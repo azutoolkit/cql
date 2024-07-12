@@ -1,0 +1,9 @@
+name: sql
+version: 0.1.0
+
+authors:
+  - Elias Perez <eperez@justworks.com>
+
+crystal: ">= 1.12.2"
+
+license: MIT
