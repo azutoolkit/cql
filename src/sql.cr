@@ -1,11 +1,7 @@
 require "log"
 require "./visitor"
 require "./statements"
-require "./select_builder"
-require "./insert_builder"
-require "./condition_builder"
-require "./column_condition_builder"
-require "./where_builder"
+require "./builders/*"
 require "./generator"
 
 module Sql

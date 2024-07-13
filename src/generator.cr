@@ -13,6 +13,7 @@ module Sql
         sb << " AS #{node.table_alias}" unless node.table_alias.empty?
         sb << " #{node.where_clause.not_nil!.accept(self)}" unless node.where_clause.nil?
         sb << " #{node.group_by_clause.not_nil!.accept(self)}" unless node.group_by_clause.nil?
+        sb << node.having_clause.not_nil!.accept(self) unless node.having_clause.nil?
         sb << node.order_by_clause.not_nil!.accept(self) unless node.order_by_clause.nil?
       end.strip
     end
@@ -97,6 +98,14 @@ module Sql
 
     def visit(node : ExistsCondition) : String
       "EXISTS (#{node.sub_query.accept(self)})"
+    end
+
+    def visit(node : HavingClause) : String
+      "HAVING #{node.condition.accept(self)}"
+    end
+
+    def visit(node : CountFunction) : String
+      "(COUNT(#{node.column.accept(self)}))"
     end
   end
 end

@@ -33,7 +33,7 @@ describe Sql do
     select_query_complex = Sql.select(id: "ulid", name: "full_name")
       .from("employees")
       .where {
-        (salary < "5000")
+        (salary < 5000)
           .and(name.not_null)
           .or(name == "'Jose'")
           .or(department.in ["'peo'", "'accounting'"])
@@ -139,7 +139,7 @@ describe Sql do
           exists(Sql.select("id")
             .from("departments")
             .where {
-              salary < "5000"
+              salary < 5000
             })
         }.build
 
@@ -152,11 +152,24 @@ describe Sql do
     )
   end
 
+  it "HAVING Clause" do
+    select_query = Sql.select("department", "COUNT(*)")
+      .from("employees")
+      .group_by("department")
+      .having {
+        department.count > 1
+      }.build
+
+    select_query.accept(generator).should eq(
+      "SELECT department, COUNT(*) FROM employees GROUP BY department HAVING COUNT(department) > 1"
+    )
+  end
+
   it "handles subqueries" do
     sub_query = Sql.select("id")
       .from("departments", as: "d")
       .where {
-        salary < "5000"
+        salary < 5000
       }
 
     select_query = Sql.select("id", "name")

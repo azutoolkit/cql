@@ -44,9 +44,9 @@ module Sql
   class ComparisonCondition < Condition
     property left : String
     property operator : String
-    property right : String
+    property right : String | Int64 | Float64 | Int32
 
-    def initialize(@left : String, @operator : String, @right : String)
+    def initialize(@left : String, @operator : String, @right : String | Int64 | Float64 | Int32)
     end
 
     def accept(visitor : Visitor)
@@ -185,6 +185,17 @@ module Sql
     end
   end
 
+  class HavingClause < Node
+    property condition : Condition
+
+    def initialize(@condition : Condition)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class SelectStatement < Node
     property columns : Array(Column)
     property table : String
@@ -193,6 +204,7 @@ module Sql
     property? is_distinct : Bool
     property where_clause : WhereClause?
     property group_by_clause : GroupByClause?
+    property having_clause : HavingClause?
     property order_by_clause : OrderByClause?
 
     def initialize(
@@ -203,6 +215,7 @@ module Sql
       @top_count : Int32? = nil,
       @where_clause : WhereClause? = nil,
       @group_by_clause : GroupByClause? = nil,
+      @having_clause : HavingClause? = nil,
       @order_by_clause : OrderByClause? = nil
     )
     end

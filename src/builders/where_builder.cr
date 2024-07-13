@@ -29,7 +29,12 @@ module Sql
 
     macro method_missing(call)
       def {{call.name.id}}
-      ColumnConditionBuilder(String).new({{call.name.id.stringify}})
+        @columns.each do |column|
+          if column.name == {{call.name.id.stringify}}
+            return ColumnConditionBuilder(String).new(column)
+          end
+        end
+        ColumnConditionBuilder(String).new(Column.new({{call.name.id.stringify}}))
       end
     end
   end
