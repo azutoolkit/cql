@@ -8,7 +8,7 @@ describe Sql do
       .from("Customers")
       .build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers")
   end
 
   it "SELECT DISTINCT Statement" do
@@ -16,7 +16,7 @@ describe Sql do
       .from("Customers")
       .build
 
-    select_query.accept(generator).should eq("SELECT DISTINCT City FROM Customers")
+    select_query.accept(generator).should eq("SELECT DISTINCT Customers.City FROM Customers")
   end
 
   it "WHERE Clause" do
@@ -26,7 +26,7 @@ describe Sql do
         city == "'London'"
       }.build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers WHERE (city = 'London')")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers WHERE (city = 'London')")
   end
 
   it "WHERE complex query" do
@@ -43,11 +43,12 @@ describe Sql do
 
     select_query_complex.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      SELECT id AS ulid, name AS full_name
+      SELECT employees.id, employees.name
       FROM employees
       WHERE (salary < 5000
       AND name IS NOT NULL
-      OR name = 'Jose' OR department IN ('peo', 'accounting'))
+      OR name = 'Jose'
+      OR department IN ('peo', 'accounting'))
       ORDER BY name ASC, age DESC
       SQL
     )
@@ -59,7 +60,7 @@ describe Sql do
       .order_by("City")
       .build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers ORDER BY City ASC")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers ORDER BY City ASC")
   end
 
   it "SQL AND Operator" do
@@ -69,7 +70,7 @@ describe Sql do
         (city == "'London'").and(city == "'Berlin'")
       }.build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers WHERE (city = 'London' AND city = 'Berlin')")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers WHERE (city = 'London' AND city = 'Berlin')")
   end
 
   it "like operator" do
@@ -79,7 +80,7 @@ describe Sql do
         city.like("a%")
       }.build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers WHERE ((city LIKE 'a%'))")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers WHERE ((city LIKE 'a%'))")
   end
 
   it "NOT Operator" do
@@ -89,7 +90,7 @@ describe Sql do
         not(city == "hello")
       }.build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers WHERE (NOT city = hello)")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers WHERE (NOT city = hello)")
   end
 
   it "NOT LIKE Operator" do
@@ -99,7 +100,7 @@ describe Sql do
         city.not_like("a%")
       }.build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers WHERE ((city NOT LIKE 'a%'))")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers WHERE ((city NOT LIKE 'a%'))")
   end
 
   it "IS NULL Operator" do
@@ -109,7 +110,7 @@ describe Sql do
         city.null
       }.build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers WHERE (city IS NULL)")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers WHERE (city IS NULL)")
   end
 
   it "IS NOT NULL Operator" do
@@ -119,7 +120,7 @@ describe Sql do
         city.not_null
       }.build
 
-    select_query.accept(generator).should eq("SELECT CustomerName, City FROM Customers WHERE (city IS NOT NULL)")
+    select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers WHERE (city IS NOT NULL)")
   end
 
   it "SELECT TOP Clause" do
@@ -128,7 +129,7 @@ describe Sql do
       .top(3)
       .build
 
-    select_query.accept(generator).should eq("SELECT TOP 3 CustomerName, City FROM Customers")
+    select_query.accept(generator).should eq("SELECT TOP 3 Customers.CustomerName, Customers.City FROM Customers")
   end
 
   it "EXISTS Operator" do
@@ -145,9 +146,9 @@ describe Sql do
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      SELECT id, name
+      SELECT employees.id, employees.name
       FROM employees
-      WHERE (EXISTS (SELECT id FROM departments WHERE (salary < 5000)))
+      WHERE (EXISTS (SELECT departments.id FROM departments WHERE (salary < 5000)))
       SQL
     )
   end
@@ -161,7 +162,7 @@ describe Sql do
       }.build
 
     select_query.accept(generator).should eq(
-      "SELECT department, COUNT(*) FROM employees GROUP BY department HAVING COUNT(department) > 1"
+      "SELECT employees.department, employees.COUNT(*) FROM employees GROUP BY department HAVING COUNT(department) > 1"
     )
   end
 
@@ -180,9 +181,9 @@ describe Sql do
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      SELECT id, name
+      SELECT e.id, e.name
       FROM employees AS e
-      WHERE (department IN (SELECT id FROM departments AS d WHERE (salary < 5000)))
+      WHERE (department IN (SELECT d.id FROM departments AS d WHERE (salary < 5000)))
       SQL
     )
   end
@@ -195,7 +196,15 @@ describe Sql do
       .build
 
     select_query.accept(generator).should eq(
-      "SELECT department, COUNT(*) FROM employees GROUP BY department ORDER BY department ASC"
+      "SELECT employees.department, employees.COUNT(*) FROM employees GROUP BY department ORDER BY department ASC"
     )
+  end
+
+  it "builds JOINS" do
+    # sql = Sql.select("employees.name", "departments.name")
+    #   .from("employees")
+    #   .inner_join("departments") {
+    #     department_id == id
+    #   }.build
   end
 end

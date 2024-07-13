@@ -20,5 +20,11 @@ module Sql
     abstract def visit(node : NotLikeCondition) : String
     abstract def visit(node : ExistsCondition) : String
     abstract def visit(node : HavingClause) : String
+    abstract def visit(node : InnerJoin) : String
+    abstract def visit(node : LeftJoin) : String
+    abstract def visit(node : RightJoin) : String
+    abstract def visit(node : FullJoin) : String
+    abstract def visit(node : CrossJoin) : String
+    abstract def visit(node : JoinClause) : String
   end
 end

@@ -1,3 +1,4 @@
+require "db"
 require "log"
 require "./visitor"
 require "./statements"

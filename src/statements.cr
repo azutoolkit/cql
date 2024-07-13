@@ -6,6 +6,76 @@ module Sql
   abstract class Condition < Node
   end
 
+  class InnerJoin < Node
+    property table : String
+    property condition : Condition
+
+    def initialize(@table : String, @condition : Condition)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class LeftJoin < Node
+    property table : String
+    property condition : Condition
+
+    def initialize(@table : String, @condition : Condition)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class RightJoin < Node
+    property table : String
+    property condition : Condition
+
+    def initialize(@table : String, @condition : Condition)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class FullJoin < Node
+    property table : String
+    property condition : Condition
+
+    def initialize(@table : String, @condition : Condition)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class CrossJoin < Node
+    property table : String
+
+    def initialize(@table : String)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class JoinClause < Node
+    property joins : Array(Node)
+
+    def initialize(@joins : Array(Node))
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class AndCondition < Condition
     property left : Condition
     property right : Condition
@@ -162,11 +232,18 @@ module Sql
 
   class Column < Node
     property name : String
+    property table : String? = nil
     property alias_name : String?
     property? is_count : Bool
     property? is_distinct : Bool
 
-    def initialize(@name : String, @alias_name : String? = nil, @is_count : Bool = false, @is_distinct : Bool = false)
+    def initialize(
+      @name : String,
+      @table : String? = nil,
+      @alias_name : String? = nil,
+      @is_count : Bool = false,
+      @is_distinct : Bool = false
+    )
     end
 
     def accept(visitor : Visitor)
@@ -206,6 +283,7 @@ module Sql
     property group_by_clause : GroupByClause?
     property having_clause : HavingClause?
     property order_by_clause : OrderByClause?
+    property joins : JoinClause?
 
     def initialize(
       @columns : Array(Column),
@@ -216,7 +294,8 @@ module Sql
       @where_clause : WhereClause? = nil,
       @group_by_clause : GroupByClause? = nil,
       @having_clause : HavingClause? = nil,
-      @order_by_clause : OrderByClause? = nil
+      @order_by_clause : OrderByClause? = nil,
+      @joins : JoinClause? = nil
     )
     end
 
