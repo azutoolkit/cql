@@ -17,5 +17,7 @@ module Sql
     abstract def visit(node : GroupByClause) : String
     abstract def visit(node : InSelectCondition) : String
     abstract def visit(node : NotInSelectCondition) : String
+    abstract def visit(node : NotLikeCondition) : String
+    abstract def visit(node : ExistsCondition) : String
   end
 end

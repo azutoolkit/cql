@@ -79,6 +79,18 @@ module Sql
     end
   end
 
+  class NotLikeCondition < Condition
+    property column : String
+    property pattern : String
+
+    def initialize(@column : String, @pattern : String)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class InCondition < Condition
     property column : String
     property values : Array(String)
@@ -137,6 +149,17 @@ module Sql
     end
   end
 
+  class ExistsCondition < Condition
+    property sub_query : SelectStatement
+
+    def initialize(@sub_query : SelectStatement)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class Column < Node
     property name : String
     property alias_name : String?
@@ -165,7 +188,9 @@ module Sql
   class SelectStatement < Node
     property columns : Array(Column)
     property table : String
-    property is_distinct : Bool
+    property table_alias : String
+    property top_count : Int32? = nil
+    property? is_distinct : Bool
     property where_clause : WhereClause?
     property group_by_clause : GroupByClause?
     property order_by_clause : OrderByClause?
@@ -173,7 +198,9 @@ module Sql
     def initialize(
       @columns : Array(Column),
       @table : String,
+      @table_alias : String,
       @is_distinct : Bool = false,
+      @top_count : Int32? = nil,
       @where_clause : WhereClause? = nil,
       @group_by_clause : GroupByClause? = nil,
       @order_by_clause : OrderByClause? = nil

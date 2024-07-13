@@ -7,12 +7,14 @@ module Sql
     def visit(node : SelectStatement) : String
       String::Builder.build do |sb|
         sb << "SELECT"
-        sb << " DISTINCT" if node.is_distinct
+        sb << " TOP #{node.top_count}" if node.top_count
+        sb << " DISTINCT" if node.is_distinct?
         sb << " #{node.columns.map(&.accept(self)).join(", ")} FROM #{node.table}"
+        sb << " AS #{node.table_alias}" unless node.table_alias.empty?
         sb << " #{node.where_clause.not_nil!.accept(self)}" unless node.where_clause.nil?
         sb << " #{node.group_by_clause.not_nil!.accept(self)}" unless node.group_by_clause.nil?
         sb << node.order_by_clause.not_nil!.accept(self) unless node.order_by_clause.nil?
-      end
+      end.strip
     end
 
     def visit(node : InsertStatement) : String
@@ -30,7 +32,7 @@ module Sql
         sb << node.name
         sb << ")" if node.is_count?
         sb << " AS #{node.alias_name}" if node.alias_name
-      end
+      end.strip
     end
 
     def visit(node : AndCondition) : String
@@ -54,7 +56,7 @@ module Sql
     end
 
     def visit(node : LikeCondition) : String
-      "#{node.column} LIKE '#{node.pattern}'"
+      "(#{node.column} LIKE '#{node.pattern}')"
     end
 
     def visit(node : InCondition) : String
@@ -70,6 +72,7 @@ module Sql
     end
 
     def visit(node : OrderByClause) : String
+      return "" if node.orders.empty?
       orders = node.orders.map { |order| "#{order[0]} #{order[1]}" }.join(", ")
       "ORDER BY #{orders}"
     end
@@ -86,6 +89,14 @@ module Sql
 
     def visit(node : NotInSelectCondition) : String
       "#{node.column} NOT IN (#{node.sub_query.accept(self)})"
+    end
+
+    def visit(node : NotLikeCondition) : String
+      "(#{node.column} NOT LIKE '#{node.pattern}')"
+    end
+
+    def visit(node : ExistsCondition) : String
+      "EXISTS (#{node.sub_query.accept(self)})"
     end
   end
 end

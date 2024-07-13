@@ -1,8 +1,6 @@
 module Sql
   class WhereBuilder
-
     def initialize(@table : String, @table_alias : String, @columns : Array(Column))
-
     end
 
     def and(left : ConditionBuilder, right : ConditionBuilder) : ConditionBuilder
@@ -19,6 +17,14 @@ module Sql
 
     def or(left : ConditionBuilder, right : ConditionBuilder) : ConditionBuilder
       ConditionBuilder.new(OrCondition.new(left.condition, right.condition))
+    end
+
+    def not(condition : ConditionBuilder) : ConditionBuilder
+      ConditionBuilder.new(NotCondition.new(condition.condition))
+    end
+
+    def exists(subquery : SelectBuilder) : ConditionBuilder
+      ConditionBuilder.new(ExistsCondition.new(subquery.build))
     end
 
     macro method_missing(call)

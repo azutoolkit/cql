@@ -10,14 +10,15 @@ module Sql
       @orders = [] of Tuple(String, String)
     end
 
-    def alias(column_name : String, as name : String)
-      @columns = @columns.map { |col| col.alias(name) }
+    def top(count : Int32)
+      @top_count = count
       self
     end
 
+
     def from(table : String, as alias_name = nil)
       @table = table
-      @table_alias = "as #{alias_name}" if alias_name
+      @table_alias = alias_name if alias_name
       self
     end
 
@@ -50,8 +51,10 @@ module Sql
     def build
       SelectStatement.new(
         @columns,
-        @table.not_nil!,
+        @table,
+        @table_alias,
         @is_distinct,
+        @top_count,
         @where_clause,
         GroupByClause.new(@table, @table_alias, @group_by_columns),
         OrderByClause.new(@table, @table_alias, @orders))

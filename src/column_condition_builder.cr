@@ -41,11 +41,9 @@ module Sql
       ConditionBuilder.new(InCondition.new(column, values))
     end
 
-
     def not_in(values : Array(T))
       ConditionBuilder.new(NotCondition.new(InCondition.new(column, values)))
     end
-
 
     def in(sub_query : SelectBuilder)
       ConditionBuilder.new(InSelectCondition.new(@column, sub_query.build))
@@ -59,12 +57,24 @@ module Sql
       ConditionBuilder.new(LikeCondition.new(@column, pattern))
     end
 
+    def not_like(pattern : T)
+      ConditionBuilder.new(NotLikeCondition.new(@column, pattern))
+    end
+
     def in(values : Array(T))
       ConditionBuilder.new(InCondition.new(@column, values))
     end
 
     def not_in(values : Array(T))
       ConditionBuilder.new(NotCondition.new(InCondition.new(@column, values)))
+    end
+
+    def null
+      ConditionBuilder.new(IsNullCondition.new(@column))
+    end
+
+    def not_null
+      ConditionBuilder.new(IsNotNullCondition.new(@column))
     end
 
     def between(low : T)
