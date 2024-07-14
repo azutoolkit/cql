@@ -201,10 +201,13 @@ describe Sql do
   end
 
   it "builds JOINS" do
-    # sql = Sql.select("employees.name", "departments.name")
-    #   .from("employees")
-    #   .inner_join("departments") {
-    #     department_id == id
-    #   }.build
+    select_query = Sql
+      .select("name", "name")
+      .from("employees", as: "e")
+      .inner_join("departments", as: "d") { "e.department_id" == "d.id" }.build
+
+    select_query.accept(generator).should eq(
+      "SELECT e.name, d.name FROM employees AS e INNER JOIN departments AS d ON e.department_id = d.id"
+    )
   end
 end

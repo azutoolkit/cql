@@ -175,9 +175,9 @@ module Sql
 
   class InSelectCondition < Condition
     property column : String
-    property sub_query : SelectStatement
+    property sub_query : Query
 
-    def initialize(@column : String, @sub_query : SelectStatement)
+    def initialize(@column : String, @sub_query : Query)
     end
 
     def accept(visitor : Visitor)
@@ -187,9 +187,9 @@ module Sql
 
   class NotInSelectCondition < Condition
     property column : String
-    property sub_query : SelectStatement
+    property sub_query : Query
 
-    def initialize(@column : String, @sub_query : SelectStatement)
+    def initialize(@column : String, @sub_query : Query)
     end
 
     def accept(visitor : Visitor)
@@ -220,9 +220,22 @@ module Sql
   end
 
   class ExistsCondition < Condition
-    property sub_query : SelectStatement
+    property sub_query : Query
 
-    def initialize(@sub_query : SelectStatement)
+    def initialize(@sub_query : Query)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class InnerJoin < Node
+    property table : String
+    property alias_name : String?
+    property condition : Condition
+
+    def initialize(@table : String, @alias_name : String?, @condition : Condition)
     end
 
     def accept(visitor : Visitor)
@@ -273,29 +286,29 @@ module Sql
     end
   end
 
-  class SelectStatement < Node
+  class Query < Node
     property columns : Array(Column)
     property table : String
-    property table_alias : String
+    property table_alias : String?
     property top_count : Int32? = nil
     property? is_distinct : Bool
     property where_clause : WhereClause?
     property group_by_clause : GroupByClause?
     property having_clause : HavingClause?
     property order_by_clause : OrderByClause?
-    property joins : JoinClause?
+    property joins : Array(InnerJoin)
 
     def initialize(
       @columns : Array(Column),
       @table : String,
-      @table_alias : String,
+      @table_alias : String? = nil,
       @is_distinct : Bool = false,
       @top_count : Int32? = nil,
       @where_clause : WhereClause? = nil,
       @group_by_clause : GroupByClause? = nil,
       @having_clause : HavingClause? = nil,
       @order_by_clause : OrderByClause? = nil,
-      @joins : JoinClause? = nil
+      @joins : Array(InnerJoin) = [] of InnerJoin
     )
     end
 
@@ -306,10 +319,14 @@ module Sql
 
   class OrderByClause < Node
     property table : String
-    property table_alias : String
+    property table_alias : String?
     property orders : Array(Tuple(String, String))
 
-    def initialize(@table : String, @table_alias : String, @orders : Array(Tuple(String, String)))
+    def initialize(
+      @table : String,
+      @table_alias : String? = nil,
+      @orders : Array(Tuple(String, String)) = [] of Tuple(String, String)
+    )
     end
 
     def accept(visitor : Visitor)
@@ -319,10 +336,14 @@ module Sql
 
   class GroupByClause < Node
     property table : String
-    property table_alias : String
+    property table_alias : String?
     property columns : Array(String)
 
-    def initialize(@table : String, @table_alias : String, @columns : Array(String))
+    def initialize(
+      @table : String,
+      @table_alias : String? = nil,
+      @columns : Array(String) = [] of String
+    )
     end
 
     def accept(visitor : Visitor)

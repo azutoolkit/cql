@@ -4,14 +4,16 @@ module Sql
   class Generator
     include Visitor
 
-    def visit(node : SelectStatement) : String
+    def visit(node : Query) : String
       String::Builder.build do |sb|
         sb << "SELECT"
         sb << " TOP #{node.top_count}" if node.top_count
         sb << " DISTINCT" if node.is_distinct?
         sb << " #{node.columns.map(&.accept(self)).join(", ")} FROM #{node.table}"
-        sb << " AS #{node.table_alias}" unless node.table_alias.empty?
-        sb << node.joins.not_nil!.accept(self) unless node.joins
+        sb << " AS #{node.table_alias}" unless node.table_alias.nil?
+        node.joins.each do |join|
+          sb << " #{join.accept(self)}"
+        end
         sb << " #{node.where_clause.not_nil!.accept(self)}" unless node.where_clause.nil?
         sb << " #{node.group_by_clause.not_nil!.accept(self)}" unless node.group_by_clause.nil?
         sb << node.having_clause.not_nil!.accept(self) unless node.having_clause.nil?
@@ -111,27 +113,10 @@ module Sql
     end
 
     def visit(node : InnerJoin) : String
-      "INNER JOIN #{node.table} ON #{node.condition.accept(self)}"
-    end
-
-    def visit(node : LeftJoin) : String
-      "LEFT JOIN #{node.table} ON #{node.condition.accept(self)}"
-    end
-
-    def visit(node : RightJoin) : String
-      "RIGHT JOIN #{node.table} ON #{node.condition.accept(self)}"
-    end
-
-    def visit(node : FullJoin) : String
-      "FULL JOIN #{node.table} ON #{node.condition.accept(self)}"
-    end
-
-    def visit(node : CrossJoin) : String
-      "CROSS JOIN #{node.table}"
-    end
-
-    def visit(node : JoinClause) : String
-      node.joins.map { |join| join.accept(self) }.join(" ")
+      query = "INNER JOIN #{node.table}"
+      query += " AS #{node.alias_name}" if node.alias_name
+      query += " ON #{node.condition.accept(self)}"
+      query
     end
   end
 end

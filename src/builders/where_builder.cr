@@ -1,6 +1,10 @@
 module Sql
   class WhereBuilder
-    def initialize(@table : String, @table_alias : String, @columns : Array(Column))
+    def initialize(
+      @table : String,
+      @table_alias : String? = nil,
+      @columns : Array(Column) = [] of Column
+    )
     end
 
     def and(left : ConditionBuilder, right : ConditionBuilder) : ConditionBuilder

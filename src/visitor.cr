@@ -1,6 +1,6 @@
 module Sql
   module Visitor
-    abstract def visit(node : SelectStatement) : String
+    abstract def visit(node : Query) : String
     abstract def visit(node : InsertStatement) : String
     abstract def visit(node : WhereClause) : String
     abstract def visit(node : Column) : String
@@ -26,5 +26,6 @@ module Sql
     abstract def visit(node : FullJoin) : String
     abstract def visit(node : CrossJoin) : String
     abstract def visit(node : JoinClause) : String
+    abstract def visit(node : InnerJoin) : String
   end
 end

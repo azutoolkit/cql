@@ -7,13 +7,14 @@ module Sql
     @group_by_columns : Array(String)
     @where_clause : WhereClause?
     @having_clause : HavingClause?
-    @table_alias : String = ""
-    @join_builder : JoinBuilder = JoinBuilder.new
+    @table_alias : String? = nil
+    @joins : Array(InnerJoin)
 
     def initialize(@columns : Array(Column))
       @is_distinct = false
       @orders = [] of Tuple(String, String)
       @group_by_columns = [] of String
+      @joins = [] of InnerJoin
     end
 
     def top(count : Int32)
@@ -23,8 +24,14 @@ module Sql
 
     def from(table : String, as alias_name = nil)
       @table = table
-      @table_alias = alias_name if alias_name
-      @columns.each { |col| col.table = alias_name || table }
+      @table_alias = alias_name
+      @columns.each { |col| col.table = @table_alias || @table }
+      self
+    end
+
+    def inner_join(join_table : String, as join_table_alias : String? = nil, &)
+      builder = with WhereBuilder.new(join_table, join_table_alias, @columns) yield
+      @joins << InnerJoin.new(join_table, join_table_alias, builder.condition)
       self
     end
 
@@ -60,38 +67,8 @@ module Sql
       self
     end
 
-    def count(column_name = "*", distinct = false)
-      @columns = [Column.new(column_name, is_count: true, is_distinct: distinct)]
-      self
-    end
-
-    def inner_join(table : String, &block : -> ConditionBuilder) : SelectBuilder
-      @join_builder.inner_join(table, &block)
-      self
-    end
-
-    def left_join(table : String, &block : -> ConditionBuilder) : SelectBuilder
-      @join_builder.left_join(table, &block)
-      self
-    end
-
-    def right_join(table : String, &block : -> ConditionBuilder) : SelectBuilder
-      @join_builder.right_join(table, &block)
-      self
-    end
-
-    def full_join(table : String, &block : -> ConditionBuilder) : SelectBuilder
-      @join_builder.full_join(table, &block)
-      self
-    end
-
-    def cross_join(table : String) : SelectBuilder
-      @join_builder.cross_join(table)
-      self
-    end
-
     def build
-      SelectStatement.new(
+      Query.new(
         @columns,
         @table,
         @table_alias,
@@ -101,7 +78,7 @@ module Sql
         GroupByClause.new(@table, @table_alias, @group_by_columns),
         @having_clause,
         OrderByClause.new(@table, @table_alias, @orders),
-        JoinClause.new(@join_builder.joins)
+        @joins
       )
     end
   end
