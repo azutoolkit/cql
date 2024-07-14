@@ -20,11 +20,11 @@ TODO: Write a description here
 require "sql"
 ```
 
-TODO: Write usage instructions here
+TODO: Write usage inclassions here
 
 ## Development
 
-TODO: Write development instructions here
+TODO: Write development inclassions here
 
 ## Contributing
 

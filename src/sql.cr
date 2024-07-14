@@ -1,24 +1,19 @@
-require "db"
 require "log"
+require "uuid"
+require "ulid"
+require "db"
+require "./schema"
+require "./column"
+require "./primary_key"
+require "./table"
+require "./expression"
 require "./visitor"
-require "./statements"
-require "./builders/*"
-require "./generator"
+require "./query"
 
 module Sql
   VERSION = "0.1.0"
+  alias PrimaryKeyType = Int64.class | UUID.class | ULID.class
+  alias ColumnType = Bool.class | Float32.class | Float64.class | Int32.class | Int64.class | Slice(UInt8) | String.class | Time.class | UUID.class | Nil.class
 
-  def self.select(*columns)
-    cols = columns.to_a.map { |col| Column.new(col) }
-    SelectBuilder.new(cols)
-  end
 
-  def self.select(**tuple)
-    cols = tuple.map { |k, v| Column.new(k.to_s, v) }
-    SelectBuilder.new(cols)
-  end
-
-  def self.insert_into(table)
-    InsertBuilder.new(table)
-  end
 end

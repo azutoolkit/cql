@@ -7,3 +7,8 @@ authors:
 crystal: ">= 1.12.2"
 
 license: MIT
+dependencies:
+  ulid:
+    github: SuperPaintman/ulid
+  db:
+    github: crystal-lang/crystal-db
