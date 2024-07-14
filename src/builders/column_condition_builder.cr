@@ -1,31 +1,31 @@
 module Sql
-  class ColumnConditionBuilder(T)
+  class ColumnConditionBuilder
     getter column : Column
 
     def initialize(@column : Column)
     end
 
-    def ==(value : T)
+    def ==(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new(column.name, "=", value))
     end
 
-    def !=(value : T)
+    def !=(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new(column.name, "<>", value))
     end
 
-    def <(value : Number)
+    def <(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new(column.name, "<", value))
     end
 
-    def <=(value : Number)
+    def <=(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new(column.name, "<=", value))
     end
 
-    def >(value : Number)
+    def >(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new(column.name, ">", value))
     end
 
-    def >=(value : Number)
+    def >=(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new(column.name, ">=", value))
     end
 
@@ -37,11 +37,11 @@ module Sql
       ConditionBuilder.new(IsNotNullCondition.new(colum.name))
     end
 
-    def in(values : Array(T))
+    def in(values : Array(DB::Any))
       ConditionBuilder.new(InCondition.new(column.name, values))
     end
 
-    def not_in(values : Array(T))
+    def not_in(values : Array(DB::Any))
       ConditionBuilder.new(NotCondition.new(InCondition.new(column.name, values)))
     end
 
@@ -53,19 +53,19 @@ module Sql
       ConditionBuilder.new(NotInSelectCondition.new(InCondition.new(@column.name, sub_query.select_build)))
     end
 
-    def like(pattern : T)
+    def like(pattern : DB::Any)
       ConditionBuilder.new(LikeCondition.new(@column.name, pattern))
     end
 
-    def not_like(pattern : T)
+    def not_like(pattern : String)
       ConditionBuilder.new(NotLikeCondition.new(@column.name, pattern))
     end
 
-    def in(values : Array(T))
+    def in(values : Array(DB::Any))
       ConditionBuilder.new(InCondition.new(@column.name, values))
     end
 
-    def not_in(values : Array(T))
+    def not_in(values : Array(DB::Any))
       ConditionBuilder.new(NotCondition.new(InCondition.new(@column.name, values)))
     end
 
@@ -78,26 +78,26 @@ module Sql
     end
 
     def count
-      AggregatorBuilder(T).new(@column.name)
+      AggregatorBuilder.new(@column.name)
     end
 
     def sum
-      AggregatorBuilder(T).new(@column.name, "SUM")
+      AggregatorBuilder.new(@column.name, "SUM")
     end
 
     def min
-      AggregatorBuilder(T).new(@column.name, "MIN")
+      AggregatorBuilder.new(@column.name, "MIN")
     end
 
     def max
-      AggregatorBuilder(T).new(@column.name, "MAX")
+      AggregatorBuilder.new(@column.name, "MAX")
     end
 
     def avg
-      AggregatorBuilder(T).new(@column.name, "AVG")
+      AggregatorBuilder.new(@column.name, "AVG")
     end
 
-    def between(low : T, high : T)
+    def between(low : DB::Any, high : DB::Any)
       ConditionBuilder.new(BetweenCondition.new(@column.name, low, high))
     end
   end

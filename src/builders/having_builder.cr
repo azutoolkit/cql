@@ -35,10 +35,10 @@ module Sql
       def {{call.name.id}}
         @columns.each do |column|
           if column.name == {{call.name.id.stringify}}
-            return ColumnConditionBuilder(String).new(column)
+            return ColumnConditionBuilder.new(column)
           end
         end
-        ColumnConditionBuilder(String).new(Column.new({{call.name.id.stringify}}))
+        ColumnConditionBuilder.new(Column.new({{call.name.id.stringify}}))
       end
     end
   end

@@ -1,29 +1,29 @@
 module Sql
-  class AggregatorBuilder(T)
+  class AggregatorBuilder
     def initialize(@column : String, @aggregator : String = "COUNT")
     end
 
-    def ==(value : T)
+    def ==(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new("#{@aggregator}(#{@column})", "=", value))
     end
 
-    def !=(value : T)
+    def !=(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new("#{@aggregator}(#{@column})", "<>", value))
     end
 
-    def <(value : Number)
+    def <(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new("#{@aggregator}(#{@column})", "<", value))
     end
 
-    def <=(value : Number)
+    def <=(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new("#{@aggregator}(#{@column})", "<=", value))
     end
 
-    def >(value : Number)
+    def >(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new("#{@aggregator}(#{@column})", ">", value))
     end
 
-    def >=(value : Number)
+    def >=(value : DB::Any)
       ConditionBuilder.new(ComparisonCondition.new("#{@aggregator}(#{@column})", ">=", value))
     end
   end
