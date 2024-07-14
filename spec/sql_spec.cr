@@ -204,7 +204,7 @@ describe Sql do
     select_query = Sql
       .select("name", "name")
       .from("employees", as: "e")
-      .inner_join("departments", as: "d") { "e.department_id" == "d.id" }.build
+      .inner_join("departments", as: "d") { department_id == "d.id" }.build
 
     select_query.accept(generator).should eq(
       "SELECT e.name, d.name FROM employees AS e INNER JOIN departments AS d ON e.department_id = d.id"
