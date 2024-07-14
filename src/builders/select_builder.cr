@@ -29,9 +29,9 @@ module Sql
       self
     end
 
-    def inner_join(join_table : String, as join_table_alias : String? = nil, &)
-      builder = with WhereBuilder.new(join_table, join_table_alias, @columns) yield
-      @joins << InnerJoin.new(join_table, join_table_alias, builder.condition)
+    def inner_join(join_table : String, as table_alias : String? = nil, &)
+      builder = with WhereBuilder.new(join_table, table_alias, @columns) yield
+      @joins << InnerJoin.new(join_table, table_alias, builder.condition)
       self
     end
 
@@ -68,7 +68,7 @@ module Sql
     end
 
     def build
-      Query.new(
+      SelectStatement.new(
         @columns,
         @table,
         @table_alias,

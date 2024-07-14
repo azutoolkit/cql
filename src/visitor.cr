@@ -1,6 +1,6 @@
 module Sql
   module Visitor
-    abstract def visit(node : Query) : String
+    abstract def visit(node : SelectStatement) : String
     abstract def visit(node : InsertStatement) : String
     abstract def visit(node : WhereClause) : String
     abstract def visit(node : Column) : String

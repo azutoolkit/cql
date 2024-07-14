@@ -4,7 +4,7 @@ module Sql
   class Generator
     include Visitor
 
-    def visit(node : Query) : String
+    def visit(node : SelectStatement) : String
       String::Builder.build do |sb|
         sb << "SELECT"
         sb << " TOP #{node.top_count}" if node.top_count

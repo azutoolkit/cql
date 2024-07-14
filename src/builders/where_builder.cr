@@ -31,6 +31,15 @@ module Sql
       ConditionBuilder.new(ExistsCondition.new(subquery.build))
     end
 
+    def column(name : String) : ColumnConditionBuilder
+      @columns.each do |column|
+        if column.name == name
+          return ColumnConditionBuilder.new(column)
+        end
+      end
+      ColumnConditionBuilder.new(Column.new(name))
+    end
+
     macro method_missing(call)
       def {{call.name.id}}
         @columns.each do |column|

@@ -175,9 +175,9 @@ module Sql
 
   class InSelectCondition < Condition
     property column : String
-    property sub_query : Query
+    property sub_query : SelectStatement
 
-    def initialize(@column : String, @sub_query : Query)
+    def initialize(@column : String, @sub_query : SelectStatement)
     end
 
     def accept(visitor : Visitor)
@@ -187,9 +187,9 @@ module Sql
 
   class NotInSelectCondition < Condition
     property column : String
-    property sub_query : Query
+    property sub_query : SelectStatement
 
-    def initialize(@column : String, @sub_query : Query)
+    def initialize(@column : String, @sub_query : SelectStatement)
     end
 
     def accept(visitor : Visitor)
@@ -220,9 +220,9 @@ module Sql
   end
 
   class ExistsCondition < Condition
-    property sub_query : Query
+    property sub_query : SelectStatement
 
-    def initialize(@sub_query : Query)
+    def initialize(@sub_query : SelectStatement)
     end
 
     def accept(visitor : Visitor)
@@ -286,7 +286,7 @@ module Sql
     end
   end
 
-  class Query < Node
+  class SelectStatement < Node
     property columns : Array(Column)
     property table : String
     property table_alias : String?

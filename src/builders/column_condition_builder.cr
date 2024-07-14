@@ -5,100 +5,104 @@ module Sql
     def initialize(@column : Column)
     end
 
+    def name
+      @column.name
+    end
+
     def ==(value : DB::Any)
-      ConditionBuilder.new(ComparisonCondition.new(column.name, "=", value))
+      ConditionBuilder.new(ComparisonCondition.new(name, "=", value))
     end
 
     def !=(value : DB::Any)
-      ConditionBuilder.new(ComparisonCondition.new(column.name, "<>", value))
+      ConditionBuilder.new(ComparisonCondition.new(name, "<>", value))
     end
 
     def <(value : DB::Any)
-      ConditionBuilder.new(ComparisonCondition.new(column.name, "<", value))
+      ConditionBuilder.new(ComparisonCondition.new(name, "<", value))
     end
 
     def <=(value : DB::Any)
-      ConditionBuilder.new(ComparisonCondition.new(column.name, "<=", value))
+      ConditionBuilder.new(ComparisonCondition.new(name, "<=", value))
     end
 
     def >(value : DB::Any)
-      ConditionBuilder.new(ComparisonCondition.new(column.name, ">", value))
+      ConditionBuilder.new(ComparisonCondition.new(name, ">", value))
     end
 
     def >=(value : DB::Any)
-      ConditionBuilder.new(ComparisonCondition.new(column.name, ">=", value))
+      ConditionBuilder.new(ComparisonCondition.new(name, ">=", value))
     end
 
     def null
-      ConditionBuilder.new(IsNullCondition.new(column.name))
+      ConditionBuilder.new(IsNullCondition.new(name))
     end
 
     def not_null
-      ConditionBuilder.new(IsNotNullCondition.new(colum.name))
+      ConditionBuilder.new(IsNotNullCondition.new(name))
     end
 
     def in(values : Array(DB::Any))
-      ConditionBuilder.new(InCondition.new(column.name, values))
+      ConditionBuilder.new(InCondition.new(name, values))
     end
 
     def not_in(values : Array(DB::Any))
-      ConditionBuilder.new(NotCondition.new(InCondition.new(column.name, values)))
+      ConditionBuilder.new(NotCondition.new(InCondition.new(name, values)))
     end
 
     def in(sub_query : SelectBuilder)
-      ConditionBuilder.new(InSelectCondition.new(@column.name, sub_query.build))
+      ConditionBuilder.new(InSelectCondition.new(name, sub_query.build))
     end
 
     def not_in(sub_query : SelectBuilder)
-      ConditionBuilder.new(NotInSelectCondition.new(InCondition.new(@column.name, sub_query.select_build)))
+      ConditionBuilder.new(NotInSelectCondition.new(InCondition.new(name, sub_query.select_build)))
     end
 
     def like(pattern : DB::Any)
-      ConditionBuilder.new(LikeCondition.new(@column.name, pattern))
+      ConditionBuilder.new(LikeCondition.new(name, pattern))
     end
 
     def not_like(pattern : String)
-      ConditionBuilder.new(NotLikeCondition.new(@column.name, pattern))
+      ConditionBuilder.new(NotLikeCondition.new(name, pattern))
     end
 
     def in(values : Array(DB::Any))
-      ConditionBuilder.new(InCondition.new(@column.name, values))
+      ConditionBuilder.new(InCondition.new(name, values))
     end
 
     def not_in(values : Array(DB::Any))
-      ConditionBuilder.new(NotCondition.new(InCondition.new(@column.name, values)))
+      ConditionBuilder.new(NotCondition.new(InCondition.new(name, values)))
     end
 
     def null
-      ConditionBuilder.new(IsNullCondition.new(@column.name))
+      ConditionBuilder.new(IsNullCondition.new(name))
     end
 
     def not_null
-      ConditionBuilder.new(IsNotNullCondition.new(@column.name))
+      ConditionBuilder.new(IsNotNullCondition.new(name))
     end
 
     def count
-      AggregatorBuilder.new(@column.name)
+      AggregatorBuilder.new(name)
     end
 
     def sum
-      AggregatorBuilder.new(@column.name, "SUM")
+      AggregatorBuilder.new(name, "SUM")
     end
 
     def min
-      AggregatorBuilder.new(@column.name, "MIN")
+      AggregatorBuilder.new(name, "MIN")
     end
 
     def max
-      AggregatorBuilder.new(@column.name, "MAX")
+      AggregatorBuilder.new(name, "MAX")
     end
 
     def avg
-      AggregatorBuilder.new(@column.name, "AVG")
+      AggregatorBuilder.new(name, "AVG")
     end
 
     def between(low : DB::Any, high : DB::Any)
-      ConditionBuilder.new(BetweenCondition.new(@column.name, low, high))
+      ConditionBuilder.new(BetweenCondition.new(name, low, high))
     end
   end
 end
