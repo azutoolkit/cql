@@ -297,8 +297,9 @@ module Expression
   end
 
   class Null < Condition
-    def accept(visitor : Visitor)
-      visitor.visit(self)
+    property column : Column?
+
+    def initialize(@column : Column? = nil)
     end
 
     def accept(visitor : Visitor)
@@ -311,6 +312,40 @@ module Expression
     property value : DB::Any
 
     def initialize(@column : Column, @value : DB::Any)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class IsNull < Condition
+    property column : Column
+
+    def initialize(@column : Column)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class IsNot < Condition
+    property column : Column
+    property value : DB::Any
+
+    def initialize(@column : Column, @value : DB::Any)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class IsNotNull < Condition
+    property column : Column
+
+    def initialize(@column : Column)
     end
 
     def accept(visitor : Visitor)
@@ -342,6 +377,9 @@ module Expression
     abstract def visit(node : Table) : String
     abstract def visit(node : Null) : String
     abstract def visit(node : Is) : String
+    abstract def visit(node : IsNull) : String
+    abstract def visit(node : IsNot) : String
+    abstract def visit(node : IsNotNull) : String
     abstract def visit(node : EmptyNode) : String
   end
 
@@ -357,11 +395,11 @@ module Expression
           sb << ", " if i < node.columns.size - 1
         end
         sb << node.from.accept(self)
-        sb << node.where.not_nil!.accept(self) if node.where
-        sb << node.group_by.not_nil!.accept(self) if node.group_by
-        sb << node.having.not_nil!.accept(self) if node.having
-        sb << node.order_by.not_nil!.accept(self) if node.order_by
-        sb << node.limit.not_nil!.accept(self) if node.limit
+        sb << node.where.try &.accept(self) if node.where
+        sb << node.group_by.try &.accept(self) if node.group_by
+        sb << node.having.try &.accept(self) if node.having
+        sb << node.order_by.try &.accept(self) if node.order_by
+        sb << node.limit.try &.accept(self) if node.limit
       end
     end
 
@@ -385,8 +423,9 @@ module Expression
 
     def visit(node : Where) : String
       String::Builder.build do |sb|
-        sb << " WHERE "
+        sb << " WHERE ("
         sb << node.condition.accept(self)
+        sb << ")"
       end
     end
 
@@ -427,7 +466,6 @@ module Expression
         sb << " "
         sb << node.operator
         sb << " "
-        puts "node.right: #{typeof(node.right)}"
         sb << node.right.to_s
       end
     end
@@ -549,7 +587,12 @@ module Expression
     end
 
     def visit(node : Null) : String
-      "NULL"
+      String::Builder.build do |sb|
+        sb << "NULL"
+        if column = node.column
+          sb << column.accept(self)
+        end
+      end
     end
 
     def visit(node : Is) : String
@@ -557,6 +600,28 @@ module Expression
         sb << node.column.accept(self)
         sb << " IS "
         sb << node.value.to_s
+      end
+    end
+
+    def visit(node : IsNull) : String
+      String::Builder.build do |sb|
+        sb << node.column.accept(self)
+        sb << " IS NULL"
+      end
+    end
+
+    def visit(node : IsNot) : String
+      String::Builder.build do |sb|
+        sb << node.column.accept(self)
+        sb << " IS NOT "
+        sb << node.value.to_s
+      end
+    end
+
+    def visit(node : IsNotNull) : String
+      String::Builder.build do |sb|
+        sb << node.column.accept(self)
+        sb << " IS NOT NULL"
       end
     end
 
@@ -609,6 +674,7 @@ module Expression
       @columns.each do |column|
         return ColumnBuilder.new(column) if column.column.name.to_s == name
       end
+
       raise "Column not found: #{name}"
     end
   end
@@ -664,7 +730,7 @@ module Expression
     end
 
     def not_in(sub_query : Query)
-      ConditionBuilder.new(Not.new(InSelect.new(@column, sub_query.build)))
+      ConditionBuilder.new(InSelect.new(Not.new(@column, sub_query.build)))
     end
 
     def like(pattern : DB::Any)
@@ -672,15 +738,15 @@ module Expression
     end
 
     def not_like(pattern : DB::Any)
-      ConditionBuilder.new(Not.new(Like.new(@column, pattern)))
+      ConditionBuilder.new(NotLike.new(@column, pattern))
     end
 
     def null
-      ConditionBuilder.new(Is.new(Null.new(@column)))
+      ConditionBuilder.new(IsNull.new, @column)
     end
 
     def not_null
-      ConditionBuilder.new(Is.new(Not.new(Null.new(@column))))
+      ConditionBuilder.new(IsNotNull.new(@column))
     end
 
     private def compare(operator : String, value : DB::Any)

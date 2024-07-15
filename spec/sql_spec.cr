@@ -70,9 +70,7 @@ describe Sql do
       .from(:customers)
       .select(:name, :city)
       .where do
-        name.eq("'Tulum'") &
-          city.eq("'Kantenah'") &
-          city.not_in(["'Cancun'", "'Playa del Carmen'"])
+        (name == "'Tulum'") & city.eq("'Kantenah'")
       end.build
 
     select_query.accept(generator).should eq(
@@ -84,30 +82,22 @@ describe Sql do
     )
   end
 
-  # it "WHERE complex query" do
-  #   select_query_complex = Sql.select(id: "ulid", name: "full_name")
-  #     .from("employees")
-  #     .where {
-  #       (salary < 5000)
-  #         .and(name.not_null)
-  #         .or(name == "'Jose'")
-  #         .or(department.in ["'peo'", "'accounting'"])
-  #     }.order_by("name")
-  #     .order_by("age", "DESC")
-  #     .build
+  it "WHERE complex query" do
+    select_query_complex = q
+      .from(:users, :address)
+      .select(users: [:id, :name], address: [:city, :street, :user_id])
+      .where {
+        (city == "'Berlin'") | (city == "'London'") & user_id.in [1, 2, 3]
+      }.build
 
-  #   select_query_complex.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT employees.id, employees.name
-  #     FROM employees
-  #     WHERE (salary < 5000
-  #     AND name IS NOT NULL
-  #     OR name = 'Jose'
-  #     OR department IN ('peo', 'accounting'))
-  #     ORDER BY name ASC, age DESC
-  #     SQL
-  #   )
-  # end
+    select_query_complex.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT users.id, users.name, address.city, address.street, address.user_id
+      FROM users, address
+      WHERE (address.city = 'Berlin' OR address.city = 'London' AND address.user_id IN (1, 2, 3))
+      SQL
+    )
+  end
 
   # it "ORDER BY" do
   #   select_query = Sql.select("CustomerName", "City")

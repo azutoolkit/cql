@@ -15,6 +15,14 @@ module Sql
       @schema = schema
     end
 
+    def select(**fields)
+      fields.each do |k, v|
+        v.map { |f| @columns << @schema.tables[k].columns[f] }
+      end
+
+      self
+    end
+
     def select(*columns : Symbol)
       @columns = columns.map { |column| find_column(column) }.to_a
       self
@@ -22,7 +30,6 @@ module Sql
 
     def from(*tbls : Symbol)
       tbls.each { |tbl| @tables[tbl] = find_table(tbl) }
-
       self
     end
 
