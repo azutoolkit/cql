@@ -6,42 +6,83 @@ describe Sql do
 
   schema.table :customers do
     primary_key :customer_id, Int64, auto_increment: true
-    column :customer_name, String
+    column :name, String
     column :city, String
   end
 
-  customers = schema.tables.first
-  customers2 = schema.tables.first
+  schema.table :users do
+    primary_key :id, Int64, auto_increment: true
+    column :name, String
+    column :email, String
+  end
 
-  it "select data from a database" do
-    q = Sql::Query.new
-    select_query = q.select.from(customers, customers2).build
+  schema.table :address do
+    primary_key :id, Int64, auto_increment: true
+    column :user_id, Int64, null: false
+    column :street, String
+    column :city, String
+    column :zip, String
+  end
+
+  q = Sql::Query.new(schema)
+
+  it "selects all columns from tables" do
+    select_query = q
+      .from(:customers, :users)
+      .build
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      SELECT Customers.CustomerName, Customers.City
-      FROM Customers
+      SELECT customers.customer_id, customers.name, customers.city, users.id, users.name, users.email
+      FROM customers, users
       SQL
     )
   end
 
-  # it "SELECT DISTINCT Statement" do
-  #   select_query = Sql.select("City").distinct
-  #     .from("Customers")
-  #     .build
+  it "select data from a database" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .build
 
-  #   select_query.accept(generator).should eq("SELECT DISTINCT Customers.City FROM Customers")
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city FROM customers
+      SQL
+    )
+  end
 
-  # it "WHERE Clause" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .where {
-  #       city == "'London'"
-  #     }.build
+  it "SELECT DISTINCT Statement" do
+    select_query = q
+      .from(:customers).distinct
+      .select(:name, :city)
+      .build
 
-  #   select_query.accept(generator).should eq("SELECT Customers.CustomerName, Customers.City FROM Customers WHERE (city = 'London')")
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT DISTINCT customers.name, customers.city FROM customers
+      SQL
+    )
+  end
+
+  it "WHERE Clause with Symbol => DB::Value" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .where do
+        name.eq("'Tulum'") &
+          city.eq("'Kantenah'") &
+          city.not_in(["'Cancun'", "'Playa del Carmen'"])
+      end.build
+
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      WHERE (customers.name = 'Tulum' AND customers.city = 'Kantenah')
+      SQL
+    )
+  end
 
   # it "WHERE complex query" do
   #   select_query_complex = Sql.select(id: "ulid", name: "full_name")

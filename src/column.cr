@@ -2,10 +2,11 @@ module Sql
   class Column
     getter name : Symbol
     getter type : ColumnType
-    getter null : Bool = false
+    getter? null : Bool = false
     getter default : DB::Any = nil
     getter unique : Bool = false
     @as_name : String? = nil
+    property table : Table? = nil
 
     def initialize(
       @name : Symbol,
@@ -15,10 +16,6 @@ module Sql
       @default : DB::Any = nil,
       @unique : Bool = false
     )
-    end
-
-    def as_name
-      @as_name || "c_#{name.to_s[0..2]}_#{self.object_id}"
     end
   end
 end
