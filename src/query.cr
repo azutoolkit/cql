@@ -5,7 +5,7 @@ module Sql
     getter where : Expression::Where? = nil
     getter group_by : Expression::GroupBy? = nil
     getter having : Expression::Having? = nil
-    getter order_by : Expression::OrderBy? = nil
+    getter order_by : Hash(Expression::Column, Expression::OrderDirection) = {} of Expression::Column => Expression::OrderDirection
     getter joins : Array(Expression::Join) = [] of Expression::Join
     getter limit : Int32? = nil
     getter offset : Int32? = nil
@@ -39,7 +39,12 @@ module Sql
       self
     end
 
-    def order_by(column : Column, direction : OrderDirection = "ASC")
+    def order(**fields)
+      fields.each do |k, v|
+        column = Expression::Column.new(find_column(k))
+        @order_by[column] = Expression::OrderDirection.parse(v.to_s)
+      end
+
       self
     end
 
@@ -65,25 +70,30 @@ module Sql
         @where,
         @group_by,
         @having,
-        @order_by,
+        build_order_by,
         @joins,
         build_limit,
         distinct?)
     ensure
-      @columns.clear
       @tables.clear
       @where = nil
       @group_by = nil
       @having = nil
-      @order_by = nil
       @joins.clear
       @limit = nil
       @offset = nil
       @distinct = false
     end
 
+    private def build_order_by
+      Expression::OrderBy.new(order_by)
+    end
+
     private def build_limit
       Expression::Limit.new(@limit, @offset) if @limit
+    ensure
+      @limit = nil
+      @offset = nil
     end
 
     private def build_select
@@ -96,6 +106,8 @@ module Sql
       @columns.map do |column|
         Expression::Column.new(column)
       end
+    ensure
+      @columns.clear
     end
 
     private def find_table(name : Symbol) : Sql::Table

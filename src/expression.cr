@@ -234,10 +234,9 @@ module Expression
   end
 
   class OrderBy < Node
-    property columns : Array(Column)
-    property direction : OrderDirection = OrderDirection::ASC
+    property orders : Hash(Column, OrderDirection)
 
-    def initialize(@columns : Array(Column), @direction : OrderDirection = OrderDirection::ASC)
+    def initialize(@orders : Hash(Column, OrderDirection))
     end
 
     def accept(visitor : Visitor)
@@ -251,7 +250,7 @@ module Expression
     property where : Where? = nil
     property group_by : GroupBy? = nil
     property having : Having? = nil
-    property order_by : OrderBy? = nil
+    property order_by : OrderBy
     property joins : Array(Join) = [] of Join
     property limit : Limit? = nil
     property? distinct : Bool = false
@@ -398,7 +397,7 @@ module Expression
         sb << node.where.try &.accept(self) if node.where
         sb << node.group_by.try &.accept(self) if node.group_by
         sb << node.having.try &.accept(self) if node.having
-        sb << node.order_by.try &.accept(self) if node.order_by
+        sb << node.order_by.not_nil!.accept(self) if node.order_by
         sb << node.limit.try &.accept(self) if node.limit
       end
     end
@@ -501,12 +500,14 @@ module Expression
     end
 
     def visit(node : OrderBy) : String
+      return "" if node.orders.empty?
       String::Builder.build do |sb|
         sb << " ORDER BY "
-        node.columns.each_with_index do |column, i|
+        node.orders.each_with_index do |(column, direction), i|
           sb << column.accept(self)
-          sb << node.direction.to_s.capitalize
-          sb << ", " if i < node.columns.size - 1
+          sb << " "
+          sb << direction.to_s.upcase
+          sb << ", " if i < node.orders.size - 1
         end
       end
     end

@@ -99,18 +99,21 @@ describe Sql do
     )
   end
 
-  # it "ORDER BY" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .order_by("City")
-  #     .build
+  it "ORDER BY" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .order(city: :desc, name: :asc)
+      .build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT Customers.CustomerName, Customers.City FROM Customers ORDER BY City ASC
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      ORDER BY customers.city DESC, customers.name ASC
+      SQL
+    )
+  end
 
   # it "SQL AND Operator" do
   #   select_query = Sql.select("CustomerName", "City")
