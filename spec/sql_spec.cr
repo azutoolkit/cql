@@ -103,7 +103,7 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .order(city: :desc, name: :asc)
+      .order_by(city: :desc, name: :asc)
       .build
 
     select_query.accept(generator).should eq(
@@ -115,131 +115,116 @@ describe Sql do
     )
   end
 
-  # it "SQL AND Operator" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .where {
-  #       (city == "'London'").and(city == "'Berlin'")
-  #     }.build
+  it "like operator" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .where { city.like("'a%'") }
+      .build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT Customers.CustomerName, Customers.City
-  #     FROM Customers
-  #     WHERE (city = 'London' AND city = 'Berlin')
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      WHERE (customers.city LIKE 'a%')
+      SQL
+    )
+  end
 
-  # it "like operator" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .where {
-  #       city.like("a%")
-  #     }.build
+  it "NOT Operator" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .where { (city != "'hello'") }.build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT Customers.CustomerName, Customers.City
-  #     FROM Customers
-  #     WHERE ((city LIKE 'a%'))
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      WHERE (customers.city != 'hello')
+      SQL
+    )
+  end
 
-  # it "NOT Operator" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .where {
-  #       not(city == "hello")
-  #     }.build
+  it "NOT LIKE Operator" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .where { city.not_like("'a%'") }.build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT Customers.CustomerName, Customers.City FROM Customers WHERE (NOT city = hello)
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      WHERE (customers.city NOT LIKE 'a%')
+      SQL
+    )
+  end
 
-  # it "NOT LIKE Operator" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .where {
-  #       city.not_like("a%")
-  #     }.build
+  it "IS NULL Operator" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .where { city.null }.build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT Customers.CustomerName, Customers.City FROM Customers WHERE ((city NOT LIKE 'a%'))
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      WHERE (customers.city IS NULL)
+      SQL
+    )
+  end
 
-  # it "IS NULL Operator" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .where {
-  #       city.null
-  #     }.build
+  it "IS NOT NULL Operator" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .where { city.not_null }.build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT Customers.CustomerName, Customers.City
-  #     FROM Customers
-  #     WHERE (city IS NULL)
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      WHERE (customers.city IS NOT NULL)
+      SQL
+    )
+  end
 
-  # it "IS NOT NULL Operator" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .where {
-  #       city.not_null
-  #     }.build
+  it "SELECT LIMIT Clause" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .limit(3)
+      .build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT Customers.CustomerName, Customers.City
-  #     FROM Customers
-  #     WHERE (city IS NOT NULL)
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      LIMIT 3
+      SQL
+    )
+  end
 
-  # it "SELECT TOP Clause" do
-  #   select_query = Sql.select("CustomerName", "City")
-  #     .from("Customers")
-  #     .top(3)
-  #     .build
+  it "EXISTS Operator" do
+    sub_query = Sql::Query.new(schema).from(:users)
+      .select(:id)
+      .where { id == 1 }
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT TOP 3 Customers.CustomerName, Customers.City
-  #     FROM Customers
-  #     SQL
-  #   )
-  # end
+    select_query = q.from(:customers)
+      .select(:name, :city)
+      .where { exists?(sub_query) }
+      .build
 
-  # it "EXISTS Operator" do
-  #   select_query = Sql.select("id", "name")
-  #     .from("employees")
-  #     .where {
-  #       exists(Sql.select("id")
-  #         .from("departments")
-  #         .where {
-  #           salary < 5000
-  #         })
-  #     }.build
-
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT employees.id, employees.name
-  #     FROM employees
-  #     WHERE (EXISTS (SELECT departments.id FROM departments WHERE (salary < 5000)))
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      WHERE (EXISTS (SELECT users.id FROM users WHERE (users.id = 1)))
+      SQL
+    )
+  end
 
   # it "HAVING Clause" do
   #   select_query = Sql.select("department", "COUNT(*)")

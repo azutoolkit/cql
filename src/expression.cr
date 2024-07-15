@@ -193,6 +193,18 @@ module Expression
     end
   end
 
+  class NotLike < Condition
+    getter column : Column
+    getter value : String
+
+    def initialize(@column : Column, @value : String)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class Limit < Node
     getter limit : Int32?
     getter offset : Int32?
@@ -363,6 +375,7 @@ module Expression
     abstract def visit(node : Compare) : String
     abstract def visit(node : Between) : String
     abstract def visit(node : Like) : String
+    abstract def visit(node : NotLike) : String
     abstract def visit(node : InCondition) : String
     abstract def visit(node : OrderBy) : String
     abstract def visit(node : GroupBy) : String
@@ -487,6 +500,14 @@ module Expression
       end
     end
 
+    def visit(node : NotLike) : String
+      String::Builder.build do |sb|
+        sb << node.column.accept(self)
+        sb << " NOT LIKE "
+        sb << node.value
+      end
+    end
+
     def visit(node : InCondition) : String
       String::Builder.build do |sb|
         sb << node.column.accept(self)
@@ -533,7 +554,7 @@ module Expression
 
     def visit(node : Exists) : String
       String::Builder.build do |sb|
-        sb << " EXISTS ("
+        sb << "EXISTS ("
         sb << node.sub_query.accept(self)
         sb << ")"
       end
@@ -656,6 +677,12 @@ module Expression
     private def combine(other : ConditionBuilder, combinator : Class)
       ConditionBuilder.new(combinator.new(@condition, other.condition))
     end
+
+    macro method_missing(call)
+      def {{call.name.id}}
+        find_column({{call.name.id.stringify}})
+      end
+    end
   end
 
   class WhereBuilder
@@ -665,6 +692,11 @@ module Expression
       @columns = sql_cols.map { |col| Column.new(col) }
     end
 
+    def exists?(sub_query : Sql::Query)
+      ConditionBuilder.new(Exists.new(sub_query.build))
+    end
+
+    # Generate methods for each column
     macro method_missing(call)
       def {{call.name.id}}
         find_column({{call.name.id.stringify}})
@@ -695,11 +727,11 @@ module Expression
     end
 
     def !=(value : DB::Any)
-      compare("<>", value)
+      compare("!=", value)
     end
 
     def neq(value : DB::Any)
-      compare("<>", value)
+      compare("!=", value)
     end
 
     def <(value : DB::Any)
@@ -743,7 +775,7 @@ module Expression
     end
 
     def null
-      ConditionBuilder.new(IsNull.new, @column)
+      ConditionBuilder.new(IsNull.new(@column))
     end
 
     def not_null

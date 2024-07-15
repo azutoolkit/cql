@@ -39,7 +39,7 @@ module Sql
       self
     end
 
-    def order(**fields)
+    def order_by(**fields)
       fields.each do |k, v|
         column = Expression::Column.new(find_column(k))
         @order_by[column] = Expression::OrderDirection.parse(v.to_s)
@@ -80,6 +80,7 @@ module Sql
       @group_by = nil
       @having = nil
       @joins.clear
+      @order_by = {} of Expression::Column => Expression::OrderDirection
       @limit = nil
       @offset = nil
       @distinct = false
