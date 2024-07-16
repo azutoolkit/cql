@@ -2,29 +2,6 @@ require "./spec_helper"
 
 describe Sql do
   generator = Expression::Generator.new
-  schema = Sql::Schema.new(:northwind)
-
-  schema.table :customers do
-    primary_key :customer_id, Int64, auto_increment: true
-    column :name, String
-    column :city, String
-  end
-
-  schema.table :users do
-    primary_key :id, Int64, auto_increment: true
-    column :name, String
-    column :email, String
-  end
-
-  schema.table :address do
-    primary_key :id, Int64, auto_increment: true
-    column :user_id, Int64, null: false
-    column :street, String
-    column :city, String
-    column :zip, String
-  end
-
-  q = Sql::Query.new(schema)
 
   it "selects all columns from tables" do
     select_query = q
@@ -33,7 +10,7 @@ describe Sql do
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      SELECT customers.customer_id, customers.name, customers.city, users.id, users.name, users.email
+      SELECT customers.customer_id, customers.name, customers.city, customers.balance, users.id, users.name, users.email
       FROM customers, users
       SQL
     )
@@ -103,7 +80,7 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .order_by(city: :desc, name: :asc)
+      .order(city: :desc, name: :asc)
       .build
 
     select_query.accept(generator).should eq(
@@ -208,7 +185,7 @@ describe Sql do
   end
 
   it "EXISTS Operator" do
-    sub_query = Sql::Query.new(schema).from(:users)
+    sub_query = q.from(:users)
       .select(:id)
       .where { id == 1 }
 
@@ -226,62 +203,69 @@ describe Sql do
     )
   end
 
-  # it "HAVING Clause" do
-  #   select_query = Sql.select("department", "COUNT(*)")
-  #     .from("employees")
-  #     .group_by("department")
-  #     .having {
-  #       department.count > 1 | department.max.==(10)
-  #     }.build
+  it "creates GROUP BY clause" do
+    select_query = q.from(:customers)
+      .select(:city)
+      .group(:city)
+      .build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT employees.department, employees.COUNT(*)
-  #     FROM employees
-  #     GROUP BY department HAVING COUNT(department) > 1
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.city
+      FROM customers
+      GROUP BY customers.city
+      SQL
+    )
 
-  # it "handles subqueries" do
-  #   sub_query = Sql.select("id")
-  #     .from("departments", as: "d")
-  #     .where {
-  #       salary < 5000
-  #     }
+    select_query = q.from(:customers)
+      .select(:city)
+      .group(:city, :name)
+      .build
 
-  #   select_query = Sql.select("id", "name")
-  #     .from("employees", as: "e")
-  #     .where {
-  #       department.in(sub_query)
-  #     }.build
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.city
+      FROM customers
+      GROUP BY customers.city, customers.name
+      SQL
+    )
+  end
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT e.id, e.name
-  #     FROM employees AS e
-  #     WHERE (department IN (SELECT d.id FROM departments AS d WHERE (salary < 5000)))
-  #     SQL
-  #   )
-  # end
+  it "HAVING Clause" do
+    select_query = q
+      .from(:customers)
+      .select(:balance)
+      .group(:city, :balance)
+      .having { count(:balance) > 1 }
+      .build
 
-  # it "Select query with GROUP BY clause" do
-  #   select_query = Sql
-  #     .select("department", "COUNT(*)")
-  #     .from("employees")
-  #     .group_by("department")
-  #     .order_by("department")
-  #     .build
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.balance
+      FROM customers
+      GROUP BY customers.city, customers.balance
+      HAVING COUNT(customers.balance) > 1
+      SQL
+    )
+  end
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT employees.department, employees.COUNT(*)
-  #     FROM employees
-  #     GROUP BY department
-  #     ORDER BY department ASC
-  #     SQL
-  #   )
-  # end
+  it "Select query with GROUP BY clause" do
+    select_query = q
+      .from(:employees)
+      .select(:department)
+      .group(:department)
+      .order(:department)
+      .build
+
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT employees.department
+      FROM employees
+      GROUP BY employees.department
+      ORDER BY employees.department ASC
+      SQL
+    )
+  end
 
   # it "builds JOINS" do
   #   select_query = Sql

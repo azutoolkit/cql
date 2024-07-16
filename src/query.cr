@@ -3,7 +3,7 @@ module Sql
     getter columns : Array(Column) = [] of Column
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
     getter where : Expression::Where? = nil
-    getter group_by : Expression::GroupBy? = nil
+    getter group_by : Array(Column) = [] of Column
     getter having : Expression::Having? = nil
     getter order_by : Hash(Expression::Column, Expression::OrderDirection) = {} of Expression::Column => Expression::OrderDirection
     getter joins : Array(Expression::Join) = [] of Expression::Join
@@ -33,18 +33,50 @@ module Sql
       self
     end
 
+    def where(**fields)
+      fields.each do |k, v|
+        column = find_column(k)
+        @where = Expression::Where.new(
+          Expression::Condition.new(And.new(
+            Expression::Comparison.new(column, "=", v)
+          )))
+      end
+
+      self
+    end
+
     def where(&)
       builder = with Expression::WhereBuilder.new(@columns) yield
       @where = Expression::Where.new(builder.condition)
       self
     end
 
-    def order_by(**fields)
+    def order(*fields)
+      fields.each do |k|
+        column = Expression::Column.new(find_column(k))
+        @order_by[column] = Expression::OrderDirection::ASC
+      end
+
+      self
+    end
+
+    def order(**fields)
       fields.each do |k, v|
         column = Expression::Column.new(find_column(k))
         @order_by[column] = Expression::OrderDirection.parse(v.to_s)
       end
 
+      self
+    end
+
+    def group(*columns)
+      @group_by = columns.map { |column| find_column(column) }.to_a
+      self
+    end
+
+    def having(&)
+      builder = with Expression::HavingBuilder.new(@group_by) yield
+      @having = Expression::Having.new(builder.condition)
       self
     end
 
@@ -68,7 +100,7 @@ module Sql
         build_select,
         Expression::From.new(@tables.values),
         @where,
-        @group_by,
+        build_group_by,
         @having,
         build_order_by,
         @joins,
@@ -77,13 +109,17 @@ module Sql
     ensure
       @tables.clear
       @where = nil
-      @group_by = nil
+      @group_by.clear
       @having = nil
       @joins.clear
       @order_by = {} of Expression::Column => Expression::OrderDirection
       @limit = nil
       @offset = nil
       @distinct = false
+    end
+
+    private def build_group_by
+      Expression::GroupBy.new(@group_by.map { |column| Expression::Column.new(column) })
     end
 
     private def build_order_by

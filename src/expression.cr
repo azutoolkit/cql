@@ -63,6 +63,19 @@ module Expression
     end
   end
 
+  class CompareCondition < Condition
+    property left : Condition
+    property operator : String
+    property right : DB::Any
+
+    def initialize(@left : Condition, @operator : String, @right : DB::Any)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class Exists < Condition
     property sub_query : Query
 
@@ -100,6 +113,61 @@ module Expression
     property condition : Condition
 
     def initialize(@condition : Condition)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class Count < Condition
+    property column : Column
+
+    def initialize(@column : Column)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class Max < Condition
+    property column : Column
+
+    def initialize(@column : Column)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class Min < Condition
+    property column : Column
+
+    def initialize(@column : Column)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class Avg < Condition
+    property column : Column
+
+    def initialize(@column : Column)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class Sum < Condition
+    property column : Column
+
+    def initialize(@column : Column)
     end
 
     def accept(visitor : Visitor)
@@ -393,6 +461,12 @@ module Expression
     abstract def visit(node : IsNot) : String
     abstract def visit(node : IsNotNull) : String
     abstract def visit(node : EmptyNode) : String
+    abstract def visit(node : Count) : String
+    abstract def visit(node : Max) : String
+    abstract def visit(node : Min) : String
+    abstract def visit(node : Avg) : String
+    abstract def visit(node : Sum) : String
+    abstract def visit(node : CompareCondition) : String
   end
 
   class Generator
@@ -482,6 +556,16 @@ module Expression
       end
     end
 
+    def visit(node : CompareCondition) : String
+      String::Builder.build do |sb|
+        sb << node.left.accept(self)
+        sb << " "
+        sb << node.operator
+        sb << " "
+        sb << node.right.to_s
+      end
+    end
+
     def visit(node : Between) : String
       String::Builder.build do |sb|
         sb << node.column.accept(self)
@@ -534,6 +618,8 @@ module Expression
     end
 
     def visit(node : GroupBy) : String
+      return "" if node.columns.empty?
+
       String::Builder.build do |sb|
         sb << " GROUP BY "
         node.columns.each_with_index do |column, i|
@@ -649,6 +735,46 @@ module Expression
 
     def visit(node : EmptyNode) : String
       ""
+    end
+
+    def visit(node : Count) : String
+      String::Builder.build do |sb|
+        sb << "COUNT("
+        sb << node.column.accept(self)
+        sb << ")"
+      end
+    end
+
+    def visit(node : Max) : String
+      String::Builder.build do |sb|
+        sb << "MAX("
+        sb << node.column.accept(self)
+        sb << ")"
+      end
+    end
+
+    def visit(node : Min) : String
+      String::Builder.build do |sb|
+        sb << "MIN("
+        sb << node.column.accept(self)
+        sb << ")"
+      end
+    end
+
+    def visit(node : Avg) : String
+      String::Builder.build do |sb|
+        sb << "AVG("
+        sb << node.column.accept(self)
+        sb << ")"
+      end
+    end
+
+    def visit(node : Sum) : String
+      String::Builder.build do |sb|
+        sb << "SUM("
+        sb << node.column.accept(self)
+        sb << ")"
+      end
     end
   end
 
@@ -784,6 +910,78 @@ module Expression
 
     private def compare(operator : String, value : DB::Any)
       ConditionBuilder.new(Compare.new(@column, operator, value))
+    end
+  end
+
+  class HavingBuilder
+    @columns : Array(Column)
+
+    def initialize(sql_cols : Array(Sql::Column))
+      @columns = sql_cols.map { |col| Column.new(col) }
+    end
+
+    def count(column : Symbol)
+      aggregate(Count, column)
+    end
+
+    def max(column : Symbol)
+      aggregate(Max, column)
+    end
+
+    def min(column : Symbol)
+      aggregate(Min, column)
+    end
+
+    def avg(column : Symbol)
+      aggregate(Avg, column)
+    end
+
+    def sum(column : Symbol)
+      aggregate(Sum, column)
+    end
+
+    private def aggregate(klass, column : Symbol)
+      col = find_column(column.to_s)
+      AggregateBuilder.new(klass.new(col))
+    end
+
+    private def find_column(name : String)
+      @columns.each do |column|
+        return column if column.column.name.to_s == name
+      end
+
+      raise "Column not found: #{name}"
+    end
+  end
+
+  class AggregateBuilder
+    getter aggregate_function : Condition
+
+    def initialize(@aggregate_function : Condition)
+    end
+
+    def >(value : DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, ">", value))
+    end
+
+    def <(value : DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "<", value))
+    end
+
+    def >=(value : DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, ">=", value))
+    end
+
+    def <=(value : DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "<=", value))
+    end
+
+    def ==(value : DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "=", value))
+    end
+
+    def !=(value : DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "!=", value))
     end
   end
 end
