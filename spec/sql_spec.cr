@@ -46,9 +46,8 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where do
-        (name == "'Tulum'") & city.eq("'Kantenah'")
-      end.build
+      .where { (customers.name == "'Tulum'") & customers.city.eq("'Kantenah'") }
+      .build
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
@@ -79,7 +78,7 @@ describe Sql do
       .from(:users, :address)
       .select(users: [:id, :name], address: [:city, :street, :user_id])
       .where {
-        (city == "'Berlin'") | (city == "'London'") & user_id.in [1, 2, 3]
+        (address.city == "'Berlin'") | (address.city == "'London'") & address.user_id.in [1, 2, 3]
       }.build
 
     select_query_complex.accept(generator).should eq(
@@ -111,7 +110,7 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { city.like("'a%'") }
+      .where { customers.city.like("'a%'") }
       .build
 
     select_query.accept(generator).should eq(
@@ -127,7 +126,7 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { (city != "'hello'") }.build
+      .where { (customers.city != "'hello'") }.build
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
@@ -142,7 +141,7 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { city.not_like("'a%'") }.build
+      .where { customers.city.not_like("'a%'") }.build
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
@@ -157,7 +156,7 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { city.null }.build
+      .where { customers.city.null }.build
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
@@ -172,7 +171,7 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { city.not_null }.build
+      .where { customers.city.not_null }.build
 
     select_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
@@ -202,7 +201,7 @@ describe Sql do
   it "EXISTS Operator" do
     sub_query = q.from(:users)
       .select(:id)
-      .where { id == 1 }
+      .where { users.id == 1 }
 
     select_query = q.from(:customers)
       .select(:name, :city)
@@ -302,7 +301,7 @@ describe Sql do
     select_query = q.from(:users)
       .select(users: [:name, :email], address: [:street, :city])
       .inner(:address) do
-        (users.id.eq(address.user_id)) | (users.name.eq("'John'")) & (users.id.eq(1))
+        (users.id.eq(address.user_id)) & (users.name.eq("'John'")) | (users.id.eq(1))
       end.build
 
     select_query.accept(generator).should eq(
@@ -310,6 +309,19 @@ describe Sql do
       SELECT users.name, users.email, address.street, address.city
       FROM users
       INNER JOIN address ON users.id = address.user_id AND users.name = 'John' OR users.id = 1
+      SQL
+    )
+  end
+
+  it "creates Inset Into query" do
+    insert_query = q
+      .insert(:users)
+      .values(name: "'John'", email: "'john@example.com'")
+
+    insert_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      INSERT INTO users (email, address)
+      VALUES ('John', 'john@example.com')
       SQL
     )
   end

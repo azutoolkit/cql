@@ -822,40 +822,17 @@ module Expression
     end
   end
 
-  class WhereBuilder
-    @columns : Array(Column)
-
-    def initialize(sql_cols : Array(Sql::Column))
-      @columns = sql_cols.map { |col| Column.new(col) }
-    end
-
-    def exists?(sub_query : Sql::Query)
-      ConditionBuilder.new(Exists.new(sub_query.build))
-    end
-
-    # Generate methods for each column
-    macro method_missing(call)
-      def {{call.name.id}}
-        find_column({{call.name.id.stringify}})
-      end
-    end
-
-    private def find_column(name : String)
-      @columns.each do |column|
-        return ColumnBuilder.new(column) if column.column.name.to_s == name
-      end
-
-      raise "Column not found: #{name}"
-    end
-  end
-
-  class JoinBuilder
+  class FilterBuilder
     @tables : Hash(Symbol, Table) = {} of Symbol => Table
 
     def initialize(sql_tables : Hash(Symbol, Sql::Table))
       sql_tables.each do |name, table|
         @tables[name] = Table.new(table)
       end
+    end
+
+    def exists?(sub_query : Sql::Query)
+      ConditionBuilder.new(Exists.new(sub_query.build))
     end
 
     # Generate methods for each column

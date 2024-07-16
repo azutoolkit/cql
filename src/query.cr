@@ -46,57 +46,53 @@ module Sql
     end
 
     def where(&)
-      builder = with Expression::WhereBuilder.new(@columns) yield
+      builder = with Expression::FilterBuilder.new(@tables) yield
       @where = Expression::Where.new(builder.condition)
       self
     end
 
     def inner(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
-      table = @schema.tables[table]
-      join(Expression::JoinType::INNER, table, on)
+      join(Expression::JoinType::INNER, find_table(table), on)
+      self
+    end
+
+    def inner(table : Symbol, &)
+      tbl = find_table(table)
+      join_table = Expression::Table.new(tbl)
+      tables = @tables.dup
+      tables[table] = tbl
+      builder = with Expression::FilterBuilder.new(tables) yield
+      @joins << Expression::Join.new(Expression::JoinType::INNER, join_table, builder.condition)
       self
     end
 
     def left(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
-      table = @schema.tables[table]
-      join(Expression::JoinType::LEFT, table, on)
-      self
-    end
-
-    def right(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
-      table = @schema.tables[table]
-      join(Expression::JoinType::RIGHT, table, on)
-      self
-    each_with_index
-
-    def inner(table : Symbol, &)
-      table = Expression::Table.new(@schema.tables[table])
-      builder = with Expression::JoinBuilder.new(@schema.tables) yield
-      @joins << Expression::Join.new(Expression::JoinType::INNER, table, builder.condition)
+      join(Expression::JoinType::LEFT, find_table(table), on)
       self
     end
 
     def left(table : Symbol, &)
-      table = Expression::Table.new(@schema.tables[table])
-      builder = with Expression::JoinBuilder.new(@schema.tables) yield
-      @joins << Expression::Join.new(Expression::JoinType::LEFT, table, builder.condition)
+      table = find_table(table)
+      join_table = Expression::Table.new(@tables[table])
+      tables = @tables.dup
+      tables[table] = table
+      builder = with Expression::FilterBuilder.new(tables) yield
+      @joins << Expression::Join.new(Expression::JoinType::LEFT, join_table, builder.condition)
+      self
+    end
+
+    def right(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
+      join(Expression::JoinType::RIGHT, find_table(table), on)
       self
     end
 
     def right(table : Symbol, &)
-      table = Expression::Table.new(@schema.tables[table])
-      builder = with Expression::JoinBuilder.new(@schema.tables) yield
-      @joins << Expression::Join.new(Expression::JoinType::RIGHT, table, builder.condition)
-      self
-    end
-
-    private def join(type : Expression::JoinType, table : Table, on : Hash(Sql::Column, Sql::Column | DB::Any))
-      condition = on.map do |left, right|
-        right_col = right.is_a?(Sql::Column) ? Expression::Column.new(right) : right
-        Expression::CompareCondition.new(Expression::Column.new(left), "=", right_col)
-      end.reduce { |acc, cond| Expression::And.new(acc, cond) }
-
-      @joins << Expression::Join.new(type, Expression::Table.new(table), condition)
+      table = find_table(table)
+      join_table = Expression::Table.new(@tables[table])
+      tables = @tables.dup
+      tables[table] = table
+      builder = with Expression::FilterBuilder.new(tables) yield
+      @joins << Expression::Join.new(Expression::JoinType::RIGHT, join_table, builder.condition)
       self
     end
 
@@ -146,15 +142,22 @@ module Sql
 
     def build
       Expression::Query.new(
-        build_select,
-        Expression::From.new(@tables.values),
-        @where,
-        build_group_by,
-        @having,
-        build_order_by,
-        @joins,
-        build_limit,
-        distinct?)
+        build_select, build_from, @where, build_group_by, @having, build_order_by, @joins, build_limit, distinct?
+      )
+    end
+
+    def build_from
+      Expression::From.new(@tables.values)
+    end
+
+    private def join(type : Expression::JoinType, table : Table, on : Hash(Sql::Column, Sql::Column | DB::Any))
+      condition = on.map do |left, right|
+        right_col = right.is_a?(Sql::Column) ? Expression::Column.new(right) : right
+        Expression::CompareCondition.new(Expression::Column.new(left), "=", right_col)
+      end.reduce { |acc, cond| Expression::And.new(acc, cond) }
+
+      @joins << Expression::Join.new(type, Expression::Table.new(table), condition)
+      self
     end
 
     private def get_expression(field, value)
@@ -187,8 +190,6 @@ module Sql
       @columns.map do |column|
         Expression::Column.new(column)
       end
-    ensure
-      @columns.clear
     end
 
     private def find_table(name : Symbol) : Sql::Table
