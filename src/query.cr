@@ -34,14 +34,20 @@ module Sql
     end
 
     def where(**fields)
-      fields.each do |k, v|
-        column = find_column(k)
-         = Expression::Column.new(column)
-        filter = Expression::And.new(,Expression::Compare.new(col, "=", v))
-        @where = Expression::Where.new(filter)
+      condition = nil
+      fields.to_h.each_with_index do |(k, v), index|
+        expr = get_expression(k, v)
+        condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
       end
 
+      @where = Expression::Where.new(condition.not_nil!)
+
       self
+    end
+
+    private def get_expression(field, value)
+      column = find_column(field)
+      Expression::Compare.new(Expression::Column.new(column), "=", value)
     end
 
     def where(&)

@@ -69,7 +69,7 @@ describe Sql do
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
-      WHERE (customers.name = 'Tulum' AND customers.city = Kantenah)
+      WHERE (customers.name = 'Tulum' AND customers.city = 'Kantenah')
       SQL
     )
   end
