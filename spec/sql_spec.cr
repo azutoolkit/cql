@@ -59,6 +59,21 @@ describe Sql do
     )
   end
 
+  it "WHERE Clause with Symbol => Value simple" do
+    select_query = q
+      .from(:customers)
+      .select(:name, :city)
+      .where(name: "'Tulum'", city: "'Kantenah'").build
+
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT customers.name, customers.city
+      FROM customers
+      WHERE (customers.name = 'Tulum' AND customers.city = Kantenah)
+      SQL
+    )
+  end
+
   it "WHERE complex query" do
     select_query_complex = q
       .from(:users, :address)

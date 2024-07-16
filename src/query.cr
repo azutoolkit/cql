@@ -36,10 +36,9 @@ module Sql
     def where(**fields)
       fields.each do |k, v|
         column = find_column(k)
-        @where = Expression::Where.new(
-          Expression::Condition.new(And.new(
-            Expression::Comparison.new(column, "=", v)
-          )))
+         = Expression::Column.new(column)
+        filter = Expression::And.new(,Expression::Compare.new(col, "=", v))
+        @where = Expression::Where.new(filter)
       end
 
       self
