@@ -64,11 +64,11 @@ module Expression
   end
 
   class CompareCondition < Condition
-    property left : Condition
+    property left : Condition | Column | DB::Any
     property operator : String
-    property right : DB::Any
+    property right : Condition | Column | DB::Any
 
-    def initialize(@left : Condition, @operator : String, @right : DB::Any)
+    def initialize(@left : Condition | Column | DB::Any, @operator : String, @right : Condition | Column | DB::Any)
     end
 
     def accept(visitor : Visitor)
@@ -209,6 +209,12 @@ module Expression
     def accept(visitor : Visitor)
       visitor.visit(self)
     end
+
+    macro method_missing(call)
+      def {{call.name.id}}
+        ColumnBuilder.new(Column.new(@table.{{call.name.id}}))
+      end
+    end
   end
 
   class Insert < Node
@@ -232,16 +238,14 @@ module Expression
     INNER
     LEFT
     RIGHT
-    FULL
-    CROSS
   end
 
   class Join < Node
-    property table : Sql::Table
+    property table : Table
     property join_type : JoinType = JoinType::INNER
-    property condition
+    property condition : Condition
 
-    def initialize(@join_type : JoinType, @table : Table, @condition)
+    def initialize(@join_type : JoinType, @table : Table, @condition : Condition)
     end
 
     def accept(visitor : Visitor)
@@ -481,6 +485,7 @@ module Expression
           sb << ", " if i < node.columns.size - 1
         end
         sb << node.from.accept(self)
+        node.joins.each { |join| sb << join.accept(self) }
         sb << node.where.try &.accept(self) if node.where
         sb << node.group_by.try &.accept(self) if node.group_by
         sb << node.having.try &.accept(self) if node.having
@@ -489,10 +494,19 @@ module Expression
       end
     end
 
+    def visit(node : Join) : String
+      String::Builder.build do |sb|
+        sb << " #{node.join_type.to_s.upcase} JOIN "
+        sb << node.table.accept(self)
+        sb << " ON "
+        sb << node.condition.accept(self)
+      end
+    end
+
     def visit(node : Insert) : String
       String::Builder.build do |sb|
         sb << "INSERT INTO "
-        sb << node.table.name
+        sb << node.table.accept(self)
         sb << " ("
         node.columns.each_with_index do |column, i|
           sb << column.column.name
@@ -517,7 +531,7 @@ module Expression
 
     def visit(node : Column) : String
       String::Builder.build do |sb|
-        sb << node.column.table.not_nil!.name
+        sb << node.column.table.not_nil!.table_name
         sb << "."
         sb << node.column.name
       end
@@ -558,11 +572,19 @@ module Expression
 
     def visit(node : CompareCondition) : String
       String::Builder.build do |sb|
-        sb << node.left.accept(self)
+        if node.left.is_a?(Column) || node.left.is_a?(Condition)
+          sb << node.left.as(Column | Condition).accept(self)
+        else
+          sb << node.left.to_s
+        end
         sb << " "
         sb << node.operator
         sb << " "
-        sb << node.right.to_s
+        if node.right.is_a?(Column) || node.right.is_a?(Condition)
+          sb << node.right.as(Column | Condition).accept(self)
+        else
+          sb << node.right.to_s
+        end
       end
     end
 
@@ -653,17 +675,6 @@ module Expression
       end
     end
 
-    def visit(node : Join) : String
-      String::Builder.build do |sb|
-        sb << " "
-        sb << node.join_type.to_s
-        sb << " JOIN "
-        sb << node.table.name
-        sb << " ON "
-        sb << node.condition.accept(self)
-      end
-    end
-
     def visit(node : Limit) : String
       String::Builder.build do |sb|
         sb << " LIMIT "
@@ -683,7 +694,7 @@ module Expression
       String::Builder.build do |sb|
         sb << " FROM "
         node.tables.each_with_index do |table, i|
-          sb << table.name
+          sb << table.table_name
           sb << " AS " << table.as_name if table.as_name
           sb << ", " if i < node.tables.size - 1
         end
@@ -691,7 +702,7 @@ module Expression
     end
 
     def visit(node : Table) : String
-      node.table.name
+      node.table.table_name.to_s
     end
 
     def visit(node : Null) : String
@@ -838,10 +849,31 @@ module Expression
     end
   end
 
+  class JoinBuilder
+    @tables : Hash(Symbol, Table) = {} of Symbol => Table
+
+    def initialize(sql_tables : Hash(Symbol, Sql::Table))
+      sql_tables.each do |name, table|
+        @tables[name] = Table.new(table)
+      end
+    end
+
+    # Generate methods for each column
+    macro method_missing(call)
+      def {{call.name.id}}
+        @tables[:{{call.name.id}}]
+      end
+    end
+  end
+
   class ColumnBuilder
     getter column : Column
 
     def initialize(@column : Column)
+    end
+
+    def ==(value : Column | ColumnBuilder)
+      compare("=", value.column)
     end
 
     def ==(value : DB::Any)
@@ -852,6 +884,14 @@ module Expression
       compare("=", value)
     end
 
+    def eq(value : Column | ColumnBuilder)
+      compare("=", value.column)
+    end
+
+    def !=(value : ColumnBuilder)
+      compare("!=", value.column)
+    end
+
     def !=(value : DB::Any)
       compare("!=", value)
     end
@@ -860,20 +900,44 @@ module Expression
       compare("!=", value)
     end
 
-    def <(value : DB::Any)
+    def neq(value : Column | ColumnBuilder)
+      compare("!=", value.column)
+    end
+
+    def <(value : Column | DB::Any)
       compare("<", value)
     end
 
-    def <=(value : DB::Any)
+    def <(value : Column | ColumnBuilder)
+      compare("<", value.column)
+    end
+
+    def <=(value : Column | DB::Any)
       compare("<=", value)
+    end
+
+    def <=(value : Column | ColumnBuilder)
+      compare("<=", value.column)
+    end
+
+    def >(value : Column | ColumnBuilder)
+      compare(">", value.column)
     end
 
     def >(value : DB::Any)
       compare(">", value)
     end
 
+    def >=(value : Column | ColumnBuilder)
+      compare(">=", value.column)
+    end
+
     def >=(value : DB::Any)
       compare(">=", value)
+    end
+
+    def >=(value : Column | ColumnBuilder)
+      compare(">=", value.column)
     end
 
     def in(values : Array(DB::Any))
@@ -892,11 +956,11 @@ module Expression
       ConditionBuilder.new(InSelect.new(Not.new(@column, sub_query.build)))
     end
 
-    def like(pattern : DB::Any)
+    def like(pattern : String)
       ConditionBuilder.new(Like.new(@column, pattern))
     end
 
-    def not_like(pattern : DB::Any)
+    def not_like(pattern : String)
       ConditionBuilder.new(NotLike.new(@column, pattern))
     end
 
@@ -906,6 +970,10 @@ module Expression
 
     def not_null
       ConditionBuilder.new(IsNotNull.new(@column))
+    end
+
+    private def compare(operator : String, value : Column | CompareCondition)
+      ConditionBuilder.new(CompareCondition.new(@column, operator, value))
     end
 
     private def compare(operator : String, value : DB::Any)
@@ -960,27 +1028,27 @@ module Expression
     def initialize(@aggregate_function : Condition)
     end
 
-    def >(value : DB::Any)
+    def >(value : Column | DB::Any)
       ConditionBuilder.new(CompareCondition.new(@aggregate_function, ">", value))
     end
 
-    def <(value : DB::Any)
+    def <(value : Column | DB::Any)
       ConditionBuilder.new(CompareCondition.new(@aggregate_function, "<", value))
     end
 
-    def >=(value : DB::Any)
+    def >=(value : Column | DB::Any)
       ConditionBuilder.new(CompareCondition.new(@aggregate_function, ">=", value))
     end
 
-    def <=(value : DB::Any)
+    def <=(value : Column | DB::Any)
       ConditionBuilder.new(CompareCondition.new(@aggregate_function, "<=", value))
     end
 
-    def ==(value : DB::Any)
+    def ==(value : Column | DB::Any)
       ConditionBuilder.new(CompareCondition.new(@aggregate_function, "=", value))
     end
 
-    def !=(value : DB::Any)
+    def !=(value : Column | DB::Any)
       ConditionBuilder.new(CompareCondition.new(@aggregate_function, "!=", value))
     end
   end

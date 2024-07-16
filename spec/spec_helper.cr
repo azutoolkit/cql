@@ -14,6 +14,7 @@ Schema.table :users do
   primary_key :id, Int64, auto_increment: true
   column :name, String
   column :email, String
+  
 end
 
 Schema.table :address do

@@ -282,20 +282,35 @@ describe Sql do
     )
   end
 
-  # it "builds JOINS" do
-  #   select_query = Sql
-  #     .select("name", "d.name")
-  #     .from("employees", as: "e")
-  #     .inner_join("departments", as: "d") do
-  #       department_id == "d.id"
-  #     end.build
+  it "builds JOINS" do
+    select_query = q
+      .from(:users)
+      .select(users: [:name, :email], address: [:street, :city])
+      .inner(:address, {q.users.id => q.address.user_id, q.users.name => "'John'", q.users.email => "'john@example.com'"})
+      .build
 
-  #   select_query.accept(generator).should eq(
-  #     <<-SQL.gsub(/\n/, " ").strip
-  #     SELECT e.name, d.name
-  #     FROM employees AS e
-  #     INNER JOIN departments AS d ON e.department_id = d.id
-  #     SQL
-  #   )
-  # end
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT users.name, users.email, address.street, address.city
+      FROM users
+      INNER JOIN address ON users.id = address.user_id AND users.name = 'John' AND users.email = 'john@example.com'
+      SQL
+    )
+  end
+
+  it "build joins with block" do
+    select_query = q.from(:users)
+      .select(users: [:name, :email], address: [:street, :city])
+      .inner(:address) do
+        (users.id.eq(address.user_id)) | (users.name.eq("'John'")) & (users.id.eq(1))
+      end.build
+
+    select_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      SELECT users.name, users.email, address.street, address.city
+      FROM users
+      INNER JOIN address ON users.id = address.user_id AND users.name = 'John' OR users.id = 1
+      SQL
+    )
+  end
 end

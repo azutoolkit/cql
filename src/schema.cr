@@ -14,5 +14,11 @@ module Sql
       @tables[name] = table
       table
     end
+
+    macro method_missing(call)
+      def {{call.id}}
+        tables[:{{call.id}}]
+      end
+    end
   end
 end

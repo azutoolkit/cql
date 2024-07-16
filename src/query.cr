@@ -45,14 +45,58 @@ module Sql
       self
     end
 
-    private def get_expression(field, value)
-      column = find_column(field)
-      Expression::Compare.new(Expression::Column.new(column), "=", value)
-    end
-
     def where(&)
       builder = with Expression::WhereBuilder.new(@columns) yield
       @where = Expression::Where.new(builder.condition)
+      self
+    end
+
+    def inner(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
+      table = @schema.tables[table]
+      join(Expression::JoinType::INNER, table, on)
+      self
+    end
+
+    def left(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
+      table = @schema.tables[table]
+      join(Expression::JoinType::LEFT, table, on)
+      self
+    end
+
+    def right(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
+      table = @schema.tables[table]
+      join(Expression::JoinType::RIGHT, table, on)
+      self
+    each_with_index
+
+    def inner(table : Symbol, &)
+      table = Expression::Table.new(@schema.tables[table])
+      builder = with Expression::JoinBuilder.new(@schema.tables) yield
+      @joins << Expression::Join.new(Expression::JoinType::INNER, table, builder.condition)
+      self
+    end
+
+    def left(table : Symbol, &)
+      table = Expression::Table.new(@schema.tables[table])
+      builder = with Expression::JoinBuilder.new(@schema.tables) yield
+      @joins << Expression::Join.new(Expression::JoinType::LEFT, table, builder.condition)
+      self
+    end
+
+    def right(table : Symbol, &)
+      table = Expression::Table.new(@schema.tables[table])
+      builder = with Expression::JoinBuilder.new(@schema.tables) yield
+      @joins << Expression::Join.new(Expression::JoinType::RIGHT, table, builder.condition)
+      self
+    end
+
+    private def join(type : Expression::JoinType, table : Table, on : Hash(Sql::Column, Sql::Column | DB::Any))
+      condition = on.map do |left, right|
+        right_col = right.is_a?(Sql::Column) ? Expression::Column.new(right) : right
+        Expression::CompareCondition.new(Expression::Column.new(left), "=", right_col)
+      end.reduce { |acc, cond| Expression::And.new(acc, cond) }
+
+      @joins << Expression::Join.new(type, Expression::Table.new(table), condition)
       self
     end
 
@@ -111,16 +155,11 @@ module Sql
         @joins,
         build_limit,
         distinct?)
-    ensure
-      @tables.clear
-      @where = nil
-      @group_by.clear
-      @having = nil
-      @joins.clear
-      @order_by = {} of Expression::Column => Expression::OrderDirection
-      @limit = nil
-      @offset = nil
-      @distinct = false
+    end
+
+    private def get_expression(field, value)
+      column = find_column(field)
+      Expression::Compare.new(Expression::Column.new(column), "=", value)
     end
 
     private def build_group_by
@@ -174,6 +213,12 @@ module Sql
         raise "Column #{name} is not nullable" if !column.null? && value.nil?
         raise "Column #{name} is not of type #{value.class}" unless column.type.new(value)
         column
+      end
+    end
+
+    macro method_missing(call)
+      def {{call.id}}
+        @schema.tables[:{{call.id}}]
       end
     end
   end

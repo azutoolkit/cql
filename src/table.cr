@@ -1,11 +1,11 @@
 module Sql
   class Table
-    getter name : Symbol
+    getter table_name : Symbol
     getter columns : Hash(Symbol, Column) = {} of Symbol => Column
     getter primary_key : PrimaryKey?
     getter as_name : String?
 
-    def initialize(@name : Symbol, @as_name : String? = nil)
+    def initialize(@table_name : Symbol, @as_name : String? = nil)
     end
 
     def primary_key(name : Symbol, type : PrimaryKeyType, auto_increment : Bool, as as_name = nil)
@@ -29,6 +29,12 @@ module Sql
       col.table = self
       @columns[name] = col
       col
+    end
+
+    macro method_missing(call)
+      def {{call.id}}
+        columns[:{{call.id}}]
+      end
     end
   end
 end
