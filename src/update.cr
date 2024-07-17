@@ -52,12 +52,16 @@ module Sql
       Expression::Update.new(@table.not_nil!, @setters, @where, @back)
     end
 
+    def to_sql
+      build
+    end
+
     private def find_table(name : Symbol) : Table
-      @schema.tables[name]
+      @schema.tables[name] || raise "Table #{name} not found"
     end
 
     private def find_column(name : Symbol) : Column
-      @table.not_nil!.table.columns[name]
+      @table.not_nil!.table.columns[name] || raise "Column #{name} not found"
     end
   end
 end

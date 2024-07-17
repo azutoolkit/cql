@@ -45,7 +45,8 @@ module Sql
       )
     end
 
-    private def set_columns(fields)
+    def to_sql
+      build
     end
 
     private def find_table(table : Symbol) : Table

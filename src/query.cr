@@ -146,7 +146,11 @@ module Sql
       )
     end
 
-    def build_from
+    def to_sql
+      build
+    end
+
+    private def build_from
       Expression::From.new(@tables.values)
     end
 
