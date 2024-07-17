@@ -28,15 +28,28 @@ Then run `shards install` to install the dependencies.
 ### Connecting to a Database
 
 ```crystal
-require "sql_toolkit"
+require "sql"
 
-db = SQLToolkit::Database.new("postgres://user:password@localhost/db_name")
+db = Sql.connect("postgres://user:password@localhost/db_name")
 ```
 
 ### Executing Queries
 
 ```crystal
-result = db.execute("SELECT * FROM users WHERE id = ?", 1)
+Schema = Sql::Schema.new(:northwind)
+
+schema = Schema.table :users do
+  primary_key :id, Int64, auto_increment: true
+  column :name, String
+  column :email, String
+end
+
+q = Sql::Query.new(schema)
+
+result = db.execute(
+  q.from(:users).where(id: "?"),
+  1
+)
 
 result.each do |row|
   puts row["name"]
@@ -78,7 +91,9 @@ Schema.table :employees do
   column :phone, String
   column :department, String
 end
+```
 
+```crystal
 q = Sql::Query.new(Schema)
 
 query = q
