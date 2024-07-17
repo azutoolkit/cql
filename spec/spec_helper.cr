@@ -14,7 +14,6 @@ Schema.table :users do
   primary_key :id, Int64, auto_increment: true
   column :name, String
   column :email, String
-  
 end
 
 Schema.table :address do
@@ -35,4 +34,8 @@ end
 
 def q
   Sql::Query.new(Schema)
+end
+
+def i
+  Sql::Insert.new(Schema)
 end

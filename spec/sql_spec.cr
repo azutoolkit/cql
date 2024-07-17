@@ -314,14 +314,54 @@ describe Sql do
   end
 
   it "creates Inset Into query" do
-    insert_query = q
-      .insert(:users)
-      .values(name: "'John'", email: "'john@example.com'")
+    insert_query = i.into(:users).values(name: "'John'", email: "'john@example.com'").build
 
     insert_query.accept(generator).should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      INSERT INTO users (email, address)
-      VALUES ('John', 'john@example.com')
+      INSERT INTO users (users.name, users.email) VALUES ('John', 'john@example.com')
+      SQL
+    )
+  end
+
+  it "creates Inset Into query with multiple rows" do
+    insert_query = i.into(:users)
+      .values(name: "'John'", email: "'john@example.com'")
+      .values(name: "'Jane'", email: "'jane@example.com'")
+      .build
+
+    insert_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      INSERT INTO users (users.name, users.email)
+      VALUES ('John', 'john@example.com'), ('Jane', 'jane@example.com')
+      SQL
+    )
+  end
+
+  it "creates Inset Into query with returning clause" do
+    insert_query = i.into(:users)
+      .values(name: "'John'", email: "'jane@example.com'")
+      .back(:id)
+      .build
+
+    insert_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      INSERT INTO users (users.name, users.email) VALUES ('John', 'jane@example.com') RETURNING (users.id)
+      SQL
+    )
+  end
+
+  it "creates Inset Into with select query" do
+    select_query = q.from(:users)
+      .select(:name, :email)
+      .where { users.id == 1 }
+
+    insert_query = i.into(:users)
+      .query(select_query)
+      .build
+
+    insert_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      INSERT INTO users (users.name, users.email) SELECT users.name, users.email FROM users WHERE (users.id = 1)
       SQL
     )
   end

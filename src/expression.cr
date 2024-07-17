@@ -219,13 +219,17 @@ module Expression
 
   class Insert < Node
     property table : Table
-    property columns : Array(Column)
-    property values : Array(String)
+    property columns : Set(Column) = Set(Column).new
+    property values : Array(Set(DB::Any)) = [] of Set(DB::Any)
+    property back : Set(Column) = Set(Column).new
+    property query : Query?
 
     def initialize(
       @table : Table,
-      @columns : Array(Column),
-      @values : Array(String)
+      @columns : Set(Column) = Set(Column).new,
+      @values : Array(Set(DB::Any)) = [] of Set(DB::Any),
+      @back : Set(Column) = Set(Column).new,
+      @query : Query? = nil
     )
     end
 
@@ -504,20 +508,47 @@ module Expression
     end
 
     def visit(node : Insert) : String
+      columns = if node.query.nil?
+                  node.columns
+                else
+                  node.query.not_nil!.columns
+                end
+
       String::Builder.build do |sb|
         sb << "INSERT INTO "
         sb << node.table.accept(self)
         sb << " ("
-        node.columns.each_with_index do |column, i|
-          sb << column.column.name
-          sb << ", " if i < node.columns.size - 1
-        end
-        sb << ") VALUES ("
-        node.values.each_with_index do |value, i|
-          sb << value
-          sb << ", " if i < node.values.size - 1
+        columns.each_with_index do |col, i|
+          sb << col.accept(self)
+          sb << ", " if i < columns.size - 1
         end
         sb << ")"
+
+        if q = node.query
+          sb << " " << q.accept(self)
+        else
+          sb << " VALUES "
+          node.values.each_with_index do |row, i|
+            sb << "("
+            row.each_with_index do |val, j|
+              sb << val.to_s
+              sb << ", " if j < row.size - 1
+            end
+            if (i < node.values.size - 1)
+              sb << "), "
+            else
+              sb << ")"
+            end
+          end
+          if node.back.any?
+            sb << " RETURNING ("
+            node.back.each_with_index do |column, i|
+              sb << column.accept(self)
+              sb << ", " if i < node.back.size - 1
+            end
+            sb << ")"
+          end
+        end
       end
     end
 
