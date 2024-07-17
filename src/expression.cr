@@ -109,6 +109,17 @@ module Expression
     end
   end
 
+  class CreateIndex < Node
+    getter index : Sql::Index
+
+    def initialize(@index : Sql::Index)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class Having < Node
     getter condition : Condition
 
@@ -523,6 +534,7 @@ module Expression
     abstract def visit(node : Setter) : String
     abstract def visit(node : Update) : String
     abstract def visit(node : Delete) : String
+    abstract def visit(node : CreateIndex) : String
   end
 
   class Generator
@@ -913,6 +925,20 @@ module Expression
             sb << ", " if i < node.back.size - 1
           end
         end
+      end
+    end
+
+    def visit(node : CreateIndex) : String
+      String::Builder.build do |sb|
+        sb << "CREATE "
+        sb << "UNIQUE " if node.index.unique
+        sb << "INDEX "
+        sb << node.index.index_name
+        sb << " ON "
+        sb << node.index.table.table_name
+        sb << " ("
+        sb << node.index.columns.map { |c| c.to_s }.join(", ")
+        sb << ")"
       end
     end
   end

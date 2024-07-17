@@ -445,4 +445,14 @@ describe Sql do
       SQL
     )
   end
+
+  it "Creates indexes for table" do
+    index = Sql::Index.new(Schema.tables[:users], [:name, :email], unique: true)
+
+    Expression::CreateIndex.new(index).accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      CREATE UNIQUE INDEX idx_name_emai ON users (name, email)
+      SQL
+    )
+  end
 end
