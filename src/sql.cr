@@ -7,9 +7,9 @@ require "./column"
 require "./primary_key"
 require "./table"
 require "./expression"
-require "./visitor"
 require "./query"
 require "./insert"
+require "./update"
 
 module Sql
   VERSION = "0.1.0"

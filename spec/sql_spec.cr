@@ -365,4 +365,30 @@ describe Sql do
       SQL
     )
   end
+
+  it "creates Update query" do
+    update_query = u.update(:users)
+      .set(name: "'John'", email: "'john@example.com'")
+      .build
+
+    update_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      UPDATE users SET users.name = 'John', users.email = 'john@example.com'
+      SQL
+    )
+  end
+
+  it "create update where query" do
+    update_query = u.update(:users)
+      .set(name: "'John'", email: "'john@example.com'")
+      .where { users.id == 1 }
+      .build
+
+    update_query.accept(generator).should eq(
+      <<-SQL.gsub(/\n/, " ").strip
+      UPDATE users SET users.name = 'John', users.email = 'john@example.com'
+      WHERE (users.id = 1)
+      SQL
+    )
+  end
 end

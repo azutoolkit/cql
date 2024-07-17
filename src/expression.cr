@@ -15,8 +15,8 @@ module Expression
   end
 
   class And < Condition
-    property left : Condition
-    property right : Condition
+    getter left : Condition
+    getter right : Condition
 
     def initialize(@left : Condition, @right : Condition)
     end
@@ -27,9 +27,9 @@ module Expression
   end
 
   class Between < Condition
-    property column : Column
-    property low : DB::Any
-    property high : DB::Any
+    getter column : Column
+    getter low : DB::Any
+    getter high : DB::Any
 
     def initialize(@column : Column, @low : DB::Any, @high : DB::Any)
     end
@@ -51,9 +51,9 @@ module Expression
   end
 
   class Compare < Condition
-    property left : Column
-    property operator : String
-    property right : DB::Any
+    getter left : Column
+    getter operator : String
+    getter right : DB::Any
 
     def initialize(@left : Column, @operator : String, @right : DB::Any)
     end
@@ -64,9 +64,9 @@ module Expression
   end
 
   class CompareCondition < Condition
-    property left : Condition | Column | DB::Any
-    property operator : String
-    property right : Condition | Column | DB::Any
+    getter left : Condition | Column | DB::Any
+    getter operator : String
+    getter right : Condition | Column | DB::Any
 
     def initialize(@left : Condition | Column | DB::Any, @operator : String, @right : Condition | Column | DB::Any)
     end
@@ -77,7 +77,7 @@ module Expression
   end
 
   class Exists < Condition
-    property sub_query : Query
+    getter sub_query : Query
 
     def initialize(@sub_query : Query)
     end
@@ -99,7 +99,7 @@ module Expression
   end
 
   class GroupBy < Node
-    property columns : Array(Column)
+    getter columns : Array(Column)
 
     def initialize(@columns : Array(Column) = [] of Sql::Column)
     end
@@ -110,7 +110,7 @@ module Expression
   end
 
   class Having < Node
-    property condition : Condition
+    getter condition : Condition
 
     def initialize(@condition : Condition)
     end
@@ -121,7 +121,7 @@ module Expression
   end
 
   class Count < Condition
-    property column : Column
+    getter column : Column
 
     def initialize(@column : Column)
     end
@@ -132,7 +132,7 @@ module Expression
   end
 
   class Max < Condition
-    property column : Column
+    getter column : Column
 
     def initialize(@column : Column)
     end
@@ -143,7 +143,7 @@ module Expression
   end
 
   class Min < Condition
-    property column : Column
+    getter column : Column
 
     def initialize(@column : Column)
     end
@@ -154,7 +154,7 @@ module Expression
   end
 
   class Avg < Condition
-    property column : Column
+    getter column : Column
 
     def initialize(@column : Column)
     end
@@ -165,7 +165,7 @@ module Expression
   end
 
   class Sum < Condition
-    property column : Column
+    getter column : Column
 
     def initialize(@column : Column)
     end
@@ -176,8 +176,8 @@ module Expression
   end
 
   class InCondition < Condition
-    property column : Column
-    property values : Array(DB::Any)
+    getter column : Column
+    getter values : Array(DB::Any)
 
     def initialize(@column : Column, values : Array(T)) forall T
       @values = values.map { |v| v.as(DB::Any) }
@@ -189,8 +189,8 @@ module Expression
   end
 
   class InSelect < Condition
-    property column : Column
-    property query : Query
+    getter column : Column
+    getter query : Query
 
     def initialize(@column : Column, @query : Query)
     end
@@ -218,11 +218,11 @@ module Expression
   end
 
   class Insert < Node
-    property table : Table
-    property columns : Set(Column) = Set(Column).new
-    property values : Array(Set(DB::Any)) = [] of Set(DB::Any)
-    property back : Set(Column) = Set(Column).new
-    property query : Query?
+    getter table : Table
+    getter columns : Set(Column) = Set(Column).new
+    getter values : Array(Set(DB::Any)) = [] of Set(DB::Any)
+    getter back : Set(Column) = Set(Column).new
+    getter query : Query?
 
     def initialize(
       @table : Table,
@@ -238,6 +238,37 @@ module Expression
     end
   end
 
+  class Update < Node
+    getter table : Table
+    getter setters : Array(Setter)
+    getter where : Where?
+    getter back : Set(Column) = Set(Column).new
+
+    def initialize(
+      @table : Table,
+      @setters : Array(Setter) = [] of Setter,
+      @where : Where? = nil,
+      @back : Set(Column) = Set(Column).new
+    )
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class Setter < Node
+    getter column : Column
+    getter value : DB::Any
+
+    def initialize(@column : Column, @value : DB::Any)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   enum JoinType
     INNER
     LEFT
@@ -245,9 +276,9 @@ module Expression
   end
 
   class Join < Node
-    property table : Table
-    property join_type : JoinType = JoinType::INNER
-    property condition : Condition
+    getter table : Table
+    getter join_type : JoinType = JoinType::INNER
+    getter condition : Condition
 
     def initialize(@join_type : JoinType, @table : Table, @condition : Condition)
     end
@@ -294,7 +325,7 @@ module Expression
   end
 
   class Not < Condition
-    property condition : Condition
+    getter condition : Condition
 
     def initialize(@condition : Condition)
     end
@@ -305,8 +336,8 @@ module Expression
   end
 
   class Or < Condition
-    property left : Condition
-    property right : Condition
+    getter left : Condition
+    getter right : Condition
 
     def initialize(@left : Condition, @right : Condition)
     end
@@ -322,7 +353,7 @@ module Expression
   end
 
   class OrderBy < Node
-    property orders : Hash(Column, OrderDirection)
+    getter orders : Hash(Column, OrderDirection)
 
     def initialize(@orders : Hash(Column, OrderDirection))
     end
@@ -333,15 +364,15 @@ module Expression
   end
 
   class Query < Node
-    property columns : Array(Column)
-    property from : From
-    property where : Where? = nil
-    property group_by : GroupBy? = nil
-    property having : Having? = nil
-    property order_by : OrderBy
-    property joins : Array(Join) = [] of Join
-    property limit : Limit? = nil
-    property? distinct : Bool = false
+    getter columns : Array(Column)
+    getter from : From
+    getter where : Where? = nil
+    getter group_by : GroupBy? = nil
+    getter having : Having? = nil
+    getter order_by : OrderBy
+    getter joins : Array(Join) = [] of Join
+    getter limit : Limit? = nil
+    getter? distinct : Bool = false
 
     def initialize(
       @columns : Array(Column) = [] of Sql::Column,
@@ -373,7 +404,7 @@ module Expression
   end
 
   class Where < Node
-    property condition : Condition
+    getter condition : Condition
 
     def initialize(@condition : Condition)
     end
@@ -384,7 +415,7 @@ module Expression
   end
 
   class Null < Condition
-    property column : Column?
+    getter column : Column?
 
     def initialize(@column : Column? = nil)
     end
@@ -395,8 +426,8 @@ module Expression
   end
 
   class Is < Condition
-    property column : Column
-    property value : DB::Any
+    getter column : Column
+    getter value : DB::Any
 
     def initialize(@column : Column, @value : DB::Any)
     end
@@ -407,7 +438,7 @@ module Expression
   end
 
   class IsNull < Condition
-    property column : Column
+    getter column : Column
 
     def initialize(@column : Column)
     end
@@ -418,8 +449,8 @@ module Expression
   end
 
   class IsNot < Condition
-    property column : Column
-    property value : DB::Any
+    getter column : Column
+    getter value : DB::Any
 
     def initialize(@column : Column, @value : DB::Any)
     end
@@ -430,7 +461,7 @@ module Expression
   end
 
   class IsNotNull < Condition
-    property column : Column
+    getter column : Column
 
     def initialize(@column : Column)
     end
@@ -475,6 +506,8 @@ module Expression
     abstract def visit(node : Avg) : String
     abstract def visit(node : Sum) : String
     abstract def visit(node : CompareCondition) : String
+    abstract def visit(node : Setter) : String
+    abstract def visit(node : Update) : String
   end
 
   class Generator
@@ -816,6 +849,36 @@ module Expression
         sb << "SUM("
         sb << node.column.accept(self)
         sb << ")"
+      end
+    end
+
+    def visit(node : Setter) : String
+      String::Builder.build do |sb|
+        sb << node.column.accept(self)
+        sb << " = "
+        sb << node.value.to_s
+      end
+    end
+
+    def visit(node : Update) : String
+      String::Builder.build do |sb|
+        sb << "UPDATE "
+        sb << node.table.accept(self)
+        sb << " SET "
+        node.setters.each_with_index do |setter, i|
+          sb << setter.accept(self)
+          sb << ", " if i < node.setters.size - 1
+        end
+        if where = node.where
+          sb << where.accept(self)
+        end
+        if node.back.any?
+          sb << " RETURNING "
+          node.back.each_with_index do |column, i|
+            sb << column.accept(self)
+            sb << ", " if i < node.back.size - 1
+          end
+        end
       end
     end
   end
