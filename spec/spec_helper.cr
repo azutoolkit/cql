@@ -43,3 +43,7 @@ end
 def u
   Sql::Update.new(Schema)
 end
+
+def d
+  Sql::Delete.new(Schema)
+end

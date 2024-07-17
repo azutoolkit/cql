@@ -10,6 +10,7 @@ require "./expression"
 require "./query"
 require "./insert"
 require "./update"
+require "./delete"
 
 module Sql
   VERSION = "0.1.0"

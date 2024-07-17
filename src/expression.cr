@@ -257,6 +257,20 @@ module Expression
     end
   end
 
+  class Delete
+    getter table : Table
+    getter where : Where?
+    getter back : Set(Column) = Set(Column).new
+    getter using : Table?
+
+    def initialize(@table : Table, @where : Where? = nil, @back : Set(Column) = Set(Column).new, @using : Table? = nil)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class Setter < Node
     getter column : Column
     getter value : DB::Any
@@ -508,6 +522,7 @@ module Expression
     abstract def visit(node : CompareCondition) : String
     abstract def visit(node : Setter) : String
     abstract def visit(node : Update) : String
+    abstract def visit(node : Delete) : String
   end
 
   class Generator
@@ -581,6 +596,25 @@ module Expression
             end
             sb << ")"
           end
+        end
+      end
+    end
+
+    def visit(node : Delete) : String
+      String::Builder.build do |sb|
+        sb << "DELETE FROM "
+        sb << node.table.accept(self)
+        if using = node.using
+          sb << " USING " << using.accept(self)
+        end
+        sb << node.where.not_nil!.accept(self) if node.where
+        if node.back.any?
+          sb << " RETURNING ("
+          node.back.each_with_index do |column, i|
+            sb << column.accept(self)
+            sb << ", " if i < node.back.size - 1
+          end
+          sb << ")"
         end
       end
     end

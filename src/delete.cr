@@ -1,31 +1,25 @@
 module Sql
-  class Update
+  class Delete
     @table : Expression::Table? = nil
-    @setters : Array(Expression::Setter) = [] of Expression::Setter
     @where : Expression::Where? = nil
     @back : Set(Expression::Column) = Set(Expression::Column).new
+    @using : Expression::Table? = nil
 
     def initialize(schema : Schema)
       @schema = schema
     end
 
-    def update(table : Symbol)
+    def from(table : Symbol)
       @table = Expression::Table.new(find_table(table))
       self
     end
 
-    def set(**fields)
-      fields.each do |k, v|
-        column = @table.not_nil!.table.columns[k]
-        @setters << Expression::Setter.new(Expression::Column.new(column), v)
-      end
-
+    def using(table : Symbol)
+      @using = Expression::Table.new(find_table(table))
       self
     end
 
     def where(&)
-      tbl = @table.not_nil!.table
-      where_hash = {tbl.table_name => tbl}
       builder = with Expression::FilterBuilder.new(where_hash) yield
       @where = Expression::Where.new(builder.condition)
       self
@@ -49,7 +43,20 @@ module Sql
     end
 
     def build
-      Expression::Update.new(@table.not_nil!, @setters, @where, @back)
+      Expression::Delete.new(@table.not_nil!, @where, @back, @using)
+    end
+
+    private def where_hash
+      where_hash = Hash(Symbol, Table).new
+      tbl = @table.not_nil!.table
+      where_hash[tbl.table_name] = tbl
+
+      if using = @using
+        using_tbl = using.table
+        where_hash[using_tbl.table_name] = using_tbl
+      end
+
+      where_hash
     end
 
     private def find_table(name : Symbol) : Table
