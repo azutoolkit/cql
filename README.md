@@ -45,27 +45,54 @@ end
 
 ### Using the Query Builder
 
+Define Schema
+
 ```crystal
-query = Sql.q
-          .select("*")
-          .from("users")
-          .where("age > ?", 18)
-          .order_by("name")
-          .to_sql
+Schema = Sql::Schema.new(:northwind)
+
+Schema.table :customers do
+  primary_key :customer_id, Int64, auto_increment: true
+  column :name, String
+  column :city, String
+  column :balance, Int64
+end
+
+Schema.table :users do
+  primary_key :id, Int64, auto_increment: true
+  column :name, String
+  column :email, String
+end
+
+Schema.table :address do
+  primary_key :id, Int64, auto_increment: true
+  column :user_id, Int64, null: false
+  column :street, String
+  column :city, String
+  column :zip, String
+end
+
+Schema.table :employees do
+  primary_key :id, Int64, auto_increment: true
+  column :name, String
+  column :email, String
+  column :phone, String
+  column :department, String
+end
+
+q = Sql::Query.new(Schema)
+
+query = q
+      .from(:users)
+      .select(users: [:name, :email], address: [:street, :city])
+      .inner(:address) do
+        (users.id.eq(address.user_id)) & (users.name.eq("'John'")) | (users.id.eq(1))
+      end.to_sql
+
 
 result = db.execute(query)
 
 result.each do |row|
-  puts row["name"]
-end
-```
-
-### Transactions
-
-```crystal
-db.transaction do |tx|
-  tx.execute("INSERT INTO users (name, age) VALUES (?, ?)", "Alice", 30)
-  tx.execute("INSERT INTO users (name, age) VALUES (?, ?)", "Bob", 25)
+  puts row["users.name"]
 end
 ```
 
