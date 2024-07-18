@@ -10,8 +10,40 @@ module Sql
     getter limit : Int32? = nil
     getter offset : Int32? = nil
     getter? distinct : Bool = false
+    getter count_columns : Array(Expression::Aggregate) = [] of Expression::Aggregate
 
     def initialize(@schema : Schema)
+    end
+
+    def count(column : Symbol = :*)
+      @count_columns << if column == :*
+        col = Column.new(column, type: Int64)
+        col.table = tables.first.last.not_nil!
+        Expression::Count.new(Expression::Column.new(col))
+      else
+        Expression::Count.new(Expression::Column.new(find_column(column)))
+      end
+      self
+    end
+
+    def max(column : Symbol)
+      @count_columns << Expression::Max.new(Expression::Column.new(find_column(column)))
+      self
+    end
+
+    def min(column : Symbol)
+      @count_columns << Expression::Min.new(Expression::Column.new(find_column(column)))
+      self
+    end
+
+    def sum(column : Symbol)
+      @count_columns << Expression::Sum.new(Expression::Column.new(find_column(column)))
+      self
+    end
+
+    def avg(column : Symbol)
+      @count_columns << Expression::Avg.new(Expression::Column.new(find_column(column)))
+      self
     end
 
     def fetch
@@ -149,7 +181,16 @@ module Sql
 
     def build
       Expression::Query.new(
-        build_select, build_from, @where, build_group_by, @having, build_order_by, @joins, build_limit, distinct?
+        build_select,
+        build_from,
+        @where,
+        build_group_by,
+        @having,
+        build_order_by,
+        @joins,
+        build_limit,
+        distinct?,
+        @count_columns
       )
     end
 

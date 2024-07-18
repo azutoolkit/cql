@@ -37,6 +37,18 @@ Schema.table :employees do
   column :department, String
 end
 
+struct CustomerModel
+  include DB::Serializable
+
+  property customer_id : Int64
+  property name : String
+  property city : String
+  property balance : Int64
+
+  def initialize(@customer_id : Int64, @name : String, @city : String, @balance : Int64)
+  end
+end
+
 def q
   Sql::Query.new(Schema)
 end

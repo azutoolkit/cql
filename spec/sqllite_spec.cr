@@ -1,17 +1,5 @@
 require "./spec_helper"
 
-struct CustomerModel
-  include DB::Serializable
-
-  property customer_id : Int64
-  property name : String
-  property city : String
-  property balance : Int64
-
-  def initialize(@customer_id : Int64, @name : String, @city : String, @balance : Int64)
-  end
-end
-
 describe "Sqlite3" do
   before_all do
     Schema.customers.create!

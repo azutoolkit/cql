@@ -54,6 +54,11 @@ module Sql
       schema.db.exec "#{drop_query};"
     end
 
+    def truncate!
+      truncate_query = Expression::TruncateTable.new(self).accept(schema.gen).to_s
+      schema.db.exec "#{truncate_query};"
+    end
+
     macro method_missing(call)
       def {{call.id}}
         columns[:{{call.id}}]

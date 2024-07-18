@@ -142,6 +142,17 @@ module Expression
     end
   end
 
+  class TruncateTable < Node
+    getter table : Sql::Table
+
+    def initialize(@table : Sql::Table)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class Having < Node
     getter condition : Condition
 
@@ -410,6 +421,8 @@ module Expression
     end
   end
 
+  alias Aggregate = Count | Max | Min | Sum | Avg
+
   class Query < Node
     getter columns : Array(Column)
     getter from : From
@@ -420,6 +433,7 @@ module Expression
     getter joins : Array(Join) = [] of Join
     getter limit : Limit? = nil
     getter? distinct : Bool = false
+    getter aggr_columns : Array(Aggregate) = [] of Aggregate
 
     def initialize(
       @columns : Array(Column) = [] of Sql::Column,
@@ -430,7 +444,8 @@ module Expression
       @order_by : OrderBy? = nil,
       @joins : Array(Join) = [] of Join,
       @limit : Limit? = nil,
-      @distinct : Bool = false
+      @distinct : Bool = false,
+      @aggr_columns : Array(Aggregate) = [] of Aggregate
     )
     end
 
@@ -559,6 +574,7 @@ module Expression
     abstract def visit(node : CreateIndex) : String
     abstract def visit(node : CreateTable) : String
     abstract def visit(node : DropTable) : String
+    abstract def visit(node : TruncateTable) : String
   end
 
   class Generator
@@ -568,10 +584,9 @@ module Expression
       String::Builder.build do |sb|
         sb << "SELECT "
         sb << "DISTINCT " if node.distinct?
-        node.columns.each_with_index do |column, i|
-          sb << column.accept(self)
-          sb << ", " if i < node.columns.size - 1
-        end
+        sb << node.aggr_columns.map { |c| c.accept(self) }.join(", ")
+        sb << ", " if node.aggr_columns.any? && node.columns.any?
+        sb << node.columns.map { |c| c.accept(self) }.join(", ")
         sb << node.from.accept(self)
         node.joins.each { |join| sb << join.accept(self) }
         sb << node.where.try &.accept(self) if node.where
@@ -885,7 +900,7 @@ module Expression
     def visit(node : Count) : String
       String::Builder.build do |sb|
         sb << "COUNT("
-        sb << node.column.accept(self)
+        sb << node.column.column.name
         sb << ")"
       end
     end
@@ -986,6 +1001,13 @@ module Expression
     def visit(node : DropTable) : String
       String::Builder.build do |sb|
         sb << "DROP TABLE IF EXISTS "
+        sb << node.table.table_name
+      end
+    end
+
+    def visit(node : TruncateTable) : String
+      String::Builder.build do |sb|
+        sb << "TRUNCATE TABLE "
         sb << node.table.table_name
       end
     end
