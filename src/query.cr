@@ -11,8 +11,14 @@ module Sql
     getter offset : Int32? = nil
     getter? distinct : Bool = false
 
-    def initialize(schema : Schema)
-      @schema = schema
+    def initialize(@schema : Schema)
+    end
+
+    def fetch
+      @schema.db.query("#{to_sql};")
+    end
+
+    def select
     end
 
     def select(**fields)
@@ -147,7 +153,7 @@ module Sql
     end
 
     def to_sql
-      build
+      build.accept(@schema.gen).to_s
     end
 
     private def build_from

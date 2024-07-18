@@ -120,6 +120,17 @@ module Expression
     end
   end
 
+  class CreateTable < Node
+    getter table : Sql::Table
+
+    def initialize(@table : Sql::Table)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class Having < Node
     getter condition : Condition
 
@@ -535,6 +546,7 @@ module Expression
     abstract def visit(node : Update) : String
     abstract def visit(node : Delete) : String
     abstract def visit(node : CreateIndex) : String
+    abstract def visit(node : CreateTable) : String
   end
 
   class Generator
@@ -579,7 +591,7 @@ module Expression
         sb << node.table.accept(self)
         sb << " ("
         columns.each_with_index do |col, i|
-          sb << col.accept(self)
+          sb << col.column.name
           sb << ", " if i < columns.size - 1
         end
         sb << ")"
@@ -938,6 +950,23 @@ module Expression
         sb << node.index.table.table_name
         sb << " ("
         sb << node.index.columns.map { |c| c.to_s }.join(", ")
+        sb << ")"
+      end
+    end
+
+    def visit(node : CreateTable) : String
+      String::Builder.build do |sb|
+        sb << "CREATE TABLE IF NOT EXISTS "
+        sb << node.table.table_name
+        sb << " ("
+        node.table.columns.each_with_index do |(name, column), i|
+          sb << column.name
+          sb << " " << column.sql_type
+          sb << " PRIMARY KEY" if column.is_a?(Sql::PrimaryKey)
+          sb << " NOT NULL" unless column.null?
+          sb << " UNIQUE" if column.unique
+          sb << ", " if i < node.table.columns.size - 1
+        end
         sb << ")"
       end
     end

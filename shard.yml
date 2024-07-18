@@ -12,3 +12,11 @@ dependencies:
     github: SuperPaintman/ulid
   db:
     github: crystal-lang/crystal-db
+
+development_dependencies:
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+  mysql:
+    github: crystal-lang/crystal-mysql
+  pg:
+    github: will/crystal-pg

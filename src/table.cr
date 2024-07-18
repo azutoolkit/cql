@@ -33,10 +33,10 @@ module Sql
       null : Bool = false,
       default : DB::Any = nil,
       unique : Bool = false,
-      length : Int32? = nil,
+      size : Int32? = nil,
       index : Bool = false
     )
-      col = Column.new(name, type, as_name, null, default, unique, length)
+      col = Column.new(name, type, as_name, null, default, unique, size)
       col.table = self
       @columns[name] = col
       col.index = index ? create_index(columns: [name], unique: unique) : nil

@@ -1,7 +1,10 @@
 require "spec"
 require "../src/sql"
 
-Schema = Sql::Schema.new(:northwind)
+Schema = Sql::Schema.new(
+  database: :northwind,
+  db: DB.connect("sqlite3:///Users/eperez/Workspaces/sql/spec/data.db")
+)
 
 Schema.table :customers do
   primary_key :customer_id, Int64, auto_increment: true

@@ -1,5 +1,7 @@
 module Sql
   class Insert
+    Log = ::Log.for(self)
+
     @table : Table? = nil
     @columns : Set(Expression::Column) = Set(Expression::Column).new
     @values : Array(Set(DB::Any)) = Array(Set(DB::Any)).new
@@ -8,6 +10,12 @@ module Sql
 
     def initialize(schema : Schema)
       @schema = schema
+    end
+
+    def exec
+      insert_query = build.accept(@schema.gen).to_s
+      puts "#{insert_query};"
+      @schema.db.exec("#{insert_query};")
     end
 
     def into(table : Symbol)
