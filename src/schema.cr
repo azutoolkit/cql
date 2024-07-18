@@ -11,6 +11,21 @@ module Sql
       @tables = {} of Symbol => Table
     end
 
+    def exec(sql : String)
+      Log.info { "Executing SQL: #{sql}" }
+      db.exec("#{sql};")
+    end
+
+    def query(sql : String)
+      Log.info { "Executing SQL: #{sql}" }
+      db.query("#{sql};")
+    end
+
+    def query_one(sql : String, as as_kind)
+      Log.info { "Executing SQL: #{sql}" }
+      db.query_one("#{sql};", as: as_kind)
+    end
+
     def query
       Query.new(self)
     end

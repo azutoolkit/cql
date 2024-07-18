@@ -44,8 +44,8 @@ module Sql
       col
     end
 
-    def create(name : Symbol)
-      create_query = Expression::CreateTable.new(tables[name]).accept(schema.gen).to_s
+    def create!
+      create_query = Expression::CreateTable.new(self).accept(schema.gen).to_s
       schema.db.exec "#{create_query};"
     end
 

@@ -15,7 +15,7 @@ module Sql
     end
 
     def fetch
-      @schema.exec("#{to_sql};")
+      @schema.query("#{to_sql};")
     end
 
     def to_sql(gen = @schema.gen)
