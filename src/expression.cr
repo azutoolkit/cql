@@ -131,6 +131,17 @@ module Expression
     end
   end
 
+  class DropTable < Node
+    getter table : Sql::Table
+
+    def initialize(@table : Sql::Table)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class Having < Node
     getter condition : Condition
 
@@ -547,6 +558,7 @@ module Expression
     abstract def visit(node : Delete) : String
     abstract def visit(node : CreateIndex) : String
     abstract def visit(node : CreateTable) : String
+    abstract def visit(node : DropTable) : String
   end
 
   class Generator
@@ -968,6 +980,13 @@ module Expression
           sb << ", " if i < node.table.columns.size - 1
         end
         sb << ")"
+      end
+    end
+
+    def visit(node : DropTable) : String
+      String::Builder.build do |sb|
+        sb << "DROP TABLE IF EXISTS "
+        sb << node.table.table_name
       end
     end
   end

@@ -13,10 +13,18 @@ struct CustomerModel
 end
 
 describe "Sqlite3" do
-  it "creates a table" do
+  before_all do
     Schema.customers.create!
-    table = Schema.customers.table_name.to_s
+  end
 
+  after_all do
+  end
+
+  it "creates a table" do
+    Schema.customers.drop!
+    Schema.customers.create!
+
+    table = Schema.customers.table_name.to_s
     check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
     name = Schema.query_one(check_query, as: String)
 
@@ -24,6 +32,8 @@ describe "Sqlite3" do
   end
 
   it "creates table" do
+    Schema.customers.drop!
+    Schema.customers.create!
     customer = CustomerModel.new(1, "'John'", "'New York'", 100)
 
     insert_query = i.into(:customers).values(
@@ -35,6 +45,18 @@ describe "Sqlite3" do
   end
 
   it "queries customers" do
+    Schema.customers.drop!
+    Schema.customers.create!
+
+    customer = CustomerModel.new(1, "'John'", "'New York'", 100)
+
+    insert_query = i.into(:customers).values(
+      customer_id: customer.customer_id,
+      name: customer.name,
+      city: customer.city,
+      balance: customer.balance
+    ).exec
+
     query = q.from(:customers)
     customers = CustomerModel.from_rs(query.fetch)
     customers.size.should eq 1

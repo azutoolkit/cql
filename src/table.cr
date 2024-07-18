@@ -49,6 +49,11 @@ module Sql
       schema.db.exec "#{create_query};"
     end
 
+    def drop!
+      drop_query = Expression::DropTable.new(self).accept(schema.gen).to_s
+      schema.db.exec "#{drop_query};"
+    end
+
     macro method_missing(call)
       def {{call.id}}
         columns[:{{call.id}}]
