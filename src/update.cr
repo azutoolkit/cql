@@ -5,8 +5,15 @@ module Sql
     @where : Expression::Where? = nil
     @back : Set(Expression::Column) = Set(Expression::Column).new
 
-    def initialize(schema : Schema)
-      @schema = schema
+    def initialize(@schema : Schema)
+    end
+
+    def exec
+      @schema.exec("#{to_sql};")
+    end
+
+    def to_sql(gen = @schema.gen)
+      build.accept(gen)
     end
 
     def update(table : Symbol)
@@ -50,10 +57,6 @@ module Sql
 
     def build
       Expression::Update.new(@table.not_nil!, @setters, @where, @back)
-    end
-
-    def to_sql
-      build
     end
 
     private def find_table(name : Symbol) : Table

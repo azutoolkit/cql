@@ -8,14 +8,11 @@ module Sql
     @back : Set(Expression::Column) = Set(Expression::Column).new
     @query : Query? = nil
 
-    def initialize(schema : Schema)
-      @schema = schema
+    def initialize(@schema : Schema)
     end
 
     def exec
-      insert_query = build.accept(@schema.gen).to_s
-      puts "#{insert_query};"
-      @schema.db.exec("#{insert_query};")
+      @schema.exec("#{to_sql};")
     end
 
     def into(table : Symbol)
@@ -53,8 +50,8 @@ module Sql
       )
     end
 
-    def to_sql
-      build
+    def to_sql(gen = @schema.gen)
+      build.accept(gen)
     end
 
     private def find_table(table : Symbol) : Table

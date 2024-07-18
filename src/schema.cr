@@ -11,11 +11,6 @@ module Sql
       @tables = {} of Symbol => Table
     end
 
-    def create_table(name : Symbol)
-      create_query = Expression::CreateTable.new(tables[name]).accept(gen).to_s
-      db.exec "#{create_query};"
-    end
-
     def query
       Query.new(self)
     end
@@ -33,7 +28,7 @@ module Sql
     end
 
     def table(name : Symbol, as as_name = nil, &)
-      table = Table.new(name, as_name)
+      table = Table.new(name, self, as_name)
       with table yield
       @tables[name] = table
       table

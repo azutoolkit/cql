@@ -15,10 +15,11 @@ module Sql
     end
 
     def fetch
-      @schema.db.query("#{to_sql};")
+      @schema.exec("#{to_sql};")
     end
 
-    def select
+    def to_sql(gen = @schema.gen)
+      build.accept(gen)
     end
 
     def select(**fields)
@@ -150,10 +151,6 @@ module Sql
       Expression::Query.new(
         build_select, build_from, @where, build_group_by, @having, build_order_by, @joins, build_limit, distinct?
       )
-    end
-
-    def to_sql
-      build.accept(@schema.gen).to_s
     end
 
     private def build_from

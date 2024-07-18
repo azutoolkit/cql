@@ -4,8 +4,9 @@ module Sql
     getter columns : Hash(Symbol, Column) = {} of Symbol => Column
     getter primary_key : PrimaryKey?
     getter as_name : String?
+    private getter schema : Schema
 
-    def initialize(@table_name : Symbol, @as_name : String? = nil)
+    def initialize(@table_name : Symbol, @schema : Schema, @as_name : String? = nil)
     end
 
     def timestamps
@@ -41,6 +42,11 @@ module Sql
       @columns[name] = col
       col.index = index ? create_index(columns: [name], unique: unique) : nil
       col
+    end
+
+    def create(name : Symbol)
+      create_query = Expression::CreateTable.new(tables[name]).accept(schema.gen).to_s
+      schema.db.exec "#{create_query};"
     end
 
     macro method_missing(call)

@@ -1,4 +1,3 @@
-require "sqlite3"
 require "./spec_helper"
 
 struct CustomerModel

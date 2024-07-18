@@ -1,9 +1,11 @@
 require "spec"
+
+require "sqlite3"
 require "../src/sql"
 
 Schema = Sql::Schema.new(
   database: :northwind,
-  db: DB.connect("sqlite3:///Users/eperez/Workspaces/sql/spec/data.db")
+  db: DB.connect("sqlite3://spec/data.db")
 )
 
 Schema.table :customers do

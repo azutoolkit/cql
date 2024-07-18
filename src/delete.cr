@@ -5,8 +5,15 @@ module Sql
     @back : Set(Expression::Column) = Set(Expression::Column).new
     @using : Expression::Table? = nil
 
-    def initialize(schema : Schema)
-      @schema = schema
+    def initialize(@schema : Schema)
+    end
+
+    def exec
+      @schema.exec("#{to_sql};")
+    end
+
+    def to_sql(gen = @schema.gen)
+      build.accept(gen)
     end
 
     def from(table : Symbol)
@@ -44,10 +51,6 @@ module Sql
 
     def build
       Expression::Delete.new(@table.not_nil!, @where, @back, @using)
-    end
-
-    def to_sql
-      build
     end
 
     private def where_hash

@@ -1,14 +1,12 @@
 require "./spec_helper"
 
 describe Sql do
-  generator = Expression::Generator.new
-
   it "selects all columns from tables" do
     select_query = q
       .from(:customers, :users)
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.customer_id, customers.name, customers.city, customers.balance, users.id, users.name, users.email
       FROM customers, users
@@ -20,9 +18,9 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city FROM customers
       SQL
@@ -33,9 +31,9 @@ describe Sql do
     select_query = q
       .from(:customers).distinct
       .select(:name, :city)
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT DISTINCT customers.name, customers.city FROM customers
       SQL
@@ -47,9 +45,9 @@ describe Sql do
       .from(:customers)
       .select(:name, :city)
       .where { (customers.name == "'Tulum'") & customers.city.eq("'Kantenah'") }
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -62,9 +60,10 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where(name: "'Tulum'", city: "'Kantenah'").build
+      .where(name: "'Tulum'", city: "'Kantenah'")
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -79,9 +78,9 @@ describe Sql do
       .select(users: [:id, :name], address: [:city, :street, :user_id])
       .where {
         (address.city == "'Berlin'") | (address.city == "'London'") & address.user_id.in [1, 2, 3]
-      }.build
+      }.to_sql
 
-    select_query_complex.accept(generator).should eq(
+    select_query_complex.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT users.id, users.name, address.city, address.street, address.user_id
       FROM users, address
@@ -95,9 +94,9 @@ describe Sql do
       .from(:customers)
       .select(:name, :city)
       .order(city: :desc, name: :asc)
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -111,9 +110,9 @@ describe Sql do
       .from(:customers)
       .select(:name, :city)
       .where { customers.city.like("'a%'") }
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -126,9 +125,10 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { (customers.city != "'hello'") }.build
+      .where { (customers.city != "'hello'") }
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -141,9 +141,10 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { customers.city.not_like("'a%'") }.build
+      .where { customers.city.not_like("'a%'") }
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -156,9 +157,10 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { customers.city.null }.build
+      .where { customers.city.null }
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -171,9 +173,10 @@ describe Sql do
     select_query = q
       .from(:customers)
       .select(:name, :city)
-      .where { customers.city.not_null }.build
+      .where { customers.city.not_null }
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -187,9 +190,9 @@ describe Sql do
       .from(:customers)
       .select(:name, :city)
       .limit(3)
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -206,9 +209,9 @@ describe Sql do
     select_query = q.from(:customers)
       .select(:name, :city)
       .where { exists?(sub_query) }
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -221,9 +224,9 @@ describe Sql do
     select_query = q.from(:customers)
       .select(:city)
       .group(:city)
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.city
       FROM customers
@@ -234,9 +237,9 @@ describe Sql do
     select_query = q.from(:customers)
       .select(:city)
       .group(:city, :name)
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.city
       FROM customers
@@ -251,9 +254,9 @@ describe Sql do
       .select(:balance)
       .group(:city, :balance)
       .having { count(:balance) > 1 }
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.balance
       FROM customers
@@ -269,9 +272,9 @@ describe Sql do
       .select(:department)
       .group(:department)
       .order(:department)
-      .build
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT employees.department
       FROM employees
@@ -285,10 +288,14 @@ describe Sql do
     select_query = q
       .from(:users)
       .select(users: [:name, :email], address: [:street, :city])
-      .inner(:address, {q.users.id => q.address.user_id, q.users.name => "'John'", q.users.email => "'john@example.com'"})
-      .build
+      .inner(:address, {
+        q.users.id    => q.address.user_id,
+        q.users.name  => "'John'",
+        q.users.email => "'john@example.com'",
+      })
+      .to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT users.name, users.email, address.street, address.city
       FROM users
@@ -302,9 +309,9 @@ describe Sql do
       .select(users: [:name, :email], address: [:street, :city])
       .inner(:address) do
         (users.id.eq(address.user_id)) & (users.name.eq("'John'")) | (users.id.eq(1))
-      end.build
+      end.to_sql
 
-    select_query.accept(generator).should eq(
+    select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       SELECT users.name, users.email, address.street, address.city
       FROM users
@@ -314,11 +321,11 @@ describe Sql do
   end
 
   it "creates Inset Into query" do
-    insert_query = i.into(:users).values(name: "'John'", email: "'john@example.com'").build
+    insert_query = i.into(:users).values(name: "'John'", email: "'john@example.com'").to_sql
 
-    insert_query.accept(generator).should eq(
+    insert_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      INSERT INTO users (users.name, users.email) VALUES ('John', 'john@example.com')
+      INSERT INTO users (name, email) VALUES ('John', 'john@example.com')
       SQL
     )
   end
@@ -327,11 +334,11 @@ describe Sql do
     insert_query = i.into(:users)
       .values(name: "'John'", email: "'john@example.com'")
       .values(name: "'Jane'", email: "'jane@example.com'")
-      .build
+      .to_sql
 
-    insert_query.accept(generator).should eq(
+    insert_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      INSERT INTO users (users.name, users.email)
+      INSERT INTO users (name, email)
       VALUES ('John', 'john@example.com'), ('Jane', 'jane@example.com')
       SQL
     )
@@ -341,11 +348,11 @@ describe Sql do
     insert_query = i.into(:users)
       .values(name: "'John'", email: "'jane@example.com'")
       .back(:id)
-      .build
+      .to_sql
 
-    insert_query.accept(generator).should eq(
+    insert_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      INSERT INTO users (users.name, users.email) VALUES ('John', 'jane@example.com') RETURNING (users.id)
+      INSERT INTO users (name, email) VALUES ('John', 'jane@example.com') RETURNING (users.id)
       SQL
     )
   end
@@ -357,11 +364,11 @@ describe Sql do
 
     insert_query = i.into(:users)
       .query(select_query)
-      .build
+      .to_sql
 
-    insert_query.accept(generator).should eq(
+    insert_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      INSERT INTO users (users.name, users.email) SELECT users.name, users.email FROM users WHERE (users.id = 1)
+      INSERT INTO users (name, email) SELECT users.name, users.email FROM users WHERE (users.id = 1)
       SQL
     )
   end
@@ -369,9 +376,9 @@ describe Sql do
   it "creates Update query" do
     update_query = u.update(:users)
       .set(name: "'John'", email: "'john@example.com'")
-      .build
+      .to_sql
 
-    update_query.accept(generator).should eq(
+    update_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       UPDATE users SET users.name = 'John', users.email = 'john@example.com'
       SQL
@@ -382,9 +389,9 @@ describe Sql do
     update_query = u.update(:users)
       .set(name: "'John'", email: "'john@example.com'")
       .where { users.id == 1 }
-      .build
+      .to_sql
 
-    update_query.accept(generator).should eq(
+    update_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       UPDATE users SET users.name = 'John', users.email = 'john@example.com'
       WHERE (users.id = 1)
@@ -395,9 +402,9 @@ describe Sql do
   it "Delete specific rows that meet a certain condition." do
     delete_query = d.from(:users)
       .where { users.id == 1 }
-      .build
+      .to_sql
 
-    delete_query.accept(generator).should eq(
+    delete_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       DELETE FROM users WHERE (users.id = 1)
       SQL
@@ -411,9 +418,9 @@ describe Sql do
 
     delete_query = d.from(:users)
       .where { exists?(sub_query) }
-      .build
+      .to_sql
 
-    delete_query.accept(generator).should eq(
+    delete_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       DELETE FROM users WHERE (EXISTS (SELECT users.id FROM users WHERE (users.id = 1)))
       SQL
@@ -424,9 +431,9 @@ describe Sql do
     delete_query = d.from(:users)
       .using(:address)
       .where { (users.id == address.user_id) & (address.city == "'Berlin'") }
-      .build
+      .to_sql
 
-    delete_query.accept(generator).should eq(
+    delete_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       DELETE FROM users USING address WHERE (users.id = address.user_id AND address.city = 'Berlin')
       SQL
@@ -437,9 +444,9 @@ describe Sql do
     delete_query = d.from(:users)
       .where { users.id == 1 }
       .back(:id)
-      .build
+      .to_sql
 
-    delete_query.accept(generator).should eq(
+    delete_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
       DELETE FROM users WHERE (users.id = 1) RETURNING (users.id)
       SQL
@@ -449,7 +456,7 @@ describe Sql do
   it "Creates indexes for table" do
     index = Sql::Index.new(Schema.tables[:users], [:name, :email], unique: true)
 
-    Expression::CreateIndex.new(index).accept(generator).should eq(
+    Expression::CreateIndex.new(index).accept(Expression::Generator.new).should eq(
       <<-SQL.gsub(/\n/, " ").strip
       CREATE UNIQUE INDEX idx_name_emai ON users (name, email)
       SQL
