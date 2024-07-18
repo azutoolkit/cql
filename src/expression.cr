@@ -680,8 +680,10 @@ module Expression
 
     def visit(node : Column) : String
       String::Builder.build do |sb|
-        sb << node.column.table.not_nil!.table_name
-        sb << "."
+        unless node.column.name == :*
+          sb << node.column.table.not_nil!.table_name
+          sb << "."
+        end
         sb << node.column.name
       end
     end
