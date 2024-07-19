@@ -17,6 +17,19 @@ describe Sql::Schema do
     end
   end
 
+  index_exists = ->(index : Symbol, table : Symbol) do
+    begin
+      query = <<-SQL
+      SELECT 1 FROM SQLite_master  WHERE type = 'index' AND tbl_name = '#{table}' AND name = '#{index}';
+      SQL
+      result = Schema.query_one(query, as: Int32)
+      result
+    rescue exception
+      puts exception
+      0
+    end
+  end
+
   schema.table :customers, as: "cust" do
     primary_key :customer_id, Int64, auto_increment: true
     column :customer_name, String, as: "cust_name"
@@ -55,5 +68,16 @@ describe Sql::Schema do
 
     column_exists.call(:city, :customers).should eq(0)
     schema.tables[:customers].columns.size.should eq(3)
+  end
+
+  it "adds an index to a table" do
+    schema.customers.drop!
+    schema.customers.create!
+
+    schema.alter :customers do
+      create_index :name_index, [:customer_name], true
+    end
+
+    index_exists.call(:name_index, :customers).should eq(1)
   end
 end

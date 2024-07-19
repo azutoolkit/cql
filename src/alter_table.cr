@@ -1,9 +1,9 @@
 module Sql
   class AlterTable
-    @table : Table
+    @table : Sql::Table
     @actions : Array(Expression::AlterAction) = [] of Expression::AlterAction
 
-    def initialize(@table : Table)
+    def initialize(@table : Sql::Table)
     end
 
     def add_column(
@@ -30,12 +30,21 @@ module Sql
       Log.error { "Column #{column} does not exist in table #{@table}" }
     end
 
+    def create_index(name : Symbol, columns : Array(Symbol), unique : Bool = false)
+      index = @table.add_index(columns, unique)
+      index.name = name.to_s
+      @actions << Expression::CreateIndex.new(index)
+    end
+
     def to_sql(visitor : Expression::Visitor)
       String::Builder.build do |sb|
         @actions.each do |action|
-          alter_table = Expression::AlterTable.new(@table, action)
-          sb << alter_table.accept(visitor)
-          sb << ";\n"
+          if action.is_a?(Expression::CreateIndex)
+            sb << action.accept(visitor)
+          else
+            sb << Expression::AlterTable.new(@table, action).accept(visitor)
+          end
+          sb << "; "
         end
       end
     end

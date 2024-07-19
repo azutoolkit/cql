@@ -180,7 +180,18 @@ module Expression
 
   alias AddIndex = CreateIndex
 
-  class CreateIndex < Node
+  class CreateIndex < AlterAction
+    getter index : Sql::Index
+
+    def initialize(@index : Sql::Index)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class DropIndex < AlterAction
     getter index : Sql::Index
 
     def initialize(@index : Sql::Index)

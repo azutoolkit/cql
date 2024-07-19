@@ -477,5 +477,12 @@ module Expression
         sb << node.column_name
       end
     end
+
+    def visit(node : DropIndex) : String
+      String::Builder.build do |sb|
+        sb << "DROP INDEX "
+        sb << node.index.name
+      end
+    end
   end
 end
