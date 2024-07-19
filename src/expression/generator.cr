@@ -481,5 +481,14 @@ module Expression
     def visit(node : DropIndex) : String
       @dialect.drop_index(node.index.index_name, node.index.table.table_name.to_s)
     end
+
+    def visit(node : RenameColumn) : String
+      @dialect.rename_column(
+        node.column.table.not_nil!.table_name.to_s,
+        node.column.name.to_s,
+        node.new_name,
+        node.column.sql_type(@adapter)
+      )
+    end
   end
 end

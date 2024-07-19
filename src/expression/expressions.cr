@@ -178,6 +178,18 @@ module Expression
     end
   end
 
+  class RenameColumn < AlterAction
+    getter column : Sql::Column
+    getter new_name : String
+
+    def initialize(@column : Sql::Column, @new_name : String)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   alias AddIndex = CreateIndex
 
   class CreateIndex < AlterAction

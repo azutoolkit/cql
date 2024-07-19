@@ -97,4 +97,18 @@ describe Sql::Schema do
 
     index_exists.call(:name_index, :customers).should eq(0)
   end
+
+  it "renames a column in a table" do
+    schema.customers.drop!
+    schema.customers.create!
+
+    column_exists.call(:city, :customers).should eq(1)
+
+    schema.alter :customers do
+      rename_column :city, :town
+    end
+
+    column_exists.call(:city, :customers).should eq(0)
+    column_exists.call(:town, :customers).should eq(1)
+  end
 end

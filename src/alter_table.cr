@@ -30,6 +30,13 @@ module Sql
       Log.error { "Column #{column} does not exist in table #{@table}" }
     end
 
+    def rename_column(old_name : Symbol, new_name : Symbol)
+      existing_column = @table.columns[old_name]
+      col = existing_column.dup
+      existing_column.name = new_name
+      @actions << Expression::RenameColumn.new(col, new_name.to_s)
+    end
+
     def create_index(name : Symbol, columns : Array(Symbol), unique : Bool = false)
       index = @table.add_index(columns, unique)
       index.name = name.to_s
