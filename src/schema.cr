@@ -13,18 +13,15 @@ module Sql
     end
 
     def exec(sql : String)
-      Log.info { "Executing SQL: #{sql}" }
-      db.exec("#{sql};")
+      db.exec("#{sql};\n")
     end
 
     def query(sql : String)
-      Log.info { "Executing SQL: #{sql}" }
-      db.query("#{sql};")
+      db.query("#{sql};\n")
     end
 
     def query_one(sql : String, as as_kind)
-      Log.info { "Executing SQL: #{sql}" }
-      db.query_one("#{sql};", as: as_kind)
+      db.query_one("#{sql};\n", as: as_kind)
     end
 
     def query
@@ -45,9 +42,17 @@ module Sql
 
     def table(name : Symbol, as as_name = nil, &)
       table = Table.new(name, self, as_name)
-      with table yield
+      with table yield table
       @tables[name] = table
       table
+    end
+
+    def alter(table_name : Symbol, &)
+      alter_table = AlterTable.new(tables[table_name])
+      db.transaction do |tx|
+        with alter_table yield alter_table
+        exec(alter_table.to_sql(@gen))
+      end
     end
 
     macro method_missing(call)

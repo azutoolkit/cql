@@ -107,17 +107,6 @@ module Expression
     end
   end
 
-  class CreateIndex < Node
-    getter index : Sql::Index
-
-    def initialize(@index : Sql::Index)
-    end
-
-    def accept(visitor : Visitor)
-      visitor.visit(self)
-    end
-  end
-
   class CreateTable < Node
     getter table : Sql::Table
 
@@ -151,6 +140,18 @@ module Expression
     end
   end
 
+  class AlterTable < Node
+    getter table : Sql::Table
+    getter action : AlterAction
+
+    def initialize(@table : Sql::Table, @action : AlterAction)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   abstract class AlterAction
     abstract def accept(visitor : Visitor)
   end
@@ -177,33 +178,12 @@ module Expression
     end
   end
 
-  class RenameColumn < AlterAction
-    getter old_name : String
-    getter new_name : String
+  alias AddIndex = CreateIndex
 
-    def initialize(@old_name : String, @new_name : String)
-    end
+  class CreateIndex < Node
+    getter index : Sql::Index
 
-    def accept(visitor : Visitor)
-      visitor.visit(self)
-    end
-  end
-
-  class RenameTable < AlterAction
-    getter new_name : String
-
-    def initialize(@new_name : String)
-    end
-
-    def accept(visitor : Visitor)
-      visitor.visit(self)
-    end
-  end
-
-  class ModifyColumn < AlterAction
-    getter column : Sql::Column
-
-    def initialize(@column : Sql::Column)
+    def initialize(@index : Sql::Index)
     end
 
     def accept(visitor : Visitor)

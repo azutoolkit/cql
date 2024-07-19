@@ -450,11 +450,21 @@ module Expression
       end
     end
 
+    # Add support for AlterTable
+    def visit(node : AlterTable) : String
+      String::Builder.build do |sb|
+        sb << "ALTER TABLE "
+        sb << node.table.table_name
+        sb << " "
+        sb << node.action.accept(self)
+      end
+    end
+
     def visit(node : AddColumn) : String
       String::Builder.build do |sb|
         sb << "ADD COLUMN "
         sb << node.column.name
-        sb << " " << node.column.sql_type
+        sb << " " << node.column.sql_type(@adapter)
         sb << " PRIMARY KEY" if node.column.is_a?(Sql::PrimaryKey)
         sb << " NOT NULL" unless node.column.null?
         sb << " UNIQUE" if node.column.unique
@@ -465,67 +475,6 @@ module Expression
       String::Builder.build do |sb|
         sb << "DROP COLUMN "
         sb << node.column_name
-      end
-    end
-
-    def visit(node : RenameColumn) : String
-      @dialect.rename_column(node.table_name, node.old_name, node.new_name, node.column_type)
-    end
-
-    def visit(node : RenameTable) : String
-      String::Builder.build do |sb|
-        sb << "ALTER TABLE " << node.old_name << " RENAME TO " << node.new_name
-      end
-    end
-
-    def visit(node : ModifyColumn) : String
-      @dialect.modify_column(node.table_name, node.column.name, node.column.sql_type)
-    end
-
-    def visit(node : AddIndex) : String
-      String::Builder.build do |sb|
-        sb << "CREATE "
-        sb << "UNIQUE " if node.index.unique
-        sb << "INDEX "
-        sb << node.index.index_name
-        sb << " ON "
-        sb << node.index.table.table_name
-        sb << " ("
-        sb << node.index.columns.join(", ")
-        sb << ")"
-      end
-    end
-
-    def visit(node : DropIndex) : String
-      @dialect.drop_index(node.index_name, node.index.table.table_name)
-    end
-
-    def visit(node : AddConstraint) : String
-      String::Builder.build do |sb|
-        sb << "ALTER TABLE " << node.table_name << " ADD CONSTRAINT "
-        sb << node.constraint_name
-        sb << " "
-        sb << node.constraint
-      end
-    end
-
-    def visit(node : RemoveConstraint) : String
-      @dialect.remove_constraint(node.table_name, node.constraint_name)
-    end
-
-    def visit(node : AddCheck) : String
-      String::Builder.build do |sb|
-        sb << "ALTER TABLE " << node.table_name << " ADD CHECK "
-        sb << node.check_name
-        sb << " "
-        sb << node.condition
-      end
-    end
-
-    def visit(node : RemoveCheck) : String
-      String::Builder.build do |sb|
-        sb << "ALTER TABLE " << node.table_name << " DROP CHECK "
-        sb << node.check_name
       end
     end
   end

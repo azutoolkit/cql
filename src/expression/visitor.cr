@@ -43,14 +43,5 @@ module Expression
     abstract def visit(node : AlterTable) : String
     abstract def visit(node : AddColumn) : String
     abstract def visit(node : DropColumn) : String
-    abstract def visit(node : RenameColumn) : String
-    abstract def visit(node : RenameTable) : String
-    abstract def visit(node : ModifyColumn) : String
-    abstract def visit(node : CreateIndex) : String
-    abstract def visit(node : DropIndex) : String
-    abstract def visit(node : AddConstraint) : String
-    abstract def visit(node : RemoveConstraint) : String
-    abstract def visit(node : AddCheck) : String
-    abstract def visit(node : RemoveCheck) : String
   end
 end
