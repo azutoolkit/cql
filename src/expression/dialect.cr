@@ -1,19 +1,11 @@
 module Expression
   abstract class Dialect
-    def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
-      raise "Not implemented"
-    end
+    abstract def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
 
-    def modify_column(table_name : String, column_name : String, column_type : String) : String
-      raise "Not implemented"
-    end
+    abstract def modify_column(table_name : String, column_name : String, column_type : String) : String
 
-    def drop_index(index_name : String, table_name : String) : String
-      raise "Not implemented"
-    end
+    abstract def drop_index(index_name : String, table_name : String) : String
 
-    def remove_constraint(table_name : String, constraint_name : String) : String
-      raise "Not implemented"
-    end
+    abstract def remove_constraint(table_name : String, constraint_name : String) : String
   end
 end

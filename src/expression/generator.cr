@@ -4,8 +4,8 @@ module Expression
 
     @dialect : Dialect
 
-    def initialize(db_type : Sql::Adapter = Sql::Adapter::Sqlite)
-      @dialect = case db_type
+    def initialize(@adapter : Sql::Adapter = Sql::Adapter::Sqlite)
+      @dialect = case @adapter
                  when Sql::Adapter::Sqlite
                    SqliteDialect.new
                  when Sql::Adapter::Mysql
@@ -69,7 +69,7 @@ module Expression
               sb << val.to_s
               sb << ", " if j < row.size - 1
             end
-            if (i < node.values.size - 1)
+            if i < node.values.size - 1
               sb << "), "
             else
               sb << ")"
@@ -426,7 +426,7 @@ module Expression
         sb << " ("
         node.table.columns.each_with_index do |(name, column), i|
           sb << column.name
-          sb << " " << column.sql_type
+          sb << " " << column.sql_type(@adapter)
           sb << " PRIMARY KEY" if column.is_a?(Sql::PrimaryKey)
           sb << " NOT NULL" unless column.null?
           sb << " UNIQUE" if column.unique
