@@ -5,6 +5,7 @@ require "../src/sql"
 
 Schema = Sql::Schema.new(
   database: :northwind,
+  adapter: Sql::Adapter::Sqlite,
   db: DB.connect("sqlite3://spec/data.db")
 )
 

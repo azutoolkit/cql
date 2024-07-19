@@ -5,10 +5,11 @@ module Sql
     getter version : String
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
     getter db : DB::Connection
-    getter gen : Expression::Generator = Expression::Generator.new
+    getter gen : Expression::Generator
 
-    def initialize(@database : Symbol, @db : DB::Connection, @version : String = "1.0")
+    def initialize(@database : Symbol, @db : DB::Connection, @adapter : Adapter, @version : String = "1.0")
       @tables = {} of Symbol => Table
+      @gen = Expression::Generator.new(@adapter)
     end
 
     def exec(sql : String)

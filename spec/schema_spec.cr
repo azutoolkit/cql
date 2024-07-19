@@ -2,7 +2,7 @@ require "./spec_helper"
 
 describe Sql::Schema do
   it "creates a schema" do
-    schema = Sql::Schema.new(:northwind, db: DB.connect("sqlite3://spec/data.db"), version: "1.0")
+    schema = Sql::Schema.new(:northwind, adapter: Sql::Adapter::Sqlite, db: DB.connect("sqlite3://spec/data.db"), version: "1.0")
 
     schema.table :customers, as: "cust" do
       primary_key :customer_id, Int64, auto_increment: true
