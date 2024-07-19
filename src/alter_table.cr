@@ -36,10 +36,17 @@ module Sql
       @actions << Expression::CreateIndex.new(index)
     end
 
+    def drop_index(name : Symbol)
+      index = Index.new(@table, [] of Symbol, false, name.to_s)
+      @actions << Expression::DropIndex.new(index)
+    rescue exception
+      Log.error { "Index #{name} does not exist in table #{@table}" }
+    end
+
     def to_sql(visitor : Expression::Visitor)
       String::Builder.build do |sb|
         @actions.each do |action|
-          if action.is_a?(Expression::CreateIndex)
+          if action.is_a?(Expression::CreateIndex) || action.is_a?(Expression::DropIndex)
             sb << action.accept(visitor)
           else
             sb << Expression::AlterTable.new(@table, action).accept(visitor)

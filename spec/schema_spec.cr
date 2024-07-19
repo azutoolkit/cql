@@ -80,4 +80,21 @@ describe Sql::Schema do
 
     index_exists.call(:name_index, :customers).should eq(1)
   end
+
+  it "drops an index from a table" do
+    schema.customers.drop!
+    schema.customers.create!
+
+    schema.alter :customers do
+      create_index :name_index, [:customer_name], true
+    end
+
+    index_exists.call(:name_index, :customers).should eq(1)
+
+    schema.alter :customers do
+      drop_index :name_index
+    end
+
+    index_exists.call(:name_index, :customers).should eq(0)
+  end
 end

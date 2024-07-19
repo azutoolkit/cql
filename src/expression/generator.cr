@@ -479,10 +479,7 @@ module Expression
     end
 
     def visit(node : DropIndex) : String
-      String::Builder.build do |sb|
-        sb << "DROP INDEX "
-        sb << node.index.name
-      end
+      @dialect.drop_index(node.index.index_name, node.index.table.table_name.to_s)
     end
   end
 end

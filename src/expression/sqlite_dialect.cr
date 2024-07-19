@@ -9,7 +9,7 @@ module Expression
     end
 
     def drop_index(index_name : String, table_name : String) : String
-      "DROP INDEX #{index_name}"
+      "DROP INDEX IF EXISTS #{index_name}"
     end
 
     def remove_constraint(table_name : String, constraint_name : String) : String
