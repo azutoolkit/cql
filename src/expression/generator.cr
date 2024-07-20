@@ -8,7 +8,7 @@ module Expression
       @dialect = case @adapter
                  when Sql::Adapter::Sqlite
                    SqliteDialect.new
-                 when Sql::Adapter::Mysql
+                 when Sql::Adapter::MySql
                    MysqlDialect.new
                  else
                    PostgresDialect.new
@@ -500,6 +500,37 @@ module Expression
         node.table_name,
         node.column.name.to_s,
         node.column.sql_type(@adapter))
+    end
+
+    def visit(node : AddForeignKey) : String
+      puts "Adding foreign key"
+      if @adapter == Sql::Adapter::Sqlite
+        message = <<-MSG
+              SQLite does not support adding foreign keys to an \n
+              existing table directly via the ALTER TABLE statement.\n
+              You need to recreate the table with the foreign key constraint.\n
+              Here is an example workflow:
+
+                1. Create the new table with the foreign key.
+                2. Copy data from the old table to the new table.
+                3. Drop the old table.
+                4. Rename the new table to the old table name.
+            MSG
+        raise DB::Error.new message
+      end
+
+      String::Builder.build do |sb|
+        sb << "ADD CONSTRAINT "
+        sb << node.fk.name
+        sb << " FOREIGN KEY ("
+        sb << node.fk.columns.map { |c| c.to_s }.join(", ")
+        sb << ") REFERENCES "
+        sb << node.fk.table
+        sb << " ("
+        sb << node.fk.references.map { |c| c.to_s }.join(", ")
+        sb << ") ON DELETE " << node.fk.on_delete
+        sb << " ON UPDATE " << node.fk.on_update
+      end
     end
   end
 end

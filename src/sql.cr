@@ -2,9 +2,8 @@ require "log"
 require "uuid"
 require "ulid"
 require "db"
-require "./check"
-require "./constraint"
 require "./index"
+require "./foreign_key"
 require "./column"
 require "./primary_key"
 require "./alter_table"
@@ -23,7 +22,7 @@ module Sql
 
   enum Adapter
     Sqlite
-    Mysql
+    MySql
     Postgres
   end
 end

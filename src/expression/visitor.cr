@@ -48,5 +48,6 @@ module Expression
     abstract def visit(node : RenameColumn) : String
     abstract def visit(node : ChangeColumn) : String
     abstract def visit(node : RenameTable) : String
+    abstract def visit(node : AddForeignKey) : String
   end
 end

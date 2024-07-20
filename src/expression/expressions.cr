@@ -220,6 +220,17 @@ module Expression
     end
   end
 
+  class AddForeignKey < AlterAction
+    getter fk : Sql::ForeignKey
+
+    def initialize(@fk : Sql::ForeignKey)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   alias AddIndex = CreateIndex
 
   class CreateIndex < AlterAction

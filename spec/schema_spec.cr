@@ -33,11 +33,17 @@ describe Sql::Schema do
     primary_key :customer_id, Int64, auto_increment: true
     column :customer_name, String, as: "cust_name"
     column :city, String
+    column :country_id, Int64
+  end
+
+  schema.table :countries do
+    primary_key :country_id, Int64, auto_increment: true
+    column :country, String
   end
 
   it "creates a schema" do
-    schema.tables.size.should eq(1)
-    schema.tables[:customers].columns.size.should eq(3)
+    schema.tables.size.should eq(2)
+    schema.tables[:customers].columns.size.should eq(4)
   end
 
   it "add a column to an existing table" do
@@ -49,7 +55,7 @@ describe Sql::Schema do
     end
 
     column_exists.call(:country, :customers).should eq(1)
-    schema.tables[:customers].columns.size.should eq(4)
+    schema.tables[:customers].columns.size.should eq(5)
   end
 
   it "drops a column from an existing table" do
@@ -63,7 +69,7 @@ describe Sql::Schema do
     end
 
     column_exists.call(:city, :customers).should eq(0)
-    schema.tables[:customers].columns.size.should eq(3)
+    schema.tables[:customers].columns.size.should eq(4)
   end
 
   it "adds an index to a table" do
@@ -112,13 +118,13 @@ describe Sql::Schema do
     schema.customers.drop!
     schema.customers.create!
 
-    schema.alter :customers do
-      change_column :full_name, Int32
+    column_exists.call(:full_name, :customers).should eq(1)
+
+    expect_raises DB::Error do
+      schema.alter :customers do
+        change_column :full_name, Int32
+      end
     end
-
-    column = schema.tables[:customers].columns[:full_name]
-
-    column.type.should eq(Int32)
   end
 
   it "renames a table" do
@@ -133,5 +139,24 @@ describe Sql::Schema do
     schema.tables[:clients]?.should_not be_nil
 
     schema.clients.drop!
+  end
+
+  it "adds a foreign key to a table" do
+    schema.countries.create!
+
+    schema.table :customers, as: "cust" do
+      primary_key :customer_id, Int64, auto_increment: true
+      column :customer_name, String, as: "cust_name"
+      column :city, String
+      column :country_id, Int64
+    end
+
+    schema.customers.create!
+
+    expect_raises DB::Error do
+      schema.alter :customers do
+        foreign_key :fk_country, [:country], :countries, [:country_id]
+      end
+    end
   end
 end

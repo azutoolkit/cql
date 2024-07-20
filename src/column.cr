@@ -40,7 +40,7 @@ module Sql
         Time::Span   => "INTERVAL",
         Slice(UInt8) => "BLOB",
       },
-      Sql::Adapter::Mysql => {
+      Sql::Adapter::MySql => {
         Int32        => "INT",
         Int64        => "BIGINT",
         UInt32       => "INT UNSIGNED",
@@ -54,7 +54,7 @@ module Sql
         Time::Span   => "TIME",
         Slice(UInt8) => "BLOB",
       },
-      Sql::Adapter::Mysql => {
+      Sql::Adapter::MySql => {
         Int32        => "INTEGER",
         Int64        => "BIGINT",
         UInt32       => "INTEGER",

@@ -54,6 +54,18 @@ module Sql
       Log.error { ex.message }
     end
 
+    def foreign_key(
+      name : Symbol,
+      columns : Array(Symbol),
+      table : Symbol,
+      references : Array(Symbol),
+      on_delete : String = "NO ACTION",
+      on_update : String = "NO ACTION"
+    )
+      fk = ForeignKey.new(name, columns, table, references, on_delete, on_update)
+      @actions << Expression::AddForeignKey.new(fk)
+    end
+
     def create_index(name : Symbol, columns : Array(Symbol), unique : Bool = false)
       index = @table.add_index(columns, unique)
       index.name = name.to_s

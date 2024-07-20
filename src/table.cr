@@ -46,6 +46,7 @@ module Sql
 
     def create!
       create_query = Expression::CreateTable.new(self).accept(schema.gen).to_s
+      schema.tables[table_name] = self if schema.tables[table_name].nil?
       schema.db.exec "#{create_query};"
     end
 
