@@ -50,11 +50,15 @@ module Sql
 
     def alter(table_name : Symbol, &)
       alter_table = AlterTable.new(tables[table_name], self)
+      with alter_table yield
       db.transaction do |tx|
         cnn = tx.connection
-        with alter_table yield
+        puts alter_table.to_sql(@gen)
+        Log.info { alter_table.to_sql(@gen) }
         cnn.exec(alter_table.to_sql(@gen))
       end
+    rescue ex
+      Log.error { ex.message }
     end
 
     macro method_missing(call)

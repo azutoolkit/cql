@@ -181,8 +181,12 @@ module Expression
   class RenameColumn < AlterAction
     getter column : Sql::Column
     getter new_name : String
+    getter old_name : String
+    getter table_name : String
 
     def initialize(@column : Sql::Column, @new_name : String)
+      @old_name = @column.name.to_s
+      @table_name = @column.table.not_nil!.table_name.to_s
     end
 
     def accept(visitor : Visitor)

@@ -484,8 +484,8 @@ module Expression
 
     def visit(node : RenameColumn) : String
       @dialect.rename_column(
-        node.column.table.not_nil!.table_name.to_s,
-        node.column.name.to_s,
+        node.table_name,
+        node.old_name,
         node.new_name,
         node.column.sql_type(@adapter)
       )

@@ -32,10 +32,11 @@ module Sql
     end
 
     def rename_column(old_name : Symbol, new_name : Symbol)
-      existing_column = @table.columns[old_name]
-      col = existing_column.dup
-      existing_column.name = new_name
-      @actions << Expression::RenameColumn.new(col, new_name.to_s)
+      column = @table.columns[old_name]
+      @actions << Expression::RenameColumn.new(column.dup, new_name.to_s)
+      column.name = new_name
+      @table.columns.delete(old_name)
+      @table.columns[new_name] = column
     end
 
     def rename_table(new_name : Symbol)
@@ -64,12 +65,12 @@ module Sql
       String::Builder.build do |sb|
         @actions.each do |action|
           case action
-          when Expression::AddColumn, Expression::DropColumn, Expression::RenameTable
+          when Expression::CreateIndex, Expression::DropIndex, Expression::RenameTable
             sb << action.accept(visitor)
           else
             sb << Expression::AlterTable.new(@table, action).accept(visitor)
           end
-          sb << "; "
+          sb << ";\n"
         end
       end
     end

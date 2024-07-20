@@ -98,14 +98,14 @@ describe Sql::Schema do
     schema.customers.drop!
     schema.customers.create!
 
-    column_exists.call(:city, :customers).should eq(1)
+    column_exists.call(:customer_name, :customers).should eq(1)
 
     schema.alter :customers do
-      rename_column :city, :town
+      rename_column :customer_name, :full_name
     end
 
-    column_exists.call(:city, :customers).should eq(0)
-    column_exists.call(:town, :customers).should eq(1)
+    column_exists.call(:customer_name, :customers).should eq(0)
+    column_exists.call(:full_name, :customers).should eq(1)
   end
 
   it "renames a table" do
