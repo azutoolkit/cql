@@ -1,6 +1,6 @@
 module Sql
   class Table
-    getter table_name : Symbol
+    property table_name : Symbol
     getter columns : Hash(Symbol, Column) = {} of Symbol => Column
     getter primary_key : PrimaryKey?
     getter as_name : String?
@@ -57,6 +57,7 @@ module Sql
     def truncate!
       truncate_query = Expression::TruncateTable.new(self).accept(schema.gen).to_s
       schema.db.exec "#{truncate_query};"
+      schema.tables.delete[table_name]
     end
 
     macro method_missing(call)

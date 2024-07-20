@@ -13,6 +13,7 @@ module Sql
     end
 
     def exec(sql : String)
+      Log.info { sql }
       db.exec("#{sql};\n")
     end
 
@@ -42,16 +43,18 @@ module Sql
 
     def table(name : Symbol, as as_name = nil, &)
       table = Table.new(name, self, as_name)
-      with table yield table
+      with table yield
       @tables[name] = table
       table
     end
 
     def alter(table_name : Symbol, &)
-      alter_table = AlterTable.new(tables[table_name])
-      with alter_table yield
-      Log.info { alter_table.to_sql(@gen) }
-      exec(alter_table.to_sql(@gen))
+      alter_table = AlterTable.new(tables[table_name], self)
+      db.transaction do |tx|
+        cnn = tx.connection
+        with alter_table yield
+        cnn.exec(alter_table.to_sql(@gen))
+      end
     end
 
     macro method_missing(call)

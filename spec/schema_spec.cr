@@ -25,7 +25,6 @@ describe Sql::Schema do
       result = Schema.query_one(query, as: Int32)
       result
     rescue exception
-      puts exception
       0
     end
   end
@@ -34,9 +33,6 @@ describe Sql::Schema do
     primary_key :customer_id, Int64, auto_increment: true
     column :customer_name, String, as: "cust_name"
     column :city, String
-  end
-
-  before_each do
   end
 
   it "creates a schema" do
@@ -110,5 +106,19 @@ describe Sql::Schema do
 
     column_exists.call(:city, :customers).should eq(0)
     column_exists.call(:town, :customers).should eq(1)
+  end
+
+  it "renames a table" do
+    schema.customers.drop!
+    schema.customers.create!
+
+    schema.alter :customers do
+      rename_table :clients
+    end
+
+    schema.tables[:customers]?.should be_nil
+    schema.tables[:clients]?.should_not be_nil
+
+    schema.clients.drop!
   end
 end

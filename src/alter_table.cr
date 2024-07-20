@@ -1,9 +1,10 @@
 module Sql
   class AlterTable
-    @table : Sql::Table
+    private getter table : Sql::Table
     @actions : Array(Expression::AlterAction) = [] of Expression::AlterAction
+    private getter schema : Sql::Schema
 
-    def initialize(@table : Sql::Table)
+    def initialize(@table : Sql::Table, @schema : Sql::Schema)
     end
 
     def add_column(
@@ -37,6 +38,15 @@ module Sql
       @actions << Expression::RenameColumn.new(col, new_name.to_s)
     end
 
+    def rename_table(new_name : Symbol)
+      @actions << Expression::RenameTable.new(table.dup, new_name.to_s)
+      schema.tables.delete(table.table_name)
+      table.table_name = new_name
+      schema.tables[new_name] = table
+    rescue ex
+      Log.error { ex.message }
+    end
+
     def create_index(name : Symbol, columns : Array(Symbol), unique : Bool = false)
       index = @table.add_index(columns, unique)
       index.name = name.to_s
@@ -53,7 +63,8 @@ module Sql
     def to_sql(visitor : Expression::Visitor)
       String::Builder.build do |sb|
         @actions.each do |action|
-          if action.is_a?(Expression::CreateIndex) || action.is_a?(Expression::DropIndex)
+          case action
+          when Expression::AddColumn, Expression::DropColumn, Expression::RenameTable
             sb << action.accept(visitor)
           else
             sb << Expression::AlterTable.new(@table, action).accept(visitor)

@@ -490,5 +490,9 @@ module Expression
         node.column.sql_type(@adapter)
       )
     end
+
+    def visit(node : RenameTable) : String
+      @dialect.rename_table(node.table.table_name.to_s, node.new_name)
+    end
   end
 end

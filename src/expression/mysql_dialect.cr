@@ -15,5 +15,9 @@ module Expression
     def remove_constraint(table_name : String, constraint_name : String) : String
       "DROP FOREIGN KEY #{constraint_name}"
     end
+
+    def rename_table(old_name : String, new_name : String) : String
+      "RENAME TABLE #{old_name} TO #{new_name}"
+    end
   end
 end

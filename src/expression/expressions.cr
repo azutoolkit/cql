@@ -190,6 +190,18 @@ module Expression
     end
   end
 
+  class RenameTable < AlterAction
+    getter table : Sql::Table
+    getter new_name : String
+
+    def initialize(@table : Sql::Table, @new_name : String)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   alias AddIndex = CreateIndex
 
   class CreateIndex < AlterAction
