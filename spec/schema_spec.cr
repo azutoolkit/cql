@@ -108,6 +108,19 @@ describe Sql::Schema do
     column_exists.call(:full_name, :customers).should eq(1)
   end
 
+  it "changes a column in a table" do
+    schema.customers.drop!
+    schema.customers.create!
+
+    schema.alter :customers do
+      change_column :full_name, Int32
+    end
+
+    column = schema.tables[:customers].columns[:full_name]
+
+    column.type.should eq(Int32)
+  end
+
   it "renames a table" do
     schema.customers.drop!
     schema.customers.create!

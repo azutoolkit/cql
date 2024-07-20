@@ -194,6 +194,20 @@ module Expression
     end
   end
 
+  class ChangeColumn < AlterAction
+    getter column : Sql::Column
+    getter type : Sql::ColumnType
+    getter table_name : String
+
+    def initialize(@column : Sql::Column, @type : Sql::ColumnType)
+      @table_name = @column.table.not_nil!.table_name.to_s
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   class RenameTable < AlterAction
     getter table : Sql::Table
     getter new_name : String

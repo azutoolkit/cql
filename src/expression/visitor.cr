@@ -46,6 +46,7 @@ module Expression
     abstract def visit(node : CreateIndex) : String
     abstract def visit(node : DropIndex) : String
     abstract def visit(node : RenameColumn) : String
+    abstract def visit(node : ChangeColumn) : String
     abstract def visit(node : RenameTable) : String
   end
 end

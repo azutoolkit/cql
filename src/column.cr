@@ -5,7 +5,7 @@ module Sql
     alias Date = Time
 
     property name : Symbol
-    getter type : ColumnType
+    property type : ColumnType
     getter? null : Bool = false
     getter default : DB::Any = nil
     getter unique : Bool = false

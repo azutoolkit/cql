@@ -39,6 +39,12 @@ module Sql
       @table.columns[new_name] = column
     end
 
+    def change_column(name : Symbol, type : ColumnType)
+      column = @table.columns[name]
+      @actions << Expression::ChangeColumn.new(column, type)
+      column.type = type
+    end
+
     def rename_table(new_name : Symbol)
       @actions << Expression::RenameTable.new(table.dup, new_name.to_s)
       schema.tables.delete(table.table_name)
