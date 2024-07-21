@@ -523,14 +523,18 @@ module Expression
         sb << "ADD CONSTRAINT "
         sb << node.fk.name
         sb << " FOREIGN KEY ("
-        sb << node.fk.columns.map { |c| c.to_s }.join(", ")
+        sb << node.fk.columns.map(&.to_s).join(", ")
         sb << ") REFERENCES "
         sb << node.fk.table
         sb << " ("
-        sb << node.fk.references.map { |c| c.to_s }.join(", ")
+        sb << node.fk.references.map(&.to_s).join(", ")
         sb << ") ON DELETE " << node.fk.on_delete
         sb << " ON UPDATE " << node.fk.on_update
       end
+    end
+
+    def visit(node : DropForeignKey) : String
+      @dialect.drop_foreign_key(node.table, node.fk)
     end
   end
 end

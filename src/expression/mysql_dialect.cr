@@ -12,7 +12,7 @@ module Expression
       "DROP INDEX #{index_name} ON #{table_name}"
     end
 
-    def remove_constraint(table_name : String, constraint_name : String) : String
+    def drop_foreign_key(table_name : String, constraint_name : String) : String
       "DROP FOREIGN KEY #{constraint_name}"
     end
 

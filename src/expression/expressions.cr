@@ -634,4 +634,16 @@ module Expression
       visitor.visit(self)
     end
   end
+
+  class DropForeignKey < AlterAction
+    getter fk : String
+    getter table : String
+
+    def initialize(@fk : String, @table : String)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
 end

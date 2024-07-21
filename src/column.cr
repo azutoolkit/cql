@@ -54,7 +54,7 @@ module Sql
         Time::Span   => "TIME",
         Slice(UInt8) => "BLOB",
       },
-      Sql::Adapter::MySql => {
+      Sql::Adapter::Postgres => {
         Int32        => "INTEGER",
         Int64        => "BIGINT",
         UInt32       => "INTEGER",

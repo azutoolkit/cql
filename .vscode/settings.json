@@ -6,6 +6,17 @@
       "name": "Northwind",
       "group": "Local",
       "database": "${workspaceFolder:sql}/spec/data.db"
+    },
+    {
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "Example",
+      "group": "Local",
+      "database": "example",
+      "username": "example",
+      "password": "example"
     }
   ]
 }

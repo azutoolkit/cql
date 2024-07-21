@@ -50,8 +50,6 @@ module Sql
       schema.tables.delete(table.table_name)
       table.table_name = new_name
       schema.tables[new_name] = table
-    rescue ex
-      Log.error { ex.message }
     end
 
     def foreign_key(
@@ -64,6 +62,10 @@ module Sql
     )
       fk = ForeignKey.new(name, columns, table, references, on_delete, on_update)
       @actions << Expression::AddForeignKey.new(fk)
+    end
+
+    def drop_foreign_key(name : Symbol)
+      @actions << Expression::DropForeignKey.new(name.to_s, @table.table_name.to_s)
     end
 
     def create_index(name : Symbol, columns : Array(Symbol), unique : Bool = false)

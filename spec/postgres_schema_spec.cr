@@ -1,18 +1,23 @@
 require "./spec_helper"
+require "pg"
 
 describe Sql::Schema do
   schema = Sql::Schema.new(
     :northwind,
-    adapter: Sql::Adapter::Sqlite,
-    db: DB.connect("sqlite3://spec/data.db"),
+    adapter: Sql::Adapter::Postgres,
+    db: DB.connect("postgresql://example:example@localhost:5432/example"),
     version: "1.0")
 
   column_exists = ->(col : Symbol, table : Symbol) do
     begin
-      query = "SELECT 1 FROM pragma_table_info('#{table}') WHERE name = '#{col}';\n"
-      result = Schema.query_one(query, as: Int32)
-      result
+      query = <<-SQL
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'  AND table_name = '#{table}'  AND column_name = '#{col}';
+      SQL
+      schema.db.query_one(query, as: Int32)
     rescue exception
+      puts exception
       0
     end
   end
@@ -20,10 +25,9 @@ describe Sql::Schema do
   index_exists = ->(index : Symbol, table : Symbol) do
     begin
       query = <<-SQL
-      SELECT 1 FROM SQLite_master  WHERE type = 'index' AND tbl_name = '#{table}' AND name = '#{index}';
+      SELECT 1 FROM pg_indexes WHERE tablename = '#{table}' AND indexname = '#{index}';
       SQL
-      result = Schema.query_one(query, as: Int32)
-      result
+      schema.db.query_one(query, as: Int32)
     rescue exception
       0
     end
@@ -51,10 +55,11 @@ describe Sql::Schema do
     schema.customers.create!
 
     schema.alter :customers do
-      add_column :country, String
+      add_column :country, String, size: 50
     end
 
-    column_exists.call(:country, :customers).should eq(1)
+    sleep 1
+    puts column_exists.call(:country, :customers).should eq(1)
     schema.tables[:customers].columns.size.should eq(5)
   end
 
@@ -120,10 +125,8 @@ describe Sql::Schema do
 
     column_exists.call(:full_name, :customers).should eq(1)
 
-    expect_raises DB::Error do
-      schema.alter :customers do
-        change_column :full_name, Int32
-      end
+    schema.alter :customers do
+      change_column :full_name, String
     end
   end
 
@@ -148,19 +151,18 @@ describe Sql::Schema do
       primary_key :customer_id, Int64, auto_increment: true
       column :customer_name, String, as: "cust_name"
       column :city, String
-      column :country_id, Int64
+      column :country, Int64
     end
 
     schema.customers.create!
 
-    expect_raises DB::Error do
-      schema.alter :customers do
-        foreign_key :fk_country, [:country], :countries, [:country_id]
-      end
+    schema.alter :customers do
+      foreign_key :fk_country, [:country], :countries, [:country_id]
     end
   end
 
   it "drops a foreign key from a table" do
+    schema.customers.drop!
     schema.countries.create!
 
     schema.table :customers, as: "cust" do

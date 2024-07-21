@@ -24,8 +24,18 @@ module Expression
       "DROP INDEX IF EXISTS #{index_name}"
     end
 
-    def remove_constraint(table_name : String, constraint_name : String) : String
-      "DROP CONSTRAINT #{constraint_name}"
+    def drop_foreign_key(table_name : String, constraint_name : String) : String
+      message = <<-MSG
+      SQLite does not support dropping foreign keys directly via the ALTER TABLE
+      statement. You need to recreate the table without the foreign key constraint.
+
+      Here is an example workflow:
+
+        1. Create a new table without the foreign key.
+        2. Copy data from the old table to the new table.
+        3. Drop the old table.
+        4. Rename the new table to the old table name.
+      MSG
     end
 
     def rename_table(old_name : String, new_name : String) : String
