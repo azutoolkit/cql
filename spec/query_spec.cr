@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Sql do
+describe Sql::Query do
   it "selects all columns from tables" do
     select_query = q
       .from(:customers, :users)
@@ -8,7 +8,8 @@ describe Sql do
 
     select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      SELECT customers.customer_id, customers.name, customers.city, customers.balance, users.id, users.name, users.email
+      SELECT customers.customer_id, customers.name,
+      customers.city, customers.balance, users.id, users.name, users.email
       FROM customers, users
       SQL
     )
