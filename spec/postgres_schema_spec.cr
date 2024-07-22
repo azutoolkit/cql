@@ -59,7 +59,8 @@ describe Sql::Schema do
     end
 
     sleep 1
-    puts column_exists.call(:country, :customers).should eq(1)
+
+    column_exists.call(:country, :customers).should eq(1)
     schema.tables[:customers].columns.size.should eq(5)
   end
 
