@@ -20,13 +20,20 @@ module Sql
       self
     end
 
+    def values(values : Array(Hash(Symbol, DB::Any)))
+      values.each { |hash|
+        build_values(hash)
+      }
+      self
+    end
+
+    def values(hash : Hash(Symbol, DB::Any))
+      build_values(hash)
+      self
+    end
+
     def values(**fields)
-      keys = fields.keys.map { |column| Expression::Column.new(find_column(column)) }
-      @columns = keys.to_set if @columns.empty?
-
-      vals = fields.values.map { |v| v.as(DB::Any) }
-      @values << vals.to_set
-
+      build_values(fields)
       self
     end
 
@@ -43,10 +50,7 @@ module Sql
     def build
       Expression::Insert.new(
         Expression::Table.new(@table.not_nil!),
-        @columns,
-        @values,
-        @back,
-        @query.try(&.build)
+        @columns, @values, @back, build_query
       )
     end
 
@@ -54,12 +58,32 @@ module Sql
       build.accept(gen)
     end
 
+    private def build_query
+      if query = @query
+        query.build
+      end
+    end
+
+    private def build_values(fields)
+      keys = fields.keys.map do |column|
+        column = find_column(column)
+        Expression::Column.new(column)
+      end
+
+      @columns = keys.to_set if @columns.empty?
+
+      vals = fields.values.map { |v| v.as(DB::Any) }
+      @values << vals.to_set
+    end
+
     private def find_table(table : Symbol) : Table
       @schema.tables[table] || raise "Table #{table} not found"
     end
 
     private def find_column(column : Symbol) : Column
-      @table.not_nil!.columns[column] || raise "Column #{column} not found"
+      @table
+        .not_nil!
+        .columns[column] || raise "Column #{column} not found"
     end
   end
 end
