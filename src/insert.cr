@@ -12,7 +12,7 @@ module Sql
     end
 
     def exec
-      @schema.exec("#{to_sql};")
+      @schema.db.exec to_sql
     end
 
     def into(table : Symbol)

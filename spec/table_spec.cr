@@ -32,15 +32,11 @@ describe Sql::Table do
       i.into(:customers).values(customer_id: c.customer_id, name: c.name, city: c.city, balance: c.balance).exec
     end
 
-    count_sql = q.from(:customers).count.to_sql
-
-    count = Schema.query_one(count_sql, as: Int32)
-    count.should eq 2
+    count_query = q.from(:customers).count
+    count_query.first!(as: Int32).should eq 2
 
     result = d.from(:customers).exec
-
-    count = Schema.query_one(count_sql, as: Int32)
-    count.should eq 0
+    count_query.first!(as: Int32).should eq 0
   end
 
   it "drops table" do
@@ -49,7 +45,7 @@ describe Sql::Table do
     check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
 
     expect_raises(DB::NoResultsError) do
-      name = Schema.query_one(check_query, as: String)
+      name = Schema.db.query_one(check_query, as: String)
     end
   end
 end

@@ -17,7 +17,7 @@ describe Sql::Schema do
       SQL
       schema.db.query_one(query, as: Int32)
     rescue exception
-      puts exception
+      Log.info { exception }
       0
     end
   end

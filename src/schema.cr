@@ -12,19 +12,6 @@ module Sql
       @gen = Expression::Generator.new(@adapter)
     end
 
-    def exec(sql : String)
-      Log.info { sql }
-      db.exec("#{sql};\n")
-    end
-
-    def query(sql : String)
-      db.query("#{sql};\n")
-    end
-
-    def query_one(sql : String, as as_kind)
-      db.query_one("#{sql};\n", as: as_kind)
-    end
-
     def query
       Query.new(self)
     end

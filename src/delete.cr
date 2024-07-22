@@ -9,7 +9,7 @@ module Sql
     end
 
     def exec
-      @schema.exec("#{to_sql};")
+      @schema.db.exec to_sql
     end
 
     def to_sql(gen = @schema.gen)

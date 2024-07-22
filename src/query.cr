@@ -15,6 +15,28 @@ module Sql
     def initialize(@schema : Schema)
     end
 
+    def all(as as_kind)
+      as_kind.from_rs @schema.db.query(to_sql)
+    end
+
+    def all!(as as_kind)
+      all(as_kind).not_nil!
+    end
+
+    def first(as as_kind)
+      @schema.db.query_one(to_sql, as: as_kind)
+    end
+
+    def first!(as as_kind)
+      first(as_kind).not_nil!
+    end
+
+    def each(as as_kind, &block)
+      @schema.db.query_each(to_sql) do |rs|
+        yield as_kind.from_rs(rs)
+      end
+    end
+
     def count(column : Symbol = :*)
       @count_columns << if column == :*
         col = Column.new(column, type: Int64)
@@ -44,10 +66,6 @@ module Sql
     def avg(column : Symbol)
       @count_columns << Expression::Avg.new(Expression::Column.new(find_column(column)))
       self
-    end
-
-    def fetch
-      @schema.query("#{to_sql};")
     end
 
     def to_sql(gen = @schema.gen)

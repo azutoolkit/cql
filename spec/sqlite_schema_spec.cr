@@ -10,7 +10,7 @@ describe Sql::Schema do
   column_exists = ->(col : Symbol, table : Symbol) do
     begin
       query = "SELECT 1 FROM pragma_table_info('#{table}') WHERE name = '#{col}';\n"
-      result = Schema.query_one(query, as: Int32)
+      result = Schema.db.query_one(query, as: Int32)
       result
     rescue exception
       0
@@ -22,7 +22,7 @@ describe Sql::Schema do
       query = <<-SQL
       SELECT 1 FROM SQLite_master  WHERE type = 'index' AND tbl_name = '#{table}' AND name = '#{index}';
       SQL
-      result = Schema.query_one(query, as: Int32)
+      result = Schema.db.query_one(query, as: Int32)
       result
     rescue exception
       0
@@ -47,12 +47,12 @@ describe Sql::Schema do
 
     table = Schema.customers.table_name.to_s
     check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
-    name = Schema.query_one(check_query, as: String)
+    name = Schema.db.query_one(check_query, as: String)
 
     name.should eq table
   end
 
-  it "creates table" do
+  it "creates record in table" do
     Schema.customers.drop!
     Schema.customers.create!
     customer = CustomerModel.new(1, "'John'", "'New York'", 100)
@@ -79,7 +79,7 @@ describe Sql::Schema do
     ).exec
 
     query = q.from(:customers)
-    customers = CustomerModel.from_rs(query.fetch)
+    customers = query.all!(CustomerModel)
     customers.size.should eq 1
   end
 
@@ -202,24 +202,13 @@ describe Sql::Schema do
     end
   end
 
-  it "drops a foreign key from a table" do
+  it "raises when droping a foreign key from a table" do
     schema.countries.create!
 
-    schema.table :customers, as: "cust" do
-      primary_key :customer_id, Int64, auto_increment: true
-      column :customer_name, String, as: "cust_name"
-      column :city, String
-      column :country_id, Int64
-    end
-
-    schema.customers.create!
-
-    schema.alter :customers do
-      foreign_key :fk_country, [:country_id], :countries, [:country_id]
-    end
-
-    schema.alter :customers do
-      drop_foreign_key :fk_country
+    expect_raises SQLite3::Exception do
+      schema.alter :customers do
+        drop_foreign_key :fk_country
+      end
     end
   end
 end

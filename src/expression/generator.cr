@@ -503,7 +503,6 @@ module Expression
     end
 
     def visit(node : AddForeignKey) : String
-      puts "Adding foreign key"
       if @adapter == Sql::Adapter::Sqlite
         message = <<-MSG
               SQLite does not support adding foreign keys to an \n
