@@ -57,12 +57,15 @@ describe Sql::Schema do
     Schema.customers.create!
     customer = CustomerModel.new(1, "'John'", "'New York'", 100)
 
-    insert_query = i.into(:customers).values(
+    i.into(:customers).values(
       customer_id: customer.customer_id,
       name: customer.name,
       city: customer.city,
       balance: customer.balance
-    ).exec
+    ).commit
+
+    total = q.from(:customers).count.first!(as: Int32)
+    total.should eq 1
   end
 
   it "queries customers" do
@@ -76,7 +79,7 @@ describe Sql::Schema do
       name: customer.name,
       city: customer.city,
       balance: customer.balance
-    ).exec
+    ).commit
 
     query = q.from(:customers)
     customers = query.all!(CustomerModel)

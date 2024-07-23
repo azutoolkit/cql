@@ -9,7 +9,7 @@ module Sql
 
     def add_column(
       name : Symbol,
-      type : ColumnType,
+      type : Any,
       as as_name : String? = nil,
       null : Bool = true,
       default : DB::Any = nil,
@@ -39,7 +39,7 @@ module Sql
       @table.columns[new_name] = column
     end
 
-    def change_column(name : Symbol, type : ColumnType)
+    def change_column(name : Symbol, type : Any)
       column = @table.columns[name]
       @actions << Expression::ChangeColumn.new(column, type)
       column.type = type

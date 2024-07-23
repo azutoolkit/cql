@@ -5,7 +5,7 @@ module Sql
     alias Date = Time
 
     property name : Symbol
-    property type : ColumnType
+    property type : Sql::Any
     getter? null : Bool = false
     getter default : DB::Any = nil
     getter unique : Bool = false
@@ -15,7 +15,7 @@ module Sql
 
     def initialize(
       @name : Symbol,
-      @type : ColumnType,
+      @type : Any,
       @as_name : String? = nil,
       @null : Bool = false,
       @default : DB::Any = nil,

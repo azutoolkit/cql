@@ -8,7 +8,7 @@ module Sql
     def initialize(@schema : Schema)
     end
 
-    def exec
+    def commit
       @schema.db.exec to_sql
     end
 

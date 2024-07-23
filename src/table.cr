@@ -20,7 +20,7 @@ module Sql
 
     def column(
       name : Symbol,
-      type : ColumnType,
+      type : Any,
       as as_name : String? = nil,
       null : Bool = false,
       default : DB::Any = nil,

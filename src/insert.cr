@@ -4,14 +4,14 @@ module Sql
 
     @table : Table? = nil
     @columns : Set(Expression::Column) = Set(Expression::Column).new
-    @values : Array(Set(DB::Any)) = Array(Set(DB::Any)).new
-    @back : Set(Expression::Column) = Set(Expression::Column).new
+    @values : Array(Array(DB::Any)) = Array(Array(DB::Any)).new
+    @back : Array(Expression::Column) = Array(Expression::Column).new
     @query : Query? = nil
 
     def initialize(@schema : Schema)
     end
 
-    def exec
+    def commit
       @schema.db.exec to_sql
     end
 
@@ -21,9 +21,7 @@ module Sql
     end
 
     def values(values : Array(Hash(Symbol, DB::Any)))
-      values.each { |hash|
-        build_values(hash)
-      }
+      values.map { |hash| build_values(hash) }
       self
     end
 
@@ -43,7 +41,7 @@ module Sql
     end
 
     def back(*columns : Symbol)
-      @back = columns.to_a.map { |column| Expression::Column.new(find_column(column)) }.to_set
+      @back = columns.to_a.map { |column| Expression::Column.new(find_column(column)) }
       self
     end
 
@@ -65,15 +63,12 @@ module Sql
     end
 
     private def build_values(fields)
-      keys = fields.keys.map do |column|
-        column = find_column(column)
-        Expression::Column.new(column)
+      fields.each do |key, value|
+        column = find_column(key)
+        @columns << Expression::Column.new(column)
+        puts typeof(column.type)
+        @values << column.type.new(value)
       end
-
-      @columns = keys.to_set if @columns.empty?
-
-      vals = fields.values.map { |v| v.as(DB::Any) }
-      @values << vals.to_set
     end
 
     private def find_table(table : Symbol) : Table

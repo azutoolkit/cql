@@ -196,10 +196,10 @@ module Expression
 
   class ChangeColumn < AlterAction
     getter column : Sql::Column
-    getter type : Sql::ColumnType
+    getter type : Sql::Any
     getter table_name : String
 
-    def initialize(@column : Sql::Column, @type : Sql::ColumnType)
+    def initialize(@column : Sql::Column, @type : Sql::Any)
       @table_name = @column.table.not_nil!.table_name.to_s
     end
 

@@ -8,7 +8,7 @@ module Sql
     def initialize(@schema : Schema)
     end
 
-    def exec
+    def commit
       @schema.db.exec to_sql
     end
 
@@ -24,7 +24,7 @@ module Sql
     def set(**fields)
       fields.each do |k, v|
         column = @table.not_nil!.table.columns[k]
-        @setters << Expression::Setter.new(Expression::Column.new(column), v)
+        @setters << Expression::Setter.new(Expression::Column.new(column), column.type.new(v))
       end
 
       self
