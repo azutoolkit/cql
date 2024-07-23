@@ -14,6 +14,7 @@ require "./insert"
 require "./update"
 require "./delete"
 require "./schema"
+require "./repository"
 
 module Sql
   VERSION = "0.1.0"
