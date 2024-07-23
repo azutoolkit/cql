@@ -205,7 +205,7 @@ describe Sql::Query do
   it "EXISTS Operator" do
     sub_query = q.from(:users)
       .select(:id)
-      .where { users.id == 1 }
+      .where { users.id == 1_i64 }
 
     select_query = q.from(:customers)
       .select(:name, :city)
@@ -309,7 +309,7 @@ describe Sql::Query do
     select_query = q.from(:users)
       .select(users: [:name, :email], address: [:street, :city])
       .inner(:address) do
-        (users.id.eq(address.user_id)) & (users.name.eq("'John'")) | (users.id.eq(1))
+        (users.id.eq(address.user_id)) & (users.name.eq("'John'")) | (users.id.eq(1_i64))
       end.to_sql
 
     select_query.should eq(

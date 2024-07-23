@@ -66,6 +66,12 @@ module Sql
       where_hash
     end
 
+    private def get_expression(field, value)
+      column = find_column(field)
+      column.validate!(v)
+      Expression::Compare.new(Expression::Column.new(column), "=", value)
+    end
+
     private def find_table(name : Symbol) : Table
       @schema.tables[name] || raise "Table #{name} not found"
     end

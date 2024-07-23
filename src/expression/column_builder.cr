@@ -110,6 +110,7 @@ module Expression
     end
 
     private def compare(operator : String, value : DB::Any)
+      @column.column.validate!(value)
       ConditionBuilder.new(Compare.new(@column, operator, value))
     end
   end

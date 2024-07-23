@@ -56,7 +56,7 @@ describe Sql::Insert do
   it "creates Insert Into with select query" do
     select_query = q.from(:users)
       .select(:name, :email)
-      .where { users.id == 1 }
+      .where { users.id == 1_i64 }
 
     insert_query = i.into(:users)
       .query(select_query)

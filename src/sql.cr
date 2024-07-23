@@ -17,8 +17,9 @@ require "./schema"
 
 module Sql
   VERSION = "0.1.0"
+
   alias PrimaryKeyType = Int64.class | UUID.class | ULID.class
-  alias Any = DB::Any
+  alias Any = Bool.class | Float32.class | Float64.class | Int32.class | Int64.class | Slice(UInt8) | String.class | Time.class | UUID.class | Nil.class
 
   enum Adapter
     Sqlite

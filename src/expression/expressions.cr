@@ -366,15 +366,15 @@ module Expression
   class Insert < Node
     getter table : Table
     getter columns : Set(Column) = Set(Column).new
-    getter values : Array(Set(DB::Any)) = [] of Set(DB::Any)
-    getter back : Set(Column) = Set(Column).new
+    getter values : Array(Array(DB::Any)) = [] of Array(DB::Any)
+    getter back : Array(Column) = Array(Column).new
     getter query : Query?
 
     def initialize(
       @table : Table,
       @columns : Set(Column) = Set(Column).new,
-      @values : Array(Set(DB::Any)) = [] of Set(DB::Any),
-      @back : Set(Column) = Set(Column).new,
+      @values : Array(Array(DB::Any)) = [] of Array(DB::Any),
+      @back : Array(Column) = Array(Column).new,
       @query : Query? = nil
     )
     end

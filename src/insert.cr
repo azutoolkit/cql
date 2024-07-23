@@ -63,12 +63,18 @@ module Sql
     end
 
     private def build_values(fields)
-      fields.each do |key, value|
-        column = find_column(key)
-        @columns << Expression::Column.new(column)
-        puts typeof(column.type)
-        @values << column.type.new(value)
+      keys = Set(Expression::Column).new
+
+      fields.each do |field, value|
+        column = find_column(field)
+        column.validate!(value)
+        keys << Expression::Column.new(column)
       end
+
+      @columns = keys if @columns.empty?
+
+      vals = fields.values.map { |v| v.as(DB::Any) }
+      @values << vals.to_a
     end
 
     private def find_table(table : Symbol) : Table
@@ -76,9 +82,7 @@ module Sql
     end
 
     private def find_column(column : Symbol) : Column
-      @table
-        .not_nil!
-        .columns[column] || raise "Column #{column} not found"
+      @table.not_nil!.columns[column] || raise "Column #{column} not found"
     end
   end
 end

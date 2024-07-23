@@ -16,7 +16,7 @@ describe Sql::Update do
   it "create update where query" do
     update_query = u.update(:users)
       .set(name: "'John'", email: "'john@example.com'")
-      .where { users.id == 1 }
+      .where { users.id == 1_i64 }
       .to_sql
 
     update_query.should eq(
