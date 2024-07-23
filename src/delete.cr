@@ -68,7 +68,7 @@ module Sql
 
     private def get_expression(field, value)
       column = find_column(field)
-      column.validate!(v)
+      column.validate!(value)
       Expression::Compare.new(Expression::Column.new(column), "=", value)
     end
 
