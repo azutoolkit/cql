@@ -6,7 +6,7 @@ module Sql
 
     def initialize(
       @name : Symbol,
-      @type : PrimaryKeyType,
+      @type : PrimaryKeyType = Int64,
       @as_name : String? = nil,
       @auto_increment : Bool = true,
       @unique : Bool = true,
