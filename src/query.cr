@@ -90,6 +90,17 @@ module Sql
       self
     end
 
+    def where(hash : Hash(Symbol, DB::Any))
+      condition = nil
+      hash.each_with_index do |(k, v), index|
+        expr = get_expression(k, v)
+        condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
+      end
+      @where = Expression::Where.new(condition.not_nil!)
+
+      self
+    end
+
     def where(**fields)
       condition = nil
       fields.to_h.each_with_index do |(k, v), index|
