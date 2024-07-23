@@ -22,21 +22,13 @@ module Sql
     end
 
     def set(setters : Hash(Symbol, DB::Any))
-      setters.each do |k, v|
-        column = find_column(k)
-        column.validate!(v)
-        @setters << Expression::Setter.new(Expression::Column.new(column), v)
-      end
+      build_setters(setters)
 
       self
     end
 
     def set(**fields)
-      fields.each do |k, v|
-        column = find_column(k)
-        column.validate!(v)
-        @setters << Expression::Setter.new(Expression::Column.new(column), v)
-      end
+      build_setters(fields)
 
       self
     end
@@ -70,9 +62,17 @@ module Sql
       Expression::Update.new(@table.not_nil!, @setters, @where, @back)
     end
 
+    private def build_setters(setters)
+      setters.each do |k, v|
+        column = find_column(k)
+        column.validate!(v)
+        @setters << Expression::Setter.new(Expression::Column.new(column), v)
+      end
+    end
+
     private def get_expression(field, value)
       column = find_column(field)
-      column.validate!(v)
+      column.validate!(value)
       Expression::Compare.new(Expression::Column.new(column), "=", value)
     end
 
