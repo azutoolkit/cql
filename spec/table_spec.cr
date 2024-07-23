@@ -16,7 +16,7 @@ describe Sql::Table do
       name: customer.name,
       city: customer.city,
       balance: customer.balance
-    ).exec
+    ).commit
   end
 
   it "truncates table" do
@@ -29,13 +29,13 @@ describe Sql::Table do
     ]
 
     customers.each do |c|
-      i.into(:customers).values(customer_id: c.customer_id, name: c.name, city: c.city, balance: c.balance).exec
+      i.into(:customers).values(customer_id: c.customer_id, name: c.name, city: c.city, balance: c.balance).commit
     end
 
     count_query = q.from(:customers).count
     count_query.first!(as: Int32).should eq 2
 
-    result = d.from(:customers).exec
+    result = d.from(:customers).commit
     count_query.first!(as: Int32).should eq 0
   end
 
