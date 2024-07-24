@@ -13,6 +13,10 @@ module Sql
       query.first(T)
     end
 
+    def find!(id)
+      find(id).not_nil!
+    end
+
     def find_by(**fields)
       query = Query.new(@schema).from(@table).where(**fields)
       query.first(T)
@@ -29,8 +33,9 @@ module Sql
     end
 
     def create(**fields)
-      insert = Insert.new(@schema).into(@table).values(**fields)
-      insert.commit
+      insert = Insert
+        .new(@schema).into(@table).values(**fields)
+      insert.commit.last_insert_id
     end
 
     def update(id, attrs : Hash(Symbol, DB::Any))
