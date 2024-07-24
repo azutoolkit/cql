@@ -9,8 +9,12 @@ module Sql
     def initialize(@table_name : Symbol, @schema : Schema, @as_name : String? = nil)
     end
 
-    def primary_key(name : Symbol, type : PrimaryKeyType, auto_increment : Bool, as as_name = nil)
-      PrimaryKeyType
+    def primary_key(
+      name : Symbol = :id,
+      type : PrimaryKeyType = Int64.class,
+      auto_increment : Bool = true,
+      as as_name = nil
+    )
       primary_key = PrimaryKey.new(name, type, as_name, auto_increment)
       primary_key.table = self
       @primary_key = primary_key

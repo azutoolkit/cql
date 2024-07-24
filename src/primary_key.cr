@@ -5,7 +5,7 @@ module Sql
     @as_name : String?
 
     def initialize(
-      @name : Symbol,
+      @name : Symbol = :id,
       @type : PrimaryKeyType = Int64.class,
       @as_name : String? = nil,
       @auto_increment : Bool = true,
