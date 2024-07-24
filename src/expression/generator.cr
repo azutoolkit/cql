@@ -377,7 +377,7 @@ module Expression
 
     def visit(node : Setter) : String
       String::Builder.build do |sb|
-        sb << node.column.accept(self)
+        sb << node.column.column.name
         sb << " = "
         sb << node.value.to_s
       end
@@ -428,6 +428,7 @@ module Expression
           sb << column.name
           sb << " " << column.sql_type(@adapter)
           sb << " PRIMARY KEY" if column.is_a?(Sql::PrimaryKey)
+          sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
           sb << " NOT NULL" unless column.null?
           sb << " UNIQUE" if column.unique
           sb << ", " if i < node.table.columns.size - 1

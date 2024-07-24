@@ -1,4 +1,5 @@
 require "./spec_helper"
+require "db"
 
 # Assuming we have these models defined
 class User
@@ -20,7 +21,7 @@ describe Sql::Repository(User) do
   )
 
   schema.table :users do
-    primary_key :id, Int64, auto_increment: true
+    primary_key
     column :name, String
     column :email, String
   end
@@ -32,11 +33,17 @@ describe Sql::Repository(User) do
     end
   end
 
+  after_each do
+    schema.tables.each do |_, table|
+      table.drop!
+    end
+  end
+
   user_repository = Sql::Repository(User).new(schema, :users)
 
   it "creates a new user" do
     user_repository.create(id: 1_i64, name: "'John Doe'", email: "'john@example.com'")
-    user = user_repository.find(1_i64)
+    user = user_repository.find!(1_i64)
 
     user.name.should eq("John Doe")
     user.email.should eq("john@example.com")
@@ -53,26 +60,25 @@ describe Sql::Repository(User) do
 
   it "finds a user by ID" do
     user_repository.create(id: 1_i64, name: "'John Doe'", email: "'john@example.com'")
-    user = user_repository.find(1)
+    user = user_repository.find!(1_i64)
 
     user.name.should eq("John Doe")
   end
 
   it "updates a user by ID" do
     user_repository.create(id: 1_i64, name: "'John Doe'", email: "'john@example.com'")
-    user_repository.update(1, name: "'John Updated", email: "john.updated@example.com'")
-    user = user_repository.find(1)
+    user_repository.update(1_i64, name: "'John Updated'", email: "'john.updated@example.com'")
+    user = user_repository.find!(1_i64)
 
     user.name.should eq("John Updated")
     user.email.should eq("john.updated@example.com")
   end
 
   it "deletes a user by ID" do
-    user_repository.create(id: 1_i64, name: "'John Doe'", email: "'john@example.com'")
-    user_repository.delete(1_i64)
+    user_id = user_repository.create(id: 1_i64, name: "'John Doe'", email: "'john@example.com'")
+    user_repository.delete(user_id)
 
-    user = user_repository.find(1)
-    user.should be_nil
+    user_repository.find(user_id).should be_nil
   end
 
   it "counts the number of users" do
@@ -111,7 +117,7 @@ describe Sql::Repository(User) do
 
   it "fetches users with pagination" do
     (1..20).each do |i|
-      user_repository.create(id: 1_i64, name: "'User #{i}'", email: "'user#{i}@example.com'")
+      user_repository.create(id: i.to_i64, name: "'User #{i}'", email: "'user#{i}@example.com'")
     end
 
     users_page_1 = user_repository.page(1, 10)

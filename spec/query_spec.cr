@@ -2,14 +2,12 @@ require "./spec_helper"
 
 describe Sql::Query do
   it "selects all columns from tables" do
-    select_query = q
-      .from(:customers, :users)
-      .to_sql
+    select_query = q.from(:customers, :users).to_sql
 
     select_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      SELECT customers.customer_id, customers.name,
-      customers.city, customers.balance, users.id, users.name, users.email
+      SELECT customers.id, customers.name, customers.city, customers.balance, customers.created_at,
+      customers.updated_at, users.id, users.name, users.email, users.created_at, users.updated_at
       FROM customers, users
       SQL
     )

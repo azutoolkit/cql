@@ -11,8 +11,15 @@ describe Sql::Table do
 
     customer = CustomerModel.new(1, "'John'", "'New York'", 100)
 
+    puts i.into(:customers).values(
+      id: customer.id,
+      name: customer.name,
+      city: customer.city,
+      balance: customer.balance
+    ).to_sql
+
     insert_query = i.into(:customers).values(
-      customer_id: customer.customer_id,
+      id: customer.id,
       name: customer.name,
       city: customer.city,
       balance: customer.balance
@@ -29,7 +36,7 @@ describe Sql::Table do
     ]
 
     customers.each do |c|
-      i.into(:customers).values(customer_id: c.customer_id, name: c.name, city: c.city, balance: c.balance).commit
+      i.into(:customers).values(id: c.id, name: c.name, city: c.city, balance: c.balance).commit
     end
 
     count_query = q.from(:customers).count

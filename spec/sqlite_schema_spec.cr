@@ -30,7 +30,7 @@ describe Sql::Schema do
   end
 
   schema.table :customers, as: "cust" do
-    primary_key :customer_id, Int64, auto_increment: true
+    primary_key :id, Int64, auto_increment: true
     column :customer_name, String, as: "cust_name"
     column :city, String
     column :country_id, Int64
@@ -58,7 +58,7 @@ describe Sql::Schema do
     customer = CustomerModel.new(1, "'John'", "'New York'", 100)
 
     i.into(:customers).values(
-      customer_id: customer.customer_id,
+      id: customer.id,
       name: customer.name,
       city: customer.city,
       balance: customer.balance
@@ -75,7 +75,7 @@ describe Sql::Schema do
     customer = CustomerModel.new(1, "'John'", "'New York'", 100)
 
     insert_query = i.into(:customers).values(
-      customer_id: customer.customer_id,
+      id: customer.id,
       name: customer.name,
       city: customer.city,
       balance: customer.balance
@@ -190,7 +190,7 @@ describe Sql::Schema do
     schema.countries.create!
 
     schema.table :customers, as: "cust" do
-      primary_key :customer_id, Int64, auto_increment: true
+      primary_key :id, Int64, auto_increment: true
       column :customer_name, String, as: "cust_name"
       column :city, String
       column :country_id, Int64

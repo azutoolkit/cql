@@ -11,7 +11,7 @@ module Sql
 
     def primary_key(
       name : Symbol = :id,
-      type : PrimaryKeyType = Int64.class,
+      type : PrimaryKeyType = Int64,
       auto_increment : Bool = true,
       as as_name = nil
     )
@@ -40,8 +40,8 @@ module Sql
     end
 
     def timestamps
-      column :created_at, Time, null: false, default: Time.now
-      column :updated_at, Time, null: false, default: Time.now
+      column :created_at, Time, null: false, default: Time.local
+      column :updated_at, Time, null: false, default: Time.local
     end
 
     def add_index(columns : Array(Symbol), unique : Bool = false, table : Table = self)

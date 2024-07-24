@@ -17,6 +17,13 @@
       "database": "example",
       "username": "example",
       "password": "example"
+    },
+    {
+      "previewLimit": 50,
+      "driver": "SQLite",
+      "name": "test",
+      "group": "local",
+      "database": "${workspaceFolder:sql}/spec/test.db"
     }
   ]
 }

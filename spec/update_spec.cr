@@ -8,7 +8,7 @@ describe Sql::Update do
 
     update_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      UPDATE users SET users.name = 'John', users.email = 'john@example.com'
+      UPDATE users SET name = 'John', email = 'john@example.com'
       SQL
     )
   end
@@ -21,7 +21,7 @@ describe Sql::Update do
 
     update_query.should eq(
       <<-SQL.gsub(/\n/, " ").strip
-      UPDATE users SET users.name = 'John', users.email = 'john@example.com'
+      UPDATE users SET name = 'John', email = 'john@example.com'
       WHERE (users.id = 1)
       SQL
     )
