@@ -3,27 +3,26 @@ require "./spec_helper"
 describe Sql::Update do
   it "creates Update query" do
     update_query = u.update(:users)
-      .set(name: "'John'", email: "'john@example.com'")
+      .set(name: "John", email: "john@example.com")
       .to_sql
 
-    update_query.should eq(
-      <<-SQL.gsub(/\n/, " ").strip
-      UPDATE users SET name = 'John', email = 'john@example.com'
+    output = <<-SQL.gsub(/\n/, " ").strip
+      UPDATE users SET name = ?, email = ?
       SQL
-    )
+
+    update_query.should eq({output, ["John", "john@example.com"]})
   end
 
   it "create update where query" do
     update_query = u.update(:users)
-      .set(name: "'John'", email: "'john@example.com'")
+      .set(name: "John", email: "john@example.com")
       .where { users.id == 1_i64 }
       .to_sql
 
-    update_query.should eq(
-      <<-SQL.gsub(/\n/, " ").strip
-      UPDATE users SET name = 'John', email = 'john@example.com'
-      WHERE (users.id = 1)
+    output = <<-SQL.gsub(/\n/, " ").strip
+      UPDATE users SET name = ?, email = ?
+      WHERE (users.id = ?)
       SQL
-    )
+    update_query.should eq({output, ["John", "john@example.com", 1]})
   end
 end

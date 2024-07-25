@@ -12,7 +12,8 @@ module Sql
     end
 
     def commit
-      @schema.db.exec to_sql
+      query, params = to_sql
+      @schema.db.exec query, args: params
     end
 
     def into(table : Symbol)
@@ -53,7 +54,9 @@ module Sql
     end
 
     def to_sql(gen = @schema.gen)
+      gen.reset
       build.accept(gen)
+      {gen.query, gen.params}
     end
 
     private def build_query

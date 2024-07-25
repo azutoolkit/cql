@@ -9,11 +9,14 @@ module Sql
     end
 
     def commit
-      @schema.db.exec to_sql
+      query, params = to_sql
+      @schema.db.exec query, args: params
     end
 
     def to_sql(gen = @schema.gen)
+      gen.reset
       build.accept(gen)
+      {gen.query, gen.params}
     end
 
     def update(table : Symbol)

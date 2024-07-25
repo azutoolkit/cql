@@ -16,7 +16,8 @@ module Sql
     end
 
     def all(as as_kind)
-      as_kind.from_rs @schema.db.query(to_sql)
+      query, params = to_sql
+      as_kind.from_rs @schema.db.query(query, args: params)
     end
 
     def all!(as as_kind)
@@ -24,7 +25,8 @@ module Sql
     end
 
     def first(as as_kind)
-      @schema.db.query_one(to_sql, as: as_kind)
+      query, params = to_sql
+      @schema.db.query_one(query, args: params, as: as_kind)
     end
 
     def first!(as as_kind)
@@ -32,7 +34,8 @@ module Sql
     end
 
     def each(as as_kind, &block)
-      @schema.db.query_each(to_sql) do |rs|
+      query, params = to_sql
+      @schema.db.query_each(query, args: params) do |rs|
         yield as_kind.from_rs(rs)
       end
     end
@@ -69,7 +72,9 @@ module Sql
     end
 
     def to_sql(gen = @schema.gen)
+      gen.reset
       build.accept(gen)
+      {gen.query, gen.params}
     end
 
     def select(**fields)

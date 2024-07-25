@@ -9,14 +9,7 @@ describe Sql::Table do
     Schema.customers.drop!
     Schema.customers.create!
 
-    customer = CustomerModel.new(1, "'John'", "'New York'", 100)
-
-    puts i.into(:customers).values(
-      id: customer.id,
-      name: customer.name,
-      city: customer.city,
-      balance: customer.balance
-    ).to_sql
+    customer = CustomerModel.new(1, "John", "New York", 100)
 
     insert_query = i.into(:customers).values(
       id: customer.id,
@@ -24,6 +17,13 @@ describe Sql::Table do
       city: customer.city,
       balance: customer.balance
     ).commit
+
+    persisted = q.from(:customers).first!(as: CustomerModel)
+
+    persisted.id.should eq customer.id
+    persisted.name.should eq customer.name
+    persisted.city.should eq customer.city
+    persisted.balance.should eq customer.balance
   end
 
   it "truncates table" do

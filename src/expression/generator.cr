@@ -3,21 +3,34 @@ module Expression
     include Visitor
 
     @dialect : Dialect
+    getter params : Array(DB::Any) = [] of DB::Any
+    getter query : String = ""
 
     def initialize(@adapter : Sql::Adapter = Sql::Adapter::Sqlite)
-      @dialect = case @adapter
-                 when Sql::Adapter::Sqlite
-                   SqliteDialect.new
-                 when Sql::Adapter::MySql
-                   MysqlDialect.new
-                 else
-                   PostgresDialect.new
-                 end
+      @dialect, @placeholder = case @adapter
+                               when Sql::Adapter::Sqlite
+                                 {SqliteDialect.new, "?"}
+                               when Sql::Adapter::MySql
+                                 {MysqlDialect.new, "?"}
+                               else
+                                 {PostgresDialect.new, "$"}
+                               end
+    end
+
+    def reset
+      @params.clear
+      @query = ""
+    end
+
+    private def placeholder : String
+      return @placeholder unless @adapter == Sql::Adapter::Postgres
+      "#{@placeholder}#{(@params.size + 1)}"
     end
 
     # Template Method for common visit methods
     def visit(node : Query) : String
-      String::Builder.build do |sb|
+      @params.clear
+      @query = String::Builder.build do |sb|
         sb << "SELECT "
         sb << "DISTINCT " if node.distinct?
         sb << node.aggr_columns.map { |c| c.accept(self) }.join(", ")
@@ -49,7 +62,7 @@ module Expression
                   node.query.not_nil!.columns
                 end
 
-      String::Builder.build do |sb|
+      @query = String::Builder.build do |sb|
         sb << "INSERT INTO "
         sb << node.table.accept(self)
         sb << " ("
@@ -66,7 +79,8 @@ module Expression
           node.values.each_with_index do |row, i|
             sb << "("
             row.each_with_index do |val, j|
-              sb << val.to_s
+              @params << val
+              sb << "#{placeholder}"
               sb << ", " if j < row.size - 1
             end
             if i < node.values.size - 1
@@ -88,7 +102,7 @@ module Expression
     end
 
     def visit(node : Delete) : String
-      String::Builder.build do |sb|
+      @query = String::Builder.build do |sb|
         sb << "DELETE FROM "
         sb << node.table.accept(self)
         if using = node.using
@@ -148,12 +162,13 @@ module Expression
     end
 
     def visit(node : Compare) : String
+      @params << node.right
       String::Builder.build do |sb|
         sb << node.left.accept(self)
         sb << " "
         sb << node.operator
         sb << " "
-        sb << node.right.to_s
+        sb << placeholder
       end
     end
 
@@ -162,7 +177,8 @@ module Expression
         if node.left.is_a?(Column) || node.left.is_a?(Condition)
           sb << node.left.as(Column | Condition).accept(self)
         else
-          sb << node.left.to_s
+          @params << node.left.as(DB::Any)
+          sb << placeholder
         end
         sb << " "
         sb << node.operator
@@ -170,35 +186,32 @@ module Expression
         if node.right.is_a?(Column) || node.right.is_a?(Condition)
           sb << node.right.as(Column | Condition).accept(self)
         else
-          sb << node.right.to_s
+          @params << node.right.as(DB::Any)
+          sb << placeholder
         end
       end
     end
 
     def visit(node : Between) : String
+      @params << node.low
+      @params << node.high
       String::Builder.build do |sb|
         sb << node.column.accept(self)
         sb << " BETWEEN "
-        sb << node.low.to_s
+        sb << placeholder
         sb << " AND "
-        sb << node.high.to_s
+        sb << placeholder
       end
     end
 
     def visit(node : Like) : String
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " LIKE "
-        sb << node.value
-      end
+      @params << node.value
+      "#{node.column.accept(self)} LIKE #{placeholder}"
     end
 
     def visit(node : NotLike) : String
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " NOT LIKE "
-        sb << node.value
-      end
+      @params << node.value
+      "#{node.column.accept(self)} NOT LIKE #{placeholder}"
     end
 
     def visit(node : InCondition) : String
@@ -206,7 +219,8 @@ module Expression
         sb << node.column.accept(self)
         sb << " IN ("
         node.values.each_with_index do |value, i|
-          sb << value.to_s
+          @params << value
+          sb << placeholder
           sb << ", " if i < node.values.size - 1
         end
         sb << ")"
@@ -263,10 +277,11 @@ module Expression
     end
 
     def visit(node : Limit) : String
+      @params << node.limit
+      @params << node.offset if node.offset
       String::Builder.build do |sb|
-        sb << " LIMIT "
-        sb << node.limit.to_s
-        sb << " OFFSET " << node.offset.to_s if node.offset
+        sb << " LIMIT #{placeholder}"
+        sb << " OFFSET #{placeholder}" if node.offset
       end
     end
 
@@ -302,33 +317,21 @@ module Expression
     end
 
     def visit(node : Is) : String
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " IS "
-        sb << node.value.to_s
-      end
+      @params << node.value
+      "#{node.column.accept(self)} IS #{placeholder}"
     end
 
     def visit(node : IsNull) : String
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " IS NULL"
-      end
+      "#{node.column.accept(self)} IS NULL"
     end
 
     def visit(node : IsNot) : String
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " IS NOT "
-        sb << node.value.to_s
-      end
+      @params << node.value
+      "#{node.column.accept(self)} IS NOT #{placeholder}"
     end
 
     def visit(node : IsNotNull) : String
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " IS NOT NULL"
-      end
+      "#{node.column.accept(self)} IS NOT NULL"
     end
 
     def visit(node : EmptyNode) : String
@@ -336,55 +339,32 @@ module Expression
     end
 
     def visit(node : Count) : String
-      String::Builder.build do |sb|
-        sb << "COUNT("
-        sb << node.column.accept(self)
-        sb << ")"
-      end
+      "COUNT(#{node.column.accept(self)})"
     end
 
     def visit(node : Max) : String
-      String::Builder.build do |sb|
-        sb << "MAX("
-        sb << node.column.accept(self)
-        sb << ")"
-      end
+      "MAX(#{node.column.accept(self)})"
     end
 
     def visit(node : Min) : String
-      String::Builder.build do |sb|
-        sb << "MIN("
-        sb << node.column.accept(self)
-        sb << ")"
-      end
+      "MIN(#{node.column.accept(self)})"
     end
 
     def visit(node : Avg) : String
-      String::Builder.build do |sb|
-        sb << "AVG("
-        sb << node.column.accept(self)
-        sb << ")"
-      end
+      "AVG(#{node.column.accept(self)})"
     end
 
     def visit(node : Sum) : String
-      String::Builder.build do |sb|
-        sb << "SUM("
-        sb << node.column.accept(self)
-        sb << ")"
-      end
+      "SUM(#{node.column.accept(self)})"
     end
 
     def visit(node : Setter) : String
-      String::Builder.build do |sb|
-        sb << node.column.column.name
-        sb << " = "
-        sb << node.value.to_s
-      end
+      @params << node.value
+      "#{node.column.column.name} = #{placeholder}"
     end
 
     def visit(node : Update) : String
-      String::Builder.build do |sb|
+      @query = String::Builder.build do |sb|
         sb << "UPDATE "
         sb << node.table.accept(self)
         sb << " SET "
@@ -406,7 +386,7 @@ module Expression
     end
 
     def visit(node : CreateIndex) : String
-      String::Builder.build do |sb|
+      @query = String::Builder.build do |sb|
         sb << "CREATE "
         sb << "UNIQUE " if node.index.unique
         sb << "INDEX "
@@ -420,7 +400,7 @@ module Expression
     end
 
     def visit(node : CreateTable) : String
-      String::Builder.build do |sb|
+      @query = String::Builder.build do |sb|
         sb << "CREATE TABLE IF NOT EXISTS "
         sb << node.table.table_name
         sb << " ("
@@ -438,27 +418,16 @@ module Expression
     end
 
     def visit(node : DropTable) : String
-      String::Builder.build do |sb|
-        sb << "DROP TABLE IF EXISTS "
-        sb << node.table.table_name
-      end
+      @query = "DROP TABLE IF EXISTS #{node.table.table_name}"
     end
 
     def visit(node : TruncateTable) : String
-      String::Builder.build do |sb|
-        sb << "TRUNCATE TABLE "
-        sb << node.table.table_name
-      end
+      @query = "TRUNCATE TABLE #{node.table.table_name}"
     end
 
     # Add support for AlterTable
     def visit(node : AlterTable) : String
-      String::Builder.build do |sb|
-        sb << "ALTER TABLE "
-        sb << node.table.table_name
-        sb << " "
-        sb << node.action.accept(self)
-      end
+      @query = "ALTER TABLE #{node.table.table_name} #{node.action.accept(self)}"
     end
 
     def visit(node : AddColumn) : String
@@ -473,10 +442,7 @@ module Expression
     end
 
     def visit(node : DropColumn) : String
-      String::Builder.build do |sb|
-        sb << "DROP COLUMN "
-        sb << node.column_name
-      end
+      "DROP COLUMN #{node.column_name}"
     end
 
     def visit(node : DropIndex) : String
