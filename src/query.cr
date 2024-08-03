@@ -10,7 +10,7 @@ module Sql
     getter limit : Int32? = nil
     getter offset : Int32? = nil
     getter? distinct : Bool = false
-    getter count_columns : Array(Expression::Aggregate) = [] of Expression::Aggregate
+    getter aggr_columns : Array(Expression::Aggregate) = [] of Expression::Aggregate
 
     def initialize(@schema : Schema)
     end
@@ -41,7 +41,7 @@ module Sql
     end
 
     def count(column : Symbol = :*)
-      @count_columns << if column == :*
+      @aggr_columns << if column == :*
         col = Column.new(column, type: Int64)
         col.table = tables.first.last.not_nil!
         Expression::Count.new(Expression::Column.new(col))
@@ -52,22 +52,22 @@ module Sql
     end
 
     def max(column : Symbol)
-      @count_columns << Expression::Max.new(Expression::Column.new(find_column(column)))
+      @aggr_columns << Expression::Max.new(Expression::Column.new(find_column(column)))
       self
     end
 
     def min(column : Symbol)
-      @count_columns << Expression::Min.new(Expression::Column.new(find_column(column)))
+      @aggr_columns << Expression::Min.new(Expression::Column.new(find_column(column)))
       self
     end
 
     def sum(column : Symbol)
-      @count_columns << Expression::Sum.new(Expression::Column.new(find_column(column)))
+      @aggr_columns << Expression::Sum.new(Expression::Column.new(find_column(column)))
       self
     end
 
     def avg(column : Symbol)
-      @count_columns << Expression::Avg.new(Expression::Column.new(find_column(column)))
+      @aggr_columns << Expression::Avg.new(Expression::Column.new(find_column(column)))
       self
     end
 
@@ -224,7 +224,7 @@ module Sql
         @joins,
         build_limit,
         distinct?,
-        @count_columns
+        @aggr_columns
       )
     end
 

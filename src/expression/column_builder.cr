@@ -5,80 +5,140 @@ module Expression
     def initialize(@column : Column)
     end
 
-    def ==(value : Column | ColumnBuilder)
-      compare("=", value.column)
+    def ==(other : DB::Any)
+      compare("=", other)
     end
 
-    def ==(value : DB::Any)
-      compare("=", value)
+    def <=(other : DB::Any)
+      compare("<=", other)
     end
 
-    def eq(value : DB::Any)
-      compare("=", value)
+    def eq(other : DB::Any)
+      compare("=", other)
     end
 
-    def eq(value : Column | ColumnBuilder)
-      compare("=", value.column)
+    def !=(other : DB::Any)
+      compare("!=", other)
     end
 
-    def !=(value : ColumnBuilder)
-      compare("!=", value.column)
+    def neq(other : DB::Any)
+      compare("!=", other)
     end
 
-    def !=(value : DB::Any)
-      compare("!=", value)
+    def <(other : DB::Any)
+      compare("<", other)
     end
 
-    def neq(value : DB::Any)
-      compare("!=", value)
+    def >(other : DB::Any)
+      compare(">", other)
     end
 
-    def neq(value : Column | ColumnBuilder)
-      compare("!=", value.column)
+    def >=(other : DB::Any)
+      compare(">=", other)
     end
 
-    def <(value : Column | DB::Any)
-      compare("<", value)
+    def ==(other : DB::Any)
+      compare("=", other)
     end
 
-    def <(value : Column | ColumnBuilder)
-      compare("<", value.column)
+    def <=(other : DB::Any)
+      compare("<=", other)
     end
 
-    def <=(value : Column | DB::Any)
-      compare("<=", value)
+    def eq(other : DB::Any)
+      compare("=", other)
     end
 
-    def <=(value : Column | ColumnBuilder)
-      compare("<=", value.column)
+    def !=(other : DB::Any)
+      compare("!=", other)
     end
 
-    def >(value : Column | ColumnBuilder)
-      compare(">", value.column)
+    def neq(other : DB::Any)
+      compare("!=", other)
     end
 
-    def >(value : DB::Any)
-      compare(">", value)
+    def <(other : DB::Any)
+      compare("<", other)
     end
 
-    def >=(value : Column | ColumnBuilder)
-      compare(">=", value.column)
+    def >(other : DB::Any)
+      compare(">", other)
     end
 
-    def >=(value : DB::Any)
-      compare(">=", value)
+    def >=(other : DB::Any)
+      compare(">=", other)
     end
 
-    def >=(value : Column | ColumnBuilder)
-      compare(">=", value.column)
+    def ==(other : ColumnBuilder)
+      compare("=", other.column)
     end
 
-    def in(values : Array(DB::Any))
-      ConditionBuilder.new(InCondition.new(@column, values))
+    def <=(other : ColumnBuilder)
+      compare("<=", other.column)
     end
 
-    def not_in(values : Array(DB::Any))
-      ConditionBuilder.new(Not.new(InCondition.new(@column, values)))
+    def eq(other : ColumnBuildery)
+      compare("=", other.column)
+    end
+
+    def !=(other : ColumnBuilder)
+      compare("!=", other.column)
+    end
+
+    def neq(other : ColumnBuilder)
+      compare("!=", other.column)
+    end
+
+    def <(other : ColumnBuilder)
+      compare("<", other.column)
+    end
+
+    def >(other : ColumnBuilder)
+      compare(">", other.column)
+    end
+
+    def >=(other : ColumnBuilder)
+      compare(">=", other.column)
+    end
+
+    def ==(other : ColumnBuilder)
+      compare("=", other.column)
+    end
+
+    def <=(other : ColumnBuilder)
+      compare("<=", other.column)
+    end
+
+    def eq(other : ColumnBuilder)
+      compare("=", other.column)
+    end
+
+    def !=(other : ColumnBuilder)
+      compare("!=", other.column)
+    end
+
+    def neq(other : ColumnBuilder)
+      compare("!=", other.column)
+    end
+
+    def <(other : ColumnBuilder)
+      compare("<", other.column)
+    end
+
+    def >(other : ColumnBuilder)
+      compare(">", other.column)
+    end
+
+    def >=(other : ColumnBuilder)
+      compare(">=", other.column)
+    end
+
+    def in(others : Array(DB::Any))
+      ConditionBuilder.new(InCondition.new(@column, others))
+    end
+
+    def not_in(others : Array(DB::Any))
+      ConditionBuilder.new(Not.new(InCondition.new(@column, others)))
     end
 
     def in(sub_query : Query)
@@ -105,13 +165,13 @@ module Expression
       ConditionBuilder.new(IsNotNull.new(@column))
     end
 
-    private def compare(operator : String, value : Column | CompareCondition)
-      ConditionBuilder.new(CompareCondition.new(@column, operator, value))
+    private def compare(operator : String, other : Column | CompareCondition)
+      ConditionBuilder.new(CompareCondition.new(@column, operator, other))
     end
 
-    private def compare(operator : String, value : DB::Any)
-      @column.column.validate!(value)
-      ConditionBuilder.new(Compare.new(@column, operator, value))
+    private def compare(operator : String, other : DB::Any)
+      @column.column.validate!(other)
+      ConditionBuilder.new(Compare.new(@column, operator, other))
     end
   end
 end
