@@ -70,6 +70,15 @@ describe Sql::Query do
     select_query.should eq({output, ["Tulum", "Kantenah"]})
   end
 
+  it "raises error when column is not right type" do
+    expect_raises Sql::Error, "Expected String, but got Int32" do
+      q.from(:customers)
+        .select(:name, :city)
+        .where { customers.name == 1 }
+        .to_sql
+    end
+  end
+
   it "WHERE complex query" do
     select_query_complex = q
       .from(:users, :address)
