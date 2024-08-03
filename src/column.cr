@@ -81,7 +81,7 @@ module Sql
 
     def validate!(value)
       unless typeof(value) == type
-        raise Error.new "Expected #{type}, but got #{value.class}"
+        raise Error.new "Expected column `#{name}` to be #{type}, but got #{value.class}"
       end
     end
   end

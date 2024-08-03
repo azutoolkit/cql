@@ -71,7 +71,7 @@ describe Sql::Query do
   end
 
   it "raises error when column is not right type" do
-    expect_raises Sql::Error, "Expected String, but got Int32" do
+    expect_raises Sql::Error, "Expected column `name` to be String, but got Int32" do
       q.from(:customers)
         .select(:name, :city)
         .where { customers.name == 1 }
