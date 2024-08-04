@@ -5,30 +5,24 @@ module Expression
     def initialize(@condition : Condition = EmptyNode.new)
     end
 
-    def &(other : ConditionBuilder)
+    def &(other : ConditionBuilder) : ConditionBuilder
       combine(other, And)
     end
 
-    def |(other : ConditionBuilder)
+    def |(other : ConditionBuilder) : ConditionBuilder
       combine(other, Or)
     end
 
-    def and(other : ConditionBuilder)
+    def and(other : ConditionBuilder) : ConditionBuilder
       combine(other, And)
     end
 
-    def or(other : ConditionBuilder)
+    def or(other : ConditionBuilder) : ConditionBuilder
       combine(other, Or)
     end
 
-    private def combine(other : ConditionBuilder, combinator : Class)
+    private def combine(other : ConditionBuilder, combinator : Class) : ConditionBuilder
       ConditionBuilder.new(combinator.new(@condition, other.condition))
-    end
-
-    macro method_missing(call)
-      def {{call.name.id}}
-        find_column({{call.name.id.stringify}})
-      end
     end
   end
 end

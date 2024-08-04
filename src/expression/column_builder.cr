@@ -5,144 +5,80 @@ module Expression
     def initialize(@column : Column)
     end
 
-    def ==(other : DB::Any)
-      compare("=", other)
+    def ==(value : DB::Any) : ConditionBuilder
+      compare("=", value)
     end
 
-    def <=(other : DB::Any)
-      compare("<=", other)
+    def eq(value : DB::Any) : ConditionBuilder
+      compare("=", value)
     end
 
-    def eq(other : DB::Any)
-      compare("=", other)
+    def <=(value : DB::Any) : ConditionBuilder
+      compare("<=", value)
     end
 
-    def !=(other : DB::Any)
-      compare("!=", other)
+    def !=(value : DB::Any) : ConditionBuilder
+      compare("!=", value)
     end
 
-    def neq(other : DB::Any)
-      compare("!=", other)
+    def neq(value : DB::Any) : ConditionBuilder
+      compare("!=", value)
     end
 
-    def <(other : DB::Any)
-      compare("<", other)
+    def <(value : DB::Any) : ConditionBuilder
+      compare("<", value)
     end
 
-    def >(other : DB::Any)
-      compare(">", other)
+    def >(value : DB::Any) : ConditionBuilder
+      compare(">", value)
     end
 
-    def >=(other : DB::Any)
-      compare(">=", other)
+    def >=(value : DB::Any) : ConditionBuilder
+      compare(">=", value)
     end
 
-    def ==(other : DB::Any)
-      compare("=", other)
+    def ==(value : ColumnBuilder | Column) : ConditionBuilder
+      compare("=", value.column)
     end
 
-    def <=(other : DB::Any)
-      compare("<=", other)
+    def eq(value : ColumnBuilder | Column) : ConditionBuilder
+      compare("=", value.column)
     end
 
-    def eq(other : DB::Any)
-      compare("=", other)
+    def <=(value : ColumnBuilder | Column) : ConditionBuilder
+      compare("<=", value.column)
     end
 
-    def !=(other : DB::Any)
-      compare("!=", other)
+    def !=(value : ColumnBuilder | Column) : ConditionBuilder
+      compare("!=", value.column)
     end
 
-    def neq(other : DB::Any)
-      compare("!=", other)
+    def neq(value : ColumnBuilder | Column) : ConditionBuilder
+      compare("!=", value.column)
     end
 
-    def <(other : DB::Any)
-      compare("<", other)
+    def <(value : ColumnBuilder | Column) : ConditionBuilder
+      compare("<", value.column)
     end
 
-    def >(other : DB::Any)
-      compare(">", other)
+    def >(value : ColumnBuilder | Column) : ConditionBuilder
+      compare(">", value.column)
     end
 
-    def >=(other : DB::Any)
-      compare(">=", other)
+    def >=(value : ColumnBuilder | Column) : ConditionBuilder
+      compare(">=", value.column)
     end
 
-    def ==(other : ColumnBuilder)
-      compare("=", other.column)
-    end
-
-    def <=(other : ColumnBuilder)
-      compare("<=", other.column)
-    end
-
-    def eq(other : ColumnBuildery)
-      compare("=", other.column)
-    end
-
-    def !=(other : ColumnBuilder)
-      compare("!=", other.column)
-    end
-
-    def neq(other : ColumnBuilder)
-      compare("!=", other.column)
-    end
-
-    def <(other : ColumnBuilder)
-      compare("<", other.column)
-    end
-
-    def >(other : ColumnBuilder)
-      compare(">", other.column)
-    end
-
-    def >=(other : ColumnBuilder)
-      compare(">=", other.column)
-    end
-
-    def ==(other : ColumnBuilder)
-      compare("=", other.column)
-    end
-
-    def <=(other : ColumnBuilder)
-      compare("<=", other.column)
-    end
-
-    def eq(other : ColumnBuilder)
-      compare("=", other.column)
-    end
-
-    def !=(other : ColumnBuilder)
-      compare("!=", other.column)
-    end
-
-    def neq(other : ColumnBuilder)
-      compare("!=", other.column)
-    end
-
-    def <(other : ColumnBuilder)
-      compare("<", other.column)
-    end
-
-    def >(other : ColumnBuilder)
-      compare(">", other.column)
-    end
-
-    def >=(other : ColumnBuilder)
-      compare(">=", other.column)
-    end
-
-    def in(others : Array(DB::Any))
-      ConditionBuilder.new(InCondition.new(@column, others))
-    end
-
-    def not_in(others : Array(DB::Any))
-      ConditionBuilder.new(Not.new(InCondition.new(@column, others)))
+    def in(items : Array)
+      ConditionBuilder.new(InCondition.new(@column, items))
     end
 
     def in(sub_query : Query)
       ConditionBuilder.new(InSelect.new(@column, sub_query.build))
+    end
+
+    def not_in(values : Array(DB::Anyy))
+      ConditionBuilder.new(Not.new(InCondition.new(@column, values)))
     end
 
     def not_in(sub_query : Query)
@@ -165,13 +101,13 @@ module Expression
       ConditionBuilder.new(IsNotNull.new(@column))
     end
 
-    private def compare(operator : String, other : Column | CompareCondition)
-      ConditionBuilder.new(CompareCondition.new(@column, operator, other))
+    private def compare(operator : String, value : Column | CompareCondition) : ConditionBuilder
+      ConditionBuilder.new(CompareCondition.new(@column, operator, value))
     end
 
-    private def compare(operator : String, other : DB::Any)
-      @column.column.validate!(other)
-      ConditionBuilder.new(Compare.new(@column, operator, other))
+    private def compare(operator : String, value : DB::Any) : ConditionBuilder
+      @column.column.validate!(value)
+      ConditionBuilder.new(Compare.new(@column, operator, value))
     end
   end
 end

@@ -308,7 +308,7 @@ describe Sql::Query do
     select_query = q.from(:users)
       .select(users: [:name, :email], address: [:street, :city])
       .inner(:address) do
-        (users.id.eq(address.user_id)) & (users.name.eq("John")) | (users.id.eq(1_i64))
+        users.id.eq(address.user_id) & users.name.eq("John") | users.id.eq(1_i64)
       end.to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip
