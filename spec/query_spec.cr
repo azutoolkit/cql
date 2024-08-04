@@ -45,6 +45,7 @@ describe Sql::Query do
       .select(:name, :city)
       .where { (customers.name == "Tulum") & customers.city.eq("Kantenah") }
       .to_sql
+
     output = <<-SQL.gsub(/\n/, " ").strip
       SELECT customers.name, customers.city
       FROM customers
@@ -293,8 +294,8 @@ describe Sql::Query do
         q.users.id    => q.address.user_id,
         q.users.name  => "John",
         q.users.email => "john@example.com",
-      })
-      .to_sql
+      }).to_sql
+
     output = <<-SQL.gsub(/\n/, " ").strip
       SELECT users.name, users.email, address.street, address.city
       FROM users

@@ -38,9 +38,9 @@ module Expression
   end
 
   class Column < Node
-    getter column : Sql::Column
+    getter column : Sql::BaseColumn
 
-    def initialize(@column : Sql::Column)
+    def initialize(@column : Sql::BaseColumn)
     end
 
     def accept(visitor : Visitor)
@@ -99,7 +99,7 @@ module Expression
   class GroupBy < Node
     getter columns : Array(Column)
 
-    def initialize(@columns : Array(Column) = [] of Sql::Column)
+    def initialize(@columns : Array(Column) = [] of Sql::BaseColumn)
     end
 
     def accept(visitor : Visitor)
@@ -157,9 +157,9 @@ module Expression
   end
 
   class AddColumn < AlterAction
-    getter column : Sql::Column
+    getter column : Sql::BaseColumn
 
-    def initialize(@column : Sql::Column)
+    def initialize(@column : Sql::BaseColumn)
     end
 
     def accept(visitor : Visitor)
@@ -179,12 +179,12 @@ module Expression
   end
 
   class RenameColumn < AlterAction
-    getter column : Sql::Column
+    getter column : Sql::BaseColumn
     getter new_name : String
     getter old_name : String
     getter table_name : String
 
-    def initialize(@column : Sql::Column, @new_name : String)
+    def initialize(@column : Sql::BaseColumn, @new_name : String)
       @old_name = @column.name.to_s
       @table_name = @column.table.not_nil!.table_name.to_s
     end
@@ -195,11 +195,11 @@ module Expression
   end
 
   class ChangeColumn < AlterAction
-    getter column : Sql::Column
+    getter column : Sql::BaseColumn
     getter type : Sql::Any
     getter table_name : String
 
-    def initialize(@column : Sql::Column, @type : Sql::Any)
+    def initialize(@column : Sql::BaseColumn, @type : Sql::Any)
       @table_name = @column.table.not_nil!.table_name.to_s
     end
 
@@ -358,7 +358,7 @@ module Expression
 
     macro method_missing(call)
       def {{call.name.id}}
-        ColumnBuilder.new(Column.new(@table.{{call.name.id}}))
+        @table.{{call.name.id}}.expression
       end
     end
   end
@@ -538,7 +538,7 @@ module Expression
     getter aggr_columns : Array(Aggregate) = [] of Aggregate
 
     def initialize(
-      @columns : Array(Column) = [] of Sql::Column,
+      @columns : Array(Column) = [] of Sql::BaseColumn,
       @from : From = [] of Sql::Table,
       @where : Where? = nil,
       @group_by : GroupBy? = nil,

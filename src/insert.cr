@@ -84,7 +84,7 @@ module Sql
       @schema.tables[table] || raise "Table #{table} not found"
     end
 
-    private def find_column(column : Symbol) : Column
+    private def find_column(column : Symbol) : BaseColumn
       @table.not_nil!.columns[column] || raise "Column #{column} not found"
     end
   end

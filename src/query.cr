@@ -1,9 +1,9 @@
 module Sql
   class Query
-    getter columns : Array(Column) = [] of Column
+    getter columns : Array(BaseColumn) = [] of BaseColumn
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
     getter where : Expression::Where? = nil
-    getter group_by : Array(Column) = [] of Column
+    getter group_by : Array(BaseColumn) = [] of BaseColumn
     getter having : Expression::Having? = nil
     getter order_by : Hash(Expression::Column, Expression::OrderDirection) = {} of Expression::Column => Expression::OrderDirection
     getter joins : Array(Expression::Join) = [] of Expression::Join
@@ -42,7 +42,7 @@ module Sql
 
     def count(column : Symbol = :*)
       @aggr_columns << if column == :*
-        col = Column.new(column, type: Int64)
+        col = Column(Int64).new(column, type: Int64)
         col.table = tables.first.last.not_nil!
         Expression::Count.new(Expression::Column.new(col))
       else
@@ -124,7 +124,7 @@ module Sql
       self
     end
 
-    def inner(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
+    def inner(table : Symbol, on : Hash(Sql::BaseColumn, Sql::BaseColumn | DB::Any))
       join(Expression::JoinType::INNER, find_table(table), on)
       self
     end
@@ -139,7 +139,7 @@ module Sql
       self
     end
 
-    def left(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
+    def left(table : Symbol, on : Hash(Sql::BaseColumn, Sql::BaseColumn | DB::Any))
       join(Expression::JoinType::LEFT, find_table(table), on)
       self
     end
@@ -154,7 +154,7 @@ module Sql
       self
     end
 
-    def right(table : Symbol, on : Hash(Sql::Column, Sql::Column | DB::Any))
+    def right(table : Symbol, on : Hash(Sql::BaseColumn, Sql::BaseColumn | DB::Any))
       join(Expression::JoinType::RIGHT, find_table(table), on)
       self
     end
@@ -232,9 +232,14 @@ module Sql
       Expression::From.new(@tables.values)
     end
 
-    private def join(type : Expression::JoinType, table : Table, on : Hash(Sql::Column, Sql::Column | DB::Any))
+    private def join(type : Expression::JoinType, table : Table, on : Hash(Sql::BaseColumn, Sql::BaseColumn | DB::Any))
       condition = on.map do |left, right|
-        right_col = right.is_a?(Sql::Column) ? Expression::Column.new(right) : right
+        right_col = if right.is_a?(DB::Any)
+                      left.validate!(right)
+                      right
+                    else
+                      Expression::Column.new(right)
+                    end
         Expression::CompareCondition.new(Expression::Column.new(left), "=", right_col)
       end.reduce { |acc, cond| Expression::And.new(acc, cond) }
 
@@ -281,7 +286,7 @@ module Sql
       table
     end
 
-    private def find_column(name : Symbol) : Sql::Column?
+    private def find_column(name : Symbol) : Sql::BaseColumn?
       @tables.each do |_tbl_name, table|
         column = table.columns[name]
         return column if column

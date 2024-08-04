@@ -4,13 +4,13 @@ module Sql
     end
   end
 
-  class Column
+  class Column(T) < BaseColumn
     @as_name : String? = nil
 
     alias Date = Time
 
     property name : Symbol
-    property type : Sql::Any
+    property type : Any
     getter? null : Bool = false
     getter default : DB::Any = nil
     getter unique : Bool = false
@@ -20,7 +20,7 @@ module Sql
 
     def initialize(
       @name : Symbol,
-      @type : Any,
+      @type : T.class,
       @as_name : String? = nil,
       @null : Bool = false,
       @default : DB::Any = nil,
@@ -74,6 +74,10 @@ module Sql
         Slice(UInt8) => "BYTEA",
       },
     }
+
+    def expression
+      Expression::ColumnBuilder.new(Expression::Column.new(self))
+    end
 
     def sql_type(adapter : Adapter) : String
       BASE_TYPE_MAPPING[adapter][type]

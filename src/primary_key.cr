@@ -1,5 +1,5 @@
 module Sql
-  class PrimaryKey < Column
+  class PrimaryKey(T) < Column(T)
     getter auto_increment : Bool = true
     getter unique : Bool = true
     @as_name : String?
