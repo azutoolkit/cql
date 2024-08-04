@@ -357,7 +357,7 @@ module Expression
     end
 
     macro method_missing(call)
-      def {{call.name.id}}
+      def {{call.name.id}} : ColumnBuilder
         @table.{{call.name.id}}.expression
       end
     end

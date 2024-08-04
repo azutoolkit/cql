@@ -120,7 +120,7 @@ module Sql
 
     def where(&)
       builder = with Expression::FilterBuilder.new(@tables) yield
-      @where = Expression::Where.new(builder.condition)
+      @where = Expression::Where.new(builder.as(Expression::ConditionBuilder).condition)
       self
     end
 
