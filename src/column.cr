@@ -13,7 +13,7 @@ module Sql
     property type : Any
     getter? null : Bool = false
     getter default : DB::Any = nil
-    getter unique : Bool = false
+    getter? unique : Bool = false
     property table : Table? = nil
     property length : Int32? = nil
     property? index : Index? = nil
