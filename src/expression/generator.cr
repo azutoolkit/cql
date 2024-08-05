@@ -406,7 +406,7 @@ module Expression
         sb << " ("
         node.table.columns.each_with_index do |(name, column), i|
           sb << column.name
-          sb << " " << column.sql_type(@adapter)
+          sb << " " << @adapter.sql_type(column.type)
           sb << " PRIMARY KEY" if column.is_a?(Sql::PrimaryKey)
           sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
           sb << " NOT NULL" unless column.null?
@@ -434,7 +434,7 @@ module Expression
       String::Builder.build do |sb|
         sb << "ADD COLUMN "
         sb << node.column.name
-        sb << " " << node.column.sql_type(@adapter)
+        sb << " " << @adapter.sql_type(node.column.type)
         sb << " PRIMARY KEY" if node.column.is_a?(Sql::PrimaryKey)
         sb << " NOT NULL" unless node.column.null?
         sb << " UNIQUE" if node.column.unique?
@@ -454,7 +454,7 @@ module Expression
         node.table_name,
         node.old_name,
         node.new_name,
-        node.column.sql_type(@adapter)
+        @adapter.sql_type(node.column.type)
       )
     end
 
@@ -466,7 +466,8 @@ module Expression
       @dialect.modify_column(
         node.table_name,
         node.column.name.to_s,
-        node.column.sql_type(@adapter))
+        @adapter.sql_type(node.column.type)
+      )
     end
 
     def visit(node : AddForeignKey) : String
