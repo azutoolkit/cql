@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class Delete
     @table : Expression::Table? = nil
     @where : Expression::Where? = nil

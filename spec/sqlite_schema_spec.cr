@@ -1,9 +1,9 @@
 require "./spec_helper"
 
-describe Sql::Schema do
-  schema = Sql::Schema.new(
+describe Cql::Schema do
+  schema = Cql::Schema.new(
     :northwind,
-    adapter: Sql::Adapter::Sqlite,
+    adapter: Cql::Adapter::Cqlite,
     db: DB.connect("sqlite3://spec/data.db"),
     version: "1.0")
 

@@ -1,10 +1,10 @@
 require "./spec_helper"
 require "pg"
 
-describe Sql::Schema do
-  schema = Sql::Schema.new(
+describe Cql::Schema do
+  schema = Cql::Schema.new(
     :northwind,
-    adapter: Sql::Adapter::Postgres,
+    adapter: Cql::Adapter::Postgres,
     db: DB.connect("postgresql://example:example@localhost:5432/example"),
     version: "1.0")
 

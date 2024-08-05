@@ -1,5 +1,5 @@
 module Expression
-  class SqliteDialect < Dialect
+  class CqliteDialect < Dialect
     def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
       "RENAME COLUMN #{old_name} TO #{new_name}"
     end

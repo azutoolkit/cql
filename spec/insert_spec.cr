@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Sql::Insert do
+describe Cql::Insert do
   it "creates Insert Into query" do
     insert_query = i.into(:users).values(name: "John", email: "john@example.com").to_sql
 

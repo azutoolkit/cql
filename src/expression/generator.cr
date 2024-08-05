@@ -6,11 +6,11 @@ module Expression
     getter params : Array(DB::Any) = [] of DB::Any
     getter query : String = ""
 
-    def initialize(@adapter : Sql::Adapter = Sql::Adapter::Sqlite)
+    def initialize(@adapter : Cql::Adapter = Cql::Adapter::Cqlite)
       @dialect, @placeholder = case @adapter
-                               when Sql::Adapter::Sqlite
-                                 {SqliteDialect.new, "?"}
-                               when Sql::Adapter::MySql
+                               when Cql::Adapter::Cqlite
+                                 {CqliteDialect.new, "?"}
+                               when Cql::Adapter::MyCql
                                  {MysqlDialect.new, "?"}
                                else
                                  {PostgresDialect.new, "$"}
@@ -23,7 +23,7 @@ module Expression
     end
 
     private def placeholder : String
-      return @placeholder unless @adapter == Sql::Adapter::Postgres
+      return @placeholder unless @adapter == Cql::Adapter::Postgres
       "#{@placeholder}#{(@params.size + 1)}"
     end
 
@@ -407,7 +407,7 @@ module Expression
         node.table.columns.each_with_index do |(name, column), i|
           sb << column.name
           sb << " " << @adapter.sql_type(column.type)
-          sb << " PRIMARY KEY" if column.is_a?(Sql::PrimaryKey)
+          sb << " PRIMARY KEY" if column.is_a?(Cql::PrimaryKey)
           sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
           sb << " NOT NULL" unless column.null?
           sb << " UNIQUE" if column.unique?
@@ -435,7 +435,7 @@ module Expression
         sb << "ADD COLUMN "
         sb << node.column.name
         sb << " " << @adapter.sql_type(node.column.type)
-        sb << " PRIMARY KEY" if node.column.is_a?(Sql::PrimaryKey)
+        sb << " PRIMARY KEY" if node.column.is_a?(Cql::PrimaryKey)
         sb << " NOT NULL" unless node.column.null?
         sb << " UNIQUE" if node.column.unique?
       end
@@ -471,7 +471,7 @@ module Expression
     end
 
     def visit(node : AddForeignKey) : String
-      if @adapter == Sql::Adapter::Sqlite
+      if @adapter == Cql::Adapter::Cqlite
         message = <<-MSG
               SQLite does not support adding foreign keys to an \n
               existing table directly via the ALTER TABLE statement.\n

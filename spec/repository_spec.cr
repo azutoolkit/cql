@@ -13,10 +13,10 @@ class User
   end
 end
 
-describe Sql::Repository(User) do
-  schema = Sql::Schema.new(
+describe Cql::Repository(User) do
+  schema = Cql::Schema.new(
     database: :northwind,
-    adapter: Sql::Adapter::Sqlite,
+    adapter: Cql::Adapter::Cqlite,
     db: DB.connect("sqlite3://spec/test.db")
   )
 
@@ -39,7 +39,7 @@ describe Sql::Repository(User) do
     end
   end
 
-  user_repository = Sql::Repository(User).new(schema, :users)
+  user_repository = Cql::Repository(User).new(schema, :users)
 
   it "creates a new user" do
     user_repository.create(id: 1_i64, name: "John Doe", email: "john@example.com")

@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Sql::Update do
+describe Cql::Update do
   it "creates Update query" do
     update_query = u.update(:users)
       .set(name: "John", email: "john@example.com")

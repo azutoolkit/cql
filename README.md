@@ -30,13 +30,13 @@ Then run `shards install` to install the dependencies.
 ```crystal
 require "sql"
 
-db = Sql.connect("postgres://user:password@localhost/db_name")
+db = Cql.connect("postgres://user:password@localhost/db_name")
 ```
 
 ### Executing Queries
 
 ```crystal
-Schema = Sql::Schema.new(:northwind)
+Schema = Cql::Schema.new(:northwind)
 
 schema = Schema.table :users do
   primary_key :id, Int64, auto_increment: true
@@ -44,7 +44,7 @@ schema = Schema.table :users do
   column :email, String
 end
 
-q = Sql::Query.new(schema)
+q = Cql::Query.new(schema)
 
 result = db.execute(
   q.from(:users).where(id: "?"),
@@ -61,7 +61,7 @@ end
 Define Schema
 
 ```crystal
-Schema = Sql::Schema.new(:northwind)
+Schema = Cql::Schema.new(:northwind)
 
 Schema.table :customers do
   primary_key :customer_id, Int64, auto_increment: true
@@ -94,7 +94,7 @@ end
 ```
 
 ```crystal
-q = Sql::Query.new(Schema)
+q = Cql::Query.new(Schema)
 
 query = q
       .from(:users)

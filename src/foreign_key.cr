@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class ForeignKey
     getter name : Symbol
     getter columns : Array(Symbol)

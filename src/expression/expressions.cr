@@ -38,9 +38,9 @@ module Expression
   end
 
   class Column < Node
-    getter column : Sql::BaseColumn
+    getter column : Cql::BaseColumn
 
-    def initialize(@column : Sql::BaseColumn)
+    def initialize(@column : Cql::BaseColumn)
     end
 
     def accept(visitor : Visitor)
@@ -86,9 +86,9 @@ module Expression
   end
 
   class From < Node
-    getter tables : Array(Sql::Table)
+    getter tables : Array(Cql::Table)
 
-    def initialize(@tables : Array(Sql::Table))
+    def initialize(@tables : Array(Cql::Table))
     end
 
     def accept(visitor : Visitor)
@@ -99,7 +99,7 @@ module Expression
   class GroupBy < Node
     getter columns : Array(Column)
 
-    def initialize(@columns : Array(Column) = [] of Sql::BaseColumn)
+    def initialize(@columns : Array(Column) = [] of Cql::BaseColumn)
     end
 
     def accept(visitor : Visitor)
@@ -108,9 +108,9 @@ module Expression
   end
 
   class CreateTable < Node
-    getter table : Sql::Table
+    getter table : Cql::Table
 
-    def initialize(@table : Sql::Table)
+    def initialize(@table : Cql::Table)
     end
 
     def accept(visitor : Visitor)
@@ -119,9 +119,9 @@ module Expression
   end
 
   class DropTable < Node
-    getter table : Sql::Table
+    getter table : Cql::Table
 
-    def initialize(@table : Sql::Table)
+    def initialize(@table : Cql::Table)
     end
 
     def accept(visitor : Visitor)
@@ -130,9 +130,9 @@ module Expression
   end
 
   class TruncateTable < Node
-    getter table : Sql::Table
+    getter table : Cql::Table
 
-    def initialize(@table : Sql::Table)
+    def initialize(@table : Cql::Table)
     end
 
     def accept(visitor : Visitor)
@@ -141,10 +141,10 @@ module Expression
   end
 
   class AlterTable < Node
-    getter table : Sql::Table
+    getter table : Cql::Table
     getter action : AlterAction
 
-    def initialize(@table : Sql::Table, @action : AlterAction)
+    def initialize(@table : Cql::Table, @action : AlterAction)
     end
 
     def accept(visitor : Visitor)
@@ -157,9 +157,9 @@ module Expression
   end
 
   class AddColumn < AlterAction
-    getter column : Sql::BaseColumn
+    getter column : Cql::BaseColumn
 
-    def initialize(@column : Sql::BaseColumn)
+    def initialize(@column : Cql::BaseColumn)
     end
 
     def accept(visitor : Visitor)
@@ -179,12 +179,12 @@ module Expression
   end
 
   class RenameColumn < AlterAction
-    getter column : Sql::BaseColumn
+    getter column : Cql::BaseColumn
     getter new_name : String
     getter old_name : String
     getter table_name : String
 
-    def initialize(@column : Sql::BaseColumn, @new_name : String)
+    def initialize(@column : Cql::BaseColumn, @new_name : String)
       @old_name = @column.name.to_s
       @table_name = @column.table.not_nil!.table_name.to_s
     end
@@ -195,11 +195,11 @@ module Expression
   end
 
   class ChangeColumn < AlterAction
-    getter column : Sql::BaseColumn
-    getter type : Sql::Any
+    getter column : Cql::BaseColumn
+    getter type : Cql::Any
     getter table_name : String
 
-    def initialize(@column : Sql::BaseColumn, @type : Sql::Any)
+    def initialize(@column : Cql::BaseColumn, @type : Cql::Any)
       @table_name = @column.table.not_nil!.table_name.to_s
     end
 
@@ -209,10 +209,10 @@ module Expression
   end
 
   class RenameTable < AlterAction
-    getter table : Sql::Table
+    getter table : Cql::Table
     getter new_name : String
 
-    def initialize(@table : Sql::Table, @new_name : String)
+    def initialize(@table : Cql::Table, @new_name : String)
     end
 
     def accept(visitor : Visitor)
@@ -221,9 +221,9 @@ module Expression
   end
 
   class AddForeignKey < AlterAction
-    getter fk : Sql::ForeignKey
+    getter fk : Cql::ForeignKey
 
-    def initialize(@fk : Sql::ForeignKey)
+    def initialize(@fk : Cql::ForeignKey)
     end
 
     def accept(visitor : Visitor)
@@ -234,9 +234,9 @@ module Expression
   alias AddIndex = CreateIndex
 
   class CreateIndex < AlterAction
-    getter index : Sql::Index
+    getter index : Cql::Index
 
-    def initialize(@index : Sql::Index)
+    def initialize(@index : Cql::Index)
     end
 
     def accept(visitor : Visitor)
@@ -245,9 +245,9 @@ module Expression
   end
 
   class DropIndex < AlterAction
-    getter index : Sql::Index
+    getter index : Cql::Index
 
-    def initialize(@index : Sql::Index)
+    def initialize(@index : Cql::Index)
     end
 
     def accept(visitor : Visitor)
@@ -347,9 +347,9 @@ module Expression
   end
 
   class Table < Node
-    getter table : Sql::Table
+    getter table : Cql::Table
 
-    def initialize(@table : Sql::Table)
+    def initialize(@table : Cql::Table)
     end
 
     def accept(visitor : Visitor)
@@ -538,8 +538,8 @@ module Expression
     getter aggr_columns : Array(Aggregate) = [] of Aggregate
 
     def initialize(
-      @columns : Array(Column) = [] of Sql::BaseColumn,
-      @from : From = [] of Sql::Table,
+      @columns : Array(Column) = [] of Cql::BaseColumn,
+      @from : From = [] of Cql::Table,
       @where : Where? = nil,
       @group_by : GroupBy? = nil,
       @having : Having? = nil,

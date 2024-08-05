@@ -17,7 +17,7 @@ require "./delete"
 require "./schema"
 require "./repository"
 
-module Sql
+module Cql
   VERSION = "0.1.0"
   alias Date = Time
   alias PrimaryKeyType = Int64.class | UUID.class | ULID.class
@@ -33,7 +33,7 @@ module Sql
               Nil.class
 
   BASE_TYPE_MAPPING = {
-    Sql::Adapter::Sqlite => {
+    Cql::Adapter::Cqlite => {
       Int32        => "INTEGER",
       Int64        => "BIGINT",
       UInt32       => "INTEGER UNSIGNED",
@@ -47,7 +47,7 @@ module Sql
       Time::Span   => "INTERVAL",
       Slice(UInt8) => "BLOB",
     },
-    Sql::Adapter::MySql => {
+    Cql::Adapter::MyCql => {
       Int32        => "INT",
       Int64        => "BIGINT",
       UInt32       => "INT UNSIGNED",
@@ -61,7 +61,7 @@ module Sql
       Time::Span   => "TIME",
       Slice(UInt8) => "BLOB",
     },
-    Sql::Adapter::Postgres => {
+    Cql::Adapter::Postgres => {
       Int32        => "INTEGER",
       Int64        => "BIGINT",
       UInt32       => "INTEGER",
@@ -77,8 +77,8 @@ module Sql
     },
   }
   enum Adapter
-    Sqlite
-    MySql
+    Cqlite
+    MyCql
     Postgres
 
     def sql_type(type) : String

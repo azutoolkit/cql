@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class Error < Exception
     def initialize(@message : String)
     end

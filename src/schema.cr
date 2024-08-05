@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class Schema
     Log = ::Log.for(self)
     getter database : Symbol

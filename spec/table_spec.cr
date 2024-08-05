@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Sql::Table do
+describe Cql::Table do
   before_all do
     Schema.customers.drop!
   end

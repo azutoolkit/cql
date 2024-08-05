@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Sql::Delete do
+describe Cql::Delete do
   it "Delete specific rows that meet a certain condition." do
     delete_query = d.from(:users)
       .where { users.id == 1_i64 }

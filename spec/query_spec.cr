@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Sql::Query do
+describe Cql::Query do
   it "selects all columns from tables" do
     select_query = q.from(:customers, :users).to_sql
 
@@ -72,7 +72,7 @@ describe Sql::Query do
   end
 
   it "raises error when column is not right type" do
-    expect_raises Sql::Error, "Expected column `name` to be String, but got Int32" do
+    expect_raises Cql::Error, "Expected column `name` to be String, but got Int32" do
       q.from(:customers)
         .select(:name, :city)
         .where { customers.name == 1 }
@@ -321,7 +321,7 @@ describe Sql::Query do
   end
 
   it "Creates indexes for table" do
-    index = Sql::Index.new(Schema.tables[:users], [:name, :email], unique: true)
+    index = Cql::Index.new(Schema.tables[:users], [:name, :email], unique: true)
 
     Expression::CreateIndex.new(index).accept(Expression::Generator.new).should eq(
       <<-SQL.gsub(/\n/, " ").strip

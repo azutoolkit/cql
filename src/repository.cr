@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class Repository(T)
     def initialize(@schema : Schema, @table : Symbol)
     end

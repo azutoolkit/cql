@@ -1,10 +1,10 @@
-module Sql
+module Cql
   class AlterTable
-    private getter table : Sql::Table
+    private getter table : Cql::Table
     @actions : Array(Expression::AlterAction) = [] of Expression::AlterAction
-    private getter schema : Sql::Schema
+    private getter schema : Cql::Schema
 
-    def initialize(@table : Sql::Table, @schema : Sql::Schema)
+    def initialize(@table : Cql::Table, @schema : Cql::Schema)
     end
 
     def add_column(

@@ -3,9 +3,9 @@ require "spec"
 require "sqlite3"
 require "../src/sql"
 
-Schema = Sql::Schema.new(
+Schema = Cql::Schema.new(
   database: :northwind,
-  adapter: Sql::Adapter::Sqlite,
+  adapter: Cql::Adapter::Cqlite,
   db: DB.connect("sqlite3://spec/data.db")
 )
 
@@ -58,17 +58,17 @@ struct CustomerModel
 end
 
 def q
-  Sql::Query.new(Schema)
+  Cql::Query.new(Schema)
 end
 
 def i
-  Sql::Insert.new(Schema)
+  Cql::Insert.new(Schema)
 end
 
 def u
-  Sql::Update.new(Schema)
+  Cql::Update.new(Schema)
 end
 
 def d
-  Sql::Delete.new(Schema)
+  Cql::Delete.new(Schema)
 end

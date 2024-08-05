@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class Query
     getter columns : Array(BaseColumn) = [] of BaseColumn
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
@@ -124,7 +124,7 @@ module Sql
       self
     end
 
-    def inner(table : Symbol, on : Hash(Sql::BaseColumn, Sql::BaseColumn | DB::Any))
+    def inner(table : Symbol, on : Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any))
       join(Expression::JoinType::INNER, find_table(table), on)
       self
     end
@@ -139,7 +139,7 @@ module Sql
       self
     end
 
-    def left(table : Symbol, on : Hash(Sql::BaseColumn, Sql::BaseColumn | DB::Any))
+    def left(table : Symbol, on : Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any))
       join(Expression::JoinType::LEFT, find_table(table), on)
       self
     end
@@ -154,7 +154,7 @@ module Sql
       self
     end
 
-    def right(table : Symbol, on : Hash(Sql::BaseColumn, Sql::BaseColumn | DB::Any))
+    def right(table : Symbol, on : Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any))
       join(Expression::JoinType::RIGHT, find_table(table), on)
       self
     end
@@ -232,7 +232,7 @@ module Sql
       Expression::From.new(@tables.values)
     end
 
-    private def join(type : Expression::JoinType, table : Table, on : Hash(Sql::BaseColumn, Sql::BaseColumn | DB::Any))
+    private def join(type : Expression::JoinType, table : Table, on : Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any))
       condition = on.map do |left, right|
         right_col = if right.is_a?(DB::Any)
                       left.validate!(right)
@@ -280,13 +280,13 @@ module Sql
       end
     end
 
-    private def find_table(name : Symbol) : Sql::Table
+    private def find_table(name : Symbol) : Cql::Table
       table = @schema.tables[name]
       raise "Table #{name} not found" unless table
       table
     end
 
-    private def find_column(name : Symbol) : Sql::BaseColumn?
+    private def find_column(name : Symbol) : Cql::BaseColumn?
       @tables.each do |_tbl_name, table|
         column = table.columns[name]
         return column if column

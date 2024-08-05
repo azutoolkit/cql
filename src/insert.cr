@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class Insert
     Log = ::Log.for(self)
 

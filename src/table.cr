@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class Table
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn

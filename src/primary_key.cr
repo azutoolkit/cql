@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class PrimaryKey(T) < Column(T)
     getter auto_increment : Bool = true
     getter unique : Bool = true

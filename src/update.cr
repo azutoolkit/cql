@@ -1,4 +1,4 @@
-module Sql
+module Cql
   class Update
     @table : Expression::Table? = nil
     @setters : Array(Expression::Setter) = [] of Expression::Setter
