@@ -2,12 +2,12 @@ require "./spec_helper"
 require "db"
 
 # Assuming we have these models defined
-class User
+struct User
   include DB::Serializable
 
-  property id : Int64
-  property name : String
-  property email : String
+  getter id : Int64
+  getter name : String
+  getter email : String
 
   def initialize(@id : Int64, @name : String, @email : String)
   end
