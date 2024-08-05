@@ -410,7 +410,7 @@ module Expression
           sb << " PRIMARY KEY" if column.is_a?(Sql::PrimaryKey)
           sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
           sb << " NOT NULL" unless column.null?
-          sb << " UNIQUE" if column.unique
+          sb << " UNIQUE" if column.unique?
           sb << ", " if i < node.table.columns.size - 1
         end
         sb << ")"
@@ -437,7 +437,7 @@ module Expression
         sb << " " << node.column.sql_type(@adapter)
         sb << " PRIMARY KEY" if node.column.is_a?(Sql::PrimaryKey)
         sb << " NOT NULL" unless node.column.null?
-        sb << " UNIQUE" if node.column.unique
+        sb << " UNIQUE" if node.column.unique?
       end
     end
 
