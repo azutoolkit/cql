@@ -2,24 +2,24 @@ module Cql
   class Table
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
-    getter primary_key = PrimaryKey(Int64).new(:id, Int64, nil, true)
+    getter primary = PrimaryKey(Int64).new(:id, Int64, nil, true)
     getter as_name : String?
     private getter schema : Schema
 
     def initialize(@table_name : Symbol, @schema : Schema, @as_name : String? = nil)
     end
 
-    def primary_key(
+    def primary(
       name : Symbol = :id,
       type : T.class = Int64,
       auto_increment : Bool = true,
       as as_name = nil
     ) forall T
-      primary_key = PrimaryKey(T).new(name, type, as_name, auto_increment)
-      primary_key.table = self
-      @primary_key = primary_key
-      @columns[name] = @primary_key.not_nil!
-      @primary_key.not_nil!
+      primary = PrimaryKey(T).new(name, type, as_name, auto_increment)
+      primary.table = self
+      @primary = primary
+      @columns[name] = @primary
+      @primary
     end
 
     def column(

@@ -21,7 +21,7 @@ describe Cql::Repository(User) do
   )
 
   schema.table :users do
-    primary_key
+    primary
     column :name, String
     column :email, String
   end

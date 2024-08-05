@@ -10,7 +10,7 @@ Schema = Cql::Schema.new(
 )
 
 Schema.table :customers do
-  primary_key
+  primary
   column :name, String
   column :city, String
   column :balance, Int64
@@ -18,14 +18,14 @@ Schema.table :customers do
 end
 
 Schema.table :users do
-  primary_key
+  primary
   column :name, String
   column :email, String
   timestamps
 end
 
 Schema.table :address do
-  primary_key
+  primary
   column :user_id, Int64, null: false
   column :street, String
   column :city, String
@@ -34,7 +34,7 @@ Schema.table :address do
 end
 
 Schema.table :employees do
-  primary_key
+  primary
   column :name, String
   column :email, String
   column :phone, String

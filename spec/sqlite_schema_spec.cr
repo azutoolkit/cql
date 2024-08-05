@@ -30,14 +30,14 @@ describe Cql::Schema do
   end
 
   schema.table :customers, as: "cust" do
-    primary_key :id, Int64, auto_increment: true
+    primary :id, Int64, auto_increment: true
     column :customer_name, String, as: "cust_name"
     column :city, String
     column :country_id, Int64
   end
 
   schema.table :countries do
-    primary_key :country_id, Int64, auto_increment: true
+    primary :country_id, Int64, auto_increment: true
     column :country, String
   end
 
@@ -190,7 +190,7 @@ describe Cql::Schema do
     schema.countries.create!
 
     schema.table :customers, as: "cust" do
-      primary_key :id, Int64, auto_increment: true
+      primary :id, Int64, auto_increment: true
       column :customer_name, String, as: "cust_name"
       column :city, String
       column :country_id, Int64
