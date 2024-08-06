@@ -1,7 +1,7 @@
 module Cql
   class Index
     getter columns : Array(Symbol)
-    getter unique : Bool
+    getter? unique : Bool
     getter table : Table
     property name : String? = nil
 

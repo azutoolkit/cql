@@ -388,7 +388,7 @@ module Expression
     def visit(node : CreateIndex) : String
       @query = String::Builder.build do |sb|
         sb << "CREATE "
-        sb << "UNIQUE " if node.index.unique
+        sb << "UNIQUE " if node.index.unique?
         sb << "INDEX "
         sb << node.index.index_name
         sb << " ON "
