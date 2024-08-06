@@ -6,11 +6,11 @@ module Expression
     getter params : Array(DB::Any) = [] of DB::Any
     getter query : String = ""
 
-    def initialize(@adapter : Cql::Adapter = Cql::Adapter::Cqlite)
+    def initialize(@adapter : Cql::Adapter = Cql::Adapter::Sqlite)
       @dialect, @placeholder = case @adapter
-                               when Cql::Adapter::Cqlite
-                                 {CqliteDialect.new, "?"}
-                               when Cql::Adapter::MyCql
+                               when Cql::Adapter::Sqlite
+                                 {SqliteDialect.new, "?"}
+                               when Cql::Adapter::MySql
                                  {MysqlDialect.new, "?"}
                                else
                                  {PostgresDialect.new, "$"}
@@ -471,7 +471,7 @@ module Expression
     end
 
     def visit(node : AddForeignKey) : String
-      if @adapter == Cql::Adapter::Cqlite
+      if @adapter == Cql::Adapter::Sqlite
         message = <<-MSG
               SQLite does not support adding foreign keys to an \n
               existing table directly via the ALTER TABLE statement.\n

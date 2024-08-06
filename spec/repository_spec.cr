@@ -15,8 +15,8 @@ end
 
 describe Cql::Repository(User) do
   schema = Cql::Schema.new(
-    database: :northwind,
-    adapter: Cql::Adapter::Cqlite,
+    name: :northwind,
+    adapter: Cql::Adapter::Sqlite,
     db: DB.connect("sqlite3://spec/test.db")
   )
 

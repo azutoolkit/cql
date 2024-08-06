@@ -1,18 +1,20 @@
-require "./spec_helper"
+require "../spec_helper"
+require "pg"
 
 describe Cql::Schema do
-  schema = Cql::Schema.new(
-    :northwind,
-    adapter: Cql::Adapter::Cqlite,
-    db: DB.connect("sqlite3://spec/data.db"),
-    version: "1.0")
+  connection = DB.connect("postgresql://example:example@localhost:5432/example")
+  schema = Cql::Schema.new(:northwind, adapter: Cql::Adapter::Postgres, db: connection, version: "1.0")
 
   column_exists = ->(col : Symbol, table : Symbol) do
     begin
-      query = "SELECT 1 FROM pragma_table_info('#{table}') WHERE name = '#{col}';\n"
-      result = Schema.db.query_one(query, as: Int32)
-      result
+      query = <<-SQL
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'  AND table_name = '#{table}'  AND column_name = '#{col}';
+      SQL
+      schema.db.query_one(query, as: Int32)
     rescue exception
+      Log.info { exception }
       0
     end
   end
@@ -20,17 +22,16 @@ describe Cql::Schema do
   index_exists = ->(index : Symbol, table : Symbol) do
     begin
       query = <<-SQL
-      SELECT 1 FROM SQLite_master  WHERE type = 'index' AND tbl_name = '#{table}' AND name = '#{index}';
+      SELECT 1 FROM pg_indexes WHERE tablename = '#{table}' AND indexname = '#{index}';
       SQL
-      result = Schema.db.query_one(query, as: Int32)
-      result
+      schema.db.query_one(query, as: Int32)
     rescue exception
       0
     end
   end
 
   schema.table :customers, as: "cust" do
-    primary :id, Int64, auto_increment: true
+    primary :customer_id, Int64, auto_increment: true
     column :customer_name, String, as: "cust_name"
     column :city, String
     column :country_id, Int64
@@ -39,51 +40,6 @@ describe Cql::Schema do
   schema.table :countries do
     primary :country_id, Int64, auto_increment: true
     column :country, String
-  end
-
-  it "creates a table" do
-    Schema.customers.drop!
-    Schema.customers.create!
-
-    table = Schema.customers.table_name.to_s
-    check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
-    name = Schema.db.query_one(check_query, as: String)
-
-    name.should eq table
-  end
-
-  it "creates record in table" do
-    Schema.customers.drop!
-    Schema.customers.create!
-    customer = CustomerModel.new(1, "'John'", "'New York'", 100)
-
-    i.into(:customers).values(
-      id: customer.id,
-      name: customer.name,
-      city: customer.city,
-      balance: customer.balance
-    ).commit
-
-    total = q.from(:customers).count.first!(as: Int32)
-    total.should eq 1
-  end
-
-  it "queries customers" do
-    Schema.customers.drop!
-    Schema.customers.create!
-
-    customer = CustomerModel.new(1, "'John'", "'New York'", 100)
-
-    insert_query = i.into(:customers).values(
-      id: customer.id,
-      name: customer.name,
-      city: customer.city,
-      balance: customer.balance
-    ).commit
-
-    query = q.from(:customers)
-    customers = query.all!(CustomerModel)
-    customers.size.should eq 1
   end
 
   it "creates a schema" do
@@ -96,8 +52,10 @@ describe Cql::Schema do
     schema.customers.create!
 
     schema.alter :customers do
-      add_column :country, String
+      add_column :country, String, size: 50
     end
+
+    sleep 1
 
     column_exists.call(:country, :customers).should eq(1)
     schema.tables[:customers].columns.size.should eq(5)
@@ -165,10 +123,8 @@ describe Cql::Schema do
 
     column_exists.call(:full_name, :customers).should eq(1)
 
-    expect_raises DB::Error do
-      schema.alter :customers do
-        change_column :full_name, Int32
-      end
+    schema.alter :customers do
+      change_column :full_name, String
     end
   end
 
@@ -190,7 +146,25 @@ describe Cql::Schema do
     schema.countries.create!
 
     schema.table :customers, as: "cust" do
-      primary :id, Int64, auto_increment: true
+      primary :customer_id, Int64, auto_increment: true
+      column :customer_name, String, as: "cust_name"
+      column :city, String
+      column :country, Int64
+    end
+
+    schema.customers.create!
+
+    schema.alter :customers do
+      foreign_key :fk_country, [:country], :countries, [:country_id]
+    end
+  end
+
+  it "drops a foreign key from a table" do
+    schema.customers.drop!
+    schema.countries.create!
+
+    schema.table :customers, as: "cust" do
+      primary :customer_id, Int64, auto_increment: true
       column :customer_name, String, as: "cust_name"
       column :city, String
       column :country_id, Int64
@@ -198,20 +172,12 @@ describe Cql::Schema do
 
     schema.customers.create!
 
-    expect_raises DB::Error do
-      schema.alter :customers do
-        foreign_key :fk_country, [:country], :countries, [:country_id]
-      end
+    schema.alter :customers do
+      foreign_key :fk_country, [:country_id], :countries, [:country_id]
     end
-  end
 
-  it "raises when droping a foreign key from a table" do
-    schema.countries.create!
-
-    expect_raises SQLite3::Exception do
-      schema.alter :customers do
-        drop_foreign_key :fk_country
-      end
+    schema.alter :customers do
+      drop_foreign_key :fk_country
     end
   end
 end

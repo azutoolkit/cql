@@ -1,14 +1,14 @@
 module Cql
   class Schema
     Log = ::Log.for(self)
-    getter database : Symbol
-    getter version : String
-    getter tables : Hash(Symbol, Table) = {} of Symbol => Table
+    getter name : Symbol
     getter db : DB::Connection
+    getter version : String
+    getter adapter : Adapter = Adapter::Sqlite
+    getter tables : Hash(Symbol, Table) = {} of Symbol => Table
     getter gen : Expression::Generator
 
-    def initialize(@database : Symbol, @db : DB::Connection, @adapter : Adapter, @version : String = "1.0")
-      @tables = {} of Symbol => Table
+    def initialize(@name : Symbol, @db : DB::Connection, @adapter : Adapter = Adapter::Sqlite, @version : String = "1.0")
       @gen = Expression::Generator.new(@adapter)
     end
 

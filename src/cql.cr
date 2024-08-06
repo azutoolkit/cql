@@ -18,7 +18,6 @@ require "./schema"
 require "./repository"
 
 module Cql
-  VERSION = "0.1.0"
   alias Date = Time
   alias PrimaryKeyType = Int64.class | UUID.class | ULID.class
   alias Any = Bool.class |
@@ -32,8 +31,8 @@ module Cql
               UUID.class |
               Nil.class
 
-  BASE_TYPE_MAPPING = {
-    Cql::Adapter::Cqlite => {
+  DB_TYPE_MAPPING = {
+    Cql::Adapter::Sqlite => {
       Int32        => "INTEGER",
       Int64        => "BIGINT",
       UInt32       => "INTEGER UNSIGNED",
@@ -47,7 +46,7 @@ module Cql
       Time::Span   => "INTERVAL",
       Slice(UInt8) => "BLOB",
     },
-    Cql::Adapter::MyCql => {
+    Cql::Adapter::MySql => {
       Int32        => "INT",
       Int64        => "BIGINT",
       UInt32       => "INT UNSIGNED",
@@ -77,12 +76,12 @@ module Cql
     },
   }
   enum Adapter
-    Cqlite
-    MyCql
+    Sqlite
+    MySql
     Postgres
 
     def sql_type(type) : String
-      BASE_TYPE_MAPPING[self][type]
+      DB_TYPE_MAPPING[self][type]
     end
   end
 end
