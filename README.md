@@ -25,35 +25,54 @@ Then run `shards install` to install the dependencies.
 
 ## Usage
 
-### Connecting to a Database
+### Connecting to a Database and Defining a Schema
 
 ```crystal
-require "sql"
+require "cql"
 
-db = Cql.connect("postgres://user:password@localhost/db_name")
+connection = DB.connect("postgresql://example:example@localhost:5432/example")
+schema = Cql::Schema.new(:northwind, adapter: Cql::Adapter::Postgres, db: connection, version: "1.0")
+
+```
+
+### Registering Tables
+
+```crystal
+Schema.table :users do
+  primary_key :id, Int64, auto_increment: true
+  column :name, String
+  column :email, String
+end
+
+Schema.table :addresses do
+  primary_key :id, Int64, auto_increment: true
+  column :user_id, Int64
+  column :address, String
+end
 ```
 
 ### Executing Queries
 
 ```crystal
-Schema = Cql::Schema.new(:northwind)
 
-schema = Schema.table :users do
-  primary :id, Int64, auto_increment: true
-  column :name, String
-  column :email, String
+struct User
+  include DB::Serializable
+
+  getter id : Int64
+  getter name : String
+  getter email : String
+
+  def initialize(@id, @name, @email)
+  end
 end
 
 q = Cql::Query.new(schema)
 
-result = db.execute(
-  q.from(:users).where(id: "?"),
-  1
-)
+user_id = 1
+user = q.from(:users).where(id: user_id).first(as: User)
 
-result.each do |row|
-  puts row["name"]
-end
+=> user.id
+~> 1
 ```
 
 ### Using the Query Builder
@@ -94,21 +113,81 @@ end
 ```
 
 ```crystal
+
+struct User
+  include DB::Serializable
+
+  getter id : Int64
+  getter name : String
+  getter email : String
+  getter addresses : Array(Address)
+
+  def initialize(@id, @name, @email, @addresses)
+  end
+end
+
+struct Address
+  include DB::Serializable
+
+  getter id : Int64
+  getter street : String
+  getter city : String
+
+  def initialize(@id, @street, @city)
+  end
+end
+
 q = Cql::Query.new(Schema)
 
-query = q
-      .from(:users)
+query = q.from(:users)
       .select(users: [:name, :email], address: [:street, :city])
       .inner(:address) do
         (users.id.eq(address.user_id)) & (users.name.eq("'John'")) | (users.id.eq(1))
-      end.to_sql
+      end
 
-
-result = db.execute(query)
+query.each(as: User) do |user|
+  puts user
+end
 
 result.each do |row|
   puts row["users.name"]
 end
+```
+
+### Using the Repository Pattern
+
+```crystal
+struct User
+  include DB::Serializable
+  getter id : Int64
+  getter name : String
+  getter email : String
+
+  def initialize(@id : Int64, @name : String, @email : String)
+  end
+end
+```
+
+Use the repository:
+
+```crystal
+user_repository = Cql::Repository(User).new(schema, :users)
+
+# Create a new user
+user_repository.create(id: 1_i64, name: "John Doe", email: "john@example.com")
+
+# Fetch all users
+users = user_repository.all
+users.each do |user|
+  puts user.name
+end
+
+# Find a user by ID
+user = user_repository.find!(1_i64)
+puts user.name
+
+# Update a user by ID
+user_repository.update(1_i64, name: "John Smith")
 ```
 
 ## Documentation
