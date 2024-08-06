@@ -2,11 +2,8 @@ require "./spec_helper"
 require "pg"
 
 describe Cql::Schema do
-  schema = Cql::Schema.new(
-    :northwind,
-    adapter: Cql::Adapter::Postgres,
-    db: DB.connect("postgresql://example:example@localhost:5432/example"),
-    version: "1.0")
+  connection = DB.connect("postgresql://example:example@localhost:5432/example")
+  schema = Cql::Schema.new(:northwind, adapter: Cql::Adapter::Postgres, db: connection, version: "1.0")
 
   column_exists = ->(col : Symbol, table : Symbol) do
     begin

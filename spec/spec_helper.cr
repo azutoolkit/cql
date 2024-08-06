@@ -1,7 +1,7 @@
 require "spec"
 
 require "sqlite3"
-require "../src/sql"
+require "../src/cql"
 
 Schema = Cql::Schema.new(
   database: :northwind,
