@@ -17,7 +17,7 @@ describe Cql::Repository(User) do
   schema = Cql::Schema.new(
     name: :northwind,
     adapter: Cql::Adapter::Sqlite,
-    db: DB.connect("sqlite3://spec/test.db")
+    db: DB.connect("sqlite3://spec/db/test.db")
   )
 
   schema.table :users do
@@ -104,6 +104,7 @@ describe Cql::Repository(User) do
     user_repository.create(id: 2_i64, name: "Jane Doe", email: "jane@example.com")
     first_user = user_repository.first
 
+    first_user.should be_a(User)
     first_user.name.should eq("John Doe")
   end
 
@@ -112,6 +113,7 @@ describe Cql::Repository(User) do
     user_repository.create(id: 2_i64, name: "Jane Doe", email: "jane@example.com")
     last_user = user_repository.last
 
+    last_user.should be_a(User)
     last_user.name.should eq("Jane Doe")
   end
 

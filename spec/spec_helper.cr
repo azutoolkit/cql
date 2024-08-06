@@ -6,7 +6,7 @@ require "../src/cql"
 Schema = Cql::Schema.new(
   name: :northwind,
   adapter: Cql::Adapter::Sqlite,
-  db: DB.connect("sqlite3://spec/data.db")
+  db: DB.connect("sqlite3://spec/db/data.db")
 )
 
 Schema.table :customers do

@@ -4,7 +4,7 @@ describe Cql::Schema do
   schema = Cql::Schema.new(
     :northwind,
     adapter: Cql::Adapter::Sqlite,
-    db: DB.connect("sqlite3://spec/data.db"),
+    db: DB.connect("sqlite3://spec/db/data.db"),
     version: "1.0")
 
   column_exists = ->(col : Symbol, table : Symbol) do
