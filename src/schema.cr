@@ -28,6 +28,10 @@ module Cql
       Delete.new(self)
     end
 
+    def migrator
+      Migrator.new(self)
+    end
+
     def table(name : Symbol, as as_name = nil, &)
       table = Table.new(name, self, as_name)
       with table yield

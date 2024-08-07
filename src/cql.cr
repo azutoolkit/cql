@@ -20,7 +20,7 @@ require "./migrations"
 
 module Cql
   alias Date = Time
-  alias PrimaryKeyType = Int64.class | UUID.class | ULID.class
+  alias PrimaryKeyType = Int32.class | Int64.class | UUID.class | ULID.class
   alias Any = Bool.class |
               Float32.class |
               Float64.class |

@@ -2,7 +2,7 @@ module Cql
   class Table
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
-    getter primary = PrimaryKey(Int64).new(:id, Int64, nil, true)
+    getter primary : BaseColumn = PrimaryKey(Int64).new(:id, Int64)
     getter as_name : String?
     private getter schema : Schema
 
@@ -13,9 +13,10 @@ module Cql
       name : Symbol = :id,
       type : T.class = Int64,
       auto_increment : Bool = true,
-      as as_name = nil
+      as as_name = nil,
+      unique : Bool = true
     ) forall T
-      primary = PrimaryKey(T).new(name, type, as_name, auto_increment)
+      primary = PrimaryKey(T).new(name, type, as_name, auto_increment, unique)
       primary.table = self
       @primary = primary
       @columns[name] = @primary
@@ -51,16 +52,19 @@ module Cql
     def create!
       create_query = Expression::CreateTable.new(self).accept(schema.gen).to_s
       schema.tables[table_name] = self if schema.tables[table_name].nil?
+      Log.info { "Creating table #{table_name}" }
       schema.db.exec "#{create_query};"
     end
 
     def drop!
       drop_query = Expression::DropTable.new(self).accept(schema.gen).to_s
+      Log.info { "Dropping table #{table_name}" }
       schema.db.exec "#{drop_query};"
     end
 
     def truncate!
       truncate_query = Expression::TruncateTable.new(self).accept(schema.gen).to_s
+      Log.info { "Truncating table #{table_name}" }
       schema.db.exec "#{truncate_query};"
       schema.tables.delete[table_name]
     end

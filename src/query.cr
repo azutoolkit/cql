@@ -33,6 +33,11 @@ module Cql
       first(as_kind).not_nil!
     end
 
+    def get(as as_kind)
+      query, params = to_sql
+      @schema.db.scalar(query, args: params, as: Int64)
+    end
+
     def each(as as_kind, &block)
       query, params = to_sql
       @schema.db.query_each(query, args: params) do |rs|

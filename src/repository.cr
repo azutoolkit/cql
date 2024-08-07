@@ -110,7 +110,7 @@ module Cql
 
     # Check if records exist matching specific fields
     def exists?(**fields)
-      query.where(**fields).limit(1).first(T) != nil
+      query.select.where(**fields).limit(1).first(T) != nil
     rescue DB::NoResultsError
       false
     end
