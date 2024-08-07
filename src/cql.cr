@@ -16,6 +16,7 @@ require "./update"
 require "./delete"
 require "./schema"
 require "./repository"
+require "./migrations"
 
 module Cql
   alias Date = Time

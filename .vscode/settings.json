@@ -1,0 +1,11 @@
+{
+  "sqltools.connections": [
+    {
+      "previewLimit": 50,
+      "driver": "SQLite",
+      "name": "local",
+      "group": "local",
+      "database": "${workspaceFolder:sql}/spec/db/data.db"
+    }
+  ]
+}
