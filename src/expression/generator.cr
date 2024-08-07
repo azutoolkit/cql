@@ -33,9 +33,9 @@ module Expression
       @query = String::Builder.build do |sb|
         sb << "SELECT "
         sb << "DISTINCT " if node.distinct?
-        sb << node.aggr_columns.map { |c| c.accept(self) }.join(", ")
-        sb << ", " if node.aggr_columns.any? && node.columns.any?
-        sb << node.columns.map { |c| c.accept(self) }.join(", ")
+        sb << node.aggr_columns.map(&.accept(self)).join(", ")
+        sb << ", " if !node.aggr_columns.empty? && !node.columns.empty?
+        sb << node.columns.map(&.accept(self)).join(", ")
         sb << node.from.accept(self)
         node.joins.each { |join| sb << join.accept(self) }
         sb << node.where.try &.accept(self) if node.where
@@ -408,6 +408,7 @@ module Expression
           sb << column.name
           sb << " " << @adapter.sql_type(column.type)
           sb << " PRIMARY KEY" if column.is_a?(Cql::PrimaryKey)
+          sb << " AUTOINCREMENT" if column.is_a?(Cql::PrimaryKey) && column.auto_increment
           sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
           sb << " NOT NULL" unless column.null?
           sb << " UNIQUE" if column.unique?
