@@ -8,9 +8,43 @@ module Cql
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
     getter gen : Expression::Generator
 
+    def self.build(name : Symbol, db : DB::Connection, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)
+      schema = new(name, db, adapter, version)
+      with schema yield
+      schema
+    end
+
     def initialize(@name : Symbol, @db : DB::Connection, @adapter : Adapter = Adapter::Sqlite, @version : String = "1.0")
       @gen = Expression::Generator.new(@adapter)
     end
+
+    def exec(sql : String)
+      @db.transaction do |tx|
+        cnn = tx.connection
+        cnn.exec(sql)
+      end
+    end
+
+    def drop!
+      Log.debug { "Dropping database #{@name}" }
+      if @adapter == Adapter::Sqlite
+        raise "TODO: Implement drop for SQLite"
+      else
+        exec "DROP DATABASE IF EXISTS #{@name};"
+      end
+    end
+
+    # def reset!
+    #   drop!
+    #   setup
+    # end
+
+    # def setup
+    #   Log.debug { "Setting up schema #{@name}" }
+    #   sql_statements = tables.map(&.create_sql).join("\n")
+    #   Log.debug { sql_statements }
+    #   exec(sql_statements)
+    # end
 
     def query
       Query.new(self)
@@ -43,7 +77,7 @@ module Cql
       alter_table = AlterTable.new(tables[table_name], self)
       with alter_table yield
       sql_statements = alter_table.to_sql(@gen)
-      Log.info { sql_statements }
+      Log.debug { sql_statements }
 
       db.transaction do |tx|
         cnn = tx.connection

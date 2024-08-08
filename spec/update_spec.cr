@@ -1,5 +1,9 @@
 require "./spec_helper"
 
+def u
+  Northwind.update
+end
+
 describe Cql::Update do
   it "creates Update query" do
     update_query = u.update(:users)

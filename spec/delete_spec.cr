@@ -1,5 +1,9 @@
 require "./spec_helper"
 
+def d
+  Northwind.delete
+end
+
 describe Cql::Delete do
   it "Delete specific rows that meet a certain condition." do
     delete_query = d.from(:users)

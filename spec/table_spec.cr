@@ -2,12 +2,12 @@ require "./spec_helper"
 
 describe Cql::Table do
   before_all do
-    Schema.customers.drop!
+    Northwind.customers.drop!
   end
 
   it "creates table" do
-    Schema.customers.drop!
-    Schema.customers.create!
+    Northwind.customers.drop!
+    Northwind.customers.create!
 
     customer = CustomerModel.new(1, "John", "New York", 100)
 
@@ -27,8 +27,8 @@ describe Cql::Table do
   end
 
   it "truncates table" do
-    Schema.customers.drop!
-    Schema.customers.create!
+    Northwind.customers.drop!
+    Northwind.customers.create!
 
     customers = [
       CustomerModel.new(1, "'John'", "'New York'", 100),
@@ -47,12 +47,12 @@ describe Cql::Table do
   end
 
   it "drops table" do
-    Schema.customers.drop!
-    table = Schema.customers.table_name.to_s
+    Northwind.customers.drop!
+    table = Northwind.customers.table_name.to_s
     check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
 
     expect_raises(DB::NoResultsError) do
-      name = Schema.db.query_one(check_query, as: String)
+      name = Northwind.db.query_one(check_query, as: String)
     end
   end
 end

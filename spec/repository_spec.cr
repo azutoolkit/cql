@@ -1,33 +1,19 @@
 require "./spec_helper"
-require "db"
 
 describe Cql::Repository(User) do
-  schema = Cql::Schema.new(
-    name: :northwind,
-    adapter: Cql::Adapter::Sqlite,
-    db: DB.connect("sqlite3://spec/db/users.db")
-  )
-
-  schema.table :users do
-    primary :id, Int32
-    column :name, String
-    column :email, String
-  end
-
   before_each do
-    schema.tables.each do |_, table|
-      table.drop!
+    Billing.tables.each do |_, table|
       table.create!
     end
   end
 
   after_each do
-    schema.tables.each do |_, table|
+    Billing.tables.each do |_, table|
       table.drop!
     end
   end
 
-  user_repository = Cql::Repository(User).new(schema, :users)
+  user_repository = Cql::Repository(User).new(Billing, :users)
 
   it "creates a new user" do
     user_repository.create(id: 1, name: "John Doe", email: "john@example.com")

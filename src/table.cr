@@ -52,23 +52,32 @@ module Cql
       Index.new(table, columns, unique)
     end
 
+    def create_sql
+      Expression::CreateTable.new(self).accept(schema.gen).to_s
+    end
+
+    def drop_sql
+      Expression::DropTable.new(self).accept(schema.gen).to_s
+    end
+
+    def truncate_sql
+      Expression::TruncateTable.new(self).accept(schema.gen).to_s
+    end
+
     def create!
-      create_query = Expression::CreateTable.new(self).accept(schema.gen).to_s
       schema.tables[table_name] = self if schema.tables[table_name].nil?
-      Log.info { "Creating table #{table_name}" }
-      schema.db.exec "#{create_query};"
+      Log.debug { "Creating table #{table_name}" }
+      schema.exec "#{create_sql};"
     end
 
     def drop!
-      drop_query = Expression::DropTable.new(self).accept(schema.gen).to_s
-      Log.info { "Dropping table #{table_name}" }
-      schema.db.exec "#{drop_query};"
+      Log.debug { "Dropping table #{table_name}" }
+      schema.exec "#{drop_sql};"
     end
 
     def truncate!
-      truncate_query = Expression::TruncateTable.new(self).accept(schema.gen).to_s
-      Log.info { "Truncating table #{table_name}" }
-      schema.db.exec "#{truncate_query};"
+      Log.debug { "Truncating table #{table_name}" }
+      schema.exec "#{truncate_sql};"
       schema.tables.delete[table_name]
     end
 

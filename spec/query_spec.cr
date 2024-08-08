@@ -1,5 +1,9 @@
 require "./spec_helper"
 
+def q
+  Northwind.query
+end
+
 describe Cql::Query do
   it "selects all columns from tables" do
     select_query = q.from(:customers, :users).to_sql
@@ -321,7 +325,7 @@ describe Cql::Query do
   end
 
   it "Creates indexes for table" do
-    index = Cql::Index.new(Schema.tables[:users], [:name, :email], unique: true)
+    index = Cql::Index.new(Northwind.tables[:users], [:name, :email], unique: true)
 
     Expression::CreateIndex.new(index).accept(Expression::Generator.new).should eq(
       <<-SQL.gsub(/\n/, " ").strip

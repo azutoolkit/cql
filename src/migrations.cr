@@ -54,10 +54,8 @@ module Cql
     def up(steps : Int32 = Migrator.migrations.size)
       sorted_migrations[0, steps].each do |migration_class|
         unless migration_applied?(migration_class.version)
-          schema.db.transaction do
-            migration_class.new(schema).up
-            record_migration(migration_class)
-          end
+          migration_class.new(schema).up
+          record_migration(migration_class)
         end
       end
       print_applied_migrations
@@ -66,10 +64,8 @@ module Cql
     def down(steps : Int32 = Migrator.migrations.size)
       sorted_migrations.reverse[0, steps].each do |migration_class|
         if migration_applied?(migration_class.version)
-          schema.db.transaction do
-            migration_class.new(schema).down
-            remove_migration_record(migration_class)
-          end
+          migration_class.new(schema).down
+          remove_migration_record(migration_class)
         end
       end
       print_rolled_back_migrations(sorted_migrations.reverse[0, steps])
