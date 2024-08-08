@@ -39,6 +39,10 @@ end
 describe Cql::Migration do
   migrator = Cql::Migrator.new(Schema)
 
+  after_all do
+    File.delete("spec/db/data.db")
+  end
+
   it "has a migration" do
     Cql::Migrator.migrations.size.should eq(2)
   end
@@ -46,7 +50,7 @@ describe Cql::Migration do
   it "migrates up" do
     migrator.up
 
-    migrator.last.not_nil!.version.should eq(MigrationTwo.version)
+    migrator.last.try(&.version).should eq(MigrationTwo.version)
     migrator.applied_migrations.map(&.version).should eq([CreateUsers.version, MigrationTwo.version])
   end
 
@@ -58,18 +62,42 @@ describe Cql::Migration do
     migrator.applied_migrations.map(&.version).should eq([] of Int64)
   end
 
+  it "rolls back" do
+    migrator.rollback
+
+    migrator.last.try(&.version).should eq(nil)
+    migrator.applied_migrations.map(&.version).should eq([] of Cql::Migrator::MigrationRecord)
+  end
+
   it "redo" do
-    migrator.down
     migrator.up
+
+    migrator.last.try(&.version).should eq(MigrationTwo.version)
+    migrator.applied_migrations.map(&.version).should eq([CreateUsers.version, MigrationTwo.version])
+
     migrator.redo
 
-    # migrator.up
-    # migrator.applied_migrations.size.should eq(2)
-    # migrator.last.not_nil!.version.should eq(MigrationTwo.version)
-    # migrator.redo
+    migrator.last.try(&.version).should eq(MigrationTwo.version)
+    migrator.applied_migrations.map(&.version).should eq([CreateUsers.version, MigrationTwo.version])
+  end
 
-    # migrator.last.not_nil!.version.should eq(MigrationTwo.version)
-    # migrator.applied_migrations.map(&.version).should eq([CreateUsers.version, MigrationTwo.version])
-    # migrator.applied_migrations.size.should eq(2)
+  it "migrates down to a specific version" do
+    migrator.down_to(CreateUsers.version)
+
+    migrator.last.try(&.version).should eq(CreateUsers.version)
+    migrator.applied_migrations.map(&.version).should eq([CreateUsers.version])
+  end
+
+  it "migrates up to a specific version" do
+    migrator.up_to(MigrationTwo.version)
+
+    migrator.last.try(&.version).should eq(MigrationTwo.version)
+    migrator.applied_migrations.map(&.version).should eq([CreateUsers.version, MigrationTwo.version])
+  end
+
+  it "prints pending migrations" do
+    migrator.down
+    migrator.print_pending_migrations
+    migrator.pending_migrations.should be_a(Array(Cql::Migrator::MigrationRecord))
   end
 end
