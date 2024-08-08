@@ -208,7 +208,7 @@ describe Cql::Query do
   it "EXISTS Operator" do
     sub_query = q.from(:users)
       .select(:id)
-      .where { users.id == 1_i64 }
+      .where { users.id == 1 }
 
     select_query = q.from(:customers)
       .select(:name, :city)
@@ -220,7 +220,7 @@ describe Cql::Query do
       FROM customers
       WHERE (EXISTS (SELECT users.id FROM users WHERE (users.id = ?)))
       SQL
-    select_query.should eq({output, [1_i64]})
+    select_query.should eq({output, [1]})
   end
 
   it "creates GROUP BY clause" do
@@ -308,7 +308,7 @@ describe Cql::Query do
     select_query = q.from(:users)
       .select(users: [:name, :email], address: [:street, :city])
       .inner(:address) do
-        users.id.eq(address.user_id) & users.name.eq("John") | users.id.eq(1_i64)
+        users.id.eq(address.user_id) & users.name.eq("John") | users.id.eq(1)
       end.to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip
@@ -317,7 +317,7 @@ describe Cql::Query do
       INNER JOIN address ON users.id = address.user_id AND users.name = ? OR users.id = ?
       SQL
 
-    select_query.should eq({output, ["John", 1_i64]})
+    select_query.should eq({output, ["John", 1]})
   end
 
   it "Creates indexes for table" do

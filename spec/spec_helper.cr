@@ -10,7 +10,7 @@ Schema = Cql::Schema.new(
 )
 
 Schema.table :customers do
-  primary
+  primary :id, Int32
   column :name, String
   column :city, String
   column :balance, Int64
@@ -18,14 +18,14 @@ Schema.table :customers do
 end
 
 Schema.table :users do
-  primary
+  primary :id, Int32
   column :name, String
   column :email, String
   timestamps
 end
 
 Schema.table :address do
-  primary
+  primary :id, Int32
   column :user_id, Int64, null: false
   column :street, String
   column :city, String
@@ -34,7 +34,7 @@ Schema.table :address do
 end
 
 Schema.table :employees do
-  primary
+  primary :id, Int32
   column :name, String
   column :email, String
   column :phone, String
@@ -45,15 +45,26 @@ end
 struct CustomerModel
   include DB::Serializable
 
-  property id : Int64
+  property id : Int32
   property name : String
   property city : String
   property balance : Int64
   property created_at : Time
   property updated_at : Time
 
-  def initialize(@id : Int64, @name : String, @city : String, @balance : Int64,
+  def initialize(@id : Int32, @name : String, @city : String, @balance : Int64,
                  @created_at = Time.local, @updated_at = Time.local)
+  end
+end
+
+struct User
+  include DB::Serializable
+
+  getter id : Int32
+  getter name : String
+  getter email : String
+
+  def initialize(@id : Int32, @name : String, @email : String)
   end
 end
 

@@ -1,9 +1,12 @@
 module Cql
   class Table
+    Log = ::Log.for(self)
+
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
     getter primary : BaseColumn = PrimaryKey(Int64).new(:id, Int64)
     getter as_name : String?
+
     private getter schema : Schema
 
     def initialize(@table_name : Symbol, @schema : Schema, @as_name : String? = nil)

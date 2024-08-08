@@ -16,7 +16,7 @@ describe Cql::Update do
   it "create update where query" do
     update_query = u.update(:users)
       .set(name: "John", email: "john@example.com")
-      .where { users.id == 1_i64 }
+      .where { users.id == 1 }
       .to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip

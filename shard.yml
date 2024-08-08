@@ -12,6 +12,8 @@ dependencies:
     github: SuperPaintman/ulid
   db:
     github: crystal-lang/crystal-db
+  tallboy:
+    github: epoch/tallboy
 
 development_dependencies:
   sqlite3:

@@ -408,7 +408,9 @@ module Expression
           sb << column.name
           sb << " " << @adapter.sql_type(column.type)
           sb << " PRIMARY KEY" if column.is_a?(Cql::PrimaryKey)
-          sb << " AUTOINCREMENT" if column.is_a?(Cql::PrimaryKey) && column.auto_increment
+          if @adapter == Cql::Adapter::Sqlite && column.is_a?(Cql::PrimaryKey) && column.auto_increment
+            sb << " AUTOINCREMENT"
+          end
           sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
           sb << " NOT NULL" unless column.null?
           sb << " UNIQUE" if column.unique?
