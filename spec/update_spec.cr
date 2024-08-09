@@ -1,12 +1,8 @@
 require "./spec_helper"
 
-def u
-  Northwind.update
-end
-
 describe Cql::Update do
   it "creates Update query" do
-    update_query = u.update(:users)
+    update_query = Northwind.update.table(:users)
       .set(name: "John", email: "john@example.com")
       .to_sql
 
@@ -18,7 +14,7 @@ describe Cql::Update do
   end
 
   it "create update where query" do
-    update_query = u.update(:users)
+    update_query = Northwind.update.table(:users)
       .set(name: "John", email: "john@example.com")
       .where { users.id == 1 }
       .to_sql

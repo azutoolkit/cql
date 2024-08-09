@@ -19,7 +19,7 @@ module Cql
       {gen.query, gen.params}
     end
 
-    def update(table : Symbol)
+    def table(table : Symbol)
       @table = Expression::Table.new(find_table(table))
       self
     end

@@ -57,7 +57,7 @@ module Cql
 
     # Return a new update object for the current table
     def update
-      Update.new(@schema).update(@table)
+      Update.new(@schema).table(@table)
     end
 
     # Update a record by ID with given attributes
