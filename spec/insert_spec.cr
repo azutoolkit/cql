@@ -57,11 +57,11 @@ describe Cql::Insert do
   end
 
   it "creates Insert Into with select query" do
-    select_query = q.from(:users)
+    select_query = Northwind.query.from(:users)
       .select(:name, :email)
       .where { users.id == 1 }
 
-    insert_query = i.into(:users)
+    insert_query = Northwind.insert.into(:users)
       .query(select_query)
       .to_sql
 

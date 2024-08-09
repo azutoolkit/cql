@@ -26,6 +26,7 @@ module Cql
 
     def first(as as_kind)
       query, params = to_sql
+      Log.debug { "Query: #{query}, Params: #{params}" }
       @schema.db.query_one(query, args: params, as: as_kind)
     end
 

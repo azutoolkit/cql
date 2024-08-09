@@ -18,7 +18,7 @@ describe Cql::Table do
       balance: customer.balance
     ).commit
 
-    persisted = q.from(:customers).first!(as: CustomerModel)
+    persisted = Northwind.query.from(:customers).first!(as: CustomerModel)
 
     persisted.id.should eq customer.id
     persisted.name.should eq customer.name
@@ -39,7 +39,7 @@ describe Cql::Table do
       i.into(:customers).values(id: c.id, name: c.name, city: c.city, balance: c.balance).commit
     end
 
-    count_query = q.from(:customers).count
+    count_query = Northwind.query.from(:customers).count
     count_query.first!(as: Int32).should eq 2
 
     result = d.from(:customers).commit

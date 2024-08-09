@@ -6,7 +6,7 @@ describe Cql::Schema do
     begin
       query = <<-SQL
       SELECT 1
-      FROM information_Example.columns
+      FROM information_schema.columns
       WHERE table_schema = 'public'  AND table_name = '#{table}'  AND column_name = '#{col}';
       SQL
       Example.db.query_one(query, as: Int32)

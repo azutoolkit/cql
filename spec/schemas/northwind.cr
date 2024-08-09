@@ -7,7 +7,7 @@ Northwind = Cql::Schema.build(
     primary :id, Int32
     column :name, String
     column :city, String
-    column :balance, Int64
+    column :balance, Int32
     timestamps
   end
 

@@ -1,17 +1,18 @@
 Data = Cql::Schema.build(
-  :northwind,
+  :data,
   adapter: Cql::Adapter::Sqlite,
   db: DB.connect("sqlite3://spec/db/data.db"),
   version: "1.0") do
-  table :customers, as: "cust" do
+  table :customers do
     primary :id, Int32
-    column :customer_name, String, as: "cust_name"
+    column :name, String
     column :city, String
-    column :country_id, Int32
+    column :balance, Int32
+    timestamps
   end
 
   table :countries do
-    primary :country_id, Int32
+    primary :id, Int32
     column :country, String
   end
 end

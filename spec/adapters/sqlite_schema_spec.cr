@@ -35,18 +35,17 @@ describe Cql::Schema do
   end
 
   it "creates record in table" do
-    Data.customers.drop!
-    Data.customers.create!
-    customer = CustomerModel.new(1, "'John'", "'New York'", 100)
+    customer = CustomerModel.new(nil, "John", "New York", 100)
 
-    Data.insert.into(:customers).values(
-      id: customer.id,
-      name: customer.name,
-      city: customer.city,
-      balance: customer.balance
-    ).commit
+    Data.insert
+      .into(:customers)
+      .values(
+        name: customer.name,
+        city: customer.city,
+        balance: customer.balance
+      ).commit
 
-    total = Data.query.from(:customers).count.first!(as: Int32)
+    total = Data.query.from(:customers).count(:id).first!(as: Int32)
     total.should eq 1
   end
 
@@ -54,23 +53,23 @@ describe Cql::Schema do
     Data.customers.drop!
     Data.customers.create!
 
-    customer = CustomerModel.new(1, "'John'", "'New York'", 100)
+    customer = CustomerModel.new(nil, "John", "New York", 100)
 
-    insert_query = Data.insert.into(:customers).values(
-      id: customer.id,
-      name: customer.name,
-      city: customer.city,
-      balance: customer.balance
-    ).commit
+    insert_query = Data.insert
+      .into(:customers)
+      .values(
+        name: customer.name,
+        city: customer.city,
+        balance: customer.balance
+      ).commit
 
-    query = q.from(:customers)
-    customers = query.all!(CustomerModel)
+    customers = Data.query.from(:customers).select.all!(CustomerModel)
     customers.size.should eq 1
   end
 
   it "creates a schema" do
     Data.tables.size.should eq(2)
-    Data.tables[:customers].columns.size.should eq(4)
+    Data.tables[:customers].columns.size.should eq(6)
   end
 
   it "add a column to an existing table" do
@@ -82,7 +81,7 @@ describe Cql::Schema do
     end
 
     column_exists.call(:country, :customers).should eq(1)
-    Data.tables[:customers].columns.size.should eq(5)
+    Data.tables[:customers].columns.size.should eq(7)
   end
 
   it "drops a column from an existing table" do
@@ -96,7 +95,7 @@ describe Cql::Schema do
     end
 
     column_exists.call(:city, :customers).should eq(0)
-    Data.tables[:customers].columns.size.should eq(4)
+    Data.tables[:customers].columns.size.should eq(6)
   end
 
   it "adds an index to a table" do
@@ -104,7 +103,7 @@ describe Cql::Schema do
     Data.customers.create!
 
     Data.alter :customers do
-      create_index :name_index, [:customer_name], true
+      create_index :name_index, [:name], true
     end
 
     index_exists.call(:name_index, :customers).should eq(1)
@@ -115,7 +114,7 @@ describe Cql::Schema do
     Data.customers.create!
 
     Data.alter :customers do
-      create_index :name_index, [:customer_name], true
+      create_index :name_index, [:name], true
     end
 
     index_exists.call(:name_index, :customers).should eq(1)
@@ -131,13 +130,13 @@ describe Cql::Schema do
     Data.customers.drop!
     Data.customers.create!
 
-    column_exists.call(:customer_name, :customers).should eq(1)
+    column_exists.call(:name, :customers).should eq(1)
 
     Data.alter :customers do
-      rename_column :customer_name, :full_name
+      rename_column :name, :full_name
     end
 
-    column_exists.call(:customer_name, :customers).should eq(0)
+    column_exists.call(:name, :customers).should eq(0)
     column_exists.call(:full_name, :customers).should eq(1)
   end
 
@@ -168,21 +167,13 @@ describe Cql::Schema do
     Data.clients.drop!
   end
 
-  it "adds a foreign key to a table" do
+  it "throws exception adding foreign key to a table" do
+    Data.countries.drop!
     Data.countries.create!
 
-    Data.table :customers, as: "cust" do
-      primary :id, Int32, auto_increment: true
-      column :customer_name, String, as: "cust_name"
-      column :city, String
-      column :country_id, Int32
-    end
-
-    Data.customers.create!
-
     expect_raises DB::Error do
-      Data.alter :customers do
-        foreign_key :fk_country, [:country], :countries, [:country_id]
+      Data.alter :clients do
+        foreign_key :fk_country, [:country_id], :countries, [:id]
       end
     end
   end
@@ -191,7 +182,7 @@ describe Cql::Schema do
     Data.countries.create!
 
     expect_raises SQLite3::Exception do
-      Data.alter :customers do
+      Data.alter :clients do
         drop_foreign_key :fk_country
       end
     end

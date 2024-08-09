@@ -18,7 +18,7 @@ describe Cql::Delete do
   end
 
   it "Delete rows based on the result of a subquery." do
-    sub_query = q.from(:users)
+    sub_query = Northwind.query.from(:users)
       .select(:id)
       .where { users.id == 1 }
 

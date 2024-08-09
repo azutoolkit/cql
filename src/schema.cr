@@ -81,7 +81,9 @@ module Cql
 
       db.transaction do |tx|
         cnn = tx.connection
-        cnn.exec(sql_statements)
+        sql_statements.split(";\n").each do |sql|
+          cnn.exec(sql) unless sql.empty?
+        end
       end
     end
 
