@@ -2,19 +2,21 @@ module Cql
   class Schema
     Log = ::Log.for(self)
     getter name : Symbol
+    getter uri : String
     getter db : DB::Connection
     getter version : String
     getter adapter : Adapter = Adapter::Sqlite
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
     getter gen : Expression::Generator
 
-    def self.build(name : Symbol, db : DB::Connection, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)
-      schema = new(name, db, adapter, version)
+    def self.build(name : Symbol, uri : String, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)
+      schema = new(name, uri, adapter, version)
       with schema yield
       schema
     end
 
-    def initialize(@name : Symbol, @db : DB::Connection, @adapter : Adapter = Adapter::Sqlite, @version : String = "1.0")
+    def initialize(@name : Symbol, @uri : String, @adapter : Adapter = Adapter::Sqlite, @version : String = "1.0")
+      @db = DB.connect(@uri)
       @gen = Expression::Generator.new(@adapter)
     end
 
@@ -24,27 +26,6 @@ module Cql
         cnn.exec(sql)
       end
     end
-
-    def drop!
-      Log.debug { "Dropping database #{@name}" }
-      if @adapter == Adapter::Sqlite
-        raise "TODO: Implement drop for SQLite"
-      else
-        exec "DROP DATABASE IF EXISTS #{@name};"
-      end
-    end
-
-    # def reset!
-    #   drop!
-    #   setup
-    # end
-
-    # def setup
-    #   Log.debug { "Setting up schema #{@name}" }
-    #   sql_statements = tables.map(&.create_sql).join("\n")
-    #   Log.debug { sql_statements }
-    #   exec(sql_statements)
-    # end
 
     def query
       Query.new(self)

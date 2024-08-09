@@ -1,8 +1,7 @@
 Data = Cql::Schema.build(
   :data,
   adapter: Cql::Adapter::Sqlite,
-  db: DB.connect("sqlite3://spec/db/data.db"),
-  version: "1.0") do
+  uri: "sqlite3://spec/db/data.db") do
   table :customers do
     primary :id, Int32
     column :name, String

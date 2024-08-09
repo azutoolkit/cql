@@ -1,8 +1,7 @@
 Northwind = Cql::Schema.build(
   name: :northwind,
   adapter: Cql::Adapter::Sqlite,
-  db: DB.connect("sqlite3://spec/db/northwind.db")
-) do
+  uri: "sqlite3://spec/db/northwind.db") do
   table :customers do
     primary :id, Int32
     column :name, String
