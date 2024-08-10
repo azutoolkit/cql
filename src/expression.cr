@@ -11,3 +11,7 @@ require "./expression/condition_builder"
 require "./expression/filter_builder"
 require "./expression/having_builder"
 require "./expression/generator"
+
+# :nodoc:
+module Expression
+end

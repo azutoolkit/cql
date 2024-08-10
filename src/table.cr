@@ -54,7 +54,7 @@ module Cql
     # - **@param** as_name [String, nil] an optional alias for the column
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: true)
     #
-    # ## Example Adding a new primary key column
+    # **Example** Adding a new primary key column
     # ```
     # primary :id, Int64
     # primary :id, Int64, auto_increment: false
@@ -84,7 +84,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     #
     # column :email, String
     #
@@ -114,7 +114,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # integer :age
     # integer :age, as: "user_age", null: false, default: 18, unique: true, index: true
@@ -132,7 +132,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # bigint :age
     # bigint :age, as: "user_age", null: false, default: 18, unique: true, index: true
@@ -150,7 +150,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # float :age
     # float :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
@@ -168,7 +168,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # double :age
     # double :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
@@ -186,7 +186,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # decimal :price
     # decimal :price, as: "product_price", null: false, default: 0.0, unique: true, index: true
@@ -204,7 +204,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # boolean :active
     # boolean :active, as: "is_active", null: false, default: false, unique: true, index: true
@@ -222,7 +222,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # timestamp :created_at
     # timestamp :created_at, as: "created_at", null: false, default: Time.local, unique: true, index: true
@@ -240,7 +240,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # date :birthday
     # date :birthday, as: "date_of_birth", null: false, default: Time.local, unique: true, index: true
@@ -258,7 +258,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # interval :duration
     # interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
@@ -276,7 +276,7 @@ module Cql
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     #
     # ```
     # blob :data
@@ -288,7 +288,7 @@ module Cql
 
     # Adds a new column to the table.
     #
-    # ## Example Adding timestamps to the table
+    # **Example** Adding timestamps to the table
     # ```
     # timestamps
     # ```
@@ -303,7 +303,7 @@ module Cql
     # - **@param** table [Table] the table to add the index to (default: self)
     # - **@return** [Index] the new index
     #
-    # ## Example Adding a new index
+    # **Example** Adding a new index
     #
     # ```
     # add_index([:email], unique: true)
@@ -316,7 +316,7 @@ module Cql
 
     # Generates the SQL to create the table.
     #
-    # ## Example
+    # **Example**
     # ```
     # table = Table.new(:users, schema)
     # table.column(:id, Int64, primary: true)
@@ -334,7 +334,7 @@ module Cql
     # Generates the SQL to drop the table.
     # - **@return** [String] the SQL query
     #
-    # ## Example
+    # **Example**
     # ```
     # table = Table.new(:users, schema)
     # table.drop_sql
@@ -350,7 +350,7 @@ module Cql
     # Generates the SQL to truncate the table.
     # - **@return** [String] the SQL query
     #
-    # ## Example
+    # **Example**
     # ```
     # table = Table.new(:users, schema)
     # table.truncate_sql
@@ -366,7 +366,7 @@ module Cql
     # Creates the table in the database.
     # - **@return** [Nil]
     #
-    # ## Example
+    # **Example**
     # ```
     # table = Table.new(:users, schema)
     # table.column(:id, Int64, primary: true)
@@ -386,7 +386,7 @@ module Cql
     # Drops the table from the database.
     # - **@return** [Nil]
     #
-    # ## Example
+    # **Example**
     # ```
     # table = Table.new(:users, schema)
     # table.drop!
@@ -403,7 +403,7 @@ module Cql
     # Truncates the table in the database.
     # - **@return** [Nil]
     #
-    # ## Example
+    # **Example**
     # ```
     # table = Table.new(:users, schema)
     # table.truncate!

@@ -19,6 +19,7 @@ require "./repository"
 require "./migrations"
 
 module Cql
+  # :nodoc:
   alias Date = Time
   alias PrimaryKeyType = Int32.class | Int64.class | UUID.class | ULID.class
   alias Any = Bool.class |
@@ -76,11 +77,20 @@ module Cql
       Slice(UInt8) => "BYTEA",
     },
   }
+
+  # Represents a database adapter
   enum Adapter
     Sqlite
     MySql
     Postgres
 
+    # Returns the SQL type for the given type.
+    # @param type [Type] the type
+    # @return [String] the SQL type
+    # **Example** Getting the SQL type
+    # ```
+    # Cql::Adapter::Sqlite.sql_type(Int32) # => "INTEGER"
+    # ```
     def sql_type(type) : String
       DB_TYPE_MAPPING[self][type]
     end

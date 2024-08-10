@@ -2,7 +2,7 @@ module Cql
   # This module is part of the Cql namespace and is responsible for handling
   # database alterations. This class represents an AlterTable object.
   #
-  # ## Examples:
+  # **Example**:
   #
   # ```
   # alter_table = AlterTable.new
@@ -10,9 +10,7 @@ module Cql
   # alter_table.drop_column(:age)
   # alter_table.rename_column(:email, :user_email)
   # alter_table.change_column(:age, "string")
-  # ```
   #
-  # ```
   # => #<AlterTable:0x00007f8e7a4e1e80>
   # ```
   class AlterTable
@@ -33,12 +31,12 @@ module Cql
     # - **@param**size [Int32, nil] the size of the column (default: nil)
     # - **@param**index [Bool] whether the column should be indexed (default: false)
     #
-    # ## Example Adding a new column with default options
+    # **Example** Adding a new column with default options
     # ```
     # add_column(:email, "string")
     # ```
     #
-    # ## Example Adding a new column with custom options
+    # **Example** Adding a new column with custom options
     # ```
     # add_column(:age, "integer", null: false, default: "18")
     # ```
@@ -61,7 +59,7 @@ module Cql
     #
     # - **@param**column [Symbol] the name of the column to be dropped
     #
-    # ## Example Dropping a column
+    # **Example** Dropping a column
     # ```
     # drop_column(:age)
     # ```
@@ -79,7 +77,7 @@ module Cql
     # - **@param**old_name [Symbol] the current name of the column
     # - **@param**new_name [Symbol] the new name for the column
     #
-    # ## Example Renaming a column
+    # **Example** Renaming a column
     # ```
     #   rename_column(:email, :user_email)
     # ````
@@ -96,7 +94,7 @@ module Cql
     # - **@param**name [Symbol] the name of the column to be changed
     # - **@param**type [Any] the new data type for the column
     #
-    # ## Example Changing the type of a column
+    # **Example** Changing the type of a column
     # ```
     # change_column(:age, "string")
     # ```
@@ -110,7 +108,7 @@ module Cql
     #
     # - **@param**new_name [Symbol] the new name for the table
     #
-    # ## Example Renaming the table
+    # **Example** Renaming the table
     # ```
     # rename_table(:new_table_name)
     # ```
@@ -130,7 +128,7 @@ module Cql
     # - **@param**on_delete [String] the action on delete (default: "NO ACTION")
     # - **@param**on_update [String] the action on update (default: "NO ACTION")
     #
-    # ## Example Adding a foreign key
+    # **Example** Adding a foreign key
     # ```
     # foreign_key(:fk_user_id, [:user_id], :users, [:id], on_delete: "CASCADE")
     # ```
@@ -150,7 +148,7 @@ module Cql
     #
     # - **@param**name [Symbol] the name of the foreign key to be dropped
     #
-    # ## Example Dropping a foreign key
+    # **Example** Dropping a foreign key
     # ```
     # drop_foreign_key(:fk_user_id)
     # ```
@@ -164,7 +162,7 @@ module Cql
     # - **@param**columns [Array(Symbol)] the columns to be indexed
     # - **@param**unique [Bool] whether the index should be unique (default: false)
     #
-    # ## Example Creating an index
+    # **Example** Creating an index
     # ```
     # create_index(:index_users_on_email, [:email], unique: true)
     # ```
@@ -178,7 +176,7 @@ module Cql
     #
     # - **@param**name [Symbol] the name of the index to be dropped
     #
-    # ## Example Dropping an index
+    # **Example** Dropping an index
     # ```
     # drop_index(:index_users_on_email)
     # ```
@@ -194,7 +192,7 @@ module Cql
     # - **@param**visitor [Expression::Visitor] the visitor to generate SQL
     # - **@return**[String] the generated SQL
     #
-    # ## Example Generating SQL for alter table actions
+    # **Example** Generating SQL for alter table actions
     # ```
     # sql = to_sql(visitor)
     # ```

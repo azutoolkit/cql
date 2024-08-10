@@ -9,7 +9,7 @@ module Cql
   # Migrations are executed in their version order defined.
   # The `Migrator` class is used to manage migrations and provides methods to apply, rollback, and redo migrations.
   # The `Migrator` class also provides methods to list applied and pending migrations.
-  # ## Example Creating a new migration
+  # **Example** Creating a new migration
   #
   # ```
   # class CreateUsersTable < Cql::Migration
@@ -29,7 +29,7 @@ module Cql
   # end
   # ```
   #
-  # ## Example Applying migrations
+  # **Example** Applying migrations
   # ```
   # schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
   #   s.create_table :schema_migrations do
@@ -43,42 +43,42 @@ module Cql
   # migrator.up
   # ```
   #
-  # ## Example Rolling back migrations
+  # **Example** Rolling back migrations
   # ```
   # migrator.down
   # ```
   #
-  # ## Example Redoing migrations
+  # **Example** Redoing migrations
   # ```
   # migrator.redo
   # ```
   #
-  # ## Example Rolling back to a specific version
+  # **Example** Rolling back to a specific version
   # ```
   # migrator.down_to(1_i64)
   # ```
   #
-  # ## Example Applying to a specific version
+  # **Example** Applying to a specific version
   # ```
   # migrator.up_to(1_i64)
   # ```
   #
-  # ## Example Listing applied migrations
+  # **Example** Listing applied migrations
   # ```
   # migrator.print_applied_migrations
   # ```
   #
-  # ## Example Listing pending migrations
+  # **Example** Listing pending migrations
   # ```
   # migrator.print_pending_migrations
   # ```
   #
-  # ## Example Listing rolled back migrations
+  # **Example** Listing rolled back migrations
   # ```
   # migrator.print_rolled_back_migrations
   # ```
   #
-  # ## Example Listing the last migration
+  # **Example** Listing the last migration
   # ```
   # migrator.last
   # ```
@@ -91,7 +91,7 @@ module Cql
 
       # Sets the migration version.
       # - **@param** number [Int64] the migration version
-      # ## Example Setting the migration version
+      # **Example** Setting the migration version
       # ```
       # class CreateUsersTable < Cql::Migration
       #  self.version = 1_i64
@@ -112,7 +112,7 @@ module Cql
   # The `Migrator` class is used to manage migrations and provides methods to apply,
   # rollback, and redo migrations.
   # The `Migrator` class also provides methods to list applied and pending migrations.
-  # ## Example Creating a new migrator
+  # **Example** Creating a new migrator
   # ```
   # schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
   #   s.create_table :schema_migrations do
@@ -125,7 +125,7 @@ module Cql
   # migrator = Cql::Migrator.new(schema)
   # ```
   #
-  # ## Example Applying migrations
+  # **Example** Applying migrations
   # ```
   # migrator.up
   # ```
@@ -138,7 +138,7 @@ module Cql
     # @field version [Int64] the migration version
     # @field created_at [Time] the creation time
     # @field updated_at [Time] the update time
-    # ## Example Creating a migration record
+    # **Example** Creating a migration record
     # ```
     # record = Cql::MigrationRecord.new(0_i64, "CreateUsersTable", 1_i64)
     # ```
@@ -172,7 +172,7 @@ module Cql
 
     # Applies the pending migrations.
     #  - **@param** steps [Int32] the number of migrations to apply (default: all)
-    # ## Example Applying migrations
+    # **Example** Applying migrations
     # ```
     # migrator.up
     # ```
@@ -189,7 +189,7 @@ module Cql
 
     # Rolls back the last migration.
     # - **@param** steps [Int32] the number of migrations to roll back (default: 1)
-    # ## Example Rolling back migrations
+    # **Example** Rolling back migrations
     # ```
     # migrator.down
     # ```
@@ -205,7 +205,7 @@ module Cql
 
     # Rolls back the last migration.
     # - **@param** steps [Int32] the number of migrations to roll back (default: 1)
-    # ## Example Rolling back migrations
+    # **Example** Rolling back migrations
     # ```
     # migrator.rollback
     # ```
@@ -215,7 +215,7 @@ module Cql
     end
 
     # Redoes the last migration.
-    # ## Example Redoing migrations
+    # **Example** Redoing migrations
     # ```
     # migrator.redo
     # ```
@@ -225,7 +225,7 @@ module Cql
     end
 
     # Returns the last migration.
-    # ## Example Listing the last migration
+    # **Example** Listing the last migration
     # ```
     # migrator.last
     # ```
@@ -238,7 +238,7 @@ module Cql
 
     # Rolls back to a specific migration version.
     # - **@param** version [Int64] the version to roll back to
-    # ## Example Rolling back to a specific version
+    # **Example** Rolling back to a specific version
     # ```
     # migrator.down_to(1_i64)
     # ```
@@ -249,7 +249,7 @@ module Cql
 
     # Applies migrations up to a specific version.
     # - **@param** version [Int64] the version to apply up to
-    # ## Example Applying to a specific version
+    # **Example** Applying to a specific version
     # ```
     # migrator.up_to(1_i64)
     # ```
@@ -261,7 +261,7 @@ module Cql
     # Prints the rolled back migrations.
     # - **@param** m [Array(Migration.class)] the migrations to print
     # - **@return** [Nil]
-    # ## Example Listing rolled back migrations
+    # **Example** Listing rolled back migrations
     # ```
     # migrator.print_rolled_back_migrations
     # ```
@@ -270,7 +270,7 @@ module Cql
     end
 
     # Prints the applied migrations.
-    # ## Example Listing applied migrations
+    # **Example** Listing applied migrations
     # ```
     # migrator.print_applied_migrations
     # ```
@@ -279,7 +279,7 @@ module Cql
     end
 
     # Prints the pending migrations.
-    # ## Example Listing pending migrations
+    # **Example** Listing pending migrations
     # ```
     # migrator.print_pending_migrations
     # ```
@@ -289,7 +289,7 @@ module Cql
 
     # Returns the pending migrations.
     # - **@return** [Array(MigrationRecord)]
-    # ## Example Listing pending migrations
+    # **Example** Listing pending migrations
     # ```
     # migrator.pending_migrations
     # ```
@@ -299,7 +299,7 @@ module Cql
 
     # Returns the applied migrations.
     # - **@return** [Array(MigrationRecord)]
-    # ## Example Listing applied migrations
+    # **Example** Listing applied migrations
     # ```
     # migrator.applied_migrations
     # ```

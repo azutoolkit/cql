@@ -1,29 +1,29 @@
-# The `Schema` class represents a database schema.
-#
-# This class provides methods to build and manage a database schema, including
-# creating tables, executing SQL statements, and generating queries.
-#
-# ## Example Creating a new schema
-# ```
-# schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
-#   s.create_table :users do
-#     primary :id, Int64, auto_increment: true
-#     column :name, String
-#     column :email, String
-#   end
-# end
-# ```
-#
-# ## Example Executing a SQL statement
-# ```
-# schema.exec("CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT)")
-# ```
-#
-# ## Example Creating a new query
-# ```
-# query = schema.query
-# ```
 module Cql
+  # The `Schema` class represents a database schema.
+  #
+  # This class provides methods to build and manage a database schema, including
+  # creating tables, executing SQL statements, and generating queries.
+  #
+  # **Example** Creating a new schema
+  # ```
+  # schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do
+  #   table :users do
+  #     primary :id, Int64, auto_increment: true
+  #     column :name, String
+  #     column :email, String
+  #   end
+  # end
+  # ```
+  #
+  # **Example** Executing a SQL statement
+  # ```
+  # schema.exec("CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT)")
+  # ```
+  #
+  # **Example** Creating a new query
+  # ```
+  # query = schema.query
+  # ```
   # The `Schema` class represents a database schema.
   class Schema
     Log = ::Log.for(self)
@@ -58,7 +58,7 @@ module Cql
     # - **@yield** [Schema] the schema being built
     # - **@return** [Schema] the built schema
     #
-    # ## Example
+    # **Example**
     # ```
     # schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
     #   s.create_table :users do
@@ -81,7 +81,7 @@ module Cql
     # - **@param** adapter [Adapter] the database adapter (default: `Adapter::Sqlite`)
     # - **@param** version [String] the version of the schema (default: "1.0")
     #
-    # ## Example Initializing a new schema
+    # **Example** Initializing a new schema
     # ```
     # schema = Cql::Schema.new(:northwind, "sqlite3://db.sqlite3")
     # ```
@@ -94,7 +94,7 @@ module Cql
     #
     # - **@param** sql [String] the SQL statement to execute
     #
-    # ## Example
+    # **Example**
     # ```
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
@@ -109,7 +109,7 @@ module Cql
     #
     # - **@return** [Query] the new query
     #
-    # ## Example
+    # **Example**
     # ```
     # query = schema.query
     # ```
@@ -119,7 +119,7 @@ module Cql
 
     # Creates a new insert query for the schema.
     # - **@return** [Insert] the new insert query
-    # ## Example
+    # **Example**
     # ```
     # insert = schema.insert
     # ```
@@ -129,7 +129,7 @@ module Cql
 
     # Creates a new update query for the schema.
     # - **@return** [Update] the new update query
-    # ## Example
+    # **Example**
     # ```
     # update = schema.update
     # ```
@@ -139,7 +139,7 @@ module Cql
 
     # Creates a new delete query for the schema.
     # - **@return** [Delete] the new delete query
-    # ## Example
+    # **Example**
     # ```
     # delete = schema.delete
     # ```
@@ -149,7 +149,7 @@ module Cql
 
     # Creates a new migrator for the schema.
     # - **@return** [Migrator] the new migrator
-    # ## Example
+    # **Example**
     # ```
     # migrator = schema.migrator
     # ```
@@ -162,7 +162,7 @@ module Cql
     # - **@param** as_name [Symbol] the alias of the table
     # - **@yield** [Table] the table being created
     # - **@return** [Table] the created table
-    # ## Example
+    # **Example**
     # ```
     # schema.create_table :users do
     #   primary :id, Int64, auto_increment: true
@@ -181,13 +181,13 @@ module Cql
     # Alter a table in the schema.
     # - **@param** table_name [Symbol] the name of the table
     # - **@yield** [AlterTable] the table being altered
-    # ## Example
+    # **Example**
     # ```
     # schema.alter(:users) do |t|
     #   t.add_column :age, Int32
     # end
     # ```
-    # ## Example
+    # **Example**
     # ```
     # schema.alter(:users) do |t|
     #   t.drop_column :age
