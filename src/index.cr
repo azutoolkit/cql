@@ -1,4 +1,20 @@
 module Cql
+  # An index on a table
+  # This class represents an index on a table
+  # It provides methods for setting the columns and unique constraint
+  # It also provides methods for generating the index name
+  #
+  # **Example** Creating a new index
+  #
+  # ```
+  # schema.build do
+  #   table :users do
+  #     column :name, String
+  #     column :email, String
+  #     index [:name, :email], unique: true
+  #   end
+  # end
+  # ```
   class Index
     getter columns : Array(Symbol)
     getter? unique : Bool

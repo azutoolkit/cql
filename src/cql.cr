@@ -21,6 +21,8 @@ require "./migrations"
 module Cql
   # :nodoc:
   alias Date = Time
+
+  # Represents a database primary key column type.
   alias PrimaryKeyType = Int32.class | Int64.class | UUID.class | ULID.class
   alias Any = Bool.class |
               Float32.class |

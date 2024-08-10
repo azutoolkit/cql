@@ -16,6 +16,7 @@ module Cql
   class AlterTable
     @actions : Array(Expression::AlterAction) = [] of Expression::AlterAction
     private getter schema : Cql::Schema
+    private getter table : Cql::Table
 
     def initialize(@table : Cql::Table, @schema : Cql::Schema)
     end

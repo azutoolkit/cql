@@ -43,6 +43,8 @@ module Cql
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
     #   .commit
+    #
+    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
     # ```
     def commit
       query, params = to_sql
@@ -81,6 +83,8 @@ module Cql
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
     #   .commit
+    #
+    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
     # ```
     def table(table : Symbol)
       @table = Expression::Table.new(find_table(table))
