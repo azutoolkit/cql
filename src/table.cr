@@ -120,7 +120,11 @@ module Cql
     # integer :age, as: "user_age", null: false, default: 18, unique: true, index: true
     # ```
     def integer(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      column(name, Int32, as_name, null, default, unique, index)
+      col = Column(Int32).new(name, Int32, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -138,7 +142,11 @@ module Cql
     # bigint :age, as: "user_age", null: false, default: 18, unique: true, index: true
     # ```
     def bigint(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      column(name, Int64, as_name, null, default, unique, index)
+      col = Column(Int64).new(name, Int64, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -156,7 +164,11 @@ module Cql
     # float :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
     # ```
     def float(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      column(name, Float32, as_name, null, default, unique, index)
+      col = Column(Float32).new(name, Float32, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -174,7 +186,11 @@ module Cql
     # double :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
     # ```
     def double(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      column(name, Float64, as_name, null, default, unique, index)
+      col = Column(Float64).new(name, Float64, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -192,7 +208,11 @@ module Cql
     # decimal :price, as: "product_price", null: false, default: 0.0, unique: true, index: true
     # ```
     def text(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
-      column(name, String, as_name, null, default, unique, size, index)
+      col = Column(String).new(name, String, as_name, null, default, unique, size)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -210,7 +230,11 @@ module Cql
     # boolean :active, as: "is_active", null: false, default: false, unique: true, index: true
     # ```
     def boolean(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      column(name, Bool, as_name, null, default, unique, index)
+      col = Column(Bool).new(name, Bool, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -228,7 +252,11 @@ module Cql
     # timestamp :created_at, as: "created_at", null: false, default: Time.local, unique: true, index: true
     # ```
     def timestamp(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      column(name, Time, as_name, null, default, unique, index)
+      col = Column(Time).new(name, Time, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -246,7 +274,11 @@ module Cql
     # date :birthday, as: "date_of_birth", null: false, default: Time.local, unique: true, index: true
     # ```
     def date(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      column(name, Date, as_name, null, default, unique, size, index)
+      col = Column(Date).new(name, Date, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -264,7 +296,11 @@ module Cql
     # interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
     # ```
     def interval(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      column(name, Time::Span, as_name, null, default, unique, size, index)
+      col = Column(Time::Span).new(name, Time::Span, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -283,7 +319,11 @@ module Cql
     # blob :data, as: "binary_data", null: false, default: nil, unique: true, index: true
     # ```
     def blob(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
-      column(name, Slice(UInt8), as_name, null, default, unique, size, index)
+      col = Column(Slice(UInt8)).new(name, Slice(UInt8), as_name, null, default, unique, size)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
     end
 
     # Adds a new column to the table.
@@ -293,8 +333,8 @@ module Cql
     # timestamps
     # ```
     def timestamps
-      column :created_at, Time, null: false, default: Time.local
-      column :updated_at, Time, null: false, default: Time.local
+      timestamp :created_at, default: Time.local
+      timestamp :updated_at, default: Time.local
     end
 
     # Adds a new column to the table.
