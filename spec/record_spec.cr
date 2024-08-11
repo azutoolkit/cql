@@ -31,14 +31,6 @@ struct Post
 
   def initialize(@title : String, @body : String, @published_at : Time = Time.utc)
   end
-
-  def attributes
-    hash = Hash(Symbol, DB::Any).new
-    {% for ivar in @type.instance_vars %}
-    hash[:{{ ivar }}] = {{ ivar }}
-    {% end %}
-    hash
-  end
 end
 
 struct Comment
@@ -51,14 +43,6 @@ struct Comment
   getter body : String
 
   def initialize(@post_id : Int64, @body : String)
-  end
-
-  def attributes
-    hash = Hash(Symbol, DB::Any).new
-    {% for ivar in @type.instance_vars %}
-    hash[:{{ ivar }}] = {{ ivar }}
-    {% end %}
-    hash
   end
 end
 

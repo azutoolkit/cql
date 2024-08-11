@@ -371,6 +371,14 @@ module Cql
       def delete
         T.delete(@id) unless @id.nil?
       end
+
+      def attributes
+        hash = Hash(Symbol, DB::Any).new
+        {% for ivar in T.instance_vars %}
+        hash[:{{ ivar }}] = {{ ivar }}
+        {% end %}
+        hash
+      end
     end
   end
 end
