@@ -24,7 +24,7 @@ module Expression
 
     private def placeholder : String
       return @placeholder unless @adapter == Cql::Adapter::Postgres
-      "#{@placeholder}#{(@params.size + 1)}"
+      "#{@placeholder}#{(@params.size)}"
     end
 
     # Template Method for common visit methods
@@ -404,16 +404,17 @@ module Expression
         sb << "CREATE TABLE IF NOT EXISTS "
         sb << node.table.table_name
         sb << " ("
+
         node.table.columns.each_with_index do |(name, column), i|
-          sb << column.name
-          sb << " " << @adapter.sql_type(column.type)
-          sb << " PRIMARY KEY" if column.is_a?(Cql::PrimaryKey)
-          if @adapter == Cql::Adapter::Sqlite && column.is_a?(Cql::PrimaryKey) && column.auto_increment
-            sb << " AUTOINCREMENT"
+          if column.is_a?(Cql::PrimaryKey)
+            sb << @dialect.auto_increment_primary_key(column, @adapter.sql_type(column.type))
+          else
+            sb << column.name
+            sb << " " << @adapter.sql_type(column.type)
+            sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
+            sb << " NOT NULL" unless column.null?
+            sb << " UNIQUE" if column.unique?
           end
-          sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
-          sb << " NOT NULL" unless column.null?
-          sb << " UNIQUE" if column.unique?
           sb << ", " if i < node.table.columns.size - 1
         end
         sb << ")"

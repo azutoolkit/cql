@@ -1,5 +1,15 @@
 module Expression
   class MysqlDialect < Dialect
+    def auto_increment_primary_key(column : Cql::BaseColumn, col_type : String) : String
+      String::Builder.build do |sb|
+        sb << column.name
+        sb << " "
+        sb << col_type
+        sb << " PRIMARY KEY"
+        sb << " AUTO_INCREMENT" if column.auto_increment
+      end
+    end
+
     def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
       "CHANGE #{old_name} #{new_name} #{column_type.not_nil!}"
     end

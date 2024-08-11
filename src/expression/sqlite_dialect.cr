@@ -1,5 +1,9 @@
 module Expression
   class SqliteDialect < Dialect
+    def auto_increment_primary_key(column : Cql::BaseColumn, col_type : String) : String
+      "#{column.name} #{col_type} PRIMARY KEY AUTOINCREMENT"
+    end
+
     def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
       "RENAME COLUMN #{old_name} TO #{new_name}"
     end

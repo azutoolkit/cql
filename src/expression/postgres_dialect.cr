@@ -1,5 +1,16 @@
 module Expression
   class PostgresDialect < Dialect
+    def auto_increment_primary_key(column : Cql::BaseColumn, col_type : String) : String
+      String::Builder.build do |sb|
+        sb << column.name
+        sb << " "
+        sb << col_type
+        sb << " GENERATED"
+        sb << " ALWAYS" if column.auto_increment
+        sb << " AS IDENTITY PRIMARY KEY"
+      end
+    end
+
     def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
       "RENAME COLUMN #{old_name} TO #{new_name}"
     end
