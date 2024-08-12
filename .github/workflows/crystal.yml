@@ -61,8 +61,6 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install dependencies
         run: shards install
-      - name: Build binary to test
-        run: shards build example_app
       - name: Check code styl2e
         run: crystal tool format --check
       - name: Run tests
