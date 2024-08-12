@@ -61,6 +61,10 @@ jobs:
           - 5432:5432
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-sqlite@v1
+        with:
+          sqlite-version: 3.40.0
+          sqlite-year: 2022
       - name: Install dependencies
         run: shards install
       - name: Check code style
