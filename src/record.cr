@@ -1,4 +1,51 @@
 module Cql
+  # Write documentation for Record module
+  #
+  # **Example** Using the Record module
+  #
+  # ```
+  #  AcmeDB = Cql::Schema.build(:acme_db, adapter: Cql::Adapter::Postgres,
+  #   uri: "postgresql://example:example@localhost:5432/example") do
+  #   table :posts do
+  #     primary :id, Int64, auto_increment: true
+  #     text :title
+  #     text :body
+  #     timestamp :published_at
+  #   end
+
+  #   table :comments do
+  #     primary
+  #     bigint :post_id
+  #     text :body
+  #   end
+  # end
+
+  # struct Post
+  #   include Cql::Record(Post)
+
+  #   define AcmeDB, :posts
+
+  #   getter id : Int64?
+  #   getter title : String
+  #   getter body : String
+  #   getter published_at : Time
+
+  #   def initialize(@title : String, @body : String, @published_at : Time = Time.utc)
+  #   end
+  # end
+
+  # struct Comment
+  #   include Cql::Record(Comment)
+  #   define AcmeDB, :comments
+
+  #   getter id : Int64?
+  #   getter post_id : Int64
+  #   getter body : String
+
+  #   def initialize(@post_id : Int64, @body : String)
+  #   end
+  # end
+  # ```
   module Record(T)
     macro included
       include DB::Serializable
@@ -6,6 +53,19 @@ module Cql
       @@schema : Cql::Schema? = nil
       @@table : Symbol? = nil
 
+      # Define the schema and table for the record
+      # - **@param** schema [Cql::Schema] The schema to use
+      # - **@param** table [Symbol] The table to use
+      # - **@return** [Nil]
+      #
+      # **Example** Defining the schema and table
+      #
+      # ```
+      # struct User
+      #   include Cql::Record(User)
+      #   define AcmeDB, :users
+      # end
+      # ```
       def self.define(schema : Cql::Schema, table : Symbol)
         @@schema = schema
         @@table = table
