@@ -67,19 +67,17 @@ jobs:
           apt-get install -y sqlite3 libsqlite3-dev
       - name: Verify SQLite installation
         run: sqlite3 --version
+      - name: Create Sqlite databases
+        run: |
+          sqlite3 spec/db/northwind.db
+          sqlite3  spec/db/data.db
+          sqlite3  spec/db/billing.db
       - name: Install dependencies
         run: shards install
       - name: Check code style
         run: crystal tool format --check
       - name: Run tests
         run: crystal spec
-        env:
-          CRYSTAL_ENV: pipeline
-          CRYSTAL_LOG_SOURCES: "*"
-          CRYSTAL_LOG_LEVEL: DEBUG
-          PORT: 4000
-          PORT_REUSE: false
-          HOST: 0.0.0.0
 
   release:
     runs-on: ubuntu-latest

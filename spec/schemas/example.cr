@@ -3,7 +3,7 @@ require "pg"
 Example = Cql::Schema.build(
   :example,
   adapter: Cql::Adapter::Postgres,
-  uri: "postgresql://example:example@localhost:5432/example") do
+  uri: "postgres://example:example@localhost:5432/example") do
   table :customers, as: "cust" do
     primary :customer_id, Int64, auto_increment: true
     column :customer_name, String, as: "cust_name"
