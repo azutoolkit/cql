@@ -133,7 +133,7 @@ module Cql
     # ```
     def get(as as_kind)
       query, params = to_sql
-      @schema.db.scalar(query, args: params, as: Int64)
+      @schema.db.scalar(query, args: params, as: as_kind)
     end
 
     # Iterates over each result and yields it to the provided block.
@@ -659,7 +659,7 @@ module Cql
     end
 
     private def build_select
-      if @columns.empty?
+      if @columns.empty? && @aggr_columns.empty?
         @tables.each do |tbl_name, table|
           @columns.concat(table.columns.values)
         end

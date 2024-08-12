@@ -1,12 +1,26 @@
 module Cql
   module Record(T)
     macro included
-      class_getter schema : Cql::Schema?
-      class_getter table : Symbol?
+      include DB::Serializable
+
+      @@schema : Cql::Schema? = nil
+      @@table : Symbol? = nil
 
       def self.define(schema : Cql::Schema, table : Symbol)
         @@schema = schema
         @@table = table
+      end
+
+      def self.schema
+        @@schema.not_nil!
+      end
+
+      def self.table
+        @@table.not_nil!
+      end
+
+      def self.adapter
+        schema.adapter
       end
 
       # Define class-level methods for querying and manipulating data
@@ -38,7 +52,7 @@ module Cql
       # user_repo.query.where(active: true).all(T)
       # ```
       def self.query
-        Cql::Query.new(T.schema.not_nil!).from(T.table.not_nil!)
+        Cql::Query.new(T.schema).from(T.table)
       end
 
       # Fetch all records of type T
@@ -116,7 +130,7 @@ module Cql
       # user_repo.insert.values(name: "Alice", email: " [email protected]").commit
       # ```
       def self.insert
-        Cql::Insert.new(T.schema.not_nil!).into(T.table.not_nil!)
+        Cql::Insert.new(T.schema).into(T.table)
       end
 
       # Create a new record with given attributes
@@ -127,7 +141,7 @@ module Cql
       # user_repo.create(name: "Alice", email: " [email protected]")
       # ```
       def self.create(attrs : Hash(Symbol, DB::Any))
-        insert.values(attrs).commit.last_insert_id
+        insert.values(attrs).last_insert_id
       end
 
       # Create a new record with given fields
@@ -140,11 +154,13 @@ module Cql
       # user_repo.create(name: "Alice", email: " [email protected]")
       # ```
       def self.create(**fields)
-        insert.values(**fields).commit.last_insert_id
+        insert.values(**fields).last_insert_id
       end
 
       def self.create(record : T)
-        insert.values(record.attributes).commit.last_insert_id
+        attrs = record.attributes
+        attrs.delete(:id)
+        create(attrs)
       end
 
       # Return a new update object for the current table
@@ -156,7 +172,7 @@ module Cql
       # user_repo.update.set(active: true).where(id: 1).commit
       # ```
       def self.update
-        Cql::Update.new(T.schema.not_nil!).table(T.table.not_nil!)
+        Cql::Update.new(T.schema).table(T.table)
       end
 
       # Update a record by ID with given attributes
@@ -183,6 +199,10 @@ module Cql
       # ```
       def self.update(id, **fields)
         update.set(**fields).where(id: id).commit
+      end
+
+      def self.update(id, fields : Hash(Symbol, DB::Any))
+        update.set(fields).where(id: id).commit
       end
 
       def self.update(id, record : T)
@@ -230,7 +250,7 @@ module Cql
       # user_repo.delete.where(id: 1).commit
       # ```
       def self.delete
-        Cql::Delete.new(T.schema.not_nil!).from(T.table.not_nil!)
+        Cql::Delete.new(T.schema).from(T.table)
       end
 
       # Delete a record by ID
@@ -277,7 +297,7 @@ module Cql
       # user_repo.count
       # ```
       def self.count
-        query.count.first!(Int64)
+        query.count(:id).first!(Int64)
       end
 
       # Check if records exist matching specific fields
@@ -346,39 +366,54 @@ module Cql
       def self.per_page(per_page)
         query.limit(per_page).all(T)
       end
+    end
 
-      # Define instance-level methods for saving and deleting records
-      def save
-        if @id.nil?
-          T.create(self)
-        else
-          T.update(self)
-        end
+    def reload!
+      record = T.find!(id)
+      {% for ivar in T.instance_vars %}
+      @{{ ivar }} = record.{{ ivar }}
+      {% end %}
+    end
+
+    # Define instance-level methods for saving and deleting records
+    def save
+      if @id.nil?
+        @id = T.create(self).as(Int64)
+      else
+        T.update(self)
       end
+    end
 
-      def update(fields : Hash(Symbol, DB::Any))
-        T.update(fields, where)
-      end
+    def update(fields : Hash(Symbol, DB::Any))
+      T.update(fields, where)
+    end
 
-      def update(**fields)
-        T.update(id, fields)
-      end
+    def update(**fields)
+      T.update(id, **fields)
+    end
 
-      def update
-        T.update(@id, self) unless @id.nil?
-      end
+    def update
+      T.update(id, self) unless id.nil?
+    end
 
-      def delete
-        T.delete(@id) unless @id.nil?
-      end
+    def delete
+      T.delete(id) unless id.nil?
+    end
 
-      def attributes
-        hash = Hash(Symbol, DB::Any).new
-        {% for ivar in T.instance_vars %}
+    def attributes
+      hash = Hash(Symbol, DB::Any).new
+      {% for ivar in T.instance_vars %}
         hash[:{{ ivar }}] = {{ ivar }}
         {% end %}
-        hash
-      end
+      hash
+    end
+
+    def id
+      @id.not_nil!
+    end
+
+    def id=(id : Int64)
+      @id = id
     end
   end
 end

@@ -32,17 +32,48 @@ module Cql
     def initialize(@schema : Schema)
     end
 
+    # Get the last inserted ID from the database
+    # Works with SQLite, PostgreSQL and MySQL.
+    # - **@return** [Int64] The last inserted ID
+    #
+    # **Example** Getting the last inserted ID
+    # ```
+    # insert.into(:users).values(name: "John", age: 30).last_insert_id
+    # ```
+    def last_insert_id(as type : PrimaryKeyType = Int64)
+      if adapter.postgres?
+        # Reset to ensure nothing else but the :id is returned
+        @back = Array(Expression::Column).new
+        query, params = back(:id).to_sql
+        @schema.db.query_one(query, args: params, as: type)
+      else
+        commit.last_insert_id
+      end
+    end
+
+    private def adapter
+      @schema.adapter
+    end
+
     # Executes the insert statement and returns the result
-    # - **@return** [DB::Result] The result of the statement
+    # - **@return** [Int64] The last inserted ID
     #
     # **Example** Inserting a record
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).commit
+    # insert
+    #   .into(:users)
+    #   .values(name: "John", age: 30)
+    #   .commit
+    #
+    # => 1
     # ```
     def commit
       query, params = to_sql
-      @schema.db.exec query, args: params
+      @schema.db.exec(query, args: params)
+    rescue ex
+      Log.error { "Insert failed: #{ex.message}" }
+      raise ex
     end
 
     # Set the table to insert into

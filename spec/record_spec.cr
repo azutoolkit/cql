@@ -5,7 +5,7 @@ AcmeDB = Cql::Schema.build(
   adapter: Cql::Adapter::Postgres,
   uri: "postgresql://example:example@localhost:5432/example") do
   table :posts do
-    primary
+    primary :id, Int64, auto_increment: true
     text :title
     text :body
     timestamp :published_at
@@ -19,7 +19,6 @@ AcmeDB = Cql::Schema.build(
 end
 
 struct Post
-  include DB::Serializable
   include Cql::Record(Post)
 
   define AcmeDB, :posts
@@ -34,7 +33,6 @@ struct Post
 end
 
 struct Comment
-  include DB::Serializable
   include Cql::Record(Comment)
   define AcmeDB, :comments
 
@@ -50,6 +48,16 @@ describe Cql::Record do
   AcmeDB.posts.create!
   AcmeDB.comments.create!
 
+  before_each do
+    AcmeDB.posts.create!
+    AcmeDB.comments.create!
+  end
+
+  after_each do
+    AcmeDB.posts.drop!
+    AcmeDB.comments.drop!
+  end
+
   describe ".build" do
     it "builds a new record" do
       post = Post.build(title: "Hello, World!", body: "This is my first post")
@@ -61,6 +69,10 @@ describe Cql::Record do
   describe ".query" do
     it "returns a new query object" do
       query = Post.query
+        .where(title: "Hello, World!")
+        .limit(1)
+        .order(published_at: :desc)
+
       query.should be_a Cql::Query
     end
   end
@@ -74,9 +86,65 @@ describe Cql::Record do
   describe ".find" do
     it "finds a record by ID" do
       post = Post.build(title: "Hello, World!", body: "This is my first post")
+
       post.save
+      post.reload!
 
       Post.find(post.id).should eq post
+    end
+  end
+
+  describe ".exists?" do
+    it "checks if a record exists" do
+      post = Post.build(title: "Hello, World!", body: "This is my first post")
+      post.save
+      post.reload!
+
+      Post.exists?(id: post.id).should eq true
+    end
+  end
+
+  describe ".count" do
+    it "returns the number of records" do
+      Post.count.should eq 0
+    end
+  end
+
+  describe ".find_by" do
+    it "finds a record by a column" do
+      post = Post.build(title: "Hello, World!", body: "This is my first post")
+      post.save
+      post.reload!
+
+      Post.find_by(title: "Hello, World!").should eq post
+    end
+  end
+
+  describe "#save" do
+    it "saves a new record" do
+      post = Post.build(title: "Hello, World!", body: "This is my first post")
+      post.save
+      post.reload!
+      Post.find(post.id).should eq post
+    end
+  end
+
+  describe "#update" do
+    it "updates a record" do
+      post = Post.build(title: "Hello, World!", body: "This is my first post")
+      post.save
+
+      post.update(title: "Hello, World!", body: "This is my first post")
+      Post.find!(post.id).title.should eq "Hello, World!"
+    end
+  end
+
+  describe "#delete" do
+    it "deletes a record" do
+      post = Post.build(title: "Hello, World!", body: "This is my first post")
+      post.save
+      post.delete
+      Post.find(post.id).should eq nil
     end
   end
 end
