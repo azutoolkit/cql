@@ -61,10 +61,10 @@ jobs:
           - 5432:5432
     steps:
       - uses: actions/checkout@v3
-      - name: Update package list and install SQLite
+      - name: Update package list and install SQLite and development files
         run: |
           apt-get update
-          apt-get install -y sqlite3
+          apt-get install -y sqlite3 libsqlite3-dev
       - name: Verify SQLite installation
         run: sqlite3 --version
       - name: Install dependencies
