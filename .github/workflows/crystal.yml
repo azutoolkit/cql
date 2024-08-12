@@ -60,11 +60,9 @@ jobs:
           # Maps tcp port 5432 on service container to the host
           - 5432:5432
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-sqlite@v1
-        with:
-          sqlite-version: 3.40.0
-          sqlite-year: 2022
+      - uses: actions/checkout@v3
+      - name: Install SQLite
+        run: sudo apt-get install -y sqlite3
       - name: Install dependencies
         run: shards install
       - name: Check code style
