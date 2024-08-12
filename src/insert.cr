@@ -32,7 +32,7 @@ module Cql
     def initialize(@schema : Schema)
     end
 
-    # Get the last inserted ID from the database
+    # Inserts and gets the last inserted ID from the database
     # Works with SQLite, PostgreSQL and MySQL.
     # - **@return** [Int64] The last inserted ID
     #
