@@ -1,12 +1,8 @@
 require "./spec_helper"
 
-def i
-  Northwind.insert
-end
-
 describe Cql::Insert do
   it "creates Insert Into query" do
-    insert_query = i.into(:users).values(name: "John", email: "john@example.com").to_sql
+    insert_query = Northwind.insert.into(:users).values(name: "John", email: "john@example.com").to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip
       INSERT INTO users (name, email) VALUES (?, ?)
@@ -16,7 +12,7 @@ describe Cql::Insert do
   end
 
   it "creates Insert Into query with multiple rows" do
-    insert_query = i.into(:users)
+    insert_query = Northwind.insert.into(:users)
       .values(name: "John", email: "john@example.com")
       .values(name: "Jane", email: "jane@example.com")
       .to_sql
@@ -30,7 +26,7 @@ describe Cql::Insert do
   end
 
   it "creates Insert Into query with Array(Hash(Symbol, DB::Any))" do
-    insert_query = i.into(:users)
+    insert_query = Northwind.insert.into(:users)
       .values(
         [{:name => "John", :email => "john@doe.com"},
          {:name => "Jane", :email => "jane@doe.com"}])
@@ -44,7 +40,7 @@ describe Cql::Insert do
   end
 
   it "creates Insert Into query with returning clause" do
-    insert_query = i.into(:users)
+    insert_query = Northwind.insert.into(:users)
       .values(name: "John", email: "jane@example.com")
       .back(:id)
       .to_sql

@@ -11,7 +11,7 @@ describe Cql::Table do
 
     customer = CustomerModel.new(1, "John", "New York", 100)
 
-    insert_query = i.into(:customers).values(
+    insert_query = Northwind.insert.into(:customers).values(
       id: customer.id,
       name: customer.name,
       city: customer.city,
@@ -36,13 +36,13 @@ describe Cql::Table do
     ]
 
     customers.each do |c|
-      i.into(:customers).values(id: c.id, name: c.name, city: c.city, balance: c.balance).commit
+      Northwind.insert.into(:customers).values(id: c.id, name: c.name, city: c.city, balance: c.balance).commit
     end
 
     count_query = Northwind.query.from(:customers).count
     count_query.first!(as: Int32).should eq 2
 
-    result = d.from(:customers).commit
+    result = Northwind.delete.from(:customers).commit
     count_query.first!(as: Int32).should eq 0
   end
 
