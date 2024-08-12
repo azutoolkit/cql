@@ -46,19 +46,18 @@ jobs:
     services:
       postgres:
         image: postgres
-        env:
-          POSTGRES_PASSWORD: example
-          POSTGRES_USER: example
-          POSTGRES_DB: example
-        # Set health checks to wait until postgres has started
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
         ports:
-          # Maps tcp port 5432 on service container to the host
           - 5432:5432
+        env:
+          POSTGRES_USER: example
+          POSTGRES_PASSWORD: example
+          POSTGRES_DB: example
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - uses: actions/checkout@v3
       - name: Update package list and install SQLite and development files
@@ -78,6 +77,8 @@ jobs:
       - name: Check code style
         run: crystal tool format --check
       - name: Run tests
+        env:
+          DATABASE_URL: "postgres://example:example@localhost:5432/example"
         run: crystal spec
 
   release:
