@@ -53,6 +53,8 @@ jobs:
       - name: Check code style
         run: crystal tool format --check
       - name: Run tests
+        env:
+          DATABASE_URL: postgres://example:example@localhost:5432/example
         run: crystal spec
 
   docs:
