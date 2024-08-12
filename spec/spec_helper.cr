@@ -5,4 +5,3 @@ require "../src/cql"
 require "./models/*"
 require "./migrations/*"
 require "./schemas/*"
-

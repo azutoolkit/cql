@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install dependencies
+        run: shards install
       - name: Generate Azu API Docs
         run: crystal docs
       - name: Setup Pages
@@ -61,7 +63,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install dependencies
         run: shards install
-      - name: Check code styl2e
+      - name: Check code style
         run: crystal tool format --check
       - name: Run tests
         run: crystal spec
