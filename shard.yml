@@ -1,11 +1,8 @@
 name: cql
 version: 0.1.0
-
 authors:
   - Elias Perez <eperez@justworks.com>
-
-crystal: ">= 1.12.2"
-
+crystal: '>= 1.12.2'
 license: MIT
 dependencies:
   ulid:
@@ -14,7 +11,6 @@ dependencies:
     github: crystal-lang/crystal-db
   tallboy:
     github: epoch/tallboy
-
 development_dependencies:
   sqlite3:
     github: crystal-lang/crystal-sqlite3
@@ -22,3 +18,5 @@ development_dependencies:
     github: crystal-lang/crystal-mysql
   pg:
     github: will/crystal-pg
+shard:
+  version: 0.0.1
