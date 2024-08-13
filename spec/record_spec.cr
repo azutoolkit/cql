@@ -3,7 +3,7 @@ require "./spec_helper"
 AcmeDB = Cql::Schema.build(
   :acme_db,
   adapter: Cql::Adapter::Postgres,
-  uri: "postgresql://example:example@localhost:5432/example") do
+  uri: ENV["DATABASE_URL"]) do
   table :posts do
     primary :id, Int64, auto_increment: true
     text :title
