@@ -1,10 +1,6 @@
 require "./spec_helper"
 
 describe Cql::Table do
-  before_all do
-    Northwind.customers.drop!
-  end
-
   it "creates table" do
     Northwind.customers.drop!
     Northwind.customers.create!
