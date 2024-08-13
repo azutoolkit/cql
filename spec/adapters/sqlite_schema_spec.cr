@@ -23,6 +23,10 @@ describe Cql::Schema do
     end
   end
 
+  before_each do
+    sleep 1.seconds
+  end
+
   it "creates a table" do
     Data.customers.drop!
     Data.customers.create!
@@ -35,6 +39,9 @@ describe Cql::Schema do
   end
 
   it "creates record in table" do
+    Data.customers.drop!
+    Data.customers.create!
+
     customer = CustomerModel.new(nil, "John", "New York", 100)
 
     Data.insert
@@ -55,7 +62,7 @@ describe Cql::Schema do
 
     customer = CustomerModel.new(nil, "John", "New York", 100)
 
-    insert_query = Data.insert
+    Data.insert
       .into(:customers)
       .values(
         name: customer.name,
