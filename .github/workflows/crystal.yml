@@ -115,13 +115,8 @@ jobs:
         uses: fjogeleit/yaml-update-action@master
         with:
           valueFile: shard.yml
-          propertyPath: version
+          propertyPath: shard.version
           value: ${{steps.semver.outputs.version}}
-          commitChange: true
-          updateFile: true
-          targetBranch: master
-          masterBranchName: master
-          createPR: false
           branch: master
           message: Set shard version ${{ steps.semver.outputs.version }}
       - name: Create Release
