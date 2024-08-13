@@ -136,10 +136,13 @@ user_repository.update(1, name: "Jane Smith")
 Work with your data using the Active Record pattern:
 
 ```crystal
-class User
-  include Cql::Record(User)
-  schema table: :users, primary_key: :id
+AcmeDB = Cql::Schema.build(...) do ... end
 
+struct User
+  include Cql::Record(User)
+  define schema: AcmeDB, table: :users
+
+  # Crystal properties (no macros)
   property id : Int64
   property name : String
   property email : String
