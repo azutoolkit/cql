@@ -134,13 +134,13 @@ describe Cql::Schema do
       primary :customer_id, Int64, auto_increment: true
       column :customer_name, String, as: "cust_name"
       column :city, String
-      column :country, Int64
+      column :country_id, Int64
     end
 
     Example.customers.create!
 
     Example.alter :customers do
-      foreign_key :fk_country, [:country], :countries, [:country_id]
+      foreign_key :fk_country, [:country_id], :countries, [:id]
     end
   end
 
@@ -158,7 +158,7 @@ describe Cql::Schema do
     Example.customers.create!
 
     Example.alter :customers do
-      foreign_key :fk_country, [:country_id], :countries, [:country_id]
+      foreign_key :fk_country, [:country_id], :countries, [:id]
     end
 
     Example.alter :customers do

@@ -12,7 +12,7 @@ Example = Cql::Schema.build(
   end
 
   table :countries do
-    primary :country_id, Int64, auto_increment: true
+    primary :id, Int64, auto_increment: true
     column :country, String
   end
 end

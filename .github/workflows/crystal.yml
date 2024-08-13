@@ -48,6 +48,9 @@ jobs:
           touch ./spec/db/northwind.db
           touch ./spec/db/data.db
           touch ./spec/db/billing.db
+          chmod 664 ./spec/db/northwind.db
+          chmod 664 ./spec/db/data.db
+          chmod 664 ./spec/db/billing.db
       - name: Install dependencies
         run: shards install
       - name: Check code style

@@ -5,7 +5,7 @@ describe Cql::Migration do
   migrator = Northwind.migrator
 
   after_all do
-    File.delete("spec/db/data.db")
+    File.delete("spec/db/northwind.db")
   end
 
   it "has a migration" do

@@ -23,10 +23,6 @@ describe Cql::Schema do
     end
   end
 
-  before_each do
-    sleep 1.seconds
-  end
-
   it "creates a table" do
     Data.customers.drop!
     Data.customers.create!
