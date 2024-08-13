@@ -27,13 +27,15 @@ describe Cql::Table do
     Northwind.customers.create!
 
     customers = [
-      CustomerModel.new(1, "'John'", "'New York'", 100),
-      CustomerModel.new(2, "'Jane'", "'New York'", 200),
+      {:name => "John", :city => "New York", :balance => 100},
+      {:name => "Jane", :city => "New York", :balance => 200},
     ]
 
-    customers.each do |c|
-      Northwind.insert.into(:customers).values(id: c.id, name: c.name, city: c.city, balance: c.balance).commit
-    end
+    Northwind
+      .insert
+      .into(:customers)
+      .values(customers)
+      .commit
 
     count_query = Northwind.query.from(:customers).count
     count_query.first!(as: Int32).should eq 2
