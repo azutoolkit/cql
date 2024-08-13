@@ -54,7 +54,7 @@ jobs:
         run: crystal tool format --check
       - name: Run tests
         env:
-          DATABASE_URL: postgres://example:example@localhost:5432/example
+          DATABASE_URL: postgres://example:example@postgres:5432/example
         run: crystal spec
 
   docs:
