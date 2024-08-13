@@ -109,7 +109,7 @@ jobs:
           # A string to determine the format of the version output
           format: "${major}.${minor}.${patch}"
           # If this is set to true, *every* commit will be treated as a new version.
-          bump_each_commit: false
+          bump_each_commit: true
       - name: Bump Shard Version
         id: bump-shard
         uses: fjogeleit/yaml-update-action@master
@@ -118,6 +118,7 @@ jobs:
           propertyPath: shard.version
           value: ${{steps.semver.outputs.version}}
           branch: master
+          updateFile: true
           message: Set shard version ${{ steps.semver.outputs.version }}
       - name: Create Release
         id: create_release
