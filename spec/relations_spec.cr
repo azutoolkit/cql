@@ -1,5 +1,5 @@
 require "./spec_helper"
-AcmeDB = Cql::Schema.build(
+AcmeDB2 = Cql::Schema.build(
   :acme_db,
   adapter: Cql::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]) do
@@ -30,7 +30,7 @@ struct Movie
   include Cql::Record(Movie)
   include Cql::Relations
 
-  define AcmeDB, :movies
+  define AcmeDB2, :movies
 
   has_one :screenplay, Screenplay
   many_to_many :actors, Actor, join_through: :movies_actors
@@ -46,7 +46,7 @@ struct Screenplay
   include Cql::Record(Screenplay)
   include Cql::Relations
 
-  define AcmeDB, :screenplays
+  define AcmeDB2, :screenplays
 
   belongs_to :movie, foreign_key: :movie_id
 
@@ -61,7 +61,7 @@ struct Actor
   include Cql::Record(Actor)
   include Cql::Relations
 
-  define AcmeDB, :actors
+  define AcmeDB2, :actors
 
   getter id : Int64?
   getter name : String
@@ -73,7 +73,7 @@ end
 struct MoviesActors
   include Cql::Record(MoviesActors)
 
-  define AcmeDB, :movies_actors
+  define AcmeDB2, :movies_actors
 
   getter id : Int64?
   getter movie_id : Int64
@@ -85,19 +85,18 @@ end
 
 describe Cql::Relations do
   before_each do
-    AcmeDB.movies.create!
-    AcmeDB.screenplays.create!
-    AcmeDB.actors.create!
-    AcmeDB.movies_actors.create!
+    AcmeDB2.movies.create!
+    AcmeDB2.screenplays.create!
+    AcmeDB2.actors.create!
+    AcmeDB2.movies_actors.create!
   end
 
-  # after_each do
-  #   AcmeDB.movies.drop!
-  #   AcmeDB.screenplays.drop!
-  #   AcmeDB.actors.drop!
-  #   # AcmeDB.movies_actors.drop!
-  # end
-  #
+  after_each do
+    AcmeDB2.movies.drop!
+    AcmeDB2.screenplays.drop!
+    AcmeDB2.actors.drop!
+    AcmeDB2.movies_actors.drop!
+  end
 
   describe "belongs_to" do
     it "defines the belongs_to association" do
