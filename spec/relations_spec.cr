@@ -79,6 +79,8 @@ struct MoviesActors
   getter movie_id : Int64
   getter actor_id : Int64
 
+  has_many :actors, Actor, :actor_id
+
   def initialize(@movie_id : Int64, @actor_id : Int64)
   end
 end
@@ -157,6 +159,47 @@ describe Cql::Relations do
 
       screenplay.content.should eq "The screenplay"
     end
+
+    it "builds the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      movie = Movie.find!(movie_id)
+      screenplay = movie.build_screenplay(content: "The screenplay")
+
+      screenplay.content.should eq "The screenplay"
+    end
+
+    it "creates the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      movie = Movie.find!(movie_id)
+      screenplay = movie.create_screenplay(content: "The screenplay")
+
+      screenplay.content.should eq "The screenplay"
+    end
+
+    it "updates the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      screenplay_id = Screenplay.create(movie_id: movie_id, content: "The screenplay")
+      movie = Movie.find!(movie_id)
+      movie.screenplay = Screenplay.find!(screenplay_id)
+
+      movie.screenplay.content.should eq "The screenplay"
+      movie.update_screenplay(content: "The screenplay 2")
+      movie.screenplay.content.should eq "The screenplay 2"
+    end
+
+    it "deletes the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      screenplay_id = Screenplay.create(movie_id: movie_id, content: "The screenplay")
+      movie = Movie.find!(movie_id)
+      movie.screenplay = Screenplay.find!(screenplay_id)
+
+      movie.screenplay.content.should eq "The screenplay"
+      movie.delete_screenplay
+
+      expect_raises DB::NoResultsError do
+        movie.screenplay
+      end
+    end
   end
 
   describe "many_to_many" do
@@ -169,11 +212,42 @@ describe Cql::Relations do
       movie << Actor.find!(actor1)
       movie << Actor.find!(actor2)
 
-      actors = movie.actors!
+      actors = movie.actors
 
       actors.size.should eq 2
       actors[0].name.should eq "Marlon Brando"
       actors[1].name.should eq "Al Pacino"
+    end
+
+    it "adds the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      movie = Movie.find!(movie_id)
+      actor = movie.create_actors(name: "Marlon Brando")
+
+      actor.name.should eq "Marlon Brando"
+    end
+
+    it "deletes the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      actor1 = Actor.create(name: "Marlon Brando")
+      actor2 = Actor.create(name: "Al Pacino")
+      movie = Movie.find!(movie_id)
+
+      movie << Actor.find!(actor1)
+      movie << Actor.find!(actor2)
+
+      actors = movie.actors
+
+      actors.size.should eq 2
+      actors.first.name.should eq "Marlon Brando"
+      actors.last.name.should eq "Al Pacino"
+
+      movie.delete(actors.first)
+
+      actors = movie.actors
+
+      actors.size.should eq 1
+      actors.last.name.should eq "Al Pacino"
     end
   end
 end

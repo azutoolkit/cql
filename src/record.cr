@@ -46,7 +46,7 @@ module Cql
   #   end
   # end
   # ```
-  module Record(T)
+  module Record(T, Pk)
     macro included
       include DB::Serializable
       @@schema : Cql::Schema? = nil
@@ -451,7 +451,7 @@ module Cql
     # Define instance-level methods for saving and deleting records
     def save
       if @id.nil?
-        @id = T.create(self).as(Int64)
+        @id = T.create(self).as(Pk)
       else
         T.update(self)
       end
@@ -485,7 +485,7 @@ module Cql
       @id.not_nil!
     end
 
-    def id=(id : Int64)
+    def id=(id : Pk)
       @id = id
     end
   end

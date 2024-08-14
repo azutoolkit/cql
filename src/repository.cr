@@ -16,6 +16,11 @@ module Cql
   # user_repo.find(1)
   # ```
   class Repository(T)
+    getter query : Cql::Query
+    getter insert : Cql::Insert
+    getter update : Cql::Update
+    getter delete : Cql::Delete
+
     # Initialize the repository with a schema and table name
     #
     # - **@param** schema [Schema] The schema to use
@@ -31,6 +36,10 @@ module Cql
     # user_repo = UserRepository.new(schema, :users
     # ```
     def initialize(@schema : Schema, @table : Symbol)
+      @query = Query.new(@schema).from(@table)
+      @insert = Insert.new(@schema).into(@table)
+      @update = Update.new(@schema).table(@table)
+      @delete = Delete.new(@schema).from(@table)
     end
 
     # Build a new object of type T with the given attributes
@@ -45,19 +54,6 @@ module Cql
     #
     def build(attrs : Hash(Symbol, DB::Any))
       T.new(attrs)
-    end
-
-    # Return a new query object for the current table
-    # - **@return** [Query] The query object
-    #
-    # **Example** Fetching all records
-    #
-    # ```
-    # user_repo.query.all(T)
-    # user_repo.query.where(active: true).all(T)
-    # ```
-    def query
-      Query.new(@schema).from(@table)
     end
 
     # Fetch all records of type T
@@ -126,18 +122,6 @@ module Cql
       query.where(**fields).all(T)
     end
 
-    # Return a new insert object for the current table
-    # - **@return** [Insert] The insert object
-    #
-    # **Example** Creating a new record
-    #
-    # ```
-    # user_repo.insert.values(name: "Alice", email: " [email protected]").commit
-    # ```
-    def insert
-      Insert.new(@schema).into(@table)
-    end
-
     # Create a new record with given attributes
     # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
     # - **@return** [PrimaryKey] The ID of the new record
@@ -147,31 +131,6 @@ module Cql
     # ```
     def create(attrs : Hash(Symbol, DB::Any))
       insert.values(attrs).commit.last_insert_id
-    end
-
-    # Create a new record with given fields
-    # - **@param** fields [Hash(Symbol, DB::Any)] The fields to use
-    # - **@return** [PrimaryKey] The ID of the new record
-    #
-    # **Example** Creating a new record
-
-    # ```
-    # user_repo.create(name: "Alice", email: " [email protected]")
-    # ```
-    def create(**fields)
-      insert.values(**fields).commit.last_insert_id
-    end
-
-    # Return a new update object for the current table
-    # - **@return** [Update] The update object
-    #
-    # **Example** Updating a record
-    #
-    # ```
-    # user_repo.update.set(active: true).where(id: 1).commit
-    # ```
-    def update
-      Update.new(@schema).table(@table)
     end
 
     # Update a record by ID with given attributes
@@ -226,18 +185,6 @@ module Cql
     # ```
     def update_all(attrs : Hash(Symbol, DB::Any))
       update.set(**attrs).commit
-    end
-
-    # Return a new delete object for the current table
-    # - **@return** [Delete] The delete object
-    #
-    # **Example** Deleting a record
-    #
-    # ```
-    # user_repo.delete.where(id: 1).commit
-    # ```
-    def delete
-      Delete.new(@schema).from(@table)
     end
 
     # Delete a record by ID

@@ -458,6 +458,11 @@ module Cql
       schema.tables.delete[table_name]
     end
 
+    # Gets table expression for Sql query generation
+    def expression
+      Expression::Table.new(self)
+    end
+
     macro method_missing(call)
       def {{call.id}}
         columns[:{{call.id}}]
