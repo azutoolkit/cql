@@ -17,6 +17,7 @@ require "./delete"
 require "./schema"
 require "./repository"
 require "./record"
+require "./relations"
 require "./migrations"
 
 module Cql

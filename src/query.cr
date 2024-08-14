@@ -403,7 +403,7 @@ module Cql
       join_table = Expression::Table.new(tbl)
       tables = @tables.dup
       tables[table] = tbl
-      builder = with Expression::FilterBuilder.new(tables) yield table_expr
+      builder = with Expression::FilterBuilder.new(tables) yield
       @joins << Expression::Join.new(Expression::JoinType::INNER, join_table, builder.condition)
       self
     end

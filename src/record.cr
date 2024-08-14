@@ -49,7 +49,6 @@ module Cql
   module Record(T)
     macro included
       include DB::Serializable
-
       @@schema : Cql::Schema? = nil
       @@table : Symbol? = nil
 
@@ -168,6 +167,18 @@ module Cql
         query.where(**fields).first(T)
       end
 
+      # Find a record by specific fields, raise an error if not found
+      # - **@param** fields [Hash(Symbol, DB::Any)] The fields to match
+      # - **@return** [T] The record
+      #
+      # **Example** Fetching a record by email
+      # ```
+      # user_repo.find_by!(email: " [email protected]")
+      # ```
+      def self.find_by!(**fields)
+        query.where(**fields).first!(T)
+      end
+
       # Find all records matching specific fields
       # - **@param** fields [Hash(Symbol, DB::Any)] The fields to match
       # - **@return** [Array(T)] The records
@@ -262,7 +273,7 @@ module Cql
       end
 
       def self.update(id, fields : Hash(Symbol, DB::Any))
-        update.set(fields).where(id: id).commit
+        update.set(**fields).where(id: id).commit
       end
 
       def self.update(id, record : T)
@@ -270,7 +281,9 @@ module Cql
       end
 
       def self.update(record : T)
-        update.set(record.attributes).where(id: record.id).commit
+        attrs = record.attributes
+        attrs.delete(:id)
+        update.set(attrs).where(id: record.id).commit
       end
 
       # Update records matching where attributes with update attributes
@@ -464,7 +477,7 @@ module Cql
       hash = Hash(Symbol, DB::Any).new
       {% for ivar in T.instance_vars %}
         hash[:{{ ivar }}] = {{ ivar }}
-        {% end %}
+      {% end %}
       hash
     end
 
