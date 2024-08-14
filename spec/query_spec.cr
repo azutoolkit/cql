@@ -320,6 +320,26 @@ describe Cql::Query do
     select_query.should eq({output, ["John", 1]})
   end
 
+  it "combines join with where clause" do
+    select_query = Northwind.query.from(:users)
+      .select(users: [:name, :email], address: [:street, :city])
+      .inner(:address) do
+        users.id.eq(address.user_id)
+      end
+      .where do
+        users.name.eq("John") | users.id.eq(1)
+      end.to_sql
+
+    output = <<-SQL.gsub(/\n/, " ").strip
+      SELECT users.name, users.email, address.street, address.city
+      FROM users
+      INNER JOIN address ON users.id = address.user_id
+      WHERE (users.name = ? OR users.id = ?)
+      SQL
+
+    select_query.should eq({output, ["John", 1]})
+  end
+
   it "Creates indexes for table" do
     index = Cql::Index.new(Northwind.tables[:users], [:name, :email], unique: true)
 

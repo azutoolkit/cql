@@ -357,7 +357,13 @@ module Cql
     # => "SELECT * FROM users WHERE name = 'John'"
     # ```
     def where(&)
-      builder = with Expression::FilterBuilder.new(@tables) yield
+      all_tables = @tables.dup
+
+      @joins.each do |j|
+        all_tables[j.table.table.table_name] = j.table.table
+      end
+
+      builder = with Expression::FilterBuilder.new(all_tables) yield
       @where = Expression::Where.new(builder.as(Expression::ConditionBuilder).condition)
       self
     end
@@ -397,7 +403,7 @@ module Cql
       join_table = Expression::Table.new(tbl)
       tables = @tables.dup
       tables[table] = tbl
-      builder = with Expression::FilterBuilder.new(tables) yield
+      builder = with Expression::FilterBuilder.new(tables) yield table_expr
       @joins << Expression::Join.new(Expression::JoinType::INNER, join_table, builder.condition)
       self
     end
