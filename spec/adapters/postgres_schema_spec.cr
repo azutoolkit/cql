@@ -140,7 +140,7 @@ describe Cql::Schema do
     Example.customers.create!
 
     Example.alter :customers do
-      foreign_key :fk_country, [:country_id], :countries, [:country_id]
+      foreign_key :fk_country, [:country_id], :countries, [:id]
     end
   end
 
@@ -158,7 +158,7 @@ describe Cql::Schema do
     Example.customers.create!
 
     Example.alter :customers do
-      foreign_key :fk_country, [:country_id], :countries, [:country_id]
+      foreign_key :fk_country, [:country_id], :countries, [:id]
     end
 
     Example.alter :customers do
