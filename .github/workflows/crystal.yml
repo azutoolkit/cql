@@ -102,29 +102,3 @@ jobs:
           release_name: Release v${{steps.semver.outputs.version}}
           draft: false
           prerelease: false
-  docs:
-    needs:
-      - release
-    if: ${{ success() }}
-    runs-on: ubuntu-latest
-    container:
-      image: crystallang/crystal
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install dependencies
-        run: shards install
-      - name: Generate Azu API Docs
-        run: crystal docs --project-version=${{ steps.semver.outputs.version }}
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: "./docs"
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
