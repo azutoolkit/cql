@@ -26,6 +26,8 @@ module Cql
 
   # Represents a database primary key column type.
   alias PrimaryKeyType = Int32.class | Int64.class | UUID.class | ULID.class
+
+  # :nodoc:
   alias Any = Bool.class |
               Float32.class |
               Float64.class |
@@ -37,6 +39,7 @@ module Cql
               UUID.class |
               Nil.class
 
+  # :nodoc:
   DB_TYPE_MAPPING = {
     Cql::Adapter::Sqlite => {
       Int32        => "INTEGER",
@@ -82,7 +85,7 @@ module Cql
     },
   }
 
-  # Represents a database adapter
+  # Represents a database adapter module.
   enum Adapter
     Sqlite
     MySql

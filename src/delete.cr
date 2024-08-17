@@ -139,6 +139,29 @@ module Cql
       self
     end
 
+    # Where clause using a hash of conditions to match against
+    # - **@param** attr [Hash(Symbol, DB::Any)] The conditions to match against
+    # - **@return** [self] The current instance
+    #
+    # **Example** Setting the where clause
+    #
+    # ```
+    # delete = Cql::Delete.new(schema)
+    #   .from(:users)
+    #   .where(id: 1)
+    # ```
+    def where(attr : Hash(Symbol, DB::Any))
+      condition = nil
+      attr.each do |k, v|
+        expr = get_expression(k, v)
+        condition = condition ? Expression::And.new(condition.not_nil!, expr) : expr
+      end
+
+      @where = Expression::Where.new(condition.not_nil!)
+
+      self
+    end
+
     # Sets the columns to return after the delete
     # - **@param** columns [Symbol*] The columns to return
     # - **@return** [self] The current instance

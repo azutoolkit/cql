@@ -8,23 +8,30 @@ module Cql
   #
   # ```
   # schema.build do
-  # table :users do
-  #  column :id, Int32, primary: true
-  # column :name, String
+  #   table :users do
+  #     column :id, Int32, primary: true
+  #     column :name, String
+  #   end
   # end
   #
   # table :posts do
-  # column :id, Int32, primary: true
-  # column :user_id, Int32
-  # foreign_key [:user_id], :users, [:id]
+  #   column :id, Int32, primary: true
+  #   column :user_id, Int32
+  #   foreign_key [:user_id], :users, [:id]
   # end
   # ```
   class ForeignKey
+    # :nodoc:
     getter name : Symbol
+    # :nodoc:
     getter columns : Array(Symbol)
+    # :nodoc:
     getter table : Symbol
+    # :nodoc:
     getter references : Array(Symbol)
+    # :nodoc:
     getter on_delete : String = "NO ACTION"
+    # :nodoc:
     getter on_update : String = "NO ACTION"
 
     def initialize(

@@ -6,19 +6,33 @@ module Cql
   # **Example** Inserting a record
   #
   # ```
-  # insert.into(:users).values(name: "John", age: 30).commit
+  # insert
+  #   .into(:users)
+  #   .values(name: "John", age: 30)
+  #   .last_insert_id
   # ```
   #
   # **Example** Inserting multiple records
   #
   # ```
-  # insert.into(:users).values([{name: "John", age: 30}, {name: "Jane", age: 25}]).commit
+  # insert
+  #   .into(:users)
+  #   .values(
+  #     [
+  #       {name: "John", age: 30},
+  #       {name: "Jane", age: 25},
+  #     ]
+  #   ).commit
   # ```
   #
   # **Example** Inserting a record with a query
   #
   # ```
-  # insert.into(:users).query(select.from(:users).where(id: 1)).commit
+  # insert
+  #   .into(:users)
+  #   .query(
+  #     select.from(:users).where(id: 1)
+  #   ).commit
   # ```
   class Insert
     Log = ::Log.for(self)
@@ -37,6 +51,7 @@ module Cql
     # - **@return** [Int64] The last inserted ID
     #
     # **Example** Getting the last inserted ID
+    #
     # ```
     # insert.into(:users).values(name: "John", age: 30).last_insert_id
     # ```
@@ -83,7 +98,10 @@ module Cql
     # **Example** Inserting a record
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).commit
+    # insert
+    #   .into(:users)
+    #   .values(name: "John", age: 30)
+    #   .commit
     # ```
     def into(table : Symbol)
       @table = find_table(table)
@@ -97,7 +115,11 @@ module Cql
     # **Example** Inserting a record
     #
     # ```
-    # insert.into(:users).columns(:name, :age).values("John", 30).commit
+    # insert
+    #   .into(:users)
+    #   .columns(:name, :age)
+    #   .values("John", 30)
+    #   .commit
     # ```
     def values(values : Array(Hash(Symbol, DB::Any)))
       values.map { |hash| build_values(hash) }

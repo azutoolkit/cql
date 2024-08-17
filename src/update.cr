@@ -186,6 +186,34 @@ module Cql
     # Sets the columns to return after the update.
     # - **@param** columns [Array(Symbol)] the columns to return
     # - **@return** [self] the current instance
+    # - **@raise** [Exception] if the column does not exist
+    # - **@raise** [Exception] if the column is not part of the table
+    #
+    # **Example**
+    #
+    # ```
+    # update = Cql::Update.new(schema)
+    #   .table(:users)
+    #   .set(name: "John", age: 30)
+    #   .where { |w| w.id == 1 }
+    #   .back(:name, :age)
+    #   .commit
+    # ```
+    def where(attr : Hash(Symbol, DB::Any))
+      condition = nil
+      attr.each do |k, v|
+        expr = get_expression(k, v)
+        condition = condition ? Expression::And.new(condition.not_nil!, expr) : expr
+      end
+
+      @where = Expression::Where.new(condition.not_nil!)
+
+      self
+    end
+
+    # Sets the columns to return after the update.
+    # - **@param** columns [Array(Symbol)] the columns to return
+    # - **@return** [self] the current instance
     #
     # **Example**
     # ```
