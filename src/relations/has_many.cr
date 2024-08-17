@@ -21,11 +21,14 @@ module Cql::Relations
   # end
   # ```
   module HasMany
-    macro has_many(name, type, foreign_key)
+    macro has_many(name, type, foreign_key, cascade = false)
       @[DB::Field(ignore: true)]
-      getter {{name.id}} : HasMany::Collection({{type.id}}, Pk) do
-        HasMany::Collection({{type.id}}, Pk).new(
-          :{{name.id}}, fk_key: :{{foreign_key.id}}, fk_value: @id.not_nil!
+      getter {{name.id}} : Cql::Relations::Collection({{type.id}}, Pk) do
+        Cql::Relations::Collection({{type.id}}, Pk).new(
+          key: :{{foreign_key.id}},
+          id: @id.not_nil!,
+          cascade: {{cascade.id}},
+          query: {{type.id}}.query.where({{foreign_key.id}}: @id.not_nil!)
         )
       end
     end

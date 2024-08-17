@@ -114,10 +114,6 @@ module Cql
       # user_repo.build(name: "Alice", email: " [email protected]")
       # ```
       #
-      def self.build(attrs : Hash(Symbol, DB::Any))
-        T.new(attrs)
-      end
-
       def self.build(**fields)
         T.new(**fields)
       end
@@ -607,10 +603,27 @@ module Cql
       hash = Hash(Symbol, DB::Any).new
       {% for ivar in T.instance_vars %}
         {% unless ivar.annotation(DB::Field) && ivar.annotation(DB::Field).named_args[:ignore] %}
-          hash[:{{ ivar }}] = {{ ivar }}
+        hash[:{{ ivar }}] = {{ ivar }}
         {% end %}
       {% end %}
       hash
+    end
+
+    # Set the record's attributes from a hash
+    # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to set
+    # - **@return** [Nil]
+    #
+    # **Example** Setting the record's attributes
+    #
+    # ```
+    # user.attributes = {name: "Alice", email: "[email protected]"}
+    # ```
+    def attributes(attrs : Hash(Symbol, DB::Any))
+      attrs.each do |key, value|
+        {% for ivar in T.instance_vars %}
+        @{{ivar.id}} = value if key == :{{ivar.id}} && value.is_a?({{ivar.type}})
+        {% end %}
+      end
     end
 
     # Identity method for the record ID

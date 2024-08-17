@@ -8,7 +8,7 @@ module Cql::Relations
         {{assoc.camelcase.id}}.find!(@{{foreign_key.id}})
       end
 
-      property {{assoc.id}}_id : Int64
+      property {{foreign_key.id}} : {{Pk}}? = nil
 
       def {{assoc.id}}=(record : {{assoc.camelcase.id}})
         @{{foreign_key.id}} = record.id.not_nil!

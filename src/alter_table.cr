@@ -2,7 +2,7 @@ module Cql
   # This module is part of the Cql namespace and is responsible for handling
   # database alterations. This class represents an AlterTable object.
   #
-  # **Example**:
+  # **Example** :
   #
   # ```
   # alter_table = AlterTable.new
@@ -23,21 +23,21 @@ module Cql
 
     # Adds a new column to the table.
     #
-    # - **@param**name [Symbol] the name of the column to be added
-    # - **@param**type [Any] the data type of the column
-    # - **@param**as_name [String, nil] an optional alias for the column
-    # - **@param**null [Bool] whether the column allows null values (default: true)
-    # - **@param**default [DB::Any, nil] the default value for the column (default: nil)
-    # - **@param**unique [Bool] whether the column should have a unique constraint (default: false)
-    # - **@param**size [Int32, nil] the size of the column (default: nil)
-    # - **@param**index [Bool] whether the column should be indexed (default: false)
+    # - **@param** name [Symbol] the name of the column to be added
+    # - **@param** type [Any] the data type of the column
+    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** null [Bool] whether the column allows null values (default: true)
+    # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
+    # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
+    # - **@param** size [Int32, nil] the size of the column (default: nil)
+    # - **@param** index [Bool] whether the column should be indexed (default: false)
     #
-    # **Example** Adding a new column with default options
+    # **Example**  Adding a new column with default options
     # ```
     # add_column(:email, "string")
     # ```
     #
-    # **Example** Adding a new column with custom options
+    # **Example**  Adding a new column with custom options
     # ```
     # add_column(:age, "integer", null: false, default: "18")
     # ```
@@ -58,9 +58,9 @@ module Cql
 
     # Drops a column from the table.
     #
-    # - **@param**column [Symbol] the name of the column to be dropped
+    # - **@param** column [Symbol] the name of the column to be dropped
     #
-    # **Example** Dropping a column
+    # **Example**  Dropping a column
     # ```
     # drop_column(:age)
     # ```
@@ -75,10 +75,11 @@ module Cql
 
     # Renames a column in the table.
     #
-    # - **@param**old_name [Symbol] the current name of the column
-    # - **@param**new_name [Symbol] the new name for the column
+    # - **@param** old_name [Symbol] the current name of the column
+    # - **@param** new_name [Symbol] the new name for the column
     #
-    # **Example** Renaming a column
+    # **Example**  Renaming a column
+    #
     # ```
     #   rename_column(:email, :user_email)
     # ````
@@ -92,10 +93,10 @@ module Cql
 
     # Changes the type of a column in the table.
     #
-    # - **@param**name [Symbol] the name of the column to be changed
-    # - **@param**type [Any] the new data type for the column
+    # - **@param** name [Symbol] the name of the column to be changed
+    # - **@param** type [Any] the new data type for the column
     #
-    # **Example** Changing the type of a column
+    # **Example**  Changing the type of a column
     # ```
     # change_column(:age, "string")
     # ```
@@ -107,9 +108,9 @@ module Cql
 
     # Renames the table.
     #
-    # - **@param**new_name [Symbol] the new name for the table
+    # - **@param** new_name [Symbol] the new name for the table
     #
-    # **Example** Renaming the table
+    # **Example**  Renaming the table
     # ```
     # rename_table(:new_table_name)
     # ```
@@ -122,14 +123,14 @@ module Cql
 
     # Adds a foreign key to the table.
     #
-    # - **@param**name [Symbol] the name of the foreign key
-    # - **@param**columns [Array(Symbol)] the columns in the current table
-    # - **@param**table [Symbol] the referenced table
-    # - **@param**references [Array(Symbol)] the columns in the referenced table
-    # - **@param**on_delete [String] the action on delete (default: "NO ACTION")
-    # - **@param**on_update [String] the action on update (default: "NO ACTION")
+    # - **@param** name [Symbol] the name of the foreign key
+    # - **@param** columns [Array(Symbol)] the columns in the current table
+    # - **@param** table [Symbol] the referenced table
+    # - **@param** references [Array(Symbol)] the columns in the referenced table
+    # - **@param** on_delete [String] the action on delete (default: "NO ACTION")
+    # - **@param** on_update [String] the action on update (default: "NO ACTION")
     #
-    # **Example** Adding a foreign key
+    # **Example**  Adding a foreign key
     # ```
     # foreign_key(:fk_user_id, [:user_id], :users, [:id], on_delete: "CASCADE")
     # ```
@@ -147,9 +148,9 @@ module Cql
 
     # Drops a foreign key from the table.
     #
-    # - **@param**name [Symbol] the name of the foreign key to be dropped
+    # - **@param** name [Symbol] the name of the foreign key to be dropped
     #
-    # **Example** Dropping a foreign key
+    # **Example**  Dropping a foreign key
     # ```
     # drop_foreign_key(:fk_user_id)
     # ```
@@ -159,11 +160,11 @@ module Cql
 
     # Creates an index on the table.
     #
-    # - **@param**name [Symbol] the name of the index
-    # - **@param**columns [Array(Symbol)] the columns to be indexed
-    # - **@param**unique [Bool] whether the index should be unique (default: false)
+    # - **@param** name [Symbol] the name of the index
+    # - **@param** columns [Array(Symbol)] the columns to be indexed
+    # - **@param** unique [Bool] whether the index should be unique (default: false)
     #
-    # **Example** Creating an index
+    # **Example**  Creating an index
     # ```
     # create_index(:index_users_on_email, [:email], unique: true)
     # ```
@@ -175,9 +176,9 @@ module Cql
 
     # Drops an index from the table.
     #
-    # - **@param**name [Symbol] the name of the index to be dropped
+    # - **@param** name [Symbol] the name of the index to be dropped
     #
-    # **Example** Dropping an index
+    # **Example**  Dropping an index
     # ```
     # drop_index(:index_users_on_email)
     # ```
@@ -190,10 +191,10 @@ module Cql
 
     # Converts the alter table actions to SQL.
     #
-    # - **@param**visitor [Expression::Visitor] the visitor to generate SQL
-    # - **@return**[String] the generated SQL
+    # - **@param** visitor [Expression::Visitor] the visitor to generate SQL
+    # - **@return** [String] the generated SQL
     #
-    # **Example** Generating SQL for alter table actions
+    # **Example**  Generating SQL for alter table actions
     # ```
     # sql = to_sql(visitor)
     # ```

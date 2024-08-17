@@ -22,6 +22,7 @@ module Cql::Relations
   class Collection(Target, Pk)
     @records : Array(Target) = [] of Target
     @target_table : Symbol
+    forward_missing_to @records
 
     # Initialize the many-to-many association collection class
     # - **param** : key (Symbol) - The key for the parent record
@@ -44,7 +45,7 @@ module Cql::Relations
     # ```
     def initialize(
       @key : Symbol,                                                         # movie_id
-      @id : Pk,                                                              # moive id value
+      @id : Pk,                                                              # movie id value
       @cascade : Bool = false,                                               # delete associated records
       @query : Cql::Query = Cql::Query.new(Target.schema).from(Target.table) # query object
     )
@@ -91,7 +92,7 @@ module Cql::Relations
     # => [1, 2, 3]
     # ```
     def ids : Array(Pk)
-      @records.map(&.id)
+      @records.map(&.id.not_nil!)
     end
 
     # Create a new record and associate it with the parent record if it doesn't exist
@@ -178,6 +179,8 @@ module Cql::Relations
     # => [#<Actor:0x00007f8b3b1b3f00 @id=1, @name="Carrie-Anne Moss">]
     # ```
     def create(**attributes)
+      record = Target.build(**attributes)
+      record.attributes({@key => @id})
       target_id = record.persisted? ? record.id : Target.create(record)
       Target.find!(target_id)
     end
@@ -196,6 +199,7 @@ module Cql::Relations
     # => [#<Actor:0x00007f8b3b1b3f00 @id=1, @name="Hugo Weaving">]
     # ```
     def create(record : Target)
+      record.attributes({@key => @id})
       target_id = record.persisted? ? record.id : Target.create(record)
       Target.find!(target_id)
     end
@@ -240,8 +244,26 @@ module Cql::Relations
     #
     # => [] of Actor
     # ```
-    def delete(record : T)
-      Target.delete(record.id).commit.rows_affected
+    def delete(record : Target)
+      delete(record.id)
+    end
+
+    # Delete the associated record from the parent record if it exists
+    # - **param** : id (Pk)
+    # - **return** : Bool
+    #
+    # **Example**
+    #
+    # ```
+    # movie.actors.create(name: "Carrie-Anne Moss")
+    # movie.actors.reload
+    # movie.actors.all => 1
+    # movie.actors.delete(1)
+    # movie.actors.reload
+    # movie.actors.all => []
+    # ```
+    def delete(id : Pk)
+      Target.delete(id).rows_affected
     end
 
     # Clears all associated records from the parent record and the database
@@ -257,7 +279,7 @@ module Cql::Relations
     # movie.actors.all => []
     # ```
     def clear
-      Target.delete.where({id: @records.map(&.id)}).rows_affected
+      Target.delete.where({@key => @id}).commit.rows_affected
       @records = [] of Target
     end
   end
@@ -303,8 +325,6 @@ module Cql::Relations
   # actor = Actor.create(name: "Keanu Reeves")
   # ```
   class ManyCollection(Target, Through, Pk) < Collection(Target, Pk)
-    @records : Array(Target) = [] of Target
-    @target_table : Symbol
     @through_table : Symbol
 
     # Initialize the many-to-many association collection class
@@ -352,6 +372,7 @@ module Cql::Relations
     # => [#<Actor:0x00007f8b3b1b3f00 @id=1, @name="Carrie-Anne Moss">]
     # ```
     def create(**attributes)
+      record = Target.build(**attributes)
       target_id = record.persisted? ? record.id : Target.create(record)
       Through.create({@key => @id, @target_key => target_id})
       Target.find!(target_id)
@@ -415,13 +436,37 @@ module Cql::Relations
     #
     # => [] of Actor
     # ```
-    def delete(record : T)
+    def delete(record : Target)
       total_records_deleted = Through.delete.where(
         {@key => @id, @target_key => record.id}
       ).commit.rows_affected
       if @cascade
+        Target.delete(record.id).rows_affected
+      end
+      total_records_deleted
+    end
+
+    # Delete the associated record from the parent record if it exists
+    # - **param** : id (Pk)
+    # - **return** : Bool
+    #
+    # **Example**
+    #
+    # ```
+    # movie.actors.create(name: "Carrie-Anne Moss")
+    # movie.actors.reload
+    # movie.actors.all => 1
+    # movie.actors.delete(1)
+    # movie.actors.reload
+    # movie.actors.all => []
+    # ```
+    def delete(id : Pk)
+      total_records_deleted = Through.delete.where(
+        {@key => @id, @target_key => id}
+      ).commit.rows_affected
+      if @cascade
         total_records_deleted += Target
-          .delete(record.id)
+          .delete(id)
           .commit
           .rows_affected > 0
       end
@@ -441,14 +486,20 @@ module Cql::Relations
     # movie.actors.all => []
     # ```
     def clear
-      total_records_deleted = Through.delete.where({@key => @id}).rows_affected
+      records_deleted = Through
+        .delete
+        .where({@key => @id})
+        .commit
+        .rows_affected
+
       if @cascade
-        total_records_deleted += Target
-          .delete
-          .where({id: @records.map(&.id)})
-          .rows_affected
+        table = Target.schema.tables[Target.table].expression
+        Target.delete.where do
+          table.id.in(ids)
+        end.commit
       end
-      total_records_deleted
+
+      records_deleted
     end
   end
 end

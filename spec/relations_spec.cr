@@ -19,6 +19,12 @@ AcmeDB2 = Cql::Schema.build(
     text :name
   end
 
+  table :directors do
+    primary :id, Int64, auto_increment: true
+    bigint :movie_id
+    text :name
+  end
+
   table :movies_actors do
     primary :id, Int64, auto_increment: true
     bigint :movie_id
@@ -47,11 +53,26 @@ struct Movie
 
   has_one :screenplay, Screenplay
   many_to_many :actors, Actor, join_through: :movies_actors
+  has_many :directors, Director, foreign_key: :movie_id
 
   getter id : Int64?
   getter title : String
 
   def initialize(@title : String)
+  end
+end
+
+struct Director
+  include Cql::Record(Director, Int64)
+  include Cql::Relations
+
+  define AcmeDB2, :directors
+
+  getter id : Int64?
+  getter name : String
+  belongs_to :movie, foreign_key: :movie_id
+
+  def initialize(@name : String)
   end
 end
 
@@ -91,6 +112,7 @@ describe Cql::Relations do
     AcmeDB2.screenplays.create!
     AcmeDB2.actors.create!
     AcmeDB2.movies_actors.create!
+    AcmeDB2.directors.create!
   end
 
   after_each do
@@ -98,6 +120,7 @@ describe Cql::Relations do
     AcmeDB2.screenplays.drop!
     AcmeDB2.actors.drop!
     AcmeDB2.movies_actors.drop!
+    AcmeDB2.directors.drop!
   end
 
   describe "belongs_to" do
@@ -209,43 +232,148 @@ describe Cql::Relations do
       actor2 = Actor.create(name: "Al Pacino")
       movie = Movie.find!(movie_id)
 
-      actors = movie.actors << Actor.find!(actor1)
-      actors = movie.actors << Actor.find!(actor2)
+      movie.actors << Actor.find!(actor1)
+      movie.actors << Actor.find!(actor2)
+
       actors = movie.actors.all
       actors.size.should eq 2
       actors[0].name.should eq "Marlon Brando"
       actors[1].name.should eq "Al Pacino"
     end
 
-    # it "adds the association" do
-    #   movie_id = Movie.create(title: "The Godfather")
-    #   movie = Movie.find!(movie_id)
-    #   actor = movie.actors << Actor.new(name: "Marlon Brando")
+    it "adds the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      movie = Movie.find!(movie_id)
 
-    #   actor.name.should eq "Marlon Brando"
-    # end
+      movie.actors.size.should eq 0
+      movie.actors << Actor.new(name: "Marlon Brando")
+      movie.actors.size.should eq 1
+      movie.actors.reload.size.should eq 1
+    end
 
-    # it "deletes the association" do
-    #   movie_id = Movie.create(title: "The Godfather")
-    #   actor1 = Actor.create(name: "Marlon Brando")
-    #   actor2 = Actor.create(name: "Al Pacino")
-    #   movie = Movie.find!(movie_id)
+    it "deletes the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      actor1 = Actor.create(name: "Marlon Brando")
+      actor2 = Actor.create(name: "Al Pacino")
+      movie = Movie.find!(movie_id)
 
-    #   movie << Actor.find!(actor1)
-    #   movie << Actor.find!(actor2)
+      movie.actors << Actor.find!(actor1)
+      movie.actors << Actor.find!(actor2)
 
-    #   actors = movie.actors
+      actors = movie.actors.all
+      actors.size.should eq 2
+      actors[0].name.should eq "Marlon Brando"
+      actors[1].name.should eq "Al Pacino"
 
-    #   actors.size.should eq 2
-    #   actors.first.name.should eq "Marlon Brando"
-    #   actors.last.name.should eq "Al Pacino"
+      movie.actors.delete(Actor.find!(actor1))
+      movie.actors.reload
+      actors = movie.actors.all
+      actors.size.should eq 1
+      actors[0].name.should eq "Al Pacino"
+    end
 
-    #   movie.delete(actors.first)
+    it "clears the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      actor1 = Actor.create(name: "Marlon Brando")
+      actor2 = Actor.create(name: "Al Pacino")
+      movie = Movie.find!(movie_id)
 
-    #   actors = movie.actors
+      movie.actors << Actor.find!(actor1)
+      movie.actors << Actor.find!(actor2)
 
-    #   actors.size.should eq 1
-    #   actors.last.name.should eq "Al Pacino"
-    # end
+      actors = movie.actors.all
+      actors.size.should eq 2
+      actors[0].name.should eq "Marlon Brando"
+      actors[1].name.should eq "Al Pacino"
+
+      movie.actors.clear
+      movie.actors.reload
+      actors = movie.actors.all
+      actors.size.should eq 0
+    end
+
+    it "creates the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      movie = Movie.find!(movie_id)
+      actor = movie.actors.create(name: "Marlon Brando")
+
+      actor.name.should eq "Marlon Brando"
+    end
+  end
+
+  describe "has_many" do
+    it "defines the has_many association" do
+      movie_id = Movie.create(title: "The Godfather")
+      Director.create(movie_id: movie_id, name: "Francis Ford Coppola")
+      Director.create(movie_id: movie_id, name: "Mario Puzo")
+      movie = Movie.find!(movie_id)
+
+      directors = movie.directors.all
+      directors.size.should eq 2
+      directors[0].name.should eq "Francis Ford Coppola"
+      directors[1].name.should eq "Mario Puzo"
+    end
+
+    it "adds the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      movie = Movie.find!(movie_id)
+
+      movie.directors.size.should eq 0
+      movie.directors << Director.new(name: "Francis Ford Coppola")
+      movie.directors.size.should eq 1
+      movie.directors.reload.size.should eq 1
+    end
+
+    it "deletes the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      director1 = Director.create(movie_id: movie_id, name: "Francis Ford Coppola")
+      Director.create(movie_id: movie_id, name: "Mario Puzo")
+      movie = Movie.find!(movie_id)
+
+      directors = movie.directors.all
+      directors.size.should eq 2
+      directors[0].name.should eq "Francis Ford Coppola"
+      directors[1].name.should eq "Mario Puzo"
+
+      movie.directors.delete(director1)
+      movie.directors.reload
+      directors = movie.directors.all
+      directors.size.should eq 1
+      directors[0].name.should eq "Mario Puzo"
+    end
+
+    it "clears the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      Director.create(movie_id: movie_id, name: "Francis Ford Coppola")
+      Director.create(movie_id: movie_id, name: "Mario Puzo")
+      movie = Movie.find!(movie_id)
+
+      directors = movie.directors.all
+      directors.size.should eq 2
+      directors[0].name.should eq "Francis Ford Coppola"
+      directors[1].name.should eq "Mario Puzo"
+
+      movie.directors.clear
+      movie.directors.reload
+      directors = movie.directors.all
+      directors.size.should eq 0
+    end
+
+    it "creates the association" do
+      movie_id = Movie.create(title: "The Godfather")
+      movie = Movie.find!(movie_id)
+      director = movie.directors.create(name: "Francis Ford Coppola")
+
+      director.name.should eq "Francis Ford Coppola"
+    end
+
+    it "check if the association is empty" do
+      movie_id = Movie.create(title: "The Godfather")
+      movie = Movie.find!(movie_id)
+
+      movie.directors.empty?.should eq true
+      movie.directors << Director.new(name: "Francis Ford Coppola")
+      movie.directors.empty?.should eq false
+    end
   end
 end

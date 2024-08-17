@@ -55,6 +55,7 @@ module Cql
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: true)
     #
     # **Example** Adding a new primary key column
+    #
     # ```
     # primary :id, Int64
     # primary :id, Int64, auto_increment: false
@@ -86,8 +87,9 @@ module Cql
     #
     # **Example** Adding a new column with default options
     #
+    # ```
     # column :email, String
-    #
+    # ```
     def column(
       name : Symbol,
       type : T.class,
@@ -115,6 +117,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # integer :age
     # integer :age, as: "user_age", null: false, default: 18, unique: true, index: true
@@ -137,6 +140,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # bigint :age
     # bigint :age, as: "user_age", null: false, default: 18, unique: true, index: true
@@ -159,6 +163,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # float :age
     # float :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
@@ -181,6 +186,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # double :age
     # double :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
@@ -203,6 +209,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # decimal :price
     # decimal :price, as: "product_price", null: false, default: 0.0, unique: true, index: true
@@ -225,6 +232,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # boolean :active
     # boolean :active, as: "is_active", null: false, default: false, unique: true, index: true
@@ -247,6 +255,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # timestamp :created_at
     # timestamp :created_at, as: "created_at", null: false, default: Time.local, unique: true, index: true
@@ -269,6 +278,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # date :birthday
     # date :birthday, as: "date_of_birth", null: false, default: Time.local, unique: true, index: true
@@ -291,6 +301,7 @@ module Cql
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
+    #
     # ```
     # interval :duration
     # interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
@@ -329,6 +340,7 @@ module Cql
     # Adds a new column to the table.
     #
     # **Example** Adding timestamps to the table
+    #
     # ```
     # timestamps
     # ```
@@ -357,6 +369,7 @@ module Cql
     # Generates the SQL to create the table.
     #
     # **Example**
+    #
     # ```
     # table = Table.new(:users, schema)
     # table.column(:id, Int64, primary: true)
@@ -375,6 +388,7 @@ module Cql
     # - **@return** [String] the SQL query
     #
     # **Example**
+    #
     # ```
     # table = Table.new(:users, schema)
     # table.drop_sql
@@ -391,12 +405,10 @@ module Cql
     # - **@return** [String] the SQL query
     #
     # **Example**
+    #
     # ```
     # table = Table.new(:users, schema)
     # table.truncate_sql
-    # ```
-    #
-    # ```
     # => "TRUNCATE TABLE users;"
     # ```
     def truncate_sql
@@ -407,14 +419,12 @@ module Cql
     # - **@return** [Nil]
     #
     # **Example**
+    #
     # ```
     # table = Table.new(:users, schema)
     # table.column(:id, Int64, primary: true)
     # table.column(:name, String)
     # table.create!
-    # ```
-    #
-    # ```
     # => nil
     # ```
     def create!
@@ -427,12 +437,10 @@ module Cql
     # - **@return** [Nil]
     #
     # **Example**
+    #
     # ```
     # table = Table.new(:users, schema)
     # table.drop!
-    # ```
-    #
-    # ```
     # => nil
     # ```
     def drop!
@@ -447,9 +455,6 @@ module Cql
     # ```
     # table = Table.new(:users, schema)
     # table.truncate!
-    # ```
-    #
-    # ```
     # => nil
     # ```
     def truncate!
@@ -459,6 +464,15 @@ module Cql
     end
 
     # Gets table expression for Sql query generation
+    # - **@return** [Expression::Table] the table expression
+    #
+    # **Example**
+    #
+    # ```
+    # table = Table.new(:users, schema)
+    # table.expression
+    # => #<Expression::Table:0x00007f8e7a4e1e80>
+    # ```
     def expression
       Expression::Table.new(self)
     end
