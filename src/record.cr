@@ -4,7 +4,7 @@ module Cql
   # **Example** Using the Record module
   #
   # ```
-  #  AcmeDB = Cql::Schema.build(:acme_db, adapter: Cql::Adapter::Postgres,
+  # AcmeDB = Cql::Schema.build(:acme_db, adapter: Cql::Adapter::Postgres,
   #   uri: "postgresql://example:example@localhost:5432/example") do
   #   table :posts do
   #     primary :id, Int64, auto_increment: true
@@ -12,36 +12,36 @@ module Cql
   #     text :body
   #     timestamp :published_at
   #   end
-
+  #
   #   table :comments do
   #     primary
   #     bigint :post_id
   #     text :body
   #   end
   # end
-
+  #
   # struct Post
   #   include Cql::Record(Post)
-
+  #
   #   define AcmeDB, :posts
-
+  #
   #   getter id : Int64?
   #   getter title : String
   #   getter body : String
   #   getter published_at : Time
-
+  #
   #   def initialize(@title : String, @body : String, @published_at : Time = Time.utc)
   #   end
   # end
-
+  #
   # struct Comment
   #   include Cql::Record(Comment)
   #   define AcmeDB, :comments
-
+  #
   #   getter id : Int64?
   #   getter post_id : Int64
   #   getter body : String
-
+  #
   #   def initialize(@post_id : Int64, @body : String)
   #   end
   # end
@@ -49,6 +49,7 @@ module Cql
   module Record(T, Pk)
     macro included
       include DB::Serializable
+      include DB::Serializable::NonStrict
       @@schema : Cql::Schema? = nil
       @@table : Symbol? = nil
 
@@ -70,14 +71,34 @@ module Cql
         @@table = table
       end
 
+      # Return the schema for the record
+      # - **@return** [Cql::Schema] The schema
+      #
+      # **Example** Fetching the schema
+      #
+      # ```
+      # User.schema
+      # ```
       def self.schema
         @@schema.not_nil!
       end
 
+      # Return the table for the record
+      # - **@return** [Symbol] The table
+      # **Example** Fetching the table
+      # ```
+      # User.table
+      # ```
       def self.table
         @@table.not_nil!
       end
 
+      # Return the adapter for the schema
+      # - **@return** [Cql::Adapter] The adapter
+      # **Example** Fetching the adapter
+      # ```
+      # User.adapter
+      # ```
       def self.adapter
         schema.adapter
       end
@@ -272,14 +293,46 @@ module Cql
         update.set(**fields).where(id: id).commit
       end
 
+      # Update a record by ID with given record
+      # - **@param** id [PrimaryKey] The ID of the record
+      # - **@param** record [T] The record to update
+      #
+      # **Example** Updating a record by ID
+      #
+      # ```
+      # User.update(1, name: "Alice", email: " [email protected]")
+      # ```
       def self.update(id, fields : Hash(Symbol, DB::Any))
         update.set(**fields).where(id: id).commit
       end
 
+      # Update a record by ID with given record object
+      # - **@param** id [PrimaryKey] The ID of the record
+      # - **@param** record [T] The record to update
+      #
+      # **Example** Updating a record by ID
+      #
+      # ```
+      # bob = User.new(name: "Bob", email: " [email protected]")
+      # id = bob.save
+      #
+      # bob.reload!
+      #
+      # User.update(1, bob)
+      # ```
       def self.update(id, record : T)
         update.set(record.attributes).where(id: id).commit
       end
 
+      # Update a record with given attributes
+      # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to update
+      # - **@param** where [Hash(Symbol, DB::Any)] The attributes to match
+      #
+      # **Example** Updating a record by email
+      #
+      # ```
+      # user_repo.update(email: " [email protected]", active: true)
+      # ```
       def self.update(record : T)
         attrs = record.attributes
         attrs.delete(:id)
@@ -441,6 +494,15 @@ module Cql
       end
     end
 
+    # Define instance-level methods for querying and manipulating data
+    # Fetch the record's ID or raise an error if it's nil
+    # - **@return** [PrimaryKey] The ID
+    #
+    # **Example** Fetching the record's ID
+    #
+    # ```
+    # user.reload!
+    # ```
     def reload!
       record = T.find!(id)
       {% for ivar in T.instance_vars %}
@@ -448,7 +510,26 @@ module Cql
       {% end %}
     end
 
+    # Check if the record has been persisted to the database
+    # - **@return** [Bool] True if the record has an ID, false otherwise
+    #
+    # **Example** Checking if the record is persisted
+    # ```
+    # user.persisted?
+    # ```
+    def persisted?
+      !id.nil?
+    end
+
     # Define instance-level methods for saving and deleting records
+    # Save the record to the database or update it if it already exists
+    # - **@return** [Nil]
+    #
+    # **Example** Saving the record
+    #
+    # ```
+    # user.save
+    # ```
     def save
       if @id.nil?
         @id = T.create(self).as(Pk)
@@ -457,34 +538,101 @@ module Cql
       end
     end
 
+    # Delete the record from the database if it exists
+    # - **@return** [Nil]
+    #
+    # **Example** Deleting the record
+    #
+    # ```
+    # user.delete
+    # ```
     def update(fields : Hash(Symbol, DB::Any))
       T.update(fields, where)
     end
 
+    # Update the record with the given fields
+    # - **@param** fields [Hash(Symbol, DB::Any)] The fields to update
+    # - **@return** [Nil]
+    #
+    # **Example** Updating the record
+    #
+    # ```
+    # user.update(name: "Alice", email: " [email protected]")
+    # ```
     def update(**fields)
       T.update(id, **fields)
     end
 
+    # Update the record with the given record object
+    #
+    #
+    # **Example** Updating the record
+    #
+    # ```
+    # bob = User.new(name: "Bob", email: " [email protected]")
+    # id = bob.save
+    #
+    # bob.reload!
+    # bon.name = "Juan"
+    #
+    # bob.update
+    # ```
     def update
       T.update(id, self) unless id.nil?
     end
 
+    # Delete the record from the database
+    # - **@return** [Nil]
+    #
+    # **Example** Deleting the record
+    #
+    # ```
+    # user.delete
+    # ```
     def delete
       T.delete(id) unless id.nil?
     end
 
+    # Define instance-level methods for querying and manipulating data
+    # Fetch the record's ID or raise an error if it's nil
+    # - **@return** [PrimaryKey] The ID
+    #
+    # **Example** Fetching the record's ID
+    #
+    # ```
+    # user.attributes
+    # -> { id: 1, name: "Alice", email: " [email protected]" }
+    # ```
     def attributes
       hash = Hash(Symbol, DB::Any).new
       {% for ivar in T.instance_vars %}
-        hash[:{{ ivar }}] = {{ ivar }}
+        {% unless ivar.annotation(DB::Field) && ivar.annotation(DB::Field).named_args[:ignore] %}
+          hash[:{{ ivar }}] = {{ ivar }}
+        {% end %}
       {% end %}
       hash
     end
 
+    # Identity method for the record ID
+    # - **@return** [PrimaryKey] The ID
+    #
+    # **Example** Fetching the record's ID
+    #
+    # ```
+    # user.id
+    # ```
     def id
       @id.not_nil!
     end
 
+    # Set the record's ID
+    # - **@param** id [PrimaryKey] The ID
+    #
+    # **Example** Setting the record's ID
+    #
+    # ```
+    # user.id = 1
+    # ```
     def id=(id : Pk)
       @id = id
     end

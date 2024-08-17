@@ -63,6 +63,6 @@ describe Cql::Migration do
   it "prints pending migrations" do
     migrator.down
     migrator.print_pending_migrations
-    migrator.pending_migrations.should be_a(Array(Cql::Migrator::MigrationRecord))
+    migrator.pending_migrations.should be_a(Array(Cql::Migration.class))
   end
 end

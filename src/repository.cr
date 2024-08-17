@@ -15,12 +15,7 @@ module Cql
   # user_repo.all
   # user_repo.find(1)
   # ```
-  class Repository(T)
-    getter query : Cql::Query
-    getter insert : Cql::Insert
-    getter update : Cql::Update
-    getter delete : Cql::Delete
-
+  class Repository(T, Pk)
     # Initialize the repository with a schema and table name
     #
     # - **@param** schema [Schema] The schema to use
@@ -36,10 +31,22 @@ module Cql
     # user_repo = UserRepository.new(schema, :users
     # ```
     def initialize(@schema : Schema, @table : Symbol)
-      @query = Query.new(@schema).from(@table)
-      @insert = Insert.new(@schema).into(@table)
-      @update = Update.new(@schema).table(@table)
-      @delete = Delete.new(@schema).from(@table)
+    end
+
+    def query
+      Query.new(@schema).from(@table)
+    end
+
+    def insert
+      Insert.new(@schema).into(@table)
+    end
+
+    def update
+      Update.new(@schema).table(@table)
+    end
+
+    def delete
+      Delete.new(@schema).from(@table)
     end
 
     # Build a new object of type T with the given attributes
@@ -77,7 +84,7 @@ module Cql
     # ```
     # user_repo.find(1)
     # ```
-    def find(id)
+    def find(id : Pk)
       query.where(id: id).first(T)
     rescue DB::NoResultsError
       nil
@@ -92,7 +99,7 @@ module Cql
     # ```
     # user_repo.find!(1)
     # ```
-    def find!(id)
+    def find!(id : Pk)
       query.where(id: id).first!(T)
     end
 
@@ -130,7 +137,11 @@ module Cql
     # user_repo.create(name: "Alice", email: " [email protected]")
     # ```
     def create(attrs : Hash(Symbol, DB::Any))
-      insert.values(attrs).commit.last_insert_id
+      insert.values(attrs).last_insert_id
+    end
+
+    def create(**fields)
+      insert.values(**fields).last_insert_id
     end
 
     # Update a record by ID with given attributes
@@ -142,7 +153,7 @@ module Cql
     # ```
     # user_repo.update(1, active: true)
     # ```
-    def update(id, attrs : Hash(Symbol, DB::Any))
+    def update(id : Pk, attrs : Hash(Symbol, DB::Any))
       update.set(**attrs).where(id: id).commit
     end
 
@@ -155,7 +166,7 @@ module Cql
     # ```
     # user_repo.update(1, active: true)
     # ```
-    def update(id, **fields)
+    def update(id : Pk, **fields)
       update.set(**fields).where(id: id).commit
     end
 
@@ -195,7 +206,7 @@ module Cql
     # ```
     # user_repo.delete(1)
     # ```
-    def delete(id)
+    def delete(id : Pk)
       delete.where(id: id).commit
     end
 

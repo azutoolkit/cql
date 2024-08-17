@@ -19,7 +19,7 @@ AcmeDB = Cql::Schema.build(
 end
 
 struct Post
-  include Cql::Record(Post)
+  include Cql::Record(Post, Int64)
 
   define AcmeDB, :posts
 
@@ -33,7 +33,7 @@ struct Post
 end
 
 struct Comment
-  include Cql::Record(Comment)
+  include Cql::Record(Comment, Int64)
   define AcmeDB, :comments
 
   getter id : Int64?

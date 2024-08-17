@@ -6,7 +6,7 @@ module Expression
         sb << " "
         sb << col_type
         sb << " GENERATED"
-        sb << " ALWAYS" if column.auto_increment
+        sb << " ALWAYS" if column.auto_increment?
         sb << " AS IDENTITY PRIMARY KEY"
       end
     end

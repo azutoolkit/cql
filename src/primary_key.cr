@@ -1,7 +1,17 @@
 module Cql
+  # Primary key column definition
+  #
+  # **Example:**
+  #
+  # ```
+  # schema.table :users do
+  #   primary :id, Int32
+  #   column :name, String
+  # end
+  # ```
   class PrimaryKey(T) < Column(T)
-    getter auto_increment : Bool = true
-    getter unique : Bool = true
+    getter? auto_increment : Bool = true
+    getter? unique : Bool = true
     @as_name : String?
 
     def initialize(

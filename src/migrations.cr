@@ -9,6 +9,7 @@ module Cql
   # Migrations are executed in their version order defined.
   # The `Migrator` class is used to manage migrations and provides methods to apply, rollback, and redo migrations.
   # The `Migrator` class also provides methods to list applied and pending migrations.
+  #
   # **Example** Creating a new migration
   #
   # ```
@@ -16,23 +17,26 @@ module Cql
   #   self.version = 1_i64
   #
   #   def up
-  #     schema.table :users do
-  #       primary :id, Int64
-  #       column :name, String
-  #       column :email, String
+  #     schema.alter :users do
+  #       add_column :name, String
+  #       add_column :age, Int32
   #     end
   #   end
   #
   #   def down
-  #     schema.drop_table :users
+  #     schema.alter :users do
+  #       drop_column :name
+  #       drop_column :age
+  #     end
   #   end
   # end
   # ```
   #
   # **Example** Applying migrations
+  #
   # ```
   # schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
-  #   s.create_table :schema_migrations do
+  #   table :schema_migrations do
   #     primary :id, Int32
   #     column :name, String
   #     column :version, Int64, index: true, unique: true
@@ -88,15 +92,6 @@ module Cql
 
     macro inherited
       class_getter version : Int64 = 0_i64
-
-      # Sets the migration version.
-      # - **@param** number [Int64] the migration version
-      # **Example** Setting the migration version
-      # ```
-      # class CreateUsersTable < Cql::Migration
-      #  self.version = 1_i64
-      # end
-      # ```
       def self.version=(number : Int64)
         @@version = number
       end
@@ -115,7 +110,7 @@ module Cql
   # **Example** Creating a new migrator
   # ```
   # schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
-  #   s.create_table :schema_migrations do
+  #   table :schema_migrations do
   #     primary :id, Int32
   #     column :name, String
   #     column :version, Int64, index: true, unique: true
@@ -163,11 +158,11 @@ module Cql
 
     getter schema : Schema
     class_property migrations : Array(Migration.class) = [] of Migration.class
-    getter repo : Repository(MigrationRecord)
+    getter repo : Repository(MigrationRecord, Int32)
 
     def initialize(@schema : Schema)
       ensure_schema_migrations_table
-      @repo = Repository(MigrationRecord).new(schema, :schema_migrations)
+      @repo = Repository(MigrationRecord, Int32).new(schema, :schema_migrations)
     end
 
     # Applies the pending migrations.
@@ -176,7 +171,6 @@ module Cql
     # ```
     # migrator.up
     # ```
-    #
     def up(steps : Int32 = Migrator.migrations.size)
       sorted_migrations[0, steps].each do |migration_class|
         unless migration_applied?(migration_class.version)
@@ -284,7 +278,7 @@ module Cql
     # migrator.print_pending_migrations
     # ```
     def print_pending_migrations
-      print_table(pending_migrations, "⏱".colorize.yellow.to_s)
+      print_table(pending_migrations.map { |m| build_migration_record(m) }, "⏱".colorize.yellow.to_s)
     end
 
     # Returns the pending migrations.
@@ -293,8 +287,8 @@ module Cql
     # ```
     # migrator.pending_migrations
     # ```
-    def pending_migrations : Array(MigrationRecord)
-      sorted_migrations.reject { |m| migration_applied?(m.version) }.map { |m| build_migration_record(m) }
+    def pending_migrations : Array(Migration.class)
+      sorted_migrations.reject { |m| migration_applied?(m.version) }
     end
 
     # Returns the applied migrations.

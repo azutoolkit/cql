@@ -6,7 +6,7 @@ module Expression
         sb << " "
         sb << col_type
         sb << " PRIMARY KEY"
-        sb << " AUTO_INCREMENT" if column.auto_increment
+        sb << " AUTO_INCREMENT" if column.auto_increment?
       end
     end
 
