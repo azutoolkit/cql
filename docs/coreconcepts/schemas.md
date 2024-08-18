@@ -6,7 +6,7 @@ Defining the schema first is a fundamental approach in CQL, helping developers q
 
 <div data-full-width="true">
 
-<figure><img src="../../.gitbook/assets/Untitled.svg" alt=""><figcaption></figcaption></figure>
+<figure><img src="../.gitbook/assets/Untitled.svg" alt=""><figcaption></figcaption></figure>
 
 </div>
 

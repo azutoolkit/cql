@@ -117,7 +117,7 @@ AcmeDB2.init
 
 ### Generated Database Tables&#x20;
 
-<figure><img src="../../.gitbook/assets/Untitled (1).svg" alt=""><figcaption></figcaption></figure>
+<figure><img src="../.gitbook/assets/Untitled (1).svg" alt=""><figcaption></figcaption></figure>
 
 #### What Happens During Initialization?
 
