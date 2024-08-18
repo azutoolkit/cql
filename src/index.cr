@@ -7,7 +7,7 @@ module Cql
   # **Example** Creating a new index
   #
   # ```
-  # schema.build do
+  # schema.define do
   #   table :users do
   #     column :name, String
   #     column :email, String

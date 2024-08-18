@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-AcmeDB = Cql::Schema.build(
+AcmeDB = Cql::Schema.define(
   :acme_db,
   adapter: Cql::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]) do

@@ -1,4 +1,4 @@
-Data = Cql::Schema.build(
+Data = Cql::Schema.define(
   :data,
   adapter: Cql::Adapter::Sqlite,
   uri: "sqlite3://spec/db/data.db") do

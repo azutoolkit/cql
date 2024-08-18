@@ -4,7 +4,7 @@ module Cql
   # **Example** Using the Record module
   #
   # ```
-  # AcmeDB = Cql::Schema.build(:acme_db, adapter: Cql::Adapter::Postgres,
+  # AcmeDB = Cql::Schema.define(:acme_db, adapter: Cql::Adapter::Postgres,
   #   uri: "postgresql://example:example@localhost:5432/example") do
   #   table :posts do
   #     primary :id, Int64, auto_increment: true
@@ -50,6 +50,7 @@ module Cql
     macro included
       include DB::Serializable
       include DB::Serializable::NonStrict
+      include Cql::Relations
       @@schema : Cql::Schema? = nil
       @@table : Symbol? = nil
 
