@@ -114,7 +114,7 @@ q.delete_from(:users).where(id: 1)
 Utilize the repository pattern for organized data management:
 
 ```crystal
-user_repository = Cql::Repository(User).new(schema, :users)
+user_repository = Cql::Repository(User, Int64).new(schema, :users)
 
 # Create a new user
 user_repository.create(id: 1, name: "Jane Doe", email: "jane@example.com")
@@ -139,7 +139,7 @@ Work with your data using the Active Record pattern:
 AcmeDB = Cql::Schema.build(...) do ... end
 
 struct User
-  include Cql::Record(User)
+  include Cql::Record(User, Int64)
   define schema: AcmeDB, table: :users
 
   # Crystal properties (no macros)
@@ -155,7 +155,7 @@ user.save
 
 ## Documentation
 
-Detailed API documentation is available at [CQL Documentation](https://azutoolkit.github.io/cql/).
+Detailed API documentation is available at [CQL Documentation](https://azutopia.gitbook.io/cql/).
 
 ## Contributing
 
