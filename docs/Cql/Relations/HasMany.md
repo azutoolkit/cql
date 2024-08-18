@@ -2,9 +2,7 @@
 title: "Cql::Relations::HasMany"
 ---
 
-::: v-pre
 # module Cql::Relations::HasMany
-
 
 Define the has_many association module that will be included in the model
 to define a one-to-many relationship between two tables in the database
@@ -27,21 +25,10 @@ class User
   has_many :posts, Post, foreign_key: :user_id
 end
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
-
-
-
 
 ## Macros
 
-
 ### macro has_many`(name, type, foreign_key, cascade = false)`
-
-
-
-
-:::

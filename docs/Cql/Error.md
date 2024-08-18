@@ -2,8 +2,8 @@
 title: "Cql::Error"
 ---
 
-::: v-pre
 # class Cql::Error
+
 `Exception` < `Reference` < `Object`
 
 Error class
@@ -15,21 +15,10 @@ It provides a message describing the error
 ```crystal
 raise Cql::Error.new("Something went wrong")
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
 
 ## Constructors
 
-
 ### def new`(message : String)`
-
-
-
-
-
-
-
-:::

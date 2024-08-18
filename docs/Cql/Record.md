@@ -2,9 +2,7 @@
 title: "Cql::Record(T, Pk)"
 ---
 
-::: v-pre
 # module Cql::Record(T, Pk)
-
 
 Write documentation for Record module
 
@@ -53,20 +51,16 @@ struct Comment
   end
 end
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
-
-
 
 ## Instance Methods
-
 
 ### def attributes`(attrs : Hash(Symbol, DB::Any))`
 
 Set the record's attributes from a hash
+
 - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to set
 - **@return** [Nil]
 
@@ -76,13 +70,11 @@ Set the record's attributes from a hash
 user.attributes = {name: "Alice", email: "[email protected]"}
 ```
 
-
-
-
 ### def attributes
 
 Define instance-level methods for querying and manipulating data
 Fetch the record's ID or raise an error if it's nil
+
 - **@return** [PrimaryKey] The ID
 
 **Example** Fetching the record's ID
@@ -92,12 +84,10 @@ user.attributes
 -> { id: 1, name: "Alice", email: " [email protected]" }
 ```
 
-
-
-
 ### def delete
 
 Delete the record from the database
+
 - **@return** [Nil]
 
 **Example** Deleting the record
@@ -106,12 +96,10 @@ Delete the record from the database
 user.delete
 ```
 
-
-
-
 ### def id
 
 Identity method for the record ID
+
 - **@return** [PrimaryKey] The ID
 
 **Example** Fetching the record's ID
@@ -120,12 +108,10 @@ Identity method for the record ID
 user.id
 ```
 
-
-
-
 ### def id=`(id : Pk)`
 
 Set the record's ID
+
 - **@param** id [PrimaryKey] The ID
 
 **Example** Setting the record's ID
@@ -134,26 +120,23 @@ Set the record's ID
 user.id = 1
 ```
 
-
-
-
 ### def persisted?
 
 Check if the record has been persisted to the database
+
 - **@return** [Bool] True if the record has an ID, false otherwise
 
 **Example** Checking if the record is persisted
+
 ```crystal
 user.persisted?
 ```
-
-
-
 
 ### def reload!
 
 Define instance-level methods for querying and manipulating data
 Fetch the record's ID or raise an error if it's nil
+
 - **@return** [PrimaryKey] The ID
 
 **Example** Fetching the record's ID
@@ -162,13 +145,11 @@ Fetch the record's ID or raise an error if it's nil
 user.reload!
 ```
 
-
-
-
 ### def save
 
 Define instance-level methods for saving and deleting records
 Save the record to the database or update it if it already exists
+
 - **@return** [Nil]
 
 **Example** Saving the record
@@ -177,12 +158,10 @@ Save the record to the database or update it if it already exists
 user.save
 ```
 
-
-
-
 ### def update`(fields : Hash(Symbol, DB::Any))`
 
 Delete the record from the database if it exists
+
 - **@return** [Nil]
 
 **Example** Deleting the record
@@ -191,13 +170,9 @@ Delete the record from the database if it exists
 user.delete
 ```
 
-
-
-
 ### def update
 
 Update the record with the given record object
-
 
 **Example** Updating the record
 
@@ -211,12 +186,10 @@ bon.name = "Juan"
 bob.update
 ```
 
-
-
-
 ### def update
 
 Update the record with the given fields
+
 - **@param** fields [Hash(Symbol, DB::Any)] The fields to update
 - **@return** [Nil]
 
@@ -225,7 +198,3 @@ Update the record with the given fields
 ```crystal
 user.update(name: "Alice", email: " [email protected]")
 ```
-
-
-
-:::

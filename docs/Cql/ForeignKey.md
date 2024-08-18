@@ -2,8 +2,8 @@
 title: "Cql::ForeignKey"
 ---
 
-::: v-pre
 # class Cql::ForeignKey
+
 `Reference` < `Object`
 
 A foreign key constraint
@@ -27,21 +27,10 @@ table :posts do
   foreign_key [:user_id], :users, [:id]
 end
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
 
 ## Constructors
 
-
 ### def new`(name : Symbol, columns : Array(Symbol), table : Symbol, references : Array(Symbol), on_delete : String = "NO ACTION", on_update : String = "NO ACTION")`
-
-
-
-
-
-
-
-:::

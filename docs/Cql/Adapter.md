@@ -2,16 +2,13 @@
 title: "Cql::Adapter"
 ---
 
-::: v-pre
 # enum Cql::Adapter
+
 `Enum` < `Comparable` < `Value` < `Object`
 
 Represents a database adapter module.
-::: details Table of Contents
+details Table of Contents
 [[toc]]
-:::
-
-
 
 ## Constants
 
@@ -21,15 +18,11 @@ Represents a database adapter module.
 0
 ```
 
-
-
 ### MySql
 
 ```crystal
 1
 ```
-
-
 
 ### Postgres
 
@@ -37,26 +30,11 @@ Represents a database adapter module.
 2
 ```
 
-
-
-
-
 ## Instance Methods
-
 
 ### def my_sql?
 
-
-
-
-
-
 ### def postgres?
-
-
-
-
-
 
 ### def sql_type`(type) : String`
 
@@ -64,17 +42,9 @@ Returns the SQL type for the given type.
 @param type [Type] the type
 @return [String] the SQL type
 **Example** Getting the SQL type
+
 ```crystal
 Cql::Adapter::Sqlite.sql_type(Int32) # => "INTEGER"
 ```
 
-
-
-
 ### def sqlite?
-
-
-
-
-
-:::

@@ -2,8 +2,8 @@
 title: "Cql::Migration"
 ---
 
-::: v-pre
 # class Cql::Migration
+
 `Reference` < `Object`
 
 Migrations are used to manage changes to the database schema over time.
@@ -52,80 +52,64 @@ migrator.up
 ```
 
 **Example** Rolling back migrations
+
 ```crystal
 migrator.down
 ```
 
 **Example** Redoing migrations
+
 ```crystal
 migrator.redo
 ```
 
 **Example** Rolling back to a specific version
+
 ```crystal
 migrator.down_to(1_i64)
 ```
 
 **Example** Applying to a specific version
+
 ```crystal
 migrator.up_to(1_i64)
 ```
 
 **Example** Listing applied migrations
+
 ```crystal
 migrator.print_applied_migrations
 ```
 
 **Example** Listing pending migrations
+
 ```crystal
 migrator.print_pending_migrations
 ```
 
 **Example** Listing rolled back migrations
+
 ```crystal
 migrator.print_rolled_back_migrations
 ```
 
 **Example** Listing the last migration
+
 ```crystal
 migrator.last
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
 
 ## Constructors
 
-
 ### def new`(schema : Schema)`
-
-
-
-
 
 ## Instance Methods
 
-
 ### def down
-
-
-
-
-
 
 ### def schema
 
-
-
-
-
-
 ### def up
-
-
-
-
-
-:::

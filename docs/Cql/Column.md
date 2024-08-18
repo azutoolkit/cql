@@ -2,8 +2,8 @@
 title: "Cql::Column(T)"
 ---
 
-::: v-pre
 # class Cql::Column(T)
+
 `Cql::BaseColumn` < `Reference` < `Object`
 
 A column in a table
@@ -21,18 +21,16 @@ schema.build do
   end
 end
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
 
 ## Constructors
-
 
 ### def new`(name : Symbol, type : T.class, as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32 | Nil = nil, index : Index | Nil = nil)`
 
 Create a new column instance
+
 - **@param** : name (Symbol) - The name of the column
 - **@param** : type (Any) - The data type of the column
 - **@param** : as_name (String, nil) - An optional alias for the column
@@ -50,14 +48,12 @@ Create a new column instance
 column = Cql::Column.new(:name, String)
 ```
 
-
-
 ## Instance Methods
-
 
 ### def expression
 
 Expressions for this column
+
 - **@return** [Expression::ColumnBuilder] the column expression builder
 
 **Example**
@@ -67,12 +63,10 @@ column = Cql::Column.new(:name, String)
 column.expression.eq("John")
 ```
 
-
-
-
 ### def validate!`(value)`
 
 Validate the value
+
 - **@param** value [DB::Any] The value to validate
 
 **Example**
@@ -81,7 +75,3 @@ Validate the value
 column = Cql::Column.new(:name, String)
 column.validate!("John")
 ```
-
-
-
-:::

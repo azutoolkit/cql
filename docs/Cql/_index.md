@@ -2,8 +2,8 @@
 title: "Cql::Index"
 ---
 
-::: v-pre
 # class Cql::Index
+
 `Reference` < `Object`
 
 An index on a table
@@ -22,18 +22,16 @@ schema.build do
   end
 end
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
 
 ## Constructors
-
 
 ### def new`(table : Table, columns : Array(Symbol), unique : Bool = false, name : String | Nil = nil)`
 
 Create a new index instance on a table
+
 - **@param** : table (Table) - The table to create the index on
 - **@param** : columns (Array(Symbol)) - The columns to index
 - **@param** : unique (Bool) - Whether the index should be unique (default: false)
@@ -48,21 +46,14 @@ Create a new index instance on a table
 index = Cql::Index.new(table, [:name, :email], unique: true)
 ```
 
-
-
 ## Instance Methods
 
-
 ### def columns
-
-
-
-
-
 
 ### def index_name
 
 Generate the index name
+
 - **@return** : String
 - **@raise** : Nil
 
@@ -72,34 +63,10 @@ Generate the index name
 index_name = index.index_name
 ```
 
-
-
-
 ### def name
-
-
-
-
-
 
 ### def name=`(name : String | Nil)`
 
-
-
-
-
-
 ### def table
 
-
-
-
-
-
 ### def unique?
-
-
-
-
-
-:::

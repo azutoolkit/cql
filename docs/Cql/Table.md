@@ -2,8 +2,8 @@
 title: "Cql::Table"
 ---
 
-::: v-pre
 # class Cql::Table
+
 `Reference` < `Object`
 
 Represents a table in the database.
@@ -40,11 +40,9 @@ table.column(:name, String)
 table.create!
 => nil
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
 
 ## Constants
 
@@ -54,23 +52,16 @@ table.create!
 ::Log.for(self)
 ```
 
-
-
 ## Constructors
-
 
 ### def new`(table_name : Symbol, schema : Schema, as_name : String | Nil = nil)`
 
-
-
-
-
 ## Instance Methods
-
 
 ### def add_index`(columns : Array(Symbol), unique : Bool = false, table : Table = self)`
 
 Adds a new column to the table.
+
 - **@param** columns [Array(Symbol)] the columns to be indexed
 - **@param** unique [Bool] whether the index should be unique (default: false)
 - **@param** table [Table] the table to add the index to (default: self)
@@ -84,19 +75,12 @@ add_index([:email, :username], unique: true)
 add_index([:email, :username], unique: true, table: users)
 ```
 
-
-
-
 ### def as_name
-
-
-
-
-
 
 ### def bigint`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -112,12 +96,10 @@ bigint :age
 bigint :age, as: "user_age", null: false, default: 18, unique: true, index: true
 ```
 
-
-
-
 ### def blob`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32 | Nil = nil, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -133,12 +115,10 @@ blob :data
 blob :data, as: "binary_data", null: false, default: nil, unique: true, index: true
 ```
 
-
-
-
 ### def boolean`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -154,12 +134,10 @@ boolean :active
 boolean :active, as: "is_active", null: false, default: false, unique: true, index: true
 ```
 
-
-
-
 ### def column`(name : Symbol, type : T.class, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32 | Nil = nil, index : Bool = false) forall T`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** type [T.class] the data type of the column
 - **@param** as_name [String, nil] an optional alias for the column
@@ -176,19 +154,12 @@ Adds a new column to the table.
 column :email, String
 ```
 
-
-
-
 ### def columns
-
-
-
-
-
 
 ### def create!
 
 Creates the table in the database.
+
 - **@return** [Nil]
 
 **Example**
@@ -200,9 +171,6 @@ table.column(:name, String)
 table.create!
 => nil
 ```
-
-
-
 
 ### def create_sql
 
@@ -221,12 +189,10 @@ table.create_sql
 => "CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);"
 ```
 
-
-
-
 ### def date`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -242,12 +208,10 @@ date :birthday
 date :birthday, as: "date_of_birth", null: false, default: Time.local, unique: true, index: true
 ```
 
-
-
-
 ### def double`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -263,12 +227,10 @@ double :age
 double :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
 ```
 
-
-
-
 ### def drop!
 
 Drops the table from the database.
+
 - **@return** [Nil]
 
 **Example**
@@ -279,12 +241,10 @@ table.drop!
 => nil
 ```
 
-
-
-
 ### def drop_sql
 
 Generates the SQL to drop the table.
+
 - **@return** [String] the SQL query
 
 **Example**
@@ -298,12 +258,10 @@ table.drop_sql
 => "DROP TABLE users;"
 ```
 
-
-
-
 ### def expression
 
 Gets table expression for Sql query generation
+
 - **@return** [Expression::Table] the table expression
 
 **Example**
@@ -314,12 +272,10 @@ table.expression
 => #<Expression::Table:0x00007f8e7a4e1e80>
 ```
 
-
-
-
 ### def float`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -335,12 +291,10 @@ float :age
 float :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
 ```
 
-
-
-
 ### def integer`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -356,12 +310,10 @@ integer :age
 integer :age, as: "user_age", null: false, default: 18, unique: true, index: true
 ```
 
-
-
-
 ### def interval`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -377,12 +329,10 @@ interval :duration
 interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
 ```
 
-
-
-
 ### def primary`(name : Symbol = :id, type : T.class = Int64, auto_increment : Bool = true, as as_name = nil, unique : Bool = true) forall T`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** type [Any] the data type of the column
 - **@param** auto_increment [Bool] whether the column should auto increment (default: true)
@@ -396,26 +346,14 @@ primary :id, Int64
 primary :id, Int64, auto_increment: false
 ```
 
-
-
-
 ### def table_name
 
-
-
-
-
-
 ### def table_name=`(table_name : Symbol)`
-
-
-
-
-
 
 ### def text`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32 | Nil = nil, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -431,12 +369,10 @@ decimal :price
 decimal :price, as: "product_price", null: false, default: 0.0, unique: true, index: true
 ```
 
-
-
-
 ### def timestamp`(name : Symbol, as as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)`
 
 Adds a new column to the table.
+
 - **@param** name [Symbol] the name of the column to be added
 - **@param** as_name [String, nil] an optional alias for the column
 - **@param** null [Bool] whether the column allows null values (default: false)
@@ -452,9 +388,6 @@ timestamp :created_at
 timestamp :created_at, as: "created_at", null: false, default: Time.local, unique: true, index: true
 ```
 
-
-
-
 ### def timestamps
 
 Adds a new column to the table.
@@ -465,27 +398,24 @@ Adds a new column to the table.
 timestamps
 ```
 
-
-
-
 ### def truncate!
 
 Truncates the table in the database.
+
 - **@return** [Nil]
 
 **Example**
+
 ```crystal
 table = Table.new(:users, schema)
 table.truncate!
 => nil
 ```
 
-
-
-
 ### def truncate_sql
 
 Generates the SQL to truncate the table.
+
 - **@return** [String] the SQL query
 
 **Example**
@@ -496,13 +426,6 @@ table.truncate_sql
 => "TRUNCATE TABLE users;"
 ```
 
-
 ## Macros
 
-
 ### macro method_missing`(call)`
-
-
-
-
-:::

@@ -2,8 +2,8 @@
 title: "Cql::Relations::ManyCollection(Target, Through, Pk)"
 ---
 
-::: v-pre
 # class Cql::Relations::ManyCollection(Target, Through, Pk)
+
 `Cql::Relations::Collection` < `Reference` < `Object`
 
 A collection of records for a many to many relationship
@@ -46,18 +46,16 @@ end
 movie = Movie.create(title: "The Matrix")
 actor = Actor.create(name: "Keanu Reeves")
 ```
-::: details Table of Contents
+
+details Table of Contents
 [[toc]]
-:::
-
-
 
 ## Constructors
-
 
 ### def new`(key : Symbol, id : Pk, target_key : Symbol, cascade : Bool = false, query : Cql::Query = (Cql::Query.new(Target.schema)).from(Target.table))`
 
 Initialize the many-to-many association collection class
+
 - **param** : key (Symbol) - The key for the parent record
 - **param** : id (Pk) - The id value for the parent record
 - **param** : target_key (Symbol) - The key for the associated record
@@ -77,17 +75,16 @@ ManyCollection.new(
 )
 ```
 
-
-
 ## Instance Methods
-
 
 ### def clear
 
 Clears all associated records from the parent record and the database
+
 - **return** : [] of T
 
 **Example**
+
 ```crystal
 movie.actors.create(name: "Carrie-Anne Moss")
 movie.actors.reload
@@ -97,12 +94,10 @@ movie.actors.reload
 movie.actors.all => []
 ```
 
-
-
-
 ### def create`(record : Target)`
 
 Create a new record and associate it with the parent record
+
 - **param** : attributes (Hash(Symbol, String | Int64))
 - **return** : Array(Target)
 - **raise** : Cql::Error
@@ -116,12 +111,10 @@ movie.actors.all
 => [#<Actor:0x00007f8b3b1b3f00 @id=1, @name="Hugo Weaving">]
 ```
 
-
-
-
 ### def create
 
 Create a new record and associate it with the parent record
+
 - **param** : attributes (Hash(Symbol, String | Int64))
 - **return** : Array(Target)
 - **raise** : Cql::Error
@@ -135,12 +128,10 @@ movie.actors.all
 => [#<Actor:0x00007f8b3b1b3f00 @id=1, @name="Carrie-Anne Moss">]
 ```
 
-
-
-
 ### def delete`(record : Target)`
 
 Delete the associated record from the parent record if it exists
+
 - **param** : record (Target)
 - **return** : Bool
 
@@ -158,12 +149,10 @@ movie.actors.all
 => [] of Actor
 ```
 
-
-
-
 ### def delete`(id : Pk)`
 
 Delete the associated record from the parent record if it exists
+
 - **param** : id (Pk)
 - **return** : Bool
 
@@ -178,12 +167,10 @@ movie.actors.reload
 movie.actors.all => []
 ```
 
-
-
-
 ### def ids=`(ids : Array(Int64))`
 
 Associates the parent record with the records that match the primary keys provided
+
 - **param** : ids (Array(Pk))
 - **return** : Array(Target)
 
@@ -197,7 +184,3 @@ movie.actors.all => [
    #<Actor:0x00007f8b3b1b3f00 @id=2, @name="Hugo Weaving">,
   #<Actor:0x00007f8b3b1b3f00 @id=3, @name="Laurence Fishburne">]
 ```
-
-
-
-:::
