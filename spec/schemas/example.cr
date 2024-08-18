@@ -1,6 +1,6 @@
 require "pg"
 
-Example = Cql::Schema.build(
+Example = Cql::Schema.define(
   :example,
   adapter: Cql::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]) do

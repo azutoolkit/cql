@@ -21,7 +21,7 @@ module Cql
   # **Example** Creating a new column
   #
   # ```
-  # schema.build do
+  # schema.define do
   #   table :users do
   #     column :name, String, null: false, default: "John"
   #     column :age, Int32, null: false

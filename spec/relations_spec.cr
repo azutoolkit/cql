@@ -1,5 +1,5 @@
 require "./spec_helper"
-AcmeDB2 = Cql::Schema.build(
+AcmeDB2 = Cql::Schema.define(
   :acme_db,
   adapter: Cql::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]) do
@@ -34,7 +34,6 @@ end
 
 struct Actor
   include Cql::Record(Actor, Int64)
-  include Cql::Relations
 
   define AcmeDB2, :actors
 
@@ -47,7 +46,6 @@ end
 
 struct Movie
   include Cql::Record(Movie, Int64)
-  include Cql::Relations
 
   define AcmeDB2, :movies
 
@@ -64,7 +62,6 @@ end
 
 struct Director
   include Cql::Record(Director, Int64)
-  include Cql::Relations
 
   define AcmeDB2, :directors
 
@@ -78,7 +75,6 @@ end
 
 struct Screenplay
   include Cql::Record(Screenplay, Int64)
-  include Cql::Relations
 
   define AcmeDB2, :screenplays
 

@@ -1,4 +1,4 @@
-Billing = Cql::Schema.build(
+Billing = Cql::Schema.define(
   name: :billing,
   adapter: Cql::Adapter::Sqlite,
   uri: "sqlite3://spec/db/billing.db") do

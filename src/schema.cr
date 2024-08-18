@@ -6,7 +6,7 @@ module Cql
   #
   # **Example** Creating a new schema
   # ```
-  # schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do
+  # schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do
   #   table :users do
   #     primary :id, Int64, auto_increment: true
   #     column :name, String
@@ -60,7 +60,7 @@ module Cql
     #
     # **Example**
     # ```
-    # schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
+    # schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
     #   s.create_table :users do
     #     primary :id, Int64, auto_increment: true
     #     column :name, String
@@ -68,7 +68,7 @@ module Cql
     #   end
     # end
     # ```
-    def self.build(name : Symbol, uri : String, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)
+    def self.define(name : Symbol, uri : String, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)
       schema = new(name, uri, adapter, version)
       with schema yield
       schema

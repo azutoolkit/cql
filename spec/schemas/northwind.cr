@@ -1,4 +1,4 @@
-Northwind = Cql::Schema.build(
+Northwind = Cql::Schema.define(
   name: :northwind,
   adapter: Cql::Adapter::Sqlite,
   uri: "sqlite3://spec/db/northwind.db") do

@@ -1,4 +1,4 @@
-TableDB = Cql::Schema.build(
+TableDB = Cql::Schema.define(
   name: :tabledb,
   adapter: Cql::Adapter::Sqlite,
   uri: "sqlite3://spec/db/tabledb.db") do
