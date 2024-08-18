@@ -54,7 +54,7 @@ end
 
 Next, we'll define the `Post` and `Comment` structs in CQL.
 
-**Post Model**
+### **Post Model**
 
 ```crystal
 crystalCopy codestruct Post
@@ -73,7 +73,7 @@ crystalCopy codestruct Post
 end
 ```
 
-**Comment Model**
+### **Comment Model**
 
 ```crystal
 crystalCopy codestruct Comment
@@ -101,7 +101,7 @@ In the `Comment` model, we specify the `belongs_to :post` association, which lin
 
 Now that we have defined the `Post` and `Comment` models with a `belongs_to` relationship, let's see how to create and query records in CQL.
 
-**Creating a Post and Comment**
+### **Creating a Post and Comment**
 
 ```crystal
 # Create a new Post
@@ -115,7 +115,7 @@ comment.savex
 * The post record is created and saved in the database.
 * &#x20;And the returned id is then associtated to the comment.
 
-**Querying the Associated Post from a Comment**
+### **Querying the Associated Post from a Comment**
 
 Once we have a comment, we can retrieve the associated post using the `belongs_to` association.
 
