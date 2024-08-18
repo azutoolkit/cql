@@ -1,5 +1,5 @@
 name: cql
-version: 0.0.55
+version: 0.0.57
 authors:
   - Elias Perez <eperez@justworks.com>
 crystal: '>= 1.12.2'
