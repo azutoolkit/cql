@@ -141,7 +141,7 @@ In this guide, we’ve covered the basics of the `belongs_to` relationship in CQ
 * Created the corresponding models, specifying the `belongs_to` relationship in the `Comment` model.
 * Showed how to create and query records using the `belongs_to` association.
 
-#### Next Steps
+### Next Steps
 
 In the next guides, we'll build on this ERD and introduce other types of relationships like `has_one`, `has_many`, and `many_to_many`. Stay tuned for the next part where we'll cover the `has_many` relationship!
 
