@@ -28,9 +28,6 @@ table :posts do
 end
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(name : Symbol, columns : Array(Symbol), table : Symbol, references : Array(Symbol), on_delete : String = "NO ACTION", on_update : String = "NO ACTION")`

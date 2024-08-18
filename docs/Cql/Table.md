@@ -41,9 +41,6 @@ table.create!
 => nil
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constants
 
 ### Log

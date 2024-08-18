@@ -17,9 +17,6 @@ It also provides methods for executing the query
 delete.from(:users).where(id: 1).commit
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(schema : Schema)`

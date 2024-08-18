@@ -12,7 +12,7 @@ The `Migrator` class also provides methods to list applied and pending migration
 **Example** Creating a new migrator
 
 ```crystal
-schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
+schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
   table :schema_migrations do
     primary :id, Int32
     column :name, String
@@ -28,9 +28,6 @@ migrator = Cql::Migrator.new(schema)
 ```crystal
 migrator.up
 ```
-
-details Table of Contents
-[[toc]]
 
 ## Constants
 

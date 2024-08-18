@@ -26,9 +26,6 @@ class User
 end
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Macros
 
 ### macro has_many`(name, type, foreign_key, cascade = false)`

@@ -28,9 +28,6 @@ class User
 end
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(key : Symbol, id : Pk, cascade : Bool = false, query : Cql::Query = (Cql::Query.new(Target.schema)).from(Target.table))`

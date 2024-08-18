@@ -14,7 +14,7 @@ It also provides methods for generating the index name
 **Example** Creating a new index
 
 ```crystal
-schema.build do
+schema.define do
   table :users do
     column :name, String
     column :email, String
@@ -22,9 +22,6 @@ schema.build do
   end
 end
 ```
-
-details Table of Contents
-[[toc]]
 
 ## Constructors
 

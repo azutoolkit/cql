@@ -18,9 +18,6 @@ Represents a migration record.
 record = Cql::MigrationRecord.new(0_i64, "CreateUsersTable", 1_i64)
 ```
 
-details Table of Contents
-[[toc]]
-
 # Included Modules
 
 `DB::Mappable`, `DB::Serializable`

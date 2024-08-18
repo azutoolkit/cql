@@ -17,9 +17,6 @@ schema.table :users do
 end
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(name : Symbol = :id, type : PrimaryKeyType = Int64.class, as_name : String | Nil = nil, auto_increment : Bool = true, unique : Bool = true, default : DB::Any = nil)`
