@@ -14,16 +14,13 @@ It also provides methods for building expressions
 **Example** Creating a new column
 
 ```crystal
-schema.build do
+schema.define do
   table :users do
     column :name, String, null: false, default: "John"
     column :age, Int32, null: false
   end
 end
 ```
-
-details Table of Contents
-[[toc]]
 
 ## Constructors
 

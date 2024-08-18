@@ -47,9 +47,6 @@ movie = Movie.create(title: "The Matrix")
 actor = Actor.create(name: "Keanu Reeves")
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(key : Symbol, id : Pk, target_key : Symbol, cascade : Bool = false, query : Cql::Query = (Cql::Query.new(Target.schema)).from(Target.table))`

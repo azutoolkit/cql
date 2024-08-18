@@ -4,9 +4,6 @@ title: "Cql::Relations::ManyToMany"
 
 # module Cql::Relations::ManyToMany
 
-details Table of Contents
-[[toc]]
-
 ## Macros
 
 ### macro many_to_many`(name, type, join_through, cascade = false)`

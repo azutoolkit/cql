@@ -7,8 +7,6 @@ title: "Cql::Adapter"
 `Enum` < `Comparable` < `Value` < `Object`
 
 Represents a database adapter module.
-details Table of Contents
-[[toc]]
 
 ## Constants
 

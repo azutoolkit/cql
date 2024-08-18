@@ -39,7 +39,7 @@ end
 **Example** Applying migrations
 
 ```crystal
-schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
+schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
   table :schema_migrations do
     primary :id, Int32
     column :name, String
@@ -98,9 +98,6 @@ migrator.print_rolled_back_migrations
 ```crystal
 migrator.last
 ```
-
-details Table of Contents
-[[toc]]
 
 ## Constructors
 

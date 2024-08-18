@@ -23,9 +23,6 @@ user_repo.all
 user_repo.find(1)
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(schema : Schema, table : Symbol)`

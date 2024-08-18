@@ -42,9 +42,6 @@ insert
   ).commit
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constants
 
 ### Log

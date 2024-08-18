@@ -32,9 +32,6 @@ end
 => John
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(schema : Schema)`

@@ -16,9 +16,6 @@ It provides a message describing the error
 raise Cql::Error.new("Something went wrong")
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(message : String)`

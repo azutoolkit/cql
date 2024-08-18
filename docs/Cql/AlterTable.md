@@ -21,9 +21,6 @@ alter_table.change_column(:age, "string")
 => #<AlterTable:0x00007f8e7a4e1e80>
 ```
 
-details Table of Contents
-[[toc]]
-
 ## Constructors
 
 ### def new`(table : Cql::Table, schema : Cql::Schema)`

@@ -9,7 +9,7 @@ Write documentation for Record module
 **Example** Using the Record module
 
 ```crystal
-AcmeDB = Cql::Schema.build(:acme_db, adapter: Cql::Adapter::Postgres,
+AcmeDB = Cql::Schema.define(:acme_db, adapter: Cql::Adapter::Postgres,
   uri: "postgresql://example:example@localhost:5432/example") do
   table :posts do
     primary :id, Int64, auto_increment: true
@@ -51,9 +51,6 @@ struct Comment
   end
 end
 ```
-
-details Table of Contents
-[[toc]]
 
 ## Instance Methods
 

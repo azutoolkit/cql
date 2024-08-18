@@ -14,7 +14,7 @@ creating tables, executing SQL statements, and generating queries.
 **Example** Creating a new schema
 
 ```crystal
-schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do
+schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do
   table :users do
     primary :id, Int64, auto_increment: true
     column :name, String
@@ -36,8 +36,6 @@ query = schema.query
 ```
 
 The `Schema` class represents a database schema.
-details Table of Contents
-[[toc]]
 
 ## Constants
 
@@ -66,7 +64,7 @@ schema = Cql::Schema.new(:northwind, "sqlite3://db.sqlite3")
 
 ## Class Methods
 
-### def build`(name : Symbol, uri : String, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)`
+### def define`(name : Symbol, uri : String, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)`
 
 Builds a new schema.
 
@@ -80,7 +78,7 @@ Builds a new schema.
 **Example**
 
 ```crystal
-schema = Cql::Schema.build(:northwind, "sqlite3://db.sqlite3") do |s|
+schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
   s.create_table :users do
     primary :id, Int64, auto_increment: true
     column :name, String
