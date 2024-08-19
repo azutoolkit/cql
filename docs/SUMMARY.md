@@ -21,6 +21,8 @@
   * [Active Record with Cql](guides/active-record-with-cql/README.md)
     * [BelongsTo](guides/active-record-with-cql/belongsto.md)
     * [HasOne](guides/active-record-with-cql/hasone.md)
+    * [HasMany](guides/active-record-with-cql/hasmany.md)
+    * [ManyToMany](guides/active-record-with-cql/manytomany.md)
 * [Cql API](cql-api/README.md)
   * [class Cql::Error](cql-api/class-cql-error.md)
   * [class Cql::Schema](cql-api/class-cql-schema/README.md)
