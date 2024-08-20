@@ -345,8 +345,8 @@ module Cql
     # timestamps
     # ```
     def timestamps
-      timestamp :created_at, default: Time.local
-      timestamp :updated_at, default: Time.local
+      timestamp :created_at, default: "CURRENT_TIMESTAMP"
+      timestamp :updated_at, default: "CURRENT_TIMESTAMP"
     end
 
     # Adds a new column to the table.

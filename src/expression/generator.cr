@@ -411,7 +411,11 @@ module Expression
           else
             sb << column.name
             sb << " " << @adapter.sql_type(column.type)
-            sb << " DEFAULT CURRENT_TIMESTAMP " if [:created_at, :updated_at].includes?(column.name)
+            if [:created_at, :updated_at].includes?(column.name)
+              sb << " DEFAULT " << column.default
+            elsif column.default
+              sb << " DEFAULT " << column.default
+            end
             sb << " NOT NULL" unless column.null?
             sb << " UNIQUE" if column.unique?
           end
