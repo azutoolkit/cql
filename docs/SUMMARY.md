@@ -19,6 +19,7 @@
     * [Repository](coreconcepts/patterns/repository.md)
 * [Guides](guides/README.md)
   * [Active Record with Cql](guides/active-record-with-cql/README.md)
+    * [CQL Record Models](guides/active-record-with-cql/cql-record-models.md)
     * [BelongsTo](guides/active-record-with-cql/belongsto.md)
     * [HasOne](guides/active-record-with-cql/hasone.md)
     * [HasMany](guides/active-record-with-cql/hasmany.md)

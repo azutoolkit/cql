@@ -20,6 +20,8 @@ A `ManyToMany` relationship means that multiple records in one table can relate 
 
 ### Example Scenario: Posts and Tags
 
+<figure><img src="../../.gitbook/assets/Untitled-5.svg" alt=""><figcaption></figcaption></figure>
+
 We’ll use a scenario where:
 
 * A **Post** can have many **Tags**.
@@ -40,21 +42,22 @@ AcmeDB = Cql::Schema.define(
   uri: ENV["DATABASE_URL"]
 ) do
   table :posts do
-    primary :id, Int64, auto_increment: true
+    primary # Defaults to :id, Int64, auto_increment: true
     text :title
     text :body
     timestamp :published_at
   end
 
   table :tags do
-    primary :id, Int64, auto_increment: true
+    primary
     text :name
   end
 
   table :post_tags do
-    primary :id, Int64, auto_increment: true
-    bigint :post_id
-    bigint :tag_id
+    primary
+    bigint :post_id, index: true
+    bigint :tag_id, index: true
+    index [:post_id, :tag_id], unique: true
   end
 end
 ```

@@ -55,19 +55,18 @@ Replace the database connection string with your actual PostgreSQL or MySQL cred
 
 CQL uses migrations to manage the database schema, similar to Rails' ActiveRecord or Ecto's migrations.
 
-1.  **Generate a migration**: CQL provides generators to create migration files.
+1.  **Create a  migration**: Let's define a `users` table in this migration:
 
-    ```bash
-    crystal lib/cql/bin/cql generate migration CreateUsers
-    ```
-
-    This will create a file in the `db/migrate` directory, for example, `20230817000000_create_users.cr`.
-2.  **Edit the migration**: Let's define a `users` table in this migration:
+    \
+    Create a file in the `db/migrate` directory, for example, `20230817000000_create_users.cr`\
+    &#x20;
 
     ```crystal
     # db/migrate/20230817000000_create_users.cr
 
     class CreateUsers < CQL::Migration
+      self.version = 20230817000000
+      
       def up
         schema.alter :users do
           text :name, null: false
@@ -84,11 +83,13 @@ CQL uses migrations to manage the database schema, similar to Rails' ActiveRecor
     end
     ```
 
-    Here, we create a `users` table with columns `name`, `email`, and `timestamps`.
-3.  **Run the migration**: After defining your migration, you can run it with:
+Here, we create a `users` table with columns `name`, `email`, and `timestamps`.
 
-    ```bash
-    crystal lib/cql/bin/cql migrate
+1.  **Run the migration**: After defining your migration, you can run it with:\
+
+
+    ```crystal
+    AcmeDB.migrator.up
     ```
 
 This command will execute all pending migrations and update your database schema.
