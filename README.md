@@ -3,6 +3,8 @@
 
 # CQL Toolkit
 
+<img width="1038" alt="cql-banner" src="https://github.com/user-attachments/assets/ed4e733a-3d37-4d03-a4d8-d15bfd7e6f25">
+
 CQL Toolkit is a powerful library designed to simplify and enhance the management and execution of SQL queries in the Crystal programming language. It provides utilities for building, validating, and executing SQL statements, ensuring better performance and code maintainability.
 
 ## Table of Contents
