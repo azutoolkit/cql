@@ -87,21 +87,23 @@ module Cql
   # migrator.last
   # ```
   #
-  abstract class Migration
-    getter schema : Schema
 
-    macro inherited
-      class_getter version : Int64 = 0_i64
-      def self.version=(number : Int64)
-        @@version = number
-      end
-      Cql::Migrator.migrations << {{@type}}
-    end
-
-    def initialize(@schema : Schema); end
-
+  abstract class BaseMigration
     abstract def up
     abstract def down
+  end
+
+  abstract class Migration(V) < BaseMigration
+    macro inherited
+      getter schema : Cql::Schema
+
+      Cql::Migrator.migrations << {{@type}}
+      def self.version : Int32
+        V
+      end
+
+      def initialize(@schema : Cql::Schema); end
+    end
   end
 
   # The `Migrator` class is used to manage migrations and provides methods to apply,
@@ -142,14 +144,14 @@ module Cql
 
       getter id : Int64
       getter name : String
-      getter version : Int64
+      getter version : Int32
       getter created_at : Time
       getter updated_at : Time
 
       def initialize(
         @id : Int64,
         @name : String,
-        @version : Int64,
+        @version : Int32,
         @created_at = Time.local,
         @updated_at = Time.local
       )
@@ -157,7 +159,7 @@ module Cql
     end
 
     getter schema : Schema
-    class_property migrations : Array(Migration.class) = [] of Migration.class
+    class_property migrations : Array(BaseMigration.class) = [] of BaseMigration.class
     getter repo : Repository(MigrationRecord, Int32)
 
     def initialize(@schema : Schema)
@@ -224,7 +226,7 @@ module Cql
     # migrator.last
     # ```
     # @return [Migration.class | Nil]
-    def last : Migration.class | Nil
+    def last : BaseMigration.class | Nil
       Migrator.migrations.find { |m| m.version == repo.last.version }
     rescue DB::NoResultsError
       nil
@@ -259,7 +261,7 @@ module Cql
     # ```
     # migrator.print_rolled_back_migrations
     # ```
-    def print_rolled_back_migrations(m : Array(Migration.class))
+    def print_rolled_back_migrations(m : Array(BaseMigration.class))
       print_table(m.map { |migration| build_migration_record(migration) }, "✗".colorize.red.to_s)
     end
 
@@ -287,7 +289,7 @@ module Cql
     # ```
     # migrator.pending_migrations
     # ```
-    def pending_migrations : Array(Migration.class)
+    def pending_migrations : Array(BaseMigration.class)
       sorted_migrations.reject { |m| migration_applied?(m.version) }
     end
 
@@ -315,7 +317,7 @@ module Cql
       puts table
     end
 
-    private def build_migration_record(migration : Migration.class) : MigrationRecord
+    private def build_migration_record(migration : BaseMigration.class) : MigrationRecord
       MigrationRecord.new(0, migration.name, migration.version)
     end
 
@@ -327,7 +329,7 @@ module Cql
       schema.table :schema_migrations do
         primary :id, Int32
         column :name, String
-        column :version, Int64, index: true, unique: true
+        column :version, Int32, index: true, unique: true
         timestamps
       end
       schema.schema_migrations.create!
@@ -339,11 +341,11 @@ module Cql
       false
     end
 
-    private def record_migration(migration : Migration.class)
+    private def record_migration(migration : BaseMigration.class)
       repo.create(name: migration.name, version: migration.version)
     end
 
-    private def remove_migration_record(migration : Migration.class)
+    private def remove_migration_record(migration : BaseMigration.class)
       repo.delete_by(name: migration.name, version: migration.version)
     end
   end

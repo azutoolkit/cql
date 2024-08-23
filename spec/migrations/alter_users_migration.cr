@@ -1,6 +1,4 @@
-class AlterUsersMigration < Cql::Migration
-  self.version = 987654321_i64
-
+class AlterUsersMigration < Cql::Migration(987654321)
   def up
     schema.alter :users do
       add_column :phone, String

@@ -1,6 +1,4 @@
-class CreateUsersMigration < Cql::Migration
-  self.version = 123456789_i64
-
+class CreateUsersMigration < Cql::Migration(123456789)
   def up
     schema.users.create!
   end
