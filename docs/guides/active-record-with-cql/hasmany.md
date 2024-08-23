@@ -14,19 +14,19 @@ The `HasMany` relationship indicates that one entity (a record) is related to mu
 
 In a blogging system:
 
-* A **Post** can have many **Comments**.
-* Each **Comment** belongs to one **Post**.
+- A **Post** can have many **Comments**.
+- Each **Comment** belongs to one **Post**.
 
 This is a common one-to-many relationship where one post can have multiple comments, but each comment refers to only one post.
 
-***
+---
 
 ## Defining the Schema
 
 We’ll define the `posts` and `comments` tables in the schema using CQL’s DSL.
 
 ```crystal
-AcmeDB = Cql::Schema.define(
+AcmeDB = Cql::Schema.db_context(
   :acme_db,
   adapter: Cql::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
@@ -46,22 +46,21 @@ AcmeDB = Cql::Schema.define(
 end
 ```
 
-* **posts** table: Stores post details like `title`, `body`, and `published_at`.
-* **comments** table: Stores comment details with a foreign key `post_id` that references the `posts` table.
+- **posts** table: Stores post details like `title`, `body`, and `published_at`.
+- **comments** table: Stores comment details with a foreign key `post_id` that references the `posts` table.
 
-***
+---
 
 ## Defining the Models
 
-Let’s define the `Post` and `Comment` models and establish the `HasMany` and `BelongsTo` relationships in CQL.
+Let’s db_context the `Post` and `Comment` models and establish the `HasMany` and `BelongsTo` relationships in CQL.
 
 ### **Post Model**
 
 ```crystal
-struct Post
-  include Cql::Record(Post, Int64)
+struct Post< Cql::Record(Post, Int64)
 
-  define AcmeDB, :posts
+  db_context AcmeDB, :posts
 
   getter id : Int64?
   getter title : String
@@ -77,15 +76,14 @@ struct Post
 end
 ```
 
-* The `has_many :comments` association in the `Post` model defines that each post can have multiple comments.
+- The `has_many :comments` association in the `Post` model  defines that each post can have multiple comments.
 
 ### **Comment Model**
 
 ```crystal
-struct Comment
-  include Cql::Record(Comment, Int64)
+struct Comment< Cql::Record(Comment, Int64)
 
-  define AcmeDB, :comments
+  db_context AcmeDB, :comments
 
   getter id : Int64?
   getter post_id : Int64
@@ -100,7 +98,7 @@ struct Comment
 end
 ```
 
-* The `belongs_to :post` association in the `Comment` model links each comment to a post by using the `post_id` foreign key.
+- The `belongs_to :post` association in the `Comment` model links each comment to a post by using the `post_id` foreign key.
 
 ## Creating and Querying Records
 
@@ -120,8 +118,8 @@ comment1.save
 comment2.save
 ```
 
-* First, we create a `Post` and save it to the database.
-* Then, we create two `Comments` and associate them with the post by passing `post.id` as the `post_id` for each comment.
+- First, we create a `Post` and save it to the database.
+- Then, we create two `Comments` and associate them with the post by passing `post.id` as the `post_id` for each comment.
 
 ### **Accessing Comments from the Post**
 
@@ -155,7 +153,7 @@ puts post.title  # Outputs: "My First Blog Post"
 
 In this example, `comment.post` fetches the post that the comment belongs to.
 
-***
+---
 
 ## Updating and Deleting the Associations
 
@@ -189,7 +187,7 @@ post.comments.each do |comment|
 end
 ```
 
-***
+---
 
 ## Advanced Querying
 
@@ -215,15 +213,15 @@ post = Post.find(1)
 filtered_comments = post.comments.where { body.like("%Great%") }
 ```
 
-***
+---
 
 ## Summary
 
 In this guide, we’ve explored the `HasMany` relationship in CQL. We:
 
-* Defined the `Post` and `Comment` tables in the schema.
-* Created corresponding models, specifying the `HasMany` relationship in the `Post` model and the `BelongsTo` relationship in the `Comment` model.
-* Demonstrated how to create, query, update, and delete records using the `HasMany` and `BelongsTo` associations.
+- Defined the `Post` and `Comment` tables in the schema.
+- Created corresponding models, specifying the `HasMany` relationship in the `Post` model and the `BelongsTo` relationship in the `Comment` model.
+- Demonstrated how to create, query, update, and delete records using the `HasMany` and `BelongsTo` associations.
 
 ### Next Steps
 

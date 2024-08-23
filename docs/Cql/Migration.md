@@ -10,7 +10,7 @@ Migrations are used to manage changes to the database schema over time.
 Each migration is a subclass of `Migration` and must implement the `up` and `down` methods.
 
 The `up` method is used to apply the migration, while the `down` method is used to rollback the migration.
-Migrations are executed in their version order defined.
+Migrations are executed in their version order define.
 The `Migrator` class is used to manage migrations and provides methods to apply, rollback, and redo migrations.
 The `Migrator` class also provides methods to list applied and pending migrations.
 

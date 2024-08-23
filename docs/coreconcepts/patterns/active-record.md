@@ -21,11 +21,10 @@ In Active Record, a model is a class that represents a database table. The class
 Here’s an example of a `User` model:
 
 ```crystal
-struct User
-  include CQL::Record(User, Int32)
+struct User < Cql::Record(User, Int32)
   # Schame name AcmeDB, table name :users
-  define AcmeDB, :users
-  
+  db_context AcmeDB, :users
+
   property id : Int32?
   property name : String
   property email : String
@@ -36,9 +35,9 @@ end
 
 In this example:
 
-* `struct User` is used instead of `class User`
-* `Include Cql::Record(User, Int32)` specifies that `User` is the model and the primary key is of type `Int32`.
-* The model still contains the properties (`id`, `name`, `email`, `created_at`, `updated_at`), but now we delegate all Active Record-like operations (e.g., `save`, `delete`) to `Cql::Record`.
+- `struct User` is used instead of `class User`
+- `Include Cql::Record(User, Int32)` specifies that `User` is the model and the primary key is of type `Int32`.
+- The model still contains the properties (`id`, `name`, `email`, `created_at`, `updated_at`), but now we delegate all Active Record-like operations (e.g., `save`, `delete`) to `Cql::Record`.
 
 {% hint style="info" %}
 Cql makes no assumptions about table names and it must be explicitly provided. \
@@ -72,13 +71,13 @@ This will generate an `INSERT INTO` SQL statement and persist the user in the `u
 
 To retrieve records from the database, you can use class-level methods like `.find` or `.all`. For example:
 
-* Fetch all users:
+- Fetch all users:
 
 ```crystal
 users = User.all # SELECT * FROM users
 ```
 
-* Find a user by `id`:
+- Find a user by `id`:
 
 ```crystal
 user = User.find(1) # SELECT * FROM users WHERE id = 1
@@ -107,14 +106,13 @@ user.delete # DELETE FROM users WHERE id = 1
 
 Active Record also simplifies relationships between tables, such as `has_many` and `belongs_to`. In CQL, you can implement these relationships like this:
 
-#### **has\_many (One-to-Many Relationship)**
+#### **has_many (One-to-Many Relationship)**
 
-A `User` has many `Posts`. You can define the association like this:
+A `User` has many `Posts`. You can db_context the association like this:
 
 ```crystal
-class User
-  include CQL::Record(User, Int32)
-  
+struct User < Cql::Record(User, Int32)
+
   property id : Int32?
   property name : String
   property email : String
@@ -124,8 +122,7 @@ class User
   has_many :posts, Post
 end
 
-class Post
-  include CQL::Record(Post, Int32)
+struct Post < Cql::Record(Post, Int32)
 
   property id : Int32?
   property title : String
@@ -144,7 +141,7 @@ user = User.find(1)
 posts = user.posts # SELECT * FROM posts WHERE user_id = 1
 ```
 
-#### **belongs\_to (Many-to-One Relationship)**
+#### **belongs_to (Many-to-One Relationship)**
 
 The `Post` class has a `belongs_to` relationship with `User`. This means each post belongs to a user:
 
@@ -160,61 +157,61 @@ Here is a summary of the **collection methods** provided in the `Cql::Relations:
 #### **Collection Methods**
 
 1. **`all`**:
-   * Returns all associated records for the parent record.
-   * **Example**: `movie.actors.all`
+   - Returns all associated records for the parent record.
+   - **Example**: `movie.actors.all`
 2. **`reload`**:
-   * Reloads the associated records from the database.
-   * **Example**: `movie.actors.reload`
+   - Reloads the associated records from the database.
+   - **Example**: `movie.actors.reload`
 3. **`ids`**:
-   * Returns a list of primary keys for the associated records.
-   * **Example**: `movie.actors.ids`
+   - Returns a list of primary keys for the associated records.
+   - **Example**: `movie.actors.ids`
 4. **`<<`**:
-   * Adds a new record to the association and persists it to the database.
-   * **Example**: `movie.actors << Actor.new(name: "Laurence Fishburne")`
+   - Adds a new record to the association and persists it to the database.
+   - **Example**: `movie.actors << Actor.new(name: "Laurence Fishburne")`
 5. **`empty?`**:
-   * Checks if the association has any records.
-   * **Example**: `movie.actors.empty?`
-6. **`exists?(**attributes)`**:
-   * Checks if any associated records exist that match the given attributes.
-   * **Example**: `movie.actors.exists?(name: "Keanu Reeves")`
+   - Checks if the association has any records.
+   - **Example**: `movie.actors.empty?`
+6. **`exists?(**attributes)`\*\*:
+   - Checks if any associated records exist that match the given attributes.
+   - **Example**: `movie.actors.exists?(name: "Keanu Reeves")`
 7. **`size`**:
-   * Returns the number of associated records.
-   * **Example**: `movie.actors.size`
-8. **`find(**attributes)`**:
-   * Finds associated records that match the given attributes.
-   * **Example**: `movie.actors.find(name: "Keanu Reeves")`
-9. **`create(**attributes)`**:
-   * Creates a new record with the provided attributes and associates it with the parent.
-   * **Example**: `movie.actors.create(name: "Carrie-Anne Moss")`
+   - Returns the number of associated records.
+   - **Example**: `movie.actors.size`
+8. **`find(**attributes)`\*\*:
+   - Finds associated records that match the given attributes.
+   - **Example**: `movie.actors.find(name: "Keanu Reeves")`
+9. **`create(**attributes)`\*\*:
+   - Creates a new record with the provided attributes and associates it with the parent.
+   - **Example**: `movie.actors.create(name: "Carrie-Anne Moss")`
 10. **`create!(record)`**:
-    * Creates and persists a new record with the provided attributes, raising an error if it fails.
-    * **Example**: `movie.actors.create!(name: "Hugo Weaving")`
+    - Creates and persists a new record with the provided attributes, raising an error if it fails.
+    - **Example**: `movie.actors.create!(name: "Hugo Weaving")`
 11. **`ids=(ids : Array(Pk))`**:
-    * Associates the parent record with the records that match the provided primary keys.
-    * **Example**: `movie.actors.ids = [1, 2, 3]`
+    - Associates the parent record with the records that match the provided primary keys.
+    - **Example**: `movie.actors.ids = [1, 2, 3]`
 12. **`delete(record : Target)`**:
-    * Deletes the associated record from the parent record if it exists.
-    * **Example**: `movie.actors.delete(Actor.find(1))`
+    - Deletes the associated record from the parent record if it exists.
+    - **Example**: `movie.actors.delete(Actor.find(1))`
 13. **`delete(id : Pk)`**:
-    * Deletes the associated record by primary key.
-    * **Example**: `movie.actors.delete(1)`
+    - Deletes the associated record by primary key.
+    - **Example**: `movie.actors.delete(1)`
 14. **`clear`**:
-    * Removes all associated records for the parent record.
-    * **Example**: `movie.actors.clear`
+    - Removes all associated records for the parent record.
+    - **Example**: `movie.actors.clear`
 
 #### **ManyCollection Additional Methods**
 
-* In addition to the methods inherited from `Collection`, the `ManyCollection` class also manages associations through a join table in many-to-many relationships.
+- In addition to the methods inherited from `Collection`, the `ManyCollection` class also manages associations through a join table in many-to-many relationships.
 
 1. **`create(record : Target)`**:
-   * Associates the parent record with the created record through a join table.
-   * **Example**: `movie.actors.create!(name: "Carrie-Anne Moss")`
+   - Associates the parent record with the created record through a join table.
+   - **Example**: `movie.actors.create!(name: "Carrie-Anne Moss")`
 2. **`delete(record : Target)`**:
-   * Deletes the association through the join table between the parent and associated record.
-   * **Example**: `movie.actors.delete(Actor.find(1))`
+   - Deletes the association through the join table between the parent and associated record.
+   - **Example**: `movie.actors.delete(Actor.find(1))`
 3. **`ids=(ids : Array(Pk))`**:
-   * Associates the parent record with the records matching the primary keys through the join table.
-   * **Example**: `movie.actors.ids = [1, 2, 3]`
+   - Associates the parent record with the records matching the primary keys through the join table.
+   - **Example**: `movie.actors.ids = [1, 2, 3]`
 
 These methods provide powerful ways to interact with and manage associations between records in a CQL-based application using both one-to-many and many-to-many relationships.
 
@@ -223,9 +220,8 @@ These methods provide powerful ways to interact with and manage associations bet
 Active Record often includes validations to ensure that data meets certain criteria before saving. In CQL, you can add custom validation logic inside the class:
 
 ```crystal
-class User
-  include CQL::Record(User, Int32)
-  
+struct User < Cql::Record(User, Int32)
+
   property id : Int32?
   property name : String
   property email : String
@@ -248,7 +244,7 @@ In this example, before saving a user, the `validate` method is called to ensure
 
 {% hint style="info" %}
 Alternatively validations can be supported by other shards. \
-For example [Schema](https://azutopia.gitbook.io/azu/validations) shard from the Azu Toolkit can be use to define validations
+For example [Schema](https://azutopia.gitbook.io/azu/validations) shard from the Azu Toolkit can be use to db_context validations
 {% endhint %}
 
 ### **5. Migrations**
@@ -279,23 +275,23 @@ This migration would create the `users` table with the specified columns.
 
 ## How CQL Implements Active Record Principles
 
-* **Model Representation**: Each class (like `User`, `Post`) maps directly to a database table.
-* **CRUD Operations**: Operations like `.save`, `.delete`, `.find`, and `.all` are built into the CQL framework, allowing for seamless interaction with the database.
-* **Associations**: Relationships between models are defined using macros like `has_many` and `belongs_to`, which make querying associated records straightforward.
-* **Encapsulation of Business Logic**: Validation and other business rules can be embedded directly into model classes.
-* **Database Migrations**: Schema changes are managed through migrations, which help keep the database structure synchronized with the application's models.
+- **Model Representation**: Each class (like `User`, `Post`) maps directly to a database table.
+- **CRUD Operations**: Operations like `.save`, `.delete`, `.find`, and `.all` are built into the CQL framework, allowing for seamless interaction with the database.
+- **Associations**: Relationships between models are defined using macros like `has_many` and `belongs_to`, which make querying associated records straightforward.
+- **Encapsulation of Business Logic**: Validation and other business rules can be embedded directly into model classes.
+- **Database Migrations**: Schema changes are managed through migrations, which help keep the database structure synchronized with the application's models.
 
 #### Example Workflow with Active Record and CQL
 
-1. **Define your models**:
-   * Create `User` and `Post` classes that correspond to `users` and `posts` tables.
+1. **db_context your models**:
+   - Create `User` and `Post` classes that correspond to `users` and `posts` tables.
 2. **Run Migrations**:
-   * Use migrations to create or modify the database schema.
+   - Use migrations to create or modify the database schema.
 3. **Perform CRUD operations**:
-   * Create, read, update, and delete records using model methods like `.save` and `.delete`.
+   - Create, read, update, and delete records using model methods like `.save` and `.delete`.
 4. **Manage relationships**:
-   * Define associations like `has_many` and `belongs_to` to handle relationships between models.
+   - db_context associations like `has_many` and `belongs_to` to handle relationships between models.
 5. **Enforce business rules**:
-   * Use validation methods to ensure data integrity.
+   - Use validation methods to ensure data integrity.
 
 By following the **Active Record** pattern in CQL, you can build a robust data access layer in your Crystal application with minimal effort while keeping your code clean and maintainable.

@@ -2,7 +2,7 @@
 
 Once you've defined your database schema using CQL's `Schema.build`, the next step is to initialize the database by creating the necessary tables and structures. In this guide, we will walk through how to define your schema and use `Schema.init` to initialize the database.
 
-***
+---
 
 ### Real-World Example: Defining the Database Schema
 
@@ -48,13 +48,13 @@ end
 
 In the example above, we define:
 
-* **`movies`**: Stores information about movies, including an auto-incrementing `id` and a `title`.
-* **`screenplays`**: Stores the screenplay contents for movies, linking to the `movies` table with `movie_id`.
-* **`actors`**: Stores actor names, with an auto-incrementing `id`.
-* **`directors`**: Stores director names, associated with a movie via `movie_id`.
-* **`movies_actors`**: A join table to link `movies` and `actors`, establishing a many-to-many relationship between movies and actors.
+- **`movies`**: Stores information about movies, including an auto-incrementing `id` and a `title`.
+- **`screenplays`**: Stores the screenplay contents for movies, linking to the `movies` table with `movie_id`.
+- **`actors`**: Stores actor names, with an auto-incrementing `id`.
+- **`directors`**: Stores director names, associated with a movie via `movie_id`.
+- **`movies_actors`**: A join table to link `movies` and `actors`, establishing a many-to-many relationship between movies and actors.
 
-***
+---
 
 ### Initializing the Database
 
@@ -71,12 +71,12 @@ AcmeDB2.init
 
 This command creates all the tables and applies the structure you defined in the schema to your actual database.
 
-***
+---
 
 ### Full Example: Defining and Initializing the Database
 
 ```crystal
-# Define the schema
+# db_context the schema
 AcmeDB2 = Cql::Schema.build(
   :acme_db,
   adapter: Cql::Adapter::Postgres,
@@ -123,11 +123,11 @@ AcmeDB2.init
 
 When `AcmeDB2.init` is called, the following happens:
 
-* The database connection is established using the URI provided in the schema (e.g., the PostgreSQL database connection).
-* CQL creates the tables (`movies`, `screenplays`, `actors`, `directors`, and `movies_actors`) in the database if they don’t already exist.
-* Primary keys, relationships, and any constraints are applied as defined in the schema.
+- The database connection is established using the URI provided in the schema (e.g., the PostgreSQL database connection).
+- CQL creates the tables (`movies`, `screenplays`, `actors`, `directors`, and `movies_actors`) in the database if they don’t already exist.
+- Primary keys, relationships, and any constraints are applied as defined in the schema.
 
-***
+---
 
 ### Verifying the Initialization
 
@@ -141,7 +141,7 @@ SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
 \d movies  -- This shows the structure of the 'movies' table
 ```
 
-***
+---
 
 ### Summary
 

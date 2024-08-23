@@ -2,6 +2,6 @@
 
 ## Macros
 
-### macro belongs\_to`(assoc, foreign_key)`
+### macro belongs_to`(assoc, foreign_key)`
 
-Define the belongs\_to association
+Define the `belongs_to` association

@@ -25,10 +25,9 @@ AcmeDB = Cql::Schema.define(:acme_db, adapter: Cql::Adapter::Postgres,
   end
 end
 
-struct Post
-  include Cql::Record(Post)
+struct Post < Cql::Record(Post)
 
-  define AcmeDB, :posts
+  db_context AcmeDB, :posts
 
   getter id : Int64?
   getter title : String
@@ -39,9 +38,8 @@ struct Post
   end
 end
 
-struct Comment
-  include Cql::Record(Comment)
-  define AcmeDB, :comments
+struct Comment < Cql::Record(Comment)
+  db_context AcmeDB, :comments
 
   getter id : Int64?
   getter post_id : Int64

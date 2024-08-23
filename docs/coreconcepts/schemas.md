@@ -66,14 +66,14 @@ end
 
 ## Explanation of Schema Definition
 
-* **Database name**: `:acme_db` defines the schema name.
-* **Adapter**: `Cql::Adapter::Postgres` specifies the database adapter (in this case, PostgreSQL).
-* **Connection URL**: The `uri: ENV["DATABASE_URL"]` specifies the database connection using environment variables.
+- **Database name**: `:acme_db` defines the schema name.
+- **Adapter**: `Cql::Adapter::Postgres` specifies the database adapter (in this case, PostgreSQL).
+- **Connection URL**: The `uri: ENV["DATABASE_URL"]` specifies the database connection using environment variables.
 
 Each table is explicitly defined with its columns, such as:
 
-* `:movies` table has `id` as the primary key and `title` as a `text` column.
-* `:screenplays`, `:actors`, and `:directors` define relationships between movies and associated records.
+- `:movies` table has `id` as the primary key and `title` as a `text` column.
+- `:screenplays`, `:actors`, and `:directors` define relationships between movies and associated records.
 
 This example shows how easy it is to define tables and manage relationships within the schema, leading to a more organized and coherent database structure that aligns with the application’s needs.
 
@@ -83,8 +83,8 @@ One significant advantage of CQL is the ability to define and manage multiple sc
 
 This approach offers the following benefits:
 
-* **Clear Separation of Data**: Each schema can encapsulate its own set of tables and relationships, allowing better isolation and separation of concerns within the application. For example, you might have a `main` schema for core business data and a separate `analytics` schema for reporting.
-* **Simple Switching**: Switching between schemas is as simple as referring to the schema name, thanks to CQL’s structured definition of schemas. This allows dynamic switching at runtime, improving scalability in multi-tenant applications.
+- **Clear Separation of Data**: Each schema can encapsulate its own set of tables and relationships, allowing better isolation and separation of concerns within the application. For example, you might have a `main` schema for core business data and a separate `analytics` schema for reporting.
+- **Simple Switching**: Switching between schemas is as simple as referring to the schema name, thanks to CQL’s structured definition of schemas. This allows dynamic switching at runtime, improving scalability in multi-tenant applications.
 
 #### **Example: Managing Multiple Schemas**
 
@@ -102,7 +102,7 @@ In this example, you define multiple schemas, and the application can easily swi
 
 #### **Benefits of Multiple Schemas**
 
-* **Improved Organization**: Separate business logic data from other concerns like reporting, testing, or archiving.
-* **Scalability**: Ideal for multi-tenant applications, allowing each tenant to have its schema without interference.
+- **Improved Organization**: Separate business logic data from other concerns like reporting, testing, or archiving.
+- **Scalability**: Ideal for multi-tenant applications, allowing each tenant to have its schema without interference.
 
 By using CQL’s schema system, you gain not only speed and clarity in your database structure but also flexibility in scaling and organizing your application.

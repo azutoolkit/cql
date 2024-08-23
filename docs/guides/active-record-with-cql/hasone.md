@@ -10,16 +10,14 @@ The `HasOne` relationship indicates that one entity (a record) is related to exa
 
 Let's say we have a system where:
 
-* A **User** can have one **Profile**.
-* A **Profile** belongs to one **User**.
-
-
+- A **User** can have one **Profile**.
+- A **Profile** belongs to one **User**.
 
 <figure><img src="../../.gitbook/assets/Untitled-4.svg" alt=""><figcaption></figcaption></figure>
 
 We will represent this one-to-one relationship using CQL’s `HasOne` and `BelongsTo` associations.
 
-***
+---
 
 ## Defining the Schema
 
@@ -46,10 +44,10 @@ AcmeDB = Cql::Schema.define(
 end
 ```
 
-* **users** table: Stores user details like `name` and `email`.
-* **profiles** table: Stores profile details like `bio` and `avatar_url`. It has a `user_id` foreign key referencing the `users`table.
+- **users** table: Stores user details like `name` and `email`.
+- **profiles** table: Stores profile details like `bio` and `avatar_url`. It has a `user_id` foreign key referencing the `users`table.
 
-***
+---
 
 ## Defining the Models
 
@@ -58,10 +56,9 @@ Let’s define the `User` and `Profile` models in CQL, establishing the `HasOne`
 ### **User Model**
 
 ```crystal
-struct User
-  include Cql::Record(User, Int64)
-  
-  define AcmeDB, :users
+struct User< Cql::Record(User, Int64)
+
+  db_context AcmeDB, :users
 
   getter id : Int64?
   getter name : String
@@ -76,15 +73,14 @@ struct User
 end
 ```
 
-* The `has_one :profile` association in the `User` model indicates that each user has one profile.
+- The `has_one :profile` association in the `User` model indicates that each user has one profile.
 
 ### **Profile Model**
 
 ```crystal
-struct Profile
-  include Cql::Record(Profile, Int64)
+struct Profile< Cql::Record(Profile, Int64)
 
-  define AcmeDB, :profiles
+  db_context AcmeDB, :profiles
 
   getter id : Int64?
   getter user_id : Int64
@@ -100,11 +96,11 @@ struct Profile
 end
 ```
 
-* The `belongs_to :user` association in the `Profile` model links each profile to a user by its `user_id`.
+- The `belongs_to :user` association in the `Profile` model links each profile to a user by its `user_id`.
 
 ## Creating and Querying Records
 
-Now that we have defined the `User` and `Profile` models with a `has_one` and `belongs_to` relationship, let's see how to create and query records in CQL.
+Now that we have define the `User` and `Profile` models with a `has_one` and `belongs_to` relationship, let's see how to create and query records in CQL.
 
 ### **Creating a User and Profile**
 
@@ -118,8 +114,8 @@ profile = Profile.new(user.id.not_nil!, "Developer at Acme", "avatar_url.jpg")
 profile.save
 ```
 
-* First, we create a `User` and save it to the database.
-* Then, we create a `Profile` and associate it with the user by passing `user.id` as the `user_id`.
+- First, we create a `User` and save it to the database.
+- Then, we create a `Profile` and associate it with the user by passing `user.id` as the `user_id`.
 
 ### **Accessing the Profile from the User**
 
@@ -185,15 +181,15 @@ profile.delete
 
 Similarly, deleting the user will not automatically delete the associated profile unless cascade rules are explicitly set in the database.
 
-***
+---
 
 ## Summary
 
 In this guide, we explored the `has_one` relationship in CQL. We:
 
-* Defined the `User` and `Profile` tables in the schema.
-* Created corresponding models, specifying the `has_one` relationship in the `User` model and the `belongs_to`relationship in the `Profile` model.
-* Demonstrated how to create, query, update, and delete records using the `has_one` and `belongs_to` associations.
+- Define the `User` and `Profile` tables in the schema.
+- Created corresponding models, specifying the `has_one` relationship in the `User` model and the `belongs_to`relationship in the `Profile` model.
+- Demonstrated how to create, query, update, and delete records using the `has_one` and `belongs_to` associations.
 
 ### Next Steps
 

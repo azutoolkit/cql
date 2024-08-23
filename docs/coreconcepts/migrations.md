@@ -6,11 +6,11 @@ Database migrations are essential for managing changes to your schema over time 
 
 Migrations allow you to:
 
-* Apply changes to your database schema over time.
-* Roll back changes in case of errors or updates.
-* Track applied and pending changes, ensuring consistency across environments.
+- Apply changes to your database schema over time.
+- Roll back changes in case of errors or updates.
+- Track applied and pending changes, ensuring consistency across environments.
 
-***
+---
 
 #### Real-World Example: Creating and Applying Migrations
 
@@ -38,11 +38,11 @@ end
 
 #### Explanation
 
-* **The `up` method**: Defines the changes to apply when the migration is run (e.g., adding new columns).
-* **The `down` method**: Defines how to revert the changes (e.g., dropping columns).
-* **Versioning**: Each migration is assigned a version number, which ensures migrations are run in the correct order.
+- **The `up` method**: defines the changes to apply when the migration is run (e.g., adding new columns).
+- **The `down` method**: defines how to revert the changes (e.g., dropping columns).
+- **Versioning**: Each migration is assigned a version number, which ensures migrations are run in the correct order.
 
-***
+---
 
 #### Initializing the Schema and Migrator
 
@@ -58,7 +58,7 @@ migrator = Cql::Migrator.new(schema)
 
 The **migrator,** upon initialization, automatically creates a `schema_migrations` table to track which migrations have been applied.
 
-***
+---
 
 #### Applying Migrations
 
@@ -80,7 +80,7 @@ migrator.up_to(1_i64)
 
 This will apply all migrations up to version `1_i64`.
 
-***
+---
 
 #### Rolling Back Migrations
 
@@ -98,7 +98,7 @@ migrator.down_to(1_i64)
 
 This rolls back all migrations down to version `1_i64`.
 
-***
+---
 
 #### Redoing Migrations
 
@@ -110,31 +110,33 @@ migrator.redo
 
 This first rolls back the last migration and then re-applies it.
 
-***
+---
 
 #### Listing Migrations
 
 You can list applied, pending, and rolled-back migrations with the following commands:
 
-*   **List Applied Migrations**:
+- **List Applied Migrations**:
 
-    ```crystal
-    migrator.print_applied_migrations
-    ```
-*   **List Pending Migrations**:
+  ```crystal
+  migrator.print_applied_migrations
+  ```
 
-    ```crystal
-    migrator.print_pending_migrations
-    ```
-*   **List Rolled Back Migrations**:
+- **List Pending Migrations**:
 
-    ```crystal
-    migrator.print_rolled_back_migrations
-    ```
+  ```crystal
+  migrator.print_pending_migrations
+  ```
+
+- **List Rolled Back Migrations**:
+
+  ```crystal
+  migrator.print_rolled_back_migrations
+  ```
 
 These commands provide a clear view of the current state of your migrations, making it easy to track progress and issues.
 
-***
+---
 
 #### Managing Migrations
 
@@ -149,7 +151,7 @@ puts last_migration
 
 This gives you details about the last migration that was successfully applied.
 
-***
+---
 
 #### Advanced Example: Managing Multiple Migrations
 
@@ -194,17 +196,17 @@ end
 migrator.up
 ```
 
-* **Versioning** ensures that migrations are applied in the correct order.
-* Each migration can be applied and rolled back independently, offering flexibility in managing your database schema.
+- **Versioning** ensures that migrations are applied in the correct order.
+- Each migration can be applied and rolled back independently, offering flexibility in managing your database schema.
 
-***
+---
 
 #### Conclusion
 
 The `Cql::Migrator` class makes it easy to manage database migrations in a structured and version-controlled manner. By following this guide, you can:
 
-* Create and apply migrations to modify your schema.
-* Roll back changes if needed.
-* Track applied and pending migrations to keep your database consistent across environments.
+- Create and apply migrations to modify your schema.
+- Roll back changes if needed.
+- Track applied and pending migrations to keep your database consistent across environments.
 
 This approach is essential for teams working on large applications where database changes need to be applied safely and consistently over time.

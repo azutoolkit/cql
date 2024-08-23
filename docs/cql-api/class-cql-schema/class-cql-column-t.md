@@ -21,16 +21,16 @@ end
 
 Create a new column instance
 
-* **@param** : name (Symbol) - The name of the column
-* **@param** : type (Any) - The data type of the column
-* **@param** : as\_name (String, nil) - An optional alias for the column
-* **@param** : null (Bool) - Whether the column allows null values (default: false)
-* **@param** : default (DB::Any) - The default value for the column (default: nil)
-* **@param** : unique (Bool) - Whether the column should have a unique constraint (default: false)
-* **@param** : size (Int32, nil) - The size of the column (default: nil)
-* **@param** : index (Index, nil) - The index for the column (default: nil)
-* **@return** : Nil
-* **@raise** : Cql::Error if the column type is not valid
+- **@param** : name (Symbol) - The name of the column
+- **@param** : type (Any) - The data type of the column
+- **@param** : as_name (String, nil) - An optional alias for the column
+- **@param** : null (Bool) - Whether the column allows null values (default: false)
+- **@param** : default (DB::Any) - The default value for the column (default: nil)
+- **@param** : unique (Bool) - Whether the column should have a unique constraint (default: false)
+- **@param** : size (Int32, nil) - The size of the column (default: nil)
+- **@param** : index (Index, nil) - The index for the column (default: nil)
+- **@return** : Nil
+- **@raise** : Cql::Error if the column type is not valid
 
 **Example**
 
@@ -44,7 +44,7 @@ column = Cql::Column.new(:name, String)
 
 Expressions for this column
 
-* **@return** \[Expression::ColumnBuilder] the column expression builder
+- **@return** \[Expression::ColumnBuilder] the column expression builder
 
 **Example**
 
@@ -57,7 +57,7 @@ column.expression.eq("John")
 
 Validate the value
 
-* **@param** value \[DB::Any] The value to validate
+- **@param** value \[DB::Any] The value to validate
 
 **Example**
 

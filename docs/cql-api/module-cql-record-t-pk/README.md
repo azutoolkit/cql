@@ -21,10 +21,9 @@ AcmeDB = Cql::Schema.define(:acme_db, adapter: Cql::Adapter::Postgres,
   end
 end
 
-struct Post
-  include Cql::Record(Post)
+struct Post < Cql::Record(Post)
 
-  define AcmeDB, :posts
+  db_context AcmeDB, :posts
 
   getter id : Int64?
   getter title : String
@@ -35,9 +34,8 @@ struct Post
   end
 end
 
-struct Comment
-  include Cql::Record(Comment)
-  define AcmeDB, :comments
+struct Comment < Cql::Record(Comment)
+  db_context AcmeDB, :comments
 
   getter id : Int64?
   getter post_id : Int64
@@ -54,8 +52,8 @@ end
 
 Set the record's attributes from a hash
 
-* **@param** attrs \[Hash(Symbol, DB::Any)] The attributes to set
-* **@return** \[Nil]
+- **@param** attrs \[Hash(Symbol, DB::Any)] The attributes to set
+- **@return** \[Nil]
 
 **Example** Setting the record's attributes
 
@@ -67,7 +65,7 @@ user.attributes = {name: "Alice", email: "[email protected]"}
 
 Define instance-level methods for querying and manipulating data Fetch the record's ID or raise an error if it's nil
 
-* **@return** \[PrimaryKey] The ID
+- **@return** \[PrimaryKey] The ID
 
 **Example** Fetching the record's ID
 
@@ -80,7 +78,7 @@ user.attributes
 
 Delete the record from the database
 
-* **@return** \[Nil]
+- **@return** \[Nil]
 
 **Example** Deleting the record
 
@@ -92,7 +90,7 @@ user.delete
 
 Identity method for the record ID
 
-* **@return** \[PrimaryKey] The ID
+- **@return** \[PrimaryKey] The ID
 
 **Example** Fetching the record's ID
 
@@ -104,7 +102,7 @@ user.id
 
 Set the record's ID
 
-* **@param** id \[PrimaryKey] The ID
+- **@param** id \[PrimaryKey] The ID
 
 **Example** Setting the record's ID
 
@@ -116,7 +114,7 @@ user.id = 1
 
 Check if the record has been persisted to the database
 
-* **@return** \[Bool] True if the record has an ID, false otherwise
+- **@return** \[Bool] True if the record has an ID, false otherwise
 
 **Example** Checking if the record is persisted
 
@@ -128,7 +126,7 @@ user.persisted?
 
 Define instance-level methods for querying and manipulating data Fetch the record's ID or raise an error if it's nil
 
-* **@return** \[PrimaryKey] The ID
+- **@return** \[PrimaryKey] The ID
 
 **Example** Fetching the record's ID
 
@@ -140,7 +138,7 @@ user.reload!
 
 Define instance-level methods for saving and deleting records Save the record to the database or update it if it already exists
 
-* **@return** \[Nil]
+- **@return** \[Nil]
 
 **Example** Saving the record
 
@@ -152,7 +150,7 @@ user.save
 
 Delete the record from the database if it exists
 
-* **@return** \[Nil]
+- **@return** \[Nil]
 
 **Example** Deleting the record
 
@@ -180,8 +178,8 @@ bob.update
 
 Update the record with the given fields
 
-* **@param** fields \[Hash(Symbol, DB::Any)] The fields to update
-* **@return** \[Nil]
+- **@param** fields \[Hash(Symbol, DB::Any)] The fields to update
+- **@return** \[Nil]
 
 **Example** Updating the record
 

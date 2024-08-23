@@ -2,14 +2,14 @@
 
 ## Macros
 
-### macro many\_to\_many`(name, type, join_through, cascade = false)`
+### macro many_to_many`(name, type, join_through, cascade = false)`
 
 Defines a many-to-many relationship between two models. This method will define a getter method that returns a ManyToMany::Collection. The collection can be used to add and remove records from the join table.
 
-* **param** : name (Symbol) - The name of the association
-* **param** : type (Cql::Model) - The target model
-* **param** : join\_through (Cql::Model) - The join table model
-* **param** : cascade (Bool) - Delete associated records
+- **param** : name (Symbol) - The name of the association
+- **param** : type (Cql::Model) - The target model
+- **param** : join_through (Cql::Model) - The join table model
+- **param** : cascade (Bool) - Delete associated records
 
 **Example**
 

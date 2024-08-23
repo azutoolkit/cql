@@ -2,7 +2,7 @@
 
 The `Cql::Delete` class provides a structured and flexible way to build and execute SQL `DELETE` queries in your Crystal applications. This guide will help you understand how to create delete queries, apply conditions, and execute them to remove records from your database.
 
-***
+---
 
 #### Key Features
 
@@ -11,7 +11,7 @@ The `Cql::Delete` class provides a structured and flexible way to build and exec
 3. **Return columns** after deletion if needed.
 4. **Chainable syntax** for clean and maintainable query building.
 
-***
+---
 
 #### Real-World Example: Deleting a User Record
 
@@ -26,7 +26,7 @@ delete = Cql::Delete.new(schema)
 
 This query deletes the record in the `users` table where `id = 1`.
 
-***
+---
 
 ### Core Methods
 
@@ -36,8 +36,8 @@ The following section provides a breakdown of the key methods available in the `
 
 **Purpose**: Specifies the table from which records will be deleted.
 
-* **Parameters**: `table` — A symbol representing the table name.
-* **Returns**: `Delete` object (for chaining).
+- **Parameters**: `table` — A symbol representing the table name.
+- **Returns**: `Delete` object (for chaining).
 
 **Real-World Example: Specifying the Table**
 
@@ -47,14 +47,14 @@ delete.from(:users)
 
 This sets the `users` table as the target for the delete operation.
 
-***
+---
 
 #### 2. `where(**fields)`
 
 **Purpose**: Adds a `WHERE` clause to filter the records to be deleted.
 
-* **Parameters**: `fields` — A key-value hash where keys represent column names and values represent the conditions to match.
-* **Returns**: `Delete` object (for chaining).
+- **Parameters**: `fields` — A key-value hash where keys represent column names and values represent the conditions to match.
+- **Returns**: `Delete` object (for chaining).
 
 **Real-World Example: Filtering by Conditions**
 
@@ -66,14 +66,14 @@ delete
 
 This filters the query to only delete the user where `id = 1`.
 
-***
+---
 
 #### 3. `where(&block)`
 
 **Purpose**: Adds a `WHERE` clause using a block for more complex filtering conditions.
 
-* **Parameters**: A block that defines the filtering logic using a filter builder.
-* **Returns**: `Delete` object (for chaining).
+- **Parameters**: A block that defines the filtering logic using a filter builder.
+- **Returns**: `Delete` object (for chaining).
 
 **Real-World Example: Using a Block for Conditions**
 
@@ -85,13 +85,13 @@ delete
 
 This deletes all users where the `age` is less than 30.
 
-***
+---
 
 #### 4. `commit`
 
 **Purpose**: Executes the delete query and commits the changes to the database.
 
-* **Returns**: A `DB::Result` object representing the result of the query execution.
+- **Returns**: A `DB::Result` object representing the result of the query execution.
 
 **Real-World Example: Committing the Delete**
 
@@ -104,14 +104,14 @@ delete = Cql::Delete.new(schema)
 
 This deletes the user from the `users` table where `id = 1` and commits the change.
 
-***
+---
 
 #### 5. `using(table : Symbol)`
 
 **Purpose**: Adds a `USING` clause to the delete query, useful when deleting records based on conditions from another table.
 
-* **Parameters**: `table` — A symbol representing the name of the table to use in the `USING` clause.
-* **Returns**: `Delete` object (for chaining).
+- **Parameters**: `table` — A symbol representing the name of the table to use in the `USING` clause.
+- **Returns**: `Delete` object (for chaining).
 
 **Real-World Example: Using Another Table for Deletion**
 
@@ -124,14 +124,14 @@ delete
 
 This example deletes users where they are linked to posts based on the condition `posts.user_id = users.id`.
 
-***
+---
 
 #### 6. `back(*columns : Symbol)`
 
 **Purpose**: Specifies the columns to return after the delete operation.
 
-* **Parameters**: `columns` — An array of symbols representing the columns to return.
-* **Returns**: `Delete` object (for chaining).
+- **Parameters**: `columns` — An array of symbols representing the columns to return.
+- **Returns**: `Delete` object (for chaining).
 
 **Real-World Example: Returning Columns After Deletion**
 
@@ -145,14 +145,14 @@ delete
 
 This deletes the user with `id = 1` and returns the `name` and `email` of the deleted record.
 
-***
+---
 
 #### 7. `to_sql(gen = @schema.gen)`
 
 **Purpose**: Generates the SQL query and parameters required for the delete operation.
 
-* **Parameters**: `gen` — The generator used for SQL generation (default: schema generator).
-* **Returns**: A tuple containing the SQL query string and the parameters.
+- **Parameters**: `gen` — The generator used for SQL generation (default: schema generator).
+- **Returns**: A tuple containing the SQL query string and the parameters.
 
 **Real-World Example: Generating SQL for Deletion**
 
@@ -168,7 +168,7 @@ puts params  # [1]
 
 This generates the raw SQL query and its associated parameters without executing it.
 
-***
+---
 
 ### Putting It All Together
 
@@ -189,11 +189,11 @@ puts result  # This returns the name and email of the deleted user(s).
 
 In this query:
 
-* We specify the `users` table as the target for deletion.
-* We use the `posts` table to filter users without any posts.
-* We return the `name` and `email` of the deleted user(s).
+- We specify the `users` table as the target for deletion.
+- We use the `posts` table to filter users without any posts.
+- We return the `name` and `email` of the deleted user(s).
 
-***
+---
 
 ### Conclusion
 

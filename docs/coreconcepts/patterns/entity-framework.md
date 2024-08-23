@@ -31,8 +31,8 @@ This code defines the `users` table and its columns (`id`, `name`, and `age`), w
 
 In EF, a `DbContext` is used to manage the entities (mapped to database tables), and each `DbSet` represents a collection of entities (mapped to individual tables). Similarly, in CQL:
 
-* `Cql::Schema` manages the structure of your database.
-* Tables are defined within the schema using `table` blocks.
+- `Cql::Schema` manages the structure of your database.
+- Tables are defined within the schema using `table` blocks.
 
 Example:
 
@@ -147,11 +147,11 @@ Both frameworks provide abstractions that avoid writing raw SQL, but CQL maintai
 
 ### 5. **Advantages of Using CQL for Crystal Developers**
 
-* **Productivity**: Like EF, CQL reduces the need for writing raw SQL by allowing developers to work with objects (schemas, tables, columns).
-* **Schema Management**: CQL migrations simplify managing database changes, ensuring your schema evolves without breaking changes.
-* **Consistency**: CQL’s Schema-First approach ensures the database schema is in sync with your application’s Crystal code, similar to EF’s Code-First approach.
+- **Productivity**: Like EF, CQL reduces the need for writing raw SQL by allowing developers to work with objects (schemas, tables, columns).
+- **Schema Management**: CQL migrations simplify managing database changes, ensuring your schema evolves without breaking changes.
+- **Consistency**: CQL’s Schema-First approach ensures the database schema is in sync with your application’s Crystal code, similar to EF’s Code-First approach.
 
-***
+---
 
 #### Conclusion
 

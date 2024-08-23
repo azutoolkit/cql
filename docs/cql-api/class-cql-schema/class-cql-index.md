@@ -22,13 +22,13 @@ end
 
 Create a new index instance on a table
 
-* **@param** : table (Table) - The table to create the index on
-* **@param** : columns (Array(Symbol)) - The columns to index
-* **@param** : unique (Bool) - Whether the index should be unique (default: false)
-* **@param** : name (String, nil) - The name of the index (default: nil)
-* **@return** : Nil
-* **@raise** : Cql::Error if the table does not exist
-* **@raise** : Cql::Error if the column does not exist
+- **@param** : table (Table) - The table to create the index on
+- **@param** : columns (Array(Symbol)) - The columns to index
+- **@param** : unique (Bool) - Whether the index should be unique (default: false)
+- **@param** : name (String, nil) - The name of the index (default: nil)
+- **@return** : Nil
+- **@raise** : Cql::Error if the table does not exist
+- **@raise** : Cql::Error if the column does not exist
 
 **Example**
 
@@ -40,12 +40,12 @@ index = Cql::Index.new(table, [:name, :email], unique: true)
 
 ### def columns
 
-### def index\_name
+### def index_name
 
 Generate the index name
 
-* **@return** : String
-* **@raise** : Nil
+- **@return** : String
+- **@raise** : Nil
 
 **Example**
 

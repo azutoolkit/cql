@@ -64,7 +64,7 @@ schema = Cql::Schema.new(:northwind, "sqlite3://db.sqlite3")
 
 ## Class Methods
 
-### def define`(name : Symbol, uri : String, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)`
+### def db_context`(name : Symbol, uri : String, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)`
 
 Builds a new schema.
 
@@ -78,7 +78,7 @@ Builds a new schema.
 **Example**
 
 ```crystal
-schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
+schema = Cql::Schema.db_context(:northwind, "sqlite3://db.sqlite3") do |s|
   s.create_table :users do
     primary :id, Int64, auto_increment: true
     column :name, String

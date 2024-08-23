@@ -4,7 +4,7 @@ title: "Cql::Relations::HasOne"
 
 # module Cql::Relations::HasOne
 
-Define the has_one association
+Define the `has_one` association
 
 ## Macros
 

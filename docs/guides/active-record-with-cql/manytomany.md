@@ -4,19 +4,19 @@
 
 In this guide, we’ll cover the `ManyToMany` relationship using CQL's Active Record syntax. This is a more complex relationship compared to `HasOne` and `HasMany`, and it’s commonly used when two entities have a many-to-many relationship, such as posts and tags where:
 
-* A **Post** can have many **Tags**.
-* A **Tag** can belong to many **Posts**.
+- A **Post** can have many **Tags**.
+- A **Tag** can belong to many **Posts**.
 
 To model this, we need an intermediate (or join) table that connects these two entities.
 
-***
+---
 
 ## What is a `ManyToMany` Relationship?
 
 A `ManyToMany` relationship means that multiple records in one table can relate to multiple records in another table. For example:
 
-* A **Post** can have multiple **Tags** (e.g., "Tech", "News").
-* A **Tag** can belong to multiple **Posts** (e.g., both Post 1 and Post 2 can have the "Tech" tag).
+- A **Post** can have multiple **Tags** (e.g., "Tech", "News").
+- A **Tag** can belong to multiple **Posts** (e.g., both Post 1 and Post 2 can have the "Tech" tag).
 
 ### Example Scenario: Posts and Tags
 
@@ -24,12 +24,12 @@ A `ManyToMany` relationship means that multiple records in one table can relate 
 
 We’ll use a scenario where:
 
-* A **Post** can have many **Tags**.
-* A **Tag** can belong to many **Posts**.
+- A **Post** can have many **Tags**.
+- A **Tag** can belong to many **Posts**.
 
 We will represent this many-to-many relationship using a join table called **PostTags**.
 
-***
+---
 
 ## Defining the Schema
 
@@ -62,11 +62,11 @@ AcmeDB = Cql::Schema.define(
 end
 ```
 
-* **posts** table: Stores post details such as `title`, `body`, and `published_at`.
-* **tags** table: Stores tag names.
-* **post\_tags** table: A join table that connects `posts` and `tags` via their foreign keys `post_id` and `tag_id`.
+- **posts** table: Stores post details such as `title`, `body`, and `published_at`.
+- **tags** table: Stores tag names.
+- **post_tags** table: A join table that connects `posts` and `tags` via their foreign keys `post_id` and `tag_id`.
 
-***
+---
 
 ## Defining the Models
 
@@ -75,10 +75,8 @@ Let’s define the `Post`, `Tag`, and `PostTag` models in CQL, establishing the 
 ### **Post Model**
 
 ```crystal
-struct Post
-  include Cql::Record(Post, Int64)
-
-  define AcmeDB, :posts
+struct Post< Cql::Record(Post, Int64)
+  db_context AcmeDB, :posts
 
   getter id : Int64?
   getter title : String
@@ -97,16 +95,15 @@ end
 
 In the `Post` model, we define:
 
-* `has_many :post_tags` to establish the association between `Post` and the join table `PostTag`.
-* `has_many :tags, through: :post_tags` to associate `Post` with `Tag` through the join table.
+- `has_many :post_tags` to establish the association between `Post` and the join table `PostTag`.
+- `has_many :tags, through: :post_tags` to associate `Post` with `Tag` through the join table.
 
 ### **Tag Model**
 
 ```crystal
-struct Tag
-  include Cql::Record(Tag, Int64)
+struct Tag< Cql::Record(Tag, Int64)
 
-  define AcmeDB, :tags
+  db_context AcmeDB, :tags
 
   getter id : Int64?
   getter name : String
@@ -121,18 +118,17 @@ struct Tag
 end
 ```
 
-Similarly, in the `Tag` model, we define:
+Similarly, in the `Tag` model, we db_context:
 
-* `has_many :post_tags` to associate `Tag` with `PostTag`.
-* `has_many :posts, through: :post_tags` to associate `Tag` with `Post` through the join table.
+- `has_many :post_tags` to associate `Tag` with `PostTag`.
+- `has_many :posts, through: :post_tags` to associate `Tag` with `Post` through the join table.
 
 ### **PostTag Model (Join Table)**
 
 ```crystal
-struct PostTag
-  include Cql::Record(PostTag, Int64)
+struct PostTag< Cql::Record(PostTag, Int64)
 
-  define AcmeDB, :post_tags
+  db_context AcmeDB, :post_tags
 
   getter id : Int64?
   getter post_id : Int64
@@ -150,11 +146,11 @@ end
 
 The `PostTag` model links each `Post` and `Tag` by storing their respective IDs.
 
-***
+---
 
 ## Creating and Querying Records
 
-Now that we’ve defined the `Post`, `Tag`, and `PostTag` models, let’s explore how to create and query records in a `ManyToMany` relationship.
+Now that we’ve db_contextd the `Post`, `Tag`, and `PostTag` models, let’s explore how to create and query records in a `ManyToMany` relationship.
 
 ### **Creating a Post with Tags**
 
@@ -176,9 +172,9 @@ PostTag.new(post.id.not_nil!, tag2.id.not_nil!).save
 
 In this example:
 
-* We create a `Post` and save it to the database.
-* We create two `Tags` ("Tech" and "Programming") and save them.
-* We create records in the `PostTag` join table to associate the `Post` with these two `Tags`.
+- We create a `Post` and save it to the database.
+- We create two `Tags` ("Tech" and "Programming") and save them.
+- We create records in the `PostTag` join table to associate the `Post` with these two `Tags`.
 
 ### **Accessing Tags for a Post**
 
@@ -212,7 +208,7 @@ end
 
 Here, `tag.posts` retrieves all the posts associated with the tag.
 
-***
+---
 
 ## Updating and Deleting the Associations
 
@@ -248,7 +244,7 @@ post_tag = PostTag.where(post_id: post.id, tag_id: tag.id).first
 post_tag.delete
 ```
 
-***
+---
 
 ## Advanced Querying
 
@@ -284,15 +280,15 @@ posts.each do |post|
 end
 ```
 
-***
+---
 
 ## Summary
 
 In this guide, we explored the `ManyToMany` relationship in CQL. We:
 
-* Defined the `Post`, `Tag`, and `PostTag` tables in the schema
-* Created corresponding models, specifying the `ManyToMany` relationship between `Post` and `Tag` through the `PostTag` join table.
-* Demonstrated how to create, query, update, and delete records in a `ManyToMany` relationship.
+- Define the `Post`, `Tag`, and `PostTag` tables in the schema
+- Created corresponding models, specifying the `ManyToMany` relationship between `Post` and `Tag` through the `PostTag` join table.
+- Demonstrated how to create, query, update, and delete records in a `ManyToMany` relationship.
 
 ### Next Steps
 

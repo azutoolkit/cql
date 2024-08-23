@@ -8,10 +8,10 @@ CQL is a powerful library designed to simplify and enhance the management and ex
 
 ## Features
 
-* **Query Builder**: Programmatically create complex SQL queries.
-* **Insert, Update, Delete Operations**: Perform CRUD operations with ease.
-* **Repository Pattern**: Manage your data more effectively using `Cql::Repository(T)`.
-* **Active Record Pattern**: Work with your data models using `Cql::Record(T)`.
+- **Query Builder**: Programmatically create complex SQL queries.
+- **Insert, Update, Delete Operations**: Perform CRUD operations with ease.
+- **Repository Pattern**: Manage your data more effectively using `Cql::Repository(T)`.
+- **Active Record Pattern**: Work with your data models using `Cql::Record(T)`.
 
 ## Installation
 
@@ -141,11 +141,9 @@ Work with your data using the Active Record pattern:
 
 ```crystal
 A
-struct Actor
-  include Cql::Record(Actor, Int64)
-  include Cql::Relations
+struct Actor < Cql::Record(Actor, Int64)
 
-  define AcmeDB2, :actors
+  db_context AcmeDB2, :actors
 
   getter id : Int64?
   getter name : String
@@ -154,11 +152,9 @@ struct Actor
   end
 end
 
-struct Movie
-  include Cql::Record(Movie, Int64)
-  include Cql::Relations
+struct Movie < Cql::Record(Movie, Int64)
 
-  define AcmeDB2, :movies
+  db_context AcmeDB2, :movies
 
   has_one :screenplay, Screenplay
   many_to_many :actors, Actor, join_through: :movies_actors
@@ -171,11 +167,9 @@ struct Movie
   end
 end
 
-struct Director
-  include Cql::Record(Director, Int64)
-  include Cql::Relations
+struct Director < Cql::Record(Director, Int64)
 
-  define AcmeDB2, :directors
+  db_context AcmeDB2, :directors
 
   getter id : Int64?
   getter name : String
@@ -185,11 +179,9 @@ struct Director
   end
 end
 
-struct Screenplay
-  include Cql::Record(Screenplay, Int64)
-  include Cql::Relations
+struct Screenplay < Cql::Record(Screenplay, Int64)
 
-  define AcmeDB2, :screenplays
+  db_context AcmeDB2, :screenplays
 
   belongs_to :movie, foreign_key: :movie_id
 
@@ -200,10 +192,9 @@ struct Screenplay
   end
 end
 
-struct MoviesActors
-  include Cql::Record(MoviesActors, Int64)
+struct MoviesActors < Cql::Record(MoviesActors, Int64)
 
-  define AcmeDB2, :movies_actors
+  db_context AcmeDB2, :movies_actors
 
   getter id : Int64?
   getter movie_id : Int64

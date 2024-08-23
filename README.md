@@ -139,9 +139,8 @@ Work with your data using the Active Record pattern:
 ```crystal
 AcmeDB = Cql::Schema.build(...) do ... end
 
-struct User
-  include Cql::Record(User, Int64)
-  define schema: AcmeDB, table: :users
+struct User < Cql::Record(Int64)
+  db_context  schema: AcmeDB, table: :users
 
   # Crystal properties (no macros)
   property id : Int64

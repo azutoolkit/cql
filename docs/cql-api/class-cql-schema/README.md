@@ -46,10 +46,10 @@ The `Schema` class represents a database schema.
 
 Initializes a new schema.
 
-* **@param** name \[Symbol] the name of the schema
-* **@param** uri \[String] the URI of the database
-* **@param** adapter \[Adapter] the database adapter (default: `Adapter::Sqlite`)
-* **@param** version \[String] the version of the schema (default: "1.0")
+- **@param** name \[Symbol] the name of the schema
+- **@param** uri \[String] the URI of the database
+- **@param** adapter \[Adapter] the database adapter (default: `Adapter::Sqlite`)
+- **@param** version \[String] the version of the schema (default: "1.0")
 
 **Example** Initializing a new schema
 
@@ -63,12 +63,12 @@ schema = Cql::Schema.new(:northwind, "sqlite3://db.sqlite3")
 
 Builds a new schema.
 
-* **@param** name \[Symbol] the name of the schema
-* **@param** uri \[String] the URI of the database
-* **@param** adapter \[Adapter] the database adapter (default: `Adapter::Sqlite`)
-* **@param** version \[String] the version of the schema (default: "1.0")
-* **@yield** \[Schema] the schema being built
-* **@return** \[Schema] the built schema
+- **@param** name \[Symbol] the name of the schema
+- **@param** uri \[String] the URI of the database
+- **@param** adapter \[Adapter] the database adapter (default: `Adapter::Sqlite`)
+- **@param** version \[String] the version of the schema (default: "1.0")
+- **@yield** \[Schema] the schema being built
+- **@return** \[Schema] the built schema
 
 **Example**
 
@@ -86,14 +86,14 @@ end
 
 ### def adapter
 
-* **@return** \[Adapter] the database adapter (default: `Adapter::Sqlite`)
+- **@return** \[Adapter] the database adapter (default: `Adapter::Sqlite`)
 
 ### def alter`(table_name : Symbol, &)`
 
 Alter a table in the schema.
 
-* **@param** table\_name \[Symbol] the name of the table
-* **@yield** \[AlterTable] the table being altered **Example**
+- **@param** table_name \[Symbol] the name of the table
+- **@yield** \[AlterTable] the table being altered **Example**
 
 ```crystal
 schema.alter(:users) do |t|
@@ -111,13 +111,13 @@ end
 
 ### def db
 
-* **@return** \[DB::Connection] the database connection
+- **@return** \[DB::Connection] the database connection
 
 ### def delete
 
 Creates a new delete query for the schema.
 
-* **@return** \[Delete] the new delete query **Example**
+- **@return** \[Delete] the new delete query **Example**
 
 ```crystal
 delete = schema.delete
@@ -127,7 +127,7 @@ delete = schema.delete
 
 Executes a SQL statement.
 
-* **@param** sql \[String] the SQL statement to execute
+- **@param** sql \[String] the SQL statement to execute
 
 **Example**
 
@@ -137,13 +137,13 @@ schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
 
 ### def gen
 
-* **@return** \[Expression::Generator] the expression generator
+- **@return** \[Expression::Generator] the expression generator
 
 ### def insert
 
 Creates a new insert query for the schema.
 
-* **@return** \[Insert] the new insert query **Example**
+- **@return** \[Insert] the new insert query **Example**
 
 ```crystal
 insert = schema.insert
@@ -153,7 +153,7 @@ insert = schema.insert
 
 Creates a new migrator for the schema.
 
-* **@return** \[Migrator] the new migrator **Example**
+- **@return** \[Migrator] the new migrator **Example**
 
 ```crystal
 migrator = schema.migrator
@@ -161,13 +161,13 @@ migrator = schema.migrator
 
 ### def name
 
-* **@return** \[Symbol] the name of the schema
+- **@return** \[Symbol] the name of the schema
 
 ### def query
 
 Creates a new query for the schema.
 
-* **@return** \[Query] the new query
+- **@return** \[Query] the new query
 
 **Example**
 
@@ -179,10 +179,10 @@ query = schema.query
 
 Creates a new table in the schema.
 
-* **@param** name \[Symbol] the name of the table
-* **@param** as\_name \[Symbol] the alias of the table
-* **@yield** \[Table] the table being created
-* **@return** \[Table] the created table **Example**
+- **@param** name \[Symbol] the name of the table
+- **@param** as_name \[Symbol] the alias of the table
+- **@yield** \[Table] the table being created
+- **@return** \[Table] the created table **Example**
 
 ```crystal
 schema.create_table :users do
@@ -194,13 +194,13 @@ end
 
 ### def tables
 
-* **@return** \[Hash(Symbol, Table)] the tables in the schema
+- **@return** \[Hash(Symbol, Table)] the tables in the schema
 
 ### def update
 
 Creates a new update query for the schema.
 
-* **@return** \[Update] the new update query **Example**
+- **@return** \[Update] the new update query **Example**
 
 ```crystal
 update = schema.update
@@ -208,12 +208,12 @@ update = schema.update
 
 ### def uri
 
-* **@return** \[String] the URI of the database
+- **@return** \[String] the URI of the database
 
 ### def version
 
-* **@return** \[String] the version of the schema
+- **@return** \[String] the version of the schema
 
 ## Macros
 
-### macro method\_missing`(call)`
+### macro method_missing`(call)`

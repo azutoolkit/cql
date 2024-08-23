@@ -1,7 +1,7 @@
 # module Cql::Relations::HasOne
 
-Define the has\_one association
+Define the `has_one` association
 
 ## Macros
 
-### macro has\_one`(name, type)`
+### macro has_one`(name, type)`

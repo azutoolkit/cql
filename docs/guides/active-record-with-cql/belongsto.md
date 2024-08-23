@@ -10,14 +10,14 @@ The `BelongsTo` association in a database indicates that one entity (a record) r
 
 Let's say you have a blog system where:
 
-* A **Post** can have many **Comments**.
-* A **Comment** belongs to one **Post**.
+- A **Post** can have many **Comments**.
+- A **Comment** belongs to one **Post**.
 
 <figure><img src="../../.gitbook/assets/Untitled-2.svg" alt=""><figcaption></figcaption></figure>
 
 We'll start by implementing the `BelongsTo` relationship from the `Comment` to the `Post`.
 
-***
+---
 
 ## Defining the Schema
 
@@ -25,7 +25,7 @@ We'll first define the `posts` and `comments` tables using CQL’s schema DSL.
 
 ```crystal
 codeAcmeDB = Cql::Schema.define(
-  :acme_db, 
+  :acme_db,
   adapter: Cql::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
 ) do
@@ -45,10 +45,10 @@ codeAcmeDB = Cql::Schema.define(
 end
 ```
 
-* **posts** table: Contains the blog post data (title, body, and published date).
-* **comments** table: Contains the comment data and a foreign key `post_id` which references the `posts` table.
+- **posts** table: Contains the blog post data (title, body, and published date).
+- **comments** table: Contains the comment data and a foreign key `post_id` which references the `posts` table.
 
-***
+---
 
 ## Defining the Models
 
@@ -57,10 +57,8 @@ Next, we'll define the `Post` and `Comment` structs in CQL.
 ### **Post Model**
 
 ```crystal
-crystalCopy codestruct Post
-  include Cql::Record(Post, Int64)
-
-  define AcmeDB, :posts
+Post < Cql::Record(Post, Int64)
+  db_context AcmeDB, :posts
 
   getter id : Int64?
   getter title : String
@@ -76,9 +74,8 @@ end
 ### **Comment Model**
 
 ```crystal
-crystalCopy codestruct Comment
-  include Cql::Record(Comment, Int64)
-  define AcmeDB, :comments
+Comment < Cql::Record(Comment, Int64)
+  db_context AcmeDB, :comments
 
   getter id : Int64?
   getter post_id : Int64
@@ -95,11 +92,11 @@ end
 
 In the `Comment` model, we specify the `belongs_to :post` association, which links each comment to its parent post by using the `post_id` foreign key.
 
-***
+---
 
 ## Creating and Querying Records
 
-Now that we have defined the `Post` and `Comment` models with a `belongs_to` relationship, let's see how to create and query records in CQL.
+Now that we have db_contextd the `Post` and `Comment` models with a `belongs_to` relationship, let's see how to create and query records in CQL.
 
 ### **Creating a Post and Comment**
 
@@ -111,9 +108,9 @@ comment.savex
 
 ```
 
-* We instantiate a `Comment` and associate it with the post by creating a `post`.
-* The post record is created and saved in the database.
-* &#x20;And the returned id is then associtated to the comment.
+- We instantiate a `Comment` and associate it with the post by creating a `post`.
+- The post record is created and saved in the database.
+- &#x20;And the returned id is then associtated to the comment.
 
 ### **Querying the Associated Post from a Comment**
 
@@ -131,15 +128,15 @@ puts post.title  # Outputs: "My First Blog Post"
 
 In this example, `comment.post` will fetch the `Post` associated with that `Comment`.
 
-***
+---
 
 ## Summary
 
 In this guide, we’ve covered the basics of the `belongs_to` relationship in CQL. We:
 
-* Defined the `Post` and `Comment` tables in the schema.
-* Created the corresponding models, specifying the `belongs_to` relationship in the `Comment` model.
-* Showed how to create and query records using the `belongs_to` association.
+- Defined the `Post` and `Comment` tables in the schema.
+- Created the corresponding models, specifying the `belongs_to` relationship in the `Comment` model.
+- Showed how to create and query records using the `belongs_to` association.
 
 ### Next Steps
 

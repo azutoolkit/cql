@@ -42,11 +42,11 @@ migrator.up
 
 ## Instance Methods
 
-### def applied\_migrations
+### def applied_migrations
 
 Returns the applied migrations.
 
-* **@return** \[Array(MigrationRecord)] **Example** Listing applied migrations
+- **@return** \[Array(MigrationRecord)] **Example** Listing applied migrations
 
 ```crystal
 migrator.applied_migrations
@@ -56,17 +56,17 @@ migrator.applied_migrations
 
 Rolls back the last migration.
 
-* **@param** steps \[Int32] the number of migrations to roll back (default: 1) **Example** Rolling back migrations
+- **@param** steps \[Int32] the number of migrations to roll back (default: 1) **Example** Rolling back migrations
 
 ```crystal
 migrator.down
 ```
 
-### def down\_to`(version : Int64)`
+### def down_to`(version : Int64)`
 
 Rolls back to a specific migration version.
 
-* **@param** version \[Int64] the version to roll back to **Example** Rolling back to a specific version
+- **@param** version \[Int64] the version to roll back to **Example** Rolling back to a specific version
 
 ```crystal
 migrator.down_to(1_i64)
@@ -82,17 +82,17 @@ migrator.last
 
 @return \[Migration.class | Nil]
 
-### def pending\_migrations
+### def pending_migrations
 
 Returns the pending migrations.
 
-* **@return** \[Array(MigrationRecord)] **Example** Listing pending migrations
+- **@return** \[Array(MigrationRecord)] **Example** Listing pending migrations
 
 ```crystal
 migrator.pending_migrations
 ```
 
-### def print\_applied\_migrations
+### def print_applied_migrations
 
 Prints the applied migrations. **Example** Listing applied migrations
 
@@ -100,7 +100,7 @@ Prints the applied migrations. **Example** Listing applied migrations
 migrator.print_applied_migrations
 ```
 
-### def print\_pending\_migrations
+### def print_pending_migrations
 
 Prints the pending migrations. **Example** Listing pending migrations
 
@@ -108,12 +108,12 @@ Prints the pending migrations. **Example** Listing pending migrations
 migrator.print_pending_migrations
 ```
 
-### def print\_rolled\_back\_migrations`(m : Array(Migration.class))`
+### def print_rolled_back_migrations`(m : Array(Migration.class))`
 
 Prints the rolled back migrations.
 
-* **@param** m \[Array(Migration.class)] the migrations to print
-* **@return** \[Nil] **Example** Listing rolled back migrations
+- **@param** m \[Array(Migration.class)] the migrations to print
+- **@return** \[Nil] **Example** Listing rolled back migrations
 
 ```crystal
 migrator.print_rolled_back_migrations
@@ -133,7 +133,7 @@ migrator.redo
 
 Rolls back the last migration.
 
-* **@param** steps \[Int32] the number of migrations to roll back (default: 1) **Example** Rolling back migrations
+- **@param** steps \[Int32] the number of migrations to roll back (default: 1) **Example** Rolling back migrations
 
 ```crystal
 migrator.rollback
@@ -145,17 +145,17 @@ migrator.rollback
 
 Applies the pending migrations.
 
-* **@param** steps \[Int32] the number of migrations to apply (default: all) **Example** Applying migrations
+- **@param** steps \[Int32] the number of migrations to apply (default: all) **Example** Applying migrations
 
 ```crystal
 migrator.up
 ```
 
-### def up\_to`(version : Int64)`
+### def up_to`(version : Int64)`
 
 Applies migrations up to a specific version.
 
-* **@param** version \[Int64] the version to apply up to **Example** Applying to a specific version
+- **@param** version \[Int64] the version to apply up to **Example** Applying to a specific version
 
 ```crystal
 migrator.up_to(1_i64)
