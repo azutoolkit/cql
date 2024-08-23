@@ -8,10 +8,10 @@ CQL is a powerful library designed to simplify and enhance the management and ex
 
 ## Features
 
-- **Query Builder**: Programmatically create complex SQL queries.
-- **Insert, Update, Delete Operations**: Perform CRUD operations with ease.
-- **Repository Pattern**: Manage your data more effectively using `Cql::Repository(T)`.
-- **Active Record Pattern**: Work with your data models using `Cql::Record(T)`.
+* **Query Builder**: Programmatically create complex SQL queries.
+* **Insert, Update, Delete Operations**: Perform CRUD operations with ease.
+* **Repository Pattern**: Manage your data more effectively using `Cql::Repository(T)`.
+* **Active Record Pattern**: Work with your data models using `Cql::Record(T)`.
 
 ## Installation
 
@@ -140,7 +140,6 @@ user_repository.update(1, name: "Jane Smith")
 Work with your data using the Active Record pattern:
 
 ```crystal
-A
 struct Actor < Cql::Record(Actor, Int64)
 
   db_context AcmeDB2, :actors
