@@ -75,7 +75,7 @@ Let’s define the `Post`, `Tag`, and `PostTag` models in CQL, establishing the 
 ### **Post Model**
 
 ```crystal
-struct Post< Cql::Record(Post, Int64)
+struct Post < Cql::Record(Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -101,8 +101,7 @@ In the `Post` model, we define:
 ### **Tag Model**
 
 ```crystal
-struct Tag< Cql::Record(Tag, Int64)
-
+struct Tag < Cql::Record(Int64)
   db_context AcmeDB, :tags
 
   getter id : Int64?
@@ -126,8 +125,7 @@ Similarly, in the `Tag` model, we db_context:
 ### **PostTag Model (Join Table)**
 
 ```crystal
-struct PostTag< Cql::Record(PostTag, Int64)
-
+struct PostTag < Cql::Record(Int64)
   db_context AcmeDB, :post_tags
 
   getter id : Int64?

@@ -58,8 +58,7 @@ Let’s db_context the `Post` and `Comment` models and establish the `HasMany` a
 ### **Post Model**
 
 ```crystal
-struct Post< Cql::Record(Post, Int64)
-
+struct Post < Cql::Record(Post, Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -82,7 +81,6 @@ end
 
 ```crystal
 struct Comment< Cql::Record(Comment, Int64)
-
   db_context AcmeDB, :comments
 
   getter id : Int64?

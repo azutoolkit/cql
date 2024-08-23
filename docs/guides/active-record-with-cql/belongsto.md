@@ -57,7 +57,7 @@ Next, we'll define the `Post` and `Comment` structs in CQL.
 ### **Post Model**
 
 ```crystal
-Post < Cql::Record(Post, Int64)
+struct Post < Cql::Record(Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -74,7 +74,7 @@ end
 ### **Comment Model**
 
 ```crystal
-Comment < Cql::Record(Comment, Int64)
+struct Comment < Cql::Record(Int64)
   db_context AcmeDB, :comments
 
   getter id : Int64?

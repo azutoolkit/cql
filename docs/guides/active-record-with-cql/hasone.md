@@ -56,8 +56,7 @@ Let’s define the `User` and `Profile` models in CQL, establishing the `HasOne`
 ### **User Model**
 
 ```crystal
-struct User< Cql::Record(User, Int64)
-
+struct User< Cql::Record(Int64)
   db_context AcmeDB, :users
 
   getter id : Int64?
@@ -78,8 +77,7 @@ end
 ### **Profile Model**
 
 ```crystal
-struct Profile< Cql::Record(Profile, Int64)
-
+struct Profile < Cql::Record(Int64)
   db_context AcmeDB, :profiles
 
   getter id : Int64?

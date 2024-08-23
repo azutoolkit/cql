@@ -102,8 +102,7 @@ Now that the schema is ready, we can define the `User` record (model) that maps 
 
     ```crystal
     # src/models/user.cr
-    struct User
-      include Cql::Record(User, Int64)
+    struct User < Cql::Record(Int64)
       db_context AcmeDB, :users
 
       property id : Int64?
@@ -156,7 +155,6 @@ CQL supports associations similar to ActiveRecord, Ecto, and other ORMs. Let's d
     # db/migrate/20230817000001_create_posts.cr
 
     class CreatePosts < Cql::Migration
-
       schema.table :posts do
         primary
         text :title, null: false
@@ -181,8 +179,7 @@ CQL supports associations similar to ActiveRecord, Ecto, and other ORMs. Let's d
 
     ```crystal
     # src/models/post.cr
-    struct Post
-      include Cql::Record(Post, Int64)
+    struct Post< Cql::Record(Int64)
       db_context AcmeDB, :posts
 
       property id : Int64?
@@ -204,8 +201,7 @@ CQL supports associations similar to ActiveRecord, Ecto, and other ORMs. Let's d
 
     ```crystal
     # src/models/user.cr
-    class User
-      include Cql::Record(User, Int64)
+    struct User < Cql::Record(Int64)
       db_context AcmeDB, :users
 
       column id : Int64?

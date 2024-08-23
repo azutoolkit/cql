@@ -7,7 +7,7 @@ module Cql
   # **Example** Creating a new foreign key
   #
   # ```
-  # schema.build do
+  # Schema.define do
   #   table :users do
   #     column :id, Int32, primary: true
   #     column :name, String

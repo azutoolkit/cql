@@ -49,10 +49,8 @@ Now, let's define the `Post` and `Comment` models that map to the `posts` and `c
 ### **Post Model**
 
 ```crystal
-struct Post
-  include Cql::Record(Post, Int64)
-
-  define AcmeDB, :posts
+struct Post < Cql::Record(Int64)
+  db_context AcmeDB, :posts
 
   getter id : Int64?
   getter title : String
@@ -68,10 +66,8 @@ end
 ### **Comment Model**
 
 ```crystal
-struct Comment
-  include Cql::Record(Comment, Int64)
-
-  define AcmeDB, :comments
+struct Comment <Cql::Record(Int64)
+  db_context AcmeDB, :comments
 
   getter id : Int64?
   getter post_id : Int64
@@ -278,10 +274,8 @@ end
 ### **Defining the Models**:
 
 ```crystal
-struct Post
-  include Cql::Record(Post, Int64)
-
-  define AcmeDB, :posts
+struct Post < Cql::Record(Int64)
+  db_context AcmeDB, :posts
 
   getter id : Int64?
   getter title : String
@@ -294,10 +288,8 @@ struct Post
   end
 end
 
-struct Comment
-  include Cql::Record(Comment, Int64)
-
-  define AcmeDB, :comments
+struct Comment < Cql::Record(Int64)
+  db_context AcmeDB, :comments
 
   getter id : Int64?
   getter post_id : Int64

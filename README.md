@@ -54,7 +54,7 @@ shards install
 Define the schema for your database tables:
 
 ```crystal
-schema = Cql::Schema.build(
+schema = Cql::Schema.define(
   :my_database,
   adapter: Cql::Adapter::Postgres,
   db: DB.open("postgresql://user:password@localhost:5432/database_name")
@@ -137,7 +137,7 @@ user_repository.update(1, name: "Jane Smith")
 Work with your data using the Active Record pattern:
 
 ```crystal
-AcmeDB = Cql::Schema.build(...) do ... end
+AcmeDB = Cql::Schema.define(...) do ... end
 
 struct User < Cql::Record(Int64)
   db_context  schema: AcmeDB, table: :users

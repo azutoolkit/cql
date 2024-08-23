@@ -95,7 +95,7 @@ module Cql
     # **Example**
     #
     # ```
-    # schema.build
+    # Schema.define
     # ```
     def build
       @tables.each do |name, table|
