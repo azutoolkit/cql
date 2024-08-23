@@ -6,6 +6,8 @@ title: Cql
 
 CQL is a powerful library designed to simplify and enhance the management and execution of SQL queries in the Crystal programming language. It provides utilities for building, validating, and executing SQL statements, ensuring better performance and code maintainability.
 
+<figure><img src=".gitbook/assets/cql-banner.png" alt=""><figcaption></figcaption></figure>
+
 ## Features
 
 * **Query Builder**: Programmatically create complex SQL queries.
