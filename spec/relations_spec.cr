@@ -1,8 +1,6 @@
 require "./spec_helper"
-AcmeDB2 = Cql::Schema.define(
-  :acme_db,
-  adapter: Cql::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]) do
+
+AcmeDB2 = Cql::Schema.define(:acme_db, adapter: Cql::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
   table :movies do
     primary :id, Int64, auto_increment: true
     text :title
@@ -32,10 +30,8 @@ AcmeDB2 = Cql::Schema.define(
   end
 end
 
-struct Actor
-  include Cql::Record(Actor, Int64)
-
-  define AcmeDB2, :actors
+struct Actor < Cql::Record(Int64)
+  db_context AcmeDB2, :actors
 
   getter id : Int64?
   getter name : String
@@ -44,10 +40,8 @@ struct Actor
   end
 end
 
-struct Movie
-  include Cql::Record(Movie, Int64)
-
-  define AcmeDB2, :movies
+struct Movie < Cql::Record(Int64)
+  db_context AcmeDB2, :movies
 
   has_one :screenplay, Screenplay
   many_to_many :actors, Actor, join_through: :movies_actors
@@ -60,10 +54,8 @@ struct Movie
   end
 end
 
-struct Director
-  include Cql::Record(Director, Int64)
-
-  define AcmeDB2, :directors
+struct Director < Cql::Record(Int64)
+  db_context AcmeDB2, :directors
 
   getter id : Int64?
   getter name : String
@@ -73,10 +65,8 @@ struct Director
   end
 end
 
-struct Screenplay
-  include Cql::Record(Screenplay, Int64)
-
-  define AcmeDB2, :screenplays
+struct Screenplay < Cql::Record(Int64)
+  db_context AcmeDB2, :screenplays
 
   belongs_to :movie, foreign_key: :movie_id
 
@@ -87,10 +77,8 @@ struct Screenplay
   end
 end
 
-struct MoviesActors
-  include Cql::Record(MoviesActors, Int64)
-
-  define AcmeDB2, :movies_actors
+struct MoviesActors < Cql::Record(Int64)
+  db_context AcmeDB2, :movies_actors
 
   getter id : Int64?
   getter movie_id : Int64

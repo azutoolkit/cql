@@ -1,35 +1,35 @@
 module Cql::Relations
   # Define the has_one association
   module HasOne
-    macro has_one(name, type)
-      def {{name.id}} : {{type.id}}
-        {{type.id}}.find_by({{T.stringify.underscore.id}}_id: @id)
+    macro has_one(name, kind)
+      def {{name.id}} : {{kind.id}}
+        {{kind.id}}.find_by({{@type.stringify.underscore.id}}_id: @id)
       end
 
-      def {{name.id}}=(record : {{type.id}})
-        record.{{T.name.underscore.id}}_id = @id.not_nil!
+      def {{name.id}}=(record : {{kind.id}})
+        record.{{@type.name.underscore.id}}_id = @id.not_nil!
       end
 
-      def build_{{name.id}}(**attributes) : {{type.id}}
-        attr = attributes.merge({{T.stringify.underscore.id}}_id: @id.not_nil!)
-        record = {{type.id}}.new(**attr)
+      def build_{{name.id}}(**attributes) : {{kind.id}}
+        attr = attributes.merge({{@type.stringify.underscore.id}}_id: @id.not_nil!)
+        record = {{kind.id}}.new(**attr)
         record
       end
 
-      def create_{{name.id}}(**attributes) : {{type.id}}
-        record = build_{{type.stringify.underscore.id}}(**attributes)
+      def create_{{name.id}}(**attributes) : {{kind.id}}
+        record = build_{{kind.stringify.underscore.id}}(**attributes)
         record.save
         {{name.id}}
       end
 
-      def update_{{name.id}}(**attributes) : {{type.id}}
+      def update_{{name.id}}(**attributes) : {{kind.id}}
         record = {{name.id}}
         record.update(**attributes)
         record
       end
 
       def delete_{{name.id}} : Bool
-        {{type.id}}.delete({{name.id}}.id).rows_affected > 0
+        {{kind.id}}.delete({{name.id}}.id).rows_affected > 0
       end
     end
   end

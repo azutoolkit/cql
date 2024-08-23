@@ -20,10 +20,8 @@ module Cql
   #   end
   # end
   #
-  # struct Post
-  #   include Cql::Record(Post)
-  #
-  #   define AcmeDB, :posts
+  # struct Post < Cql::Record(Int64)
+  #   db_context AcmeDB, :posts
   #
   #   getter id : Int64?
   #   getter title : String
@@ -34,9 +32,8 @@ module Cql
   #   end
   # end
   #
-  # struct Comment
-  #   include Cql::Record(Comment)
-  #   define AcmeDB, :comments
+  # struct Comment < Cql::Record(Int64)
+  #   db_context AcmeDB, :comments
   #
   #   getter id : Int64?
   #   getter post_id : Int64
@@ -46,8 +43,8 @@ module Cql
   #   end
   # end
   # ```
-  module Record(T, Pk)
-    macro included
+  abstract struct Record(Pk)
+    macro inherited
       include DB::Serializable
       include DB::Serializable::NonStrict
       include Cql::Relations
@@ -62,12 +59,11 @@ module Cql
       # **Example** Defining the schema and table
       #
       # ```
-      # struct User
-      #   include Cql::Record(User)
-      #   define AcmeDB, :users
+      # struct User < Cql::Record(Int64)
+      #   db_context AcmeDB, :users
       # end
       # ```
-      def self.define(schema : Cql::Schema, table : Symbol)
+      def self.db_context(schema : Cql::Schema, table : Symbol)
         @@schema = schema
         @@table = table
       end
@@ -116,7 +112,7 @@ module Cql
       # ```
       #
       def self.build(**fields)
-        T.new(**fields)
+        new(**fields)
       end
 
       # Return a new query object for the current table
@@ -125,15 +121,15 @@ module Cql
       # **Example** Fetching all records
       #
       # ```
-      # user_repo.query.all(T)
-      # user_repo.query.where(active: true).all(T)
+      # user_repo.query.all({{@type.id}})
+      # user_repo.query.where(active: true).all({{@type.id}})
       # ```
       def self.query
-        Cql::Query.new(T.schema).from(T.table)
+        Cql::Query.new({{@type.id}}.schema).from({{@type.id}}.table)
       end
 
       # Fetch all records of type T
-      # - **@return** [Array(T)] The records
+      # - **@return** [Array({{@type.id}})] The records
       #
       # **Example** Fetching all records
       #
@@ -141,7 +137,7 @@ module Cql
       # user_repo.all
       # ```
       def self.all
-        query.all(T)
+        query.all({{@type.id}})
       end
 
       # Find a record by ID, return nil if not found
@@ -154,7 +150,7 @@ module Cql
       # user_repo.find(1)
       # ```
       def self.find(id)
-        query.where(id: id).first(T)
+        query.where(id: id).first({{@type.id}})
       rescue DB::NoResultsError
         nil
       end
@@ -169,7 +165,7 @@ module Cql
       # user_repo.find!(1)
       # ```
       def self.find!(id)
-        query.where(id: id).first!(T)
+        query.where(id: id).first!({{@type.id}})
       end
 
       # Find a record by specific fields
@@ -182,7 +178,7 @@ module Cql
       # user_repo.find_by(email: " [email protected]")
       # ```
       def self.find_by(**fields)
-        query.where(**fields).first(T)
+        query.where(**fields).first({{@type.id}})
       end
 
       # Find a record by specific fields, raise an error if not found
@@ -194,12 +190,12 @@ module Cql
       # user_repo.find_by!(email: " [email protected]")
       # ```
       def self.find_by!(**fields)
-        query.where(**fields).first!(T)
+        query.where(**fields).first!({{@type.id}})
       end
 
       # Find all records matching specific fields
       # - **@param** fields [Hash(Symbol, DB::Any)] The fields to match
-      # - **@return** [Array(T)] The records
+      # - **@return** [Array({{@type.id}})] The records
       #
       # **Example** Fetching all active users
       #
@@ -207,7 +203,7 @@ module Cql
       # user_repo.find_all_by(active: true)
       # ```
       def self.find_all_by(**fields)
-        query.where(**fields).all(T)
+        query.where(**fields).all({{@type.id}})
       end
 
       # Return a new insert object for the current table
@@ -219,7 +215,7 @@ module Cql
       # user_repo.insert.values(name: "Alice", email: " [email protected]").commit
       # ```
       def self.insert
-        Cql::Insert.new(T.schema).into(T.table)
+        Cql::Insert.new({{@type.id}}.schema).into({{@type.id}}.table)
       end
 
       # Create a new record with given attributes
@@ -246,7 +242,7 @@ module Cql
         insert.values(**fields).last_insert_id
       end
 
-      def self.create(record : T)
+      def self.create(record : {{@type.id}})
         attrs = record.attributes
         attrs.delete(:id)
         create(attrs)
@@ -261,7 +257,7 @@ module Cql
       # user_repo.update.set(active: true).where(id: 1).commit
       # ```
       def self.update
-        Cql::Update.new(T.schema).table(T.table)
+        Cql::Update.new({{@type.id}}.schema).table({{@type.id}}.table)
       end
 
       # Update a record by ID with given attributes
@@ -317,7 +313,7 @@ module Cql
       #
       # User.update(1, bob)
       # ```
-      def self.update(id, record : T)
+      def self.update(id, record : {{@type.id}})
         update.set(record.attributes).where(id: id).commit
       end
 
@@ -330,7 +326,7 @@ module Cql
       # ```
       # user_repo.update(email: " [email protected]", active: true)
       # ```
-      def self.update(record : T)
+      def self.update(record : {{@type.id}})
         attrs = record.attributes
         attrs.delete(:id)
         update.set(attrs).where(id: record.id).commit
@@ -373,7 +369,7 @@ module Cql
       # user_repo.delete.where(id: 1).commit
       # ```
       def self.delete
-        Cql::Delete.new(T.schema).from(T.table)
+        Cql::Delete.new({{@type.id}}.schema).from({{@type.id}}.table)
       end
 
       # Delete a record by ID
@@ -433,7 +429,7 @@ module Cql
       # user_repo.exists?(email: " [email protected]")
       # ```
       def self.exists?(**fields)
-        query.select.where(**fields).limit(1).first(T) != nil
+        query.select.where(**fields).limit(1).first({{@type.id}}) != nil
       rescue DB::NoResultsError
         false
       end
@@ -447,7 +443,7 @@ module Cql
       # user_repo.first
       # ```
       def self.first
-        query.order(id: :asc).limit(1).first(T)
+        query.order(id: :asc).limit(1).first({{@type.id}})
       end
 
       # Fetch the last record in the table
@@ -459,13 +455,13 @@ module Cql
       # user_repo.last
       # ```
       def self.last
-        query.order(id: :desc).limit(1).first(T)
+        query.order(id: :desc).limit(1).first({{@type.id}})
       end
 
       # Paginate results based on page number and items per page
       # - **@param** page_number [Int32] The page number to fetch
       # - **@param** per_page [Int32] The number of items per page
-      # - **@return** [Array(T)] The records for the page
+      # - **@return** [Array({{@type.id}})] The records for the page
       #
       # **Example** Paginating results
       #
@@ -474,12 +470,12 @@ module Cql
       # ```
       def self.page(page_number, per_page = 10)
         offset = (page_number - 1) * per_page
-        query.limit(per_page).offset(offset).all(T)
+        query.limit(per_page).offset(offset).all({{@type.id}})
       end
 
       # Limit the number of results per page
       # - **@param** per_page [Int32] The number of items per page
-      # - **@return** [Array(T)] The records for the page
+      # - **@return** [Array({{@type.id}})] The records for the page
       #
       # **Example** Limiting results per page
       #
@@ -487,7 +483,7 @@ module Cql
       # user_repo.per_page(10)
       # ```
       def self.per_page(per_page)
-        query.limit(per_page).all(T)
+        query.limit(per_page).all({{@type.id}})
       end
     end
 
@@ -501,8 +497,8 @@ module Cql
     # user.reload!
     # ```
     def reload!
-      record = T.find!(id)
-      {% for ivar in T.instance_vars %}
+      record = {{@type.id}}.find!(id)
+      {% for ivar in @type.instance_vars %}
       @{{ ivar }} = record.{{ ivar }}
       {% end %}
     end
@@ -529,9 +525,9 @@ module Cql
     # ```
     def save
       if @id.nil?
-        @id = T.create(self).as(Pk)
+        @id = {{@type.id}}.create(self).as(Pk)
       else
-        T.update(self)
+        {{@type.id}}.update(self)
       end
     end
 
@@ -544,7 +540,7 @@ module Cql
     # user.delete
     # ```
     def update(fields : Hash(Symbol, DB::Any))
-      T.update(fields, where)
+      {{@type.id}}.update(fields, where)
     end
 
     # Update the record with the given fields
@@ -557,7 +553,7 @@ module Cql
     # user.update(name: "Alice", email: " [email protected]")
     # ```
     def update(**fields)
-      T.update(id, **fields)
+      {{@type.id}}.update(id, **fields)
     end
 
     # Update the record with the given record object
@@ -575,7 +571,7 @@ module Cql
     # bob.update
     # ```
     def update
-      T.update(id, self) unless id.nil?
+      {{@type.id}}.update(id, self) unless id.nil?
     end
 
     # Delete the record from the database
@@ -587,7 +583,7 @@ module Cql
     # user.delete
     # ```
     def delete
-      T.delete(id) unless id.nil?
+      {{@type.id}}.delete(id) unless id.nil?
     end
 
     # Define instance-level methods for querying and manipulating data
@@ -602,7 +598,7 @@ module Cql
     # ```
     def attributes
       hash = Hash(Symbol, DB::Any).new
-      {% for ivar in T.instance_vars %}
+      {% for ivar in @type.instance_vars %}
         {% unless ivar.annotation(DB::Field) && ivar.annotation(DB::Field).named_args[:ignore] %}
         hash[:{{ ivar }}] = {{ ivar }}
         {% end %}
@@ -621,7 +617,7 @@ module Cql
     # ```
     def attributes(attrs : Hash(Symbol, DB::Any))
       attrs.each do |key, value|
-        {% for ivar in T.instance_vars %}
+        {% for ivar in @type.instance_vars %}
         @{{ivar.id}} = value if key == :{{ivar.id}} && value.is_a?({{ivar.type}})
         {% end %}
       end

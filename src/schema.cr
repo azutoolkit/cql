@@ -90,6 +90,21 @@ module Cql
       @gen = Expression::Generator.new(@adapter)
     end
 
+    # Builds the schema. This method creates the tables in the schema.
+    #
+    # **Example**
+    #
+    # ```
+    # schema.build
+    # ```
+    def build
+      @tables.each do |name, table|
+        sql = table.create_sql
+        Log.debug { sql }
+        exec(sql)
+      end
+    end
+
     # Executes a SQL statement.
     #
     # - **@param** sql [String] the SQL statement to execute

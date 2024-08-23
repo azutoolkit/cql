@@ -31,17 +31,17 @@ module Cql::Relations
     #   property actor_id : Int64
     # end
     # ```
-    macro many_to_many(name, type, join_through, cascade = false)
+    macro many_to_many(name, klass, join_through, cascade = false)
       @[DB::Field(ignore: true)]
-      getter {{name.id}} : Cql::Relations::ManyCollection({{type.id}}, {{join_through.camelcase.id}}, Pk) do
-        Cql::Relations::ManyCollection({{type.id}}, {{join_through.camelcase.id}}, Pk).new(
-          key: :{{T.name.underscore.id}}_id,
+      getter {{name.id}} : Cql::Relations::ManyCollection({{klass.id}}, {{join_through.camelcase.id}}, Pk) do
+        Cql::Relations::ManyCollection({{klass.id}}, {{join_through.camelcase.id}}, Pk).new(
+          key: :{{@type.name.underscore.id}}_id,
           id: @id.not_nil!,
-          target_key: :{{type.stringify.underscore.id}}_id,
+          target_key: :{{klass.stringify.underscore.id}}_id,
           cascade: {{cascade.id}},
-          query: {{type.id}}.query
-            .inner(:{{join_through.id}}) { ({{join_through.id}}.{{type.stringify.underscore.id}}_id == {{T.id}}.schema.{{name.id}}.expression.id)}
-            .where{({{join_through.id}}.{{T.name.underscore.id}}_id == @id.not_nil!)}
+          query: {{klass.id}}.query
+            .inner(:{{join_through.id}}) { ({{join_through.id}}.{{klass.stringify.underscore.id}}_id == {{@type.id}}.schema.{{name.id}}.expression.id)}
+            .where{({{join_through.id}}.{{@type.name.underscore.id}}_id == @id.not_nil!)}
         )
       end
     end
