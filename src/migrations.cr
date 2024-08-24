@@ -13,9 +13,7 @@ module Cql
   # **Example** Creating a new migration
   #
   # ```
-  # class CreateUsersTable < Cql::Migration
-  #   self.version = 1_i64
-  #
+  # class CreateUsersTable < Cql::Migration(1)
   #   def up
   #     schema.alter :users do
   #       add_column :name, String
@@ -35,14 +33,6 @@ module Cql
   # **Example** Applying migrations
   #
   # ```
-  # schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
-  #   table :schema_migrations do
-  #     primary :id, Int32
-  #     column :name, String
-  #     column :version, Int64, index: true, unique: true
-  #     timestamps
-  #   end
-  # end
   # migrator = Cql::Migrator.new(schema)
   # migrator.up
   # ```

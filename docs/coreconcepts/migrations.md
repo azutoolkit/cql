@@ -17,9 +17,7 @@ Migrations allow you to:
 Let’s start with a simple example. Suppose we need to add a `users` table to our database with two columns: `name` and `age`.
 
 ```crystal
-class CreateUsersTable < Cql::Migration
-  self.version = 1_i64
-
+class CreateUsersTable < Cql::Migration(1)
   def up
     schema.alter :users do
       add_column :name, String
@@ -158,9 +156,7 @@ This gives you details about the last migration that was successfully applied.
 Here’s an example where we define multiple migrations and apply them sequentially:
 
 ```crystal
-class CreateMoviesTable < Cql::Migration
-  self.version = 2_i64
-
+class CreateMoviesTable < Cql::Migration(2)
   def up
     schema.alter :movies do
       add_column :title, String

@@ -17,9 +17,7 @@ The `Migrator` class also provides methods to list applied and pending migration
 **Example** Creating a new migration
 
 ```crystal
-class CreateUsersTable < Cql::Migration
-  self.version = 1_i64
-
+class CreateUsersTable < Cql::Migration(1)
   def up
     schema.alter :users do
       add_column :name, String
