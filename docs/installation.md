@@ -1,3 +1,7 @@
+---
+icon: gear
+---
+
 # Installation
 
 To get started with CQL in your Crystal project, follow these steps:

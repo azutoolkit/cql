@@ -1,3 +1,7 @@
+---
+icon: arrow-right-to-arc
+---
+
 # Introduction
 
 ## Purpose of CQL

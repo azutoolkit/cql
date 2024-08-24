@@ -1,5 +1,6 @@
 ---
 title: Cql
+icon: database
 ---
 
 # Cql
