@@ -1,5 +1,14 @@
 module Expression
   class MysqlDialect < Dialect
+    def structure_dump(uri : URI) : String
+      Process.new(
+        "mysqldump",
+        "--no-data",
+        "--skip-comments",
+        "--compact", "--user=#{uri.user}",
+        "--password=#{uri.password}", uri.path[1..-1]).output || ""
+    end
+
     def auto_increment_primary_key(column : Cql::BaseColumn, col_type : String) : String
       String::Builder.build do |sb|
         sb << column.name

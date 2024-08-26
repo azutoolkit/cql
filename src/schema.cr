@@ -222,6 +222,21 @@ module Cql
       end
     end
 
+    # TODO: For each adapter implement dumping the database structure tp a file
+    # called `structure.sql`. This file should contain the SQL statements to create the
+    # tables in the schema. The file should be saved in the ./src/db/ directory.
+    # **Example**
+    # ```
+    # schema.dump_structure
+    # ```
+    #
+    # **Example**
+    # ```
+    # schema.dump_structure("db/structure.sql")
+    # ```
+    def dump_structure
+    end
+
     macro method_missing(call)
       def {{call.id}}
         tables[:{{call.id}}]
