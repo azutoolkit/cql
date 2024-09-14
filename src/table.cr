@@ -302,7 +302,7 @@ module Cql
     end
 
     def json(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(String).new(name, String, as_name, null, default, unique)
+      col = Column(JSON::Any).new(name, JSON::Any, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil

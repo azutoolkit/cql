@@ -255,7 +255,12 @@ module Cql
       setters.each do |k, v|
         column = find_column(k)
         column.validate!(v)
-        @setters << Expression::Setter.new(Expression::Column.new(column), v)
+        val = if v.is_a?(JSON::Any)
+                v.to_json.as(DB::Any)
+              else
+                v.as(DB::Any)
+              end
+        @setters << Expression::Setter.new(Expression::Column.new(column), val)
       end
     end
 

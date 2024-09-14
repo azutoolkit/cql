@@ -37,7 +37,8 @@ module Cql
               String.class |
               Time.class |
               UUID.class |
-              Nil.class
+              Nil.class |
+              JSON::Any.class
 
   # :nodoc:
   DB_TYPE_MAPPING = {

@@ -25,13 +25,27 @@ describe Cql::Schema do
     # end
 
     it "fetches user preferences" do
+      payload_json = %({"theme": "dark"})
+      json_any = JSON.parse(payload_json)
+
       Example
         .insert
         .into(:user_pref)
-        .values(preferences: %({"theme": "dark"}))
+        .values(preferences: json_any)
         .commit
       result = Example.query.from(:user_pref).limit(1).first!(UserPref)
       result.preferences.should be_a(JSON::Any)
+      result.preferences.should eq(json_any)
+
+      Example
+        .update
+        .table(:user_pref)
+        .set(preferences: json_any)
+        .where { user_pref.id.eq(1_i64) }
+        .commit
+
+      result.preferences.should be_a(JSON::Any)
+      result.preferences.should eq(json_any)
     end
   end
 

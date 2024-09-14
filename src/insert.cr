@@ -231,7 +231,13 @@ module Cql
 
       @columns = keys if @columns.empty?
 
-      vals = fields.values.map { |v| v.as(DB::Any) }
+      vals = fields.values.map do |v|
+        if v.is_a?(JSON::Any)
+          v.to_json.as(DB::Any)
+        else
+          v.as(DB::Any)
+        end
+      end
       @values << vals.to_a
     end
 
