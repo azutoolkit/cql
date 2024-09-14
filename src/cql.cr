@@ -54,6 +54,7 @@ module Cql
       Date         => "DATE",
       Time::Span   => "INTERVAL",
       Slice(UInt8) => "BLOB",
+      JSON::Any    => "TEXT",
     },
     Cql::Adapter::MySql => {
       Int32        => "INT",
@@ -68,6 +69,7 @@ module Cql
       Date         => "DATE",
       Time::Span   => "TIME",
       Slice(UInt8) => "BLOB",
+      JSON::Any    => "JSON",
     },
     Cql::Adapter::Postgres => {
       Int32        => "INTEGER",
@@ -82,6 +84,7 @@ module Cql
       Date         => "DATE",
       Time::Span   => "INTERVAL",
       Slice(UInt8) => "BYTEA",
+      JSON::Any    => "JSONB",
     },
   }
 

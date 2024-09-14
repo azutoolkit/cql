@@ -1,7 +1,40 @@
 require "pg"
 require "../spec_helper"
 
+struct UserPref
+  include DB::Serializable
+
+  property id : Int64
+  getter preferences do |value|
+    JSON.parse(value)
+  end
+end
+
 describe Cql::Schema do
+  context "handles json fields" do
+    Example.table :user_pref do
+      primary
+      json :preferences
+    end
+
+    Example.user_pref.create!
+
+    # it "inserts a record with a json field" do
+    #   insert_json_query, arguments = Example.insert.into(:user_pref).values(id: 1, preferences: %({"theme": "dark"})).to_sql
+    #   puts insert_json_query, arguments
+    # end
+
+    it "fetches user preferences" do
+      Example
+        .insert
+        .into(:user_pref)
+        .values(preferences: %({"theme": "dark"}))
+        .commit
+      result = Example.query.from(:user_pref).limit(1).first!(UserPref)
+      puts result
+    end
+  end
+
   column_exists = ->(col : Symbol, table : Symbol) do
     begin
       query = <<-SQL

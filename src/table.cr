@@ -224,6 +224,16 @@ module Cql
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
+    def varchar(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = 1000, index : Bool = false)
+      col = Column(String).new(name, String, as_name, null, default, unique, size)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
+    end
+
+    # Adds a new column to the table.
+    # - **@param** name [Symbol] the name of the column to be added
     # - **@param** as_name [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
@@ -285,6 +295,14 @@ module Cql
     # ```
     def date(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Date).new(name, Date, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
+    end
+
+    def json(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
+      col = Column(String).new(name, String, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil

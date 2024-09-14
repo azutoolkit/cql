@@ -99,6 +99,7 @@ module Cql
     # column.validate!("John")
     # ```
     def validate!(value)
+      return if value.class == JSON::Any && value.is_a?(String)
       return if value.class == type
       raise Error.new "Expected column `#{name}` to be #{type}, but got #{value.class}"
     end
