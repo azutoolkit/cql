@@ -31,7 +31,7 @@ describe Cql::Schema do
         .values(preferences: %({"theme": "dark"}))
         .commit
       result = Example.query.from(:user_pref).limit(1).first!(UserPref)
-      puts result
+      result.preferences.should be_a(JSON::Any)
     end
   end
 
@@ -61,7 +61,7 @@ describe Cql::Schema do
   end
 
   it "creates a schema" do
-    Example.tables.size.should eq(2)
+    Example.tables.size.should eq(3)
     Example.tables[:customers].columns.size.should eq(4)
   end
 
