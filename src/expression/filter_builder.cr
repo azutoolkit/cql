@@ -1,6 +1,6 @@
 module Expression
   class FilterBuilder
-    @tables : Hash(Symbol, Table) = {} of Symbol => Table
+    @tables : Hash(Symbol,Table) = {} of Symbol => Table
 
     def initialize(sql_tables : Hash(Symbol, Cql::Table))
       sql_tables.each do |name, table|

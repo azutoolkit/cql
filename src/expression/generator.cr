@@ -33,9 +33,9 @@ module Expression
       @query = String::Builder.build do |sb|
         sb << "SELECT "
         sb << "DISTINCT " if node.distinct?
-        sb << node.aggr_columns.map(&.accept(self)).join(", ")
-        sb << ", " if !node.aggr_columns.empty? && !node.columns.empty?
         sb << node.columns.map(&.accept(self)).join(", ")
+        sb << ", " if !node.aggr_columns.empty? && !node.columns.empty?
+        sb << node.aggr_columns.map(&.accept(self)).join(", ")
         sb << node.from.accept(self)
         node.joins.each { |join| sb << join.accept(self) }
         sb << node.where.try &.accept(self) if node.where

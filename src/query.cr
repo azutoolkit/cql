@@ -261,9 +261,22 @@ module Cql
     # ```
     def select(**fields)
       fields.each do |k, v|
-        v.map { |f| @columns << @schema.tables[k].columns[f] }
+        if [:count, :sum, :avg, :min, :max].includes?(k) && v.is_a?(Symbol)
+          @aggr_columns << build_aggr_expression(k, v)
+        else
+          if v.is_a?(Array(Symbol))
+            v.map { |f| @columns << find_column(f, k) }
+          else
+            @columns << find_column(v)
+          end
+        end
       end
+      self
+    end
 
+    def select(*cols, **columns)
+      self.select(*cols)
+      self.select(**columns)
       self
     end
 
@@ -682,13 +695,32 @@ module Cql
       table
     end
 
-    private def find_column(name : Symbol) : Cql::BaseColumn?
-      @tables.each do |_tbl_name, table|
+    private def build_aggr_expression(aggr : Symbol, column : Symbol)
+      col = Expression::Column.new(find_column(column))
+      case aggr
+      when :count then  Expression::Count.new(col)
+      when :sum then  Expression::Sum.new(col)
+      when :avg then  Expression::Avg.new(col)
+      when :min then Expression::Min.new(col)
+      when :max then  Expression::Max.new(col)
+      else
+        raise "Invalid aggregate function #{aggr}"
+      end
+    end
+
+    private def find_column(name : Symbol, table_name : Symbol? = nil) : Cql::BaseColumn
+      if table_name
+        table = @schema.tables[table_name]
         column = table.columns[name]
         return column if column
+        raise "Column #{name} not found in table #{table_name}"
+      else
+        @tables.each do |_tbl_name, table|
+          column = table.columns[name]?
+          return column if column
+        end
+        raise "Column #{name} not found in any of #{@tables.keys} tables"
       end
-
-      raise "Column #{name} not found in any of #{@tables} tables"
     end
 
     private def validate_fields!(**fields)

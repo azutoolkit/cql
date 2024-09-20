@@ -35,4 +35,16 @@ Northwind = Cql::Schema.define(
     column :department, String
     timestamps
   end
+
+  table :orders do
+    primary :id, Int32
+    integer :total, default: 0
+    column :customer_id, Int32, null: false
+    column :employee_id, Int32, null: false
+    column :order_date, Time
+    text :status, default: "pending"
+    column :shipped_date, Time
+    column :shipper_id, Int32
+    timestamps
+  end
 end
