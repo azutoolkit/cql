@@ -698,11 +698,11 @@ module Cql
     private def build_aggr_expression(aggr : Symbol, column : Symbol)
       col = Expression::Column.new(find_column(column))
       case aggr
-      when :count then  Expression::Count.new(col)
-      when :sum then  Expression::Sum.new(col)
-      when :avg then  Expression::Avg.new(col)
-      when :min then Expression::Min.new(col)
-      when :max then  Expression::Max.new(col)
+      when :count then Expression::Count.new(col)
+      when :sum   then Expression::Sum.new(col)
+      when :avg   then Expression::Avg.new(col)
+      when :min   then Expression::Min.new(col)
+      when :max   then Expression::Max.new(col)
       else
         raise "Invalid aggregate function #{aggr}"
       end
