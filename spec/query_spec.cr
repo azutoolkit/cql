@@ -314,7 +314,6 @@ describe Cql::Query do
 
       select_query.should eq({output, ["John", 1]})
     end
-
   end
 
   describe "Transactions" do
