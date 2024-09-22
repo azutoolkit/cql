@@ -20,6 +20,8 @@ module Cql::Relations
   # end
   # ```
   class Collection(Target, Pk)
+    include Enumerable(Target)
+
     @records : Array(Target) = [] of Target
     @target_table : Symbol
     forward_missing_to @records
@@ -51,6 +53,14 @@ module Cql::Relations
     )
       @target_table = Target.table
       @records = reload
+    end
+
+    # Implements the each method for the Enumerable module
+    # - **param** : block (Block(Target))
+    # - **return** : Nil
+    #
+    def each(&block : Target ->)
+      @records.each(&block)
     end
 
     # Create a new record and associate it with the parent record
@@ -494,9 +504,9 @@ module Cql::Relations
 
       if @cascade
         table = Target.schema.tables[Target.table].expression
-        Target.delete.where do
+        records_deleted += Target.delete.where do
           table.id.in(ids)
-        end.commit
+        end.commit.rows_affected
       end
 
       records_deleted
