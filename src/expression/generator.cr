@@ -277,11 +277,13 @@ module Expression
     end
 
     def visit(node : Limit) : String
-      @params << node.limit
-      @params << node.offset if node.offset
       String::Builder.build do |sb|
+        @params << node.limit
         sb << " LIMIT #{placeholder}"
-        sb << " OFFSET #{placeholder}" if node.offset
+        if node.offset
+          @params << node.offset
+          sb << " OFFSET #{placeholder}"
+        end
       end
     end
 
