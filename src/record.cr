@@ -468,7 +468,7 @@ module Cql
       # ```
       # user_repo.page(1, 10)
       # ```
-      def self.page(page_number, per_page = 10)
+      def self.page(page_number : Int32, per_page = 10)
         offset = (page_number - 1) * per_page
         query.limit(per_page).offset(offset).all({{@type.id}})
       end
@@ -583,7 +583,10 @@ module Cql
     # user.delete
     # ```
     def delete
-      {{@type.id}}.delete(id) unless id.nil?
+      unless id.nil?
+        {{@type.id}}.delete(id)
+        @id = nil
+      end
     end
 
     # Define instance-level methods for querying and manipulating data
