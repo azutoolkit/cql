@@ -82,6 +82,7 @@ describe Cql::Record do
 
   describe ".find" do
     it "finds a record by ID" do
+      Post.delete_all
       post = Post.build(title: "Hello, World!", body: "This is my first post")
 
       post.save
@@ -109,6 +110,7 @@ describe Cql::Record do
 
   describe ".find_by" do
     it "finds a record by a column" do
+      Post.delete_all
       post = Post.build(title: "Hello, World!", body: "This is my first post")
       post.save
       post.reload!
@@ -140,8 +142,11 @@ describe Cql::Record do
     it "deletes a record" do
       post = Post.build(title: "Hello, World!", body: "This is my first post")
       post.save
+      id = post.id
       post.delete
-      Post.find(post.id).should eq nil
+
+      post.id.should eq nil
+      Post.find(id).should eq nil
     end
   end
 end
