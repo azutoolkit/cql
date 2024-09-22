@@ -260,6 +260,63 @@ describe Cql::Query do
     end
   end
 
+  describe "Joins" do
+    it "builds JOINS" do
+      select_query = Northwind.query
+        .from(:users)
+        .select(users: [:name, :email], address: [:street, :city])
+        .inner(:address, {
+          Northwind.query.users.id    => Northwind.query.address.user_id,
+          Northwind.query.users.name  => "John",
+          Northwind.query.users.email => "john@example.com",
+        }).to_sql
+
+      output = <<-SQL.gsub(/\n/, " ").strip
+        SELECT users.name, users.email, address.street, address.city
+        FROM users
+        INNER JOIN address ON users.id = address.user_id AND users.name = ? AND users.email = ?
+        SQL
+      select_query.should eq({output, ["John", "john@example.com"]})
+    end
+
+    it "build joins with block" do
+      select_query = Northwind.query.from(:users)
+        .select(users: [:name, :email], address: [:street, :city])
+        .inner(:address) do
+          users.id.eq(address.user_id) & users.name.eq("John") | users.id.eq(1)
+        end.to_sql
+
+      output = <<-SQL.gsub(/\n/, " ").strip
+        SELECT users.name, users.email, address.street, address.city
+        FROM users
+        INNER JOIN address ON users.id = address.user_id AND users.name = ? OR users.id = ?
+        SQL
+
+      select_query.should eq({output, ["John", 1]})
+    end
+
+    it "combines join with where clause" do
+      select_query = Northwind.query.from(:users)
+        .select(users: [:name, :email], address: [:street, :city])
+        .inner(:address) do
+          users.id.eq(address.user_id)
+        end
+        .where do
+          users.name.eq("John") | users.id.eq(1)
+        end.to_sql
+
+      output = <<-SQL.gsub(/\n/, " ").strip
+        SELECT users.name, users.email, address.street, address.city
+        FROM users
+        INNER JOIN address ON users.id = address.user_id
+        WHERE (users.name = ? OR users.id = ?)
+        SQL
+
+      select_query.should eq({output, ["John", 1]})
+    end
+
+  end
+
   describe "Transactions" do
     # it "handles basic transaction" do
     #   transaction = Northwind.transaction do |tx|
