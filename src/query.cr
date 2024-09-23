@@ -679,7 +679,7 @@ module Cql
 
     private def build_select
       if @columns.empty? && @aggr_columns.empty?
-        @tables.each do |_, table|
+        @tables.each do |_tbl_name, table|
           @columns.concat(table.columns.values)
         end
       end
