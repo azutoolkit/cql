@@ -12,6 +12,8 @@ dependencies:
   tallboy:
     github: epoch/tallboy
 development_dependencies:
+  ameba:
+    github: crystal-ameba/ameba
   sqlite3:
     github: crystal-lang/crystal-sqlite3
   mysql:

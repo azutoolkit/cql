@@ -11,13 +11,13 @@ module Expression
     end
 
     def auto_increment_primary_key(column : Cql::BaseColumn, col_type : String) : String
-      String::Builder.build do |sb|
-        sb << column.name
-        sb << " "
-        sb << col_type
-        sb << " GENERATED"
-        sb << " ALWAYS" if column.auto_increment?
-        sb << " AS IDENTITY PRIMARY KEY"
+      String.build do |string|
+        string << column.name
+        string << " "
+        string << col_type
+        string << " GENERATED"
+        string << " ALWAYS" if column.auto_increment?
+        string << " AS IDENTITY PRIMARY KEY"
       end
     end
 

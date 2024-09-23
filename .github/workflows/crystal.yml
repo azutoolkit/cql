@@ -57,6 +57,8 @@ jobs:
         run: shards install
       - name: Check code style
         run: crystal tool format --check
+      - name: Check code linting with Ameba
+        run: bin/ameba
       - name: Run tests
         env:
           DATABASE_URL: postgres://example:example@postgres:5432/example

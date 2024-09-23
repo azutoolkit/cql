@@ -5,28 +5,28 @@ module Expression
     def initialize(@aggregate_function : Condition)
     end
 
-    def >(value : Column | DB::Any)
-      ConditionBuilder.new(CompareCondition.new(@aggregate_function, ">", value))
+    def >(other : Column | DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, ">", other))
     end
 
-    def <(value : Column | DB::Any)
-      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "<", value))
+    def <(other : Column | DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "<", other))
     end
 
-    def >=(value : Column | DB::Any)
-      ConditionBuilder.new(CompareCondition.new(@aggregate_function, ">=", value))
+    def >=(other : Column | DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, ">=", other))
     end
 
-    def <=(value : Column | DB::Any)
-      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "<=", value))
+    def <=(other : Column | DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "<=", other))
     end
 
-    def ==(value : Column | DB::Any)
-      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "=", value))
+    def ==(other : Column | DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "=", other))
     end
 
-    def !=(value : Column | DB::Any)
-      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "!=", value))
+    def !=(other : Column | DB::Any)
+      ConditionBuilder.new(CompareCondition.new(@aggregate_function, "!=", other))
     end
   end
 end
