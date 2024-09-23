@@ -1,5 +1,5 @@
 name: cql
-version: 0.0.117
+version: 0.0.121
 authors:
   - Elias Perez <eperez@justworks.com>
 crystal: '>= 1.12.2'
@@ -12,6 +12,8 @@ dependencies:
   tallboy:
     github: epoch/tallboy
 development_dependencies:
+  ameba:
+    github: crystal-ameba/ameba
   sqlite3:
     github: crystal-lang/crystal-sqlite3
   mysql:
