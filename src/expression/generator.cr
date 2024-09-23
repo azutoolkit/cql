@@ -30,28 +30,28 @@ module Expression
     # Template Method for common visit methods
     def visit(node : Query) : String
       @params.clear
-      @query = String::Builder.build do |sb|
-        sb << "SELECT "
-        sb << "DISTINCT " if node.distinct?
-        sb << node.columns.map(&.accept(self)).join(", ")
-        sb << ", " if !node.aggr_columns.empty? && !node.columns.empty?
-        sb << node.aggr_columns.map(&.accept(self)).join(", ")
-        sb << node.from.accept(self)
-        node.joins.each { |join| sb << join.accept(self) }
-        sb << node.where.try &.accept(self) if node.where
-        sb << node.group_by.try &.accept(self) if node.group_by
-        sb << node.having.try &.accept(self) if node.having
-        sb << node.order_by.not_nil!.accept(self) if node.order_by
-        sb << node.limit.try &.accept(self) if node.limit
+      @query = String.build do |string|
+        string << "SELECT "
+        string << "DISTINCT " if node.distinct?
+        string << node.columns.map(&.accept(self)).join(", ")
+        string << ", " if !node.aggr_columns.empty? && !node.columns.empty?
+        string << node.aggr_columns.map(&.accept(self)).join(", ")
+        string << node.from.accept(self)
+        node.joins.each { |join| string << join.accept(self) }
+        string << node.where.try &.accept(self) if node.where
+        string << node.group_by.try &.accept(self) if node.group_by
+        string << node.having.try &.accept(self) if node.having
+        string << node.order_by.not_nil!.accept(self) if node.order_by
+        string << node.limit.try &.accept(self) if node.limit
       end
     end
 
     def visit(node : Join) : String
-      String::Builder.build do |sb|
-        sb << " #{node.join_type.to_s.upcase} JOIN "
-        sb << node.table.accept(self)
-        sb << " ON "
-        sb << node.condition.accept(self)
+      String.build do |string|
+        string << " #{node.join_type.to_s.upcase} JOIN "
+        string << node.table.accept(self)
+        string << " ON "
+        string << node.condition.accept(self)
       end
     end
 
@@ -62,132 +62,132 @@ module Expression
                   node.query.not_nil!.columns
                 end
 
-      @query = String::Builder.build do |sb|
-        sb << "INSERT INTO "
-        sb << node.table.accept(self)
-        sb << " ("
+      @query = String.build do |string|
+        string << "INSERT INTO "
+        string << node.table.accept(self)
+        string << " ("
         columns.each_with_index do |col, i|
-          sb << col.column.name
-          sb << ", " if i < columns.size - 1
+          string << col.column.name
+          string << ", " if i < columns.size - 1
         end
-        sb << ")"
+        string << ")"
 
         if q = node.query
-          sb << " " << q.accept(self)
+          string << " " << q.accept(self)
         else
-          sb << " VALUES "
+          string << " VALUES "
           node.values.each_with_index do |row, i|
-            sb << "("
+            string << "("
             row.each_with_index do |val, j|
               @params << val
-              sb << "#{placeholder}"
-              sb << ", " if j < row.size - 1
+              string << "#{placeholder}"
+              string << ", " if j < row.size - 1
             end
             if i < node.values.size - 1
-              sb << "), "
+              string << "), "
             else
-              sb << ")"
+              string << ")"
             end
           end
-          if node.back.any?
-            sb << " RETURNING ("
+          if !node.back.empty?
+            string << " RETURNING ("
             node.back.each_with_index do |column, i|
-              sb << column.accept(self)
-              sb << ", " if i < node.back.size - 1
+              string << column.accept(self)
+              string << ", " if i < node.back.size - 1
             end
-            sb << ")"
+            string << ")"
           end
         end
       end
     end
 
     def visit(node : Delete) : String
-      @query = String::Builder.build do |sb|
-        sb << "DELETE FROM "
-        sb << node.table.accept(self)
+      @query = String.build do |string|
+        string << "DELETE FROM "
+        string << node.table.accept(self)
         if using = node.using
-          sb << " USING " << using.accept(self)
+          string << " USING " << using.accept(self)
         end
-        sb << node.where.not_nil!.accept(self) if node.where
-        if node.back.any?
-          sb << " RETURNING ("
+        string << node.where.not_nil!.accept(self) if node.where
+        if !node.back.empty?
+          string << " RETURNING ("
           node.back.each_with_index do |column, i|
-            sb << column.accept(self)
-            sb << ", " if i < node.back.size - 1
+            string << column.accept(self)
+            string << ", " if i < node.back.size - 1
           end
-          sb << ")"
+          string << ")"
         end
       end
     end
 
     def visit(node : Where) : String
-      String::Builder.build do |sb|
-        sb << " WHERE ("
-        sb << node.condition.accept(self)
-        sb << ")"
+      String.build do |string|
+        string << " WHERE ("
+        string << node.condition.accept(self)
+        string << ")"
       end
     end
 
     def visit(node : Column) : String
-      String::Builder.build do |sb|
+      String.build do |string|
         unless node.column.name == :*
-          sb << node.column.table.not_nil!.table_name
-          sb << "."
+          string << node.column.table.not_nil!.table_name
+          string << "."
         end
-        sb << node.column.name
+        string << node.column.name
       end
     end
 
     def visit(node : And) : String
-      String::Builder.build do |sb|
-        sb << node.left.accept(self)
-        sb << " AND "
-        sb << node.right.accept(self)
+      String.build do |string|
+        string << node.left.accept(self)
+        string << " AND "
+        string << node.right.accept(self)
       end
     end
 
     def visit(node : Or) : String
-      String::Builder.build do |sb|
-        sb << node.left.accept(self)
-        sb << " OR "
-        sb << node.right.accept(self)
+      String.build do |string|
+        string << node.left.accept(self)
+        string << " OR "
+        string << node.right.accept(self)
       end
     end
 
     def visit(node : Not) : String
-      String::Builder.build do |sb|
-        sb << "NOT "
-        sb << node.condition.accept(self)
+      String.build do |string|
+        string << "NOT "
+        string << node.condition.accept(self)
       end
     end
 
     def visit(node : Compare) : String
       @params << node.right
-      String::Builder.build do |sb|
-        sb << node.left.accept(self)
-        sb << " "
-        sb << node.operator
-        sb << " "
-        sb << placeholder
+      String.build do |string|
+        string << node.left.accept(self)
+        string << " "
+        string << node.operator
+        string << " "
+        string << placeholder
       end
     end
 
     def visit(node : CompareCondition) : String
-      String::Builder.build do |sb|
+      String.build do |string|
         if node.left.is_a?(Column) || node.left.is_a?(Condition)
-          sb << node.left.as(Column | Condition).accept(self)
+          string << node.left.as(Column | Condition).accept(self)
         else
           @params << node.left.as(DB::Any)
-          sb << placeholder
+          string << placeholder
         end
-        sb << " "
-        sb << node.operator
-        sb << " "
+        string << " "
+        string << node.operator
+        string << " "
         if node.right.is_a?(Column) || node.right.is_a?(Condition)
-          sb << node.right.as(Column | Condition).accept(self)
+          string << node.right.as(Column | Condition).accept(self)
         else
           @params << node.right.as(DB::Any)
-          sb << placeholder
+          string << placeholder
         end
       end
     end
@@ -195,12 +195,12 @@ module Expression
     def visit(node : Between) : String
       @params << node.low
       @params << node.high
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " BETWEEN "
-        sb << placeholder
-        sb << " AND "
-        sb << placeholder
+      String.build do |string|
+        string << node.column.accept(self)
+        string << " BETWEEN "
+        string << placeholder
+        string << " AND "
+        string << placeholder
       end
     end
 
@@ -215,27 +215,27 @@ module Expression
     end
 
     def visit(node : InCondition) : String
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " IN ("
+      String.build do |string|
+        string << node.column.accept(self)
+        string << " IN ("
         node.values.each_with_index do |value, i|
           @params << value
-          sb << placeholder
-          sb << ", " if i < node.values.size - 1
+          string << placeholder
+          string << ", " if i < node.values.size - 1
         end
-        sb << ")"
+        string << ")"
       end
     end
 
     def visit(node : OrderBy) : String
       return "" if node.orders.empty?
-      String::Builder.build do |sb|
-        sb << " ORDER BY "
+      String.build do |string|
+        string << " ORDER BY "
         node.orders.each_with_index do |(column, direction), i|
-          sb << column.accept(self)
-          sb << " "
-          sb << direction.to_s.upcase
-          sb << ", " if i < node.orders.size - 1
+          string << column.accept(self)
+          string << " "
+          string << direction.to_s.upcase
+          string << ", " if i < node.orders.size - 1
         end
       end
     end
@@ -243,64 +243,64 @@ module Expression
     def visit(node : GroupBy) : String
       return "" if node.columns.empty?
 
-      String::Builder.build do |sb|
-        sb << " GROUP BY "
+      String.build do |string|
+        string << " GROUP BY "
         node.columns.each_with_index do |column, i|
-          sb << column.accept(self)
-          sb << ", " if i < node.columns.size - 1
+          string << column.accept(self)
+          string << ", " if i < node.columns.size - 1
         end
       end
     end
 
     def visit(node : InSelect) : String
-      String::Builder.build do |sb|
-        sb << node.column.accept(self)
-        sb << " IN ("
-        sb << node.query.accept(self)
-        sb << ")"
+      String.build do |string|
+        string << node.column.accept(self)
+        string << " IN ("
+        string << node.query.accept(self)
+        string << ")"
       end
     end
 
     def visit(node : Exists) : String
-      String::Builder.build do |sb|
-        sb << "EXISTS ("
-        sb << node.sub_query.accept(self)
-        sb << ")"
+      String.build do |string|
+        string << "EXISTS ("
+        string << node.sub_query.accept(self)
+        string << ")"
       end
     end
 
     def visit(node : Having) : String
-      String::Builder.build do |sb|
-        sb << " HAVING "
-        sb << node.condition.accept(self)
+      String.build do |string|
+        string << " HAVING "
+        string << node.condition.accept(self)
       end
     end
 
     def visit(node : Limit) : String
-      String::Builder.build do |sb|
+      String.build do |string|
         @params << node.limit
-        sb << " LIMIT #{placeholder}"
+        string << " LIMIT #{placeholder}"
         if node.offset
           @params << node.offset
-          sb << " OFFSET #{placeholder}"
+          string << " OFFSET #{placeholder}"
         end
       end
     end
 
     def visit(node : Top) : String
-      String::Builder.build do |sb|
-        sb << "TOP "
-        sb << node.count.to_s
+      String.build do |string|
+        string << "TOP "
+        string << node.count.to_s
       end
     end
 
     def visit(node : From) : String
-      String::Builder.build do |sb|
-        sb << " FROM "
+      String.build do |string|
+        string << " FROM "
         node.tables.each_with_index do |table, i|
-          sb << table.table_name
-          sb << " AS " << table.as_name if table.as_name
-          sb << ", " if i < node.tables.size - 1
+          string << table.table_name
+          string << " AS " << table.as_name if table.as_name
+          string << ", " if i < node.tables.size - 1
         end
       end
     end
@@ -310,10 +310,10 @@ module Expression
     end
 
     def visit(node : Null) : String
-      String::Builder.build do |sb|
-        sb << "NULL"
+      String.build do |string|
+        string << "NULL"
         if column = node.column
-          sb << column.accept(self)
+          string << column.accept(self)
         end
       end
     end
@@ -366,64 +366,64 @@ module Expression
     end
 
     def visit(node : Update) : String
-      @query = String::Builder.build do |sb|
-        sb << "UPDATE "
-        sb << node.table.accept(self)
-        sb << " SET "
+      @query = String.build do |string|
+        string << "UPDATE "
+        string << node.table.accept(self)
+        string << " SET "
         node.setters.each_with_index do |setter, i|
-          sb << setter.accept(self)
-          sb << ", " if i < node.setters.size - 1
+          string << setter.accept(self)
+          string << ", " if i < node.setters.size - 1
         end
         if where = node.where
-          sb << where.accept(self)
+          string << where.accept(self)
         end
-        if node.back.any?
-          sb << " RETURNING "
+        if !node.back.empty?
+          string << " RETURNING "
           node.back.each_with_index do |column, i|
-            sb << column.accept(self)
-            sb << ", " if i < node.back.size - 1
+            string << column.accept(self)
+            string << ", " if i < node.back.size - 1
           end
         end
       end
     end
 
     def visit(node : CreateIndex) : String
-      @query = String::Builder.build do |sb|
-        sb << "CREATE "
-        sb << "UNIQUE " if node.index.unique?
-        sb << "INDEX "
-        sb << node.index.index_name
-        sb << " ON "
-        sb << node.index.table.table_name
-        sb << " ("
-        sb << node.index.columns.map { |c| c.to_s }.join(", ")
-        sb << ")"
+      @query = String.build do |string|
+        string << "CREATE "
+        string << "UNIQUE " if node.index.unique?
+        string << "INDEX "
+        string << node.index.index_name
+        string << " ON "
+        string << node.index.table.table_name
+        string << " ("
+        string << node.index.columns.map(&.to_s).join(", ")
+        string << ")"
       end
     end
 
     def visit(node : CreateTable) : String
-      @query = String::Builder.build do |sb|
-        sb << "CREATE TABLE IF NOT EXISTS "
-        sb << node.table.table_name
-        sb << " ("
+      @query = String.build do |string|
+        string << "CREATE TABLE IF NOT EXISTS "
+        string << node.table.table_name
+        string << " ("
 
         node.table.columns.each_with_index do |(name, column), i|
           if column.is_a?(Cql::PrimaryKey)
-            sb << @dialect.auto_increment_primary_key(column, @adapter.sql_type(column.type))
+            string << @dialect.auto_increment_primary_key(column, @adapter.sql_type(column.type))
           else
-            sb << column.name
-            sb << " " << @adapter.sql_type(column.type)
+            string << column.name
+            string << " " << @adapter.sql_type(column.type)
             if [:created_at, :updated_at].includes?(column.name)
-              sb << " DEFAULT " << column.default
+              string << " DEFAULT " << column.default
             elsif column.default
-              sb << " DEFAULT " << column.default
+              string << " DEFAULT " << column.default
             end
-            sb << " NOT NULL" unless column.null?
-            sb << " UNIQUE" if column.unique?
+            string << " NOT NULL" unless column.null?
+            string << " UNIQUE" if column.unique?
           end
-          sb << ", " if i < node.table.columns.size - 1
+          string << ", " if i < node.table.columns.size - 1
         end
-        sb << ")"
+        string << ")"
       end
     end
 
@@ -441,13 +441,13 @@ module Expression
     end
 
     def visit(node : AddColumn) : String
-      String::Builder.build do |sb|
-        sb << "ADD COLUMN "
-        sb << node.column.name
-        sb << " " << @adapter.sql_type(node.column.type)
-        sb << " PRIMARY KEY" if node.column.is_a?(Cql::PrimaryKey)
-        sb << " NOT NULL" unless node.column.null?
-        sb << " UNIQUE" if node.column.unique?
+      String.build do |string|
+        string << "ADD COLUMN "
+        string << node.column.name
+        string << " " << @adapter.sql_type(node.column.type)
+        string << " PRIMARY KEY" if node.column.is_a?(Cql::PrimaryKey)
+        string << " NOT NULL" unless node.column.null?
+        string << " UNIQUE" if node.column.unique?
       end
     end
 
@@ -496,17 +496,17 @@ module Expression
         raise DB::Error.new message
       end
 
-      String::Builder.build do |sb|
-        sb << "ADD CONSTRAINT "
-        sb << node.fk.name
-        sb << " FOREIGN KEY ("
-        sb << node.fk.columns.map(&.to_s).join(", ")
-        sb << ") REFERENCES "
-        sb << node.fk.table
-        sb << " ("
-        sb << node.fk.references.map(&.to_s).join(", ")
-        sb << ") ON DELETE " << node.fk.on_delete
-        sb << " ON UPDATE " << node.fk.on_update
+      String.build do |string|
+        string << "ADD CONSTRAINT "
+        string << node.fk.name
+        string << " FOREIGN KEY ("
+        string << node.fk.columns.map(&.to_s).join(", ")
+        string << ") REFERENCES "
+        string << node.fk.table
+        string << " ("
+        string << node.fk.references.map(&.to_s).join(", ")
+        string << ") ON DELETE " << node.fk.on_delete
+        string << " ON UPDATE " << node.fk.on_update
       end
     end
 

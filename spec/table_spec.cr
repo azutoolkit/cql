@@ -7,7 +7,7 @@ describe Cql::Table do
 
     customer = CustomerModel.new(1, "John", "New York", 100)
 
-    insert_query = TableDB.insert.into(:customers).values(
+    TableDB.insert.into(:customers).values(
       id: customer.id,
       name: customer.name,
       city: customer.city,
@@ -40,7 +40,7 @@ describe Cql::Table do
     count_query = TableDB.query.from(:customers).count
     count_query.first!(as: Int32).should eq 2
 
-    result = TableDB.delete.from(:customers).commit
+    TableDB.delete.from(:customers).commit
     count_query.first!(as: Int32).should eq 0
   end
 
@@ -50,7 +50,7 @@ describe Cql::Table do
     check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
 
     expect_raises(DB::NoResultsError) do
-      name = TableDB.db.query_one(check_query, as: String)
+      TableDB.db.query_one(check_query, as: String)
     end
   end
 end

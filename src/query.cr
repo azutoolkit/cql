@@ -145,10 +145,10 @@ module Cql
     #
     # => John
     # ```
-    def each(as as_kind, &block)
+    def each(as as_kind, &)
       query, params = to_sql
-      @schema.db.query_each(query, args: params) do |rs|
-        yield as_kind.from_rs(rs)
+      @schema.db.query_each(query, args: params) do |result|
+        yield as_kind.from_rs(result)
       end
     end
 
@@ -260,14 +260,14 @@ module Cql
     # => "SELECT users.name, users.age, address.city, address.state FROM users, address"
     # ```
     def select(**fields)
-      fields.each do |k, v|
-        if [:count, :sum, :avg, :min, :max].includes?(k) && v.is_a?(Symbol)
-          @aggr_columns << build_aggr_expression(k, v)
+      fields.each do |key, value|
+        if [:count, :sum, :avg, :min, :max].includes?(key) && value.is_a?(Symbol)
+          @aggr_columns << build_aggr_expression(key, value)
         else
-          if v.is_a?(Array(Symbol))
-            v.map { |f| @columns << find_column(f, k) }
+          if value.is_a?(Array(Symbol))
+            value.map { |name| @columns << find_column(name, key) }
           else
-            @columns << find_column(v)
+            @columns << find_column(value)
           end
         end
       end
@@ -679,7 +679,7 @@ module Cql
 
     private def build_select
       if @columns.empty? && @aggr_columns.empty?
-        @tables.each do |tbl_name, table|
+        @tables.each do |_tbl_name, table|
           @columns.concat(table.columns.values)
         end
       end
@@ -715,8 +715,8 @@ module Cql
         return column if column
         raise "Column #{name} not found in table #{table_name}"
       else
-        @tables.each do |_tbl_name, table|
-          column = table.columns[name]?
+        @tables.each do |_tbl_name, tbl|
+          column = tbl.columns[name]?
           return column if column
         end
         raise "Column #{name} not found in any of #{@tables.keys} tables"

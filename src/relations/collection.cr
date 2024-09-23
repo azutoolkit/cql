@@ -232,7 +232,7 @@ module Cql::Relations
       clear
       Target.insert
         .into(@target_table)
-        .values(ids.map { |id| {@key => @id} }).commit.rows_affected
+        .values(ids.map { |_id| {@key => @id} }).commit.rows_affected
 
       @records = reload
     end
