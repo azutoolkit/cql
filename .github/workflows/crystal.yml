@@ -44,7 +44,6 @@ jobs:
         run: sqlite3 --version
       - name: Create Sqlite databases
         run: |
-          mkdir -p ./spec/db
           touch ./spec/db/northwind.db
           touch ./spec/db/data.db
           touch ./spec/db/billing.db
