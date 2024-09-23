@@ -4,7 +4,7 @@ def d
   Northwind.delete
 end
 
-describe Cql::Delete do
+describe CQL::Delete do
   it "Delete specific rows that meet a certain condition." do
     delete_query = d.from(:users)
       .where { users.id == 1 }

@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # The `Schema` class represents a database schema.
   #
   # This class provides methods to build and manage a database schema, including
@@ -6,7 +6,7 @@ module Cql
   #
   # **Example** Creating a new schema
   # ```
-  # schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do
+  # schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do
   #   table :users do
   #     primary :id, Int64, auto_increment: true
   #     column :name, String
@@ -40,8 +40,8 @@ module Cql
     # - **@return** [String] the version of the schema
     getter version : String
 
-    # - **@return** [Adapter] the database adapter (default: `Adapter::Sqlite`)
-    getter adapter : Adapter = Adapter::Sqlite
+    # - **@return** [Adapter] the database adapter (default: `Adapter::SQLite`)
+    getter adapter : Adapter = Adapter::SQLite
 
     # - **@return** [Hash(Symbol, Table)] the tables in the schema
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
@@ -53,14 +53,14 @@ module Cql
     #
     # - **@param** name [Symbol] the name of the schema
     # - **@param** uri [String] the URI of the database
-    # - **@param** adapter [Adapter] the database adapter (default: `Adapter::Sqlite`)
+    # - **@param** adapter [Adapter] the database adapter (default: `Adapter::SQLite`)
     # - **@param** version [String] the version of the schema (default: "1.0")
     # - **@yield** [Schema] the schema being built
     # - **@return** [Schema] the built schema
     #
     # **Example**
     # ```
-    # schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
+    # schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
     #   s.create_table :users do
     #     primary :id, Int64, auto_increment: true
     #     column :name, String
@@ -68,7 +68,7 @@ module Cql
     #   end
     # end
     # ```
-    def self.define(name : Symbol, uri : String, adapter : Adapter = Adapter::Sqlite, version : String = "1.0", &)
+    def self.define(name : Symbol, uri : String, adapter : Adapter = Adapter::SQLite, version : String = "1.0", &)
       schema = new(name, uri, adapter, version)
       with schema yield
       schema
@@ -78,14 +78,14 @@ module Cql
     #
     # - **@param** name [Symbol] the name of the schema
     # - **@param** uri [String] the URI of the database
-    # - **@param** adapter [Adapter] the database adapter (default: `Adapter::Sqlite`)
+    # - **@param** adapter [Adapter] the database adapter (default: `Adapter::SQLite`)
     # - **@param** version [String] the version of the schema (default: "1.0")
     #
     # **Example** Initializing a new schema
     # ```
-    # schema = Cql::Schema.new(:northwind, "sqlite3://db.sqlite3")
+    # schema = CQL::Schema.new(:northwind, "sqlite3://db.sqlite3")
     # ```
-    def initialize(@name : Symbol, @uri : String, @adapter : Adapter = Adapter::Sqlite, @version : String = "1.0")
+    def initialize(@name : Symbol, @uri : String, @adapter : Adapter = Adapter::SQLite, @version : String = "1.0")
       @db = DB.connect(@uri)
       @gen = Expression::Generator.new(@adapter)
     end

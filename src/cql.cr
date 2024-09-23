@@ -20,7 +20,7 @@ require "./record"
 require "./relations"
 require "./migrations"
 
-module Cql
+module CQL
   # :nodoc:
   alias Date = Time
 
@@ -42,7 +42,7 @@ module Cql
 
   # :nodoc:
   DB_TYPE_MAPPING = {
-    Cql::Adapter::Sqlite => {
+    CQL::Adapter::SQLite => {
       Int32        => "INTEGER",
       Int64        => "BIGINT",
       UInt32       => "INTEGER UNSIGNED",
@@ -57,7 +57,7 @@ module Cql
       Slice(UInt8) => "BLOB",
       JSON::Any    => "TEXT",
     },
-    Cql::Adapter::MySql => {
+    CQL::Adapter::MySql => {
       Int32        => "INT",
       Int64        => "BIGINT",
       UInt32       => "INT UNSIGNED",
@@ -72,7 +72,7 @@ module Cql
       Slice(UInt8) => "BLOB",
       JSON::Any    => "JSON",
     },
-    Cql::Adapter::Postgres => {
+    CQL::Adapter::Postgres => {
       Int32        => "INTEGER",
       Int64        => "BIGINT",
       UInt32       => "INTEGER",
@@ -91,7 +91,7 @@ module Cql
 
   # Represents a database adapter module.
   enum Adapter
-    Sqlite
+    SQLite
     MySql
     Postgres
 
@@ -100,7 +100,7 @@ module Cql
     # @return [String] the SQL type
     # **Example** Getting the SQL type
     # ```
-    # Cql::Adapter::Sqlite.sql_type(Int32) # => "INTEGER"
+    # CQL::Adapter::SQLite.sql_type(Int32) # => "INTEGER"
     # ```
     def sql_type(type) : String
       DB_TYPE_MAPPING[self][type]

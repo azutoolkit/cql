@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # Primary key column definition
   #
   # **Example:**

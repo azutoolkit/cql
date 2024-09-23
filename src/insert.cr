@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # An insert statement builder class
   # This class provides methods for building an insert statement
   # It also provides methods for executing the statement

@@ -1,8 +1,8 @@
 require "./spec_helper"
 
-Users = Cql::Repository(User, Int32).new(Billing, :users)
+Users = CQL::Repository(User, Int32).new(Billing, :users)
 
-describe Cql::Repository(User, Int32) do
+describe CQL::Repository(User, Int32) do
   Billing.users.create!
 
   before_each do

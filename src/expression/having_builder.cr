@@ -2,7 +2,7 @@ module Expression
   class HavingBuilder
     @columns : Array(Column)
 
-    def initialize(sql_cols : Array(Cql::BaseColumn))
+    def initialize(sql_cols : Array(CQL::BaseColumn))
       @columns = sql_cols.map { |col| Column.new(col) }
     end
 

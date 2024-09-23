@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # A delete query
   # This class represents a delete query
   # It provides methods for building a delete query
@@ -22,7 +22,7 @@ module Cql
     # **Example** Deleting a record
     #
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .where(id: 1)
     #   .commit
@@ -36,7 +36,7 @@ module Cql
     # **Example** Deleting a record
     #
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .where(id: 1)
     #   .commit
@@ -53,7 +53,7 @@ module Cql
     # **Example** Generating a delete query
     #
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .where(id: 1)
     #   .to_sql
@@ -72,7 +72,7 @@ module Cql
     # **Example** Setting the table
     #
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     # ```
     def from(table : Symbol)
@@ -87,7 +87,7 @@ module Cql
     #
     # **Example** Setting the using table
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .using(:posts)
     # ```
@@ -105,7 +105,7 @@ module Cql
     # **Example** Setting the columns to return
     #
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .back(:name, :age)
     # ```
@@ -123,7 +123,7 @@ module Cql
     # **Example** Setting the columns to return
     #
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .back(:name, :age)
     # ```
@@ -146,7 +146,7 @@ module Cql
     # **Example** Setting the where clause
     #
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .where(id: 1)
     # ```
@@ -169,7 +169,7 @@ module Cql
     #
     # **Example** Setting the columns to return
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .back(:name, :age)
     # ```
@@ -185,7 +185,7 @@ module Cql
     #
     # **Example** Building the delete expression
     # ```
-    # delete = Cql::Delete.new(schema)
+    # delete = CQL::Delete.new(schema)
     #   .from(:users)
     #   .where(id: 1)
     #   .commit

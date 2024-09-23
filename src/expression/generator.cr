@@ -6,12 +6,12 @@ module Expression
     getter params : Array(DB::Any) = [] of DB::Any
     getter query : String = ""
 
-    def initialize(@adapter : Cql::Adapter = Cql::Adapter::Sqlite)
+    def initialize(@adapter : CQL::Adapter = CQL::Adapter::SQLite)
       @dialect, @placeholder = case @adapter
-                               when Cql::Adapter::Sqlite
-                                 {SqliteDialect.new, "?"}
-                               when Cql::Adapter::MySql
-                                 {MysqlDialect.new, "?"}
+                               when CQL::Adapter::SQLite
+                                 {SQLiteDialect.new, "?"}
+                               when CQL::Adapter::MySql
+                                 {MySQLDialect.new, "?"}
                                else
                                  {PostgresDialect.new, "$"}
                                end
@@ -23,7 +23,7 @@ module Expression
     end
 
     private def placeholder : String
-      return @placeholder unless @adapter == Cql::Adapter::Postgres
+      return @placeholder unless @adapter == CQL::Adapter::Postgres
       "#{@placeholder}#{(@params.size)}"
     end
 
@@ -408,7 +408,7 @@ module Expression
         string << " ("
 
         node.table.columns.each_with_index do |(name, column), i|
-          if column.is_a?(Cql::PrimaryKey)
+          if column.is_a?(CQL::PrimaryKey)
             string << @dialect.auto_increment_primary_key(column, @adapter.sql_type(column.type))
           else
             string << column.name
@@ -445,7 +445,7 @@ module Expression
         string << "ADD COLUMN "
         string << node.column.name
         string << " " << @adapter.sql_type(node.column.type)
-        string << " PRIMARY KEY" if node.column.is_a?(Cql::PrimaryKey)
+        string << " PRIMARY KEY" if node.column.is_a?(CQL::PrimaryKey)
         string << " NOT NULL" unless node.column.null?
         string << " UNIQUE" if node.column.unique?
       end
@@ -481,7 +481,7 @@ module Expression
     end
 
     def visit(node : AddForeignKey) : String
-      if @adapter == Cql::Adapter::Sqlite
+      if @adapter == CQL::Adapter::SQLite
         message = <<-MSG
               SQLite does not support adding foreign keys to an \n
               existing table directly via the ALTER TABLE statement.\n

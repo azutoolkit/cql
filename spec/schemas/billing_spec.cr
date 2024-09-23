@@ -1,6 +1,6 @@
-Billing = Cql::Schema.define(
+Billing = CQL::Schema.define(
   name: :billing,
-  adapter: Cql::Adapter::Sqlite,
+  adapter: CQL::Adapter::SQLite,
   uri: "sqlite3://spec/db/billing.db") do
   table :users do
     primary :id, Int32

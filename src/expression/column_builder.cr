@@ -46,7 +46,7 @@ module Expression
       ConditionBuilder.new(InCondition.new(@column, items))
     end
 
-    def in(sub_query : Cql::Query) : ConditionBuilder
+    def in(sub_query : CQL::Query) : ConditionBuilder
       ConditionBuilder.new(InSelect.new(@column, sub_query.build))
     end
 
@@ -54,7 +54,7 @@ module Expression
       ConditionBuilder.new(Not.new(InCondition.new(@column, values)))
     end
 
-    def not_in(sub_query : Cql::Query) : ConditionBuilder
+    def not_in(sub_query : CQL::Query) : ConditionBuilder
       ConditionBuilder.new(Not.new(InSelect.new(@column, sub_query.build)))
     end
 

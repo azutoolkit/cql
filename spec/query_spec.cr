@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Cql::Query do
+describe CQL::Query do
   describe "Basic SELECT queries" do
     it "selects all columns from tables" do
       select_query = Northwind.query.from(:customers, :users).to_sql
@@ -240,7 +240,7 @@ describe Cql::Query do
 
   describe "Indexes" do
     it "Creates indexes for table" do
-      index = Cql::Index.new(Northwind.tables[:users], [:name, :email], unique: true)
+      index = CQL::Index.new(Northwind.tables[:users], [:name, :email], unique: true)
 
       output = <<-SQL
         CREATE UNIQUE INDEX idx_name_emai ON users (name, email)
@@ -250,7 +250,7 @@ describe Cql::Query do
     end
 
     it "Creates non-unique index for table" do
-      index = Cql::Index.new(Northwind.tables[:orders], [:customer_id, :order_date], unique: false)
+      index = CQL::Index.new(Northwind.tables[:orders], [:customer_id, :order_date], unique: false)
 
       output = <<-SQL
         CREATE INDEX idx_cust_orde ON orders (customer_id, order_date)

@@ -1,5 +1,5 @@
-module Cql
-  # This module is part of the Cql namespace and is responsible for handling
+module CQL
+  # This module is part of the CQL namespace and is responsible for handling
   # database alterations. This class represents an AlterTable object.
   #
   # **Example** :
@@ -15,10 +15,10 @@ module Cql
   # ```
   class AlterTable
     @actions : Array(Expression::AlterAction) = [] of Expression::AlterAction
-    private getter schema : Cql::Schema
-    private getter table : Cql::Table
+    private getter schema : CQL::Schema
+    private getter table : CQL::Table
 
-    def initialize(@table : Cql::Table, @schema : Cql::Schema)
+    def initialize(@table : CQL::Table, @schema : CQL::Schema)
     end
 
     # Adds a new column to the table.

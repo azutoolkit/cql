@@ -1,12 +1,12 @@
-module Cql
+module CQL
   # Error class
-  # This class represents an error in the Cql library
+  # This class represents an error in the CQL library
   # It provides a message describing the error
   #
   # **Example** Raising an error
   #
   # ```
-  # raise Cql::Error.new("Something went wrong")
+  # raise CQL::Error.new("Something went wrong")
   # ```
   class Error < Exception
     def initialize(@message : String)
@@ -57,12 +57,12 @@ module Cql
     # - **@param** : size (Int32, nil) - The size of the column (default: nil)
     # - **@param** : index (Index, nil) - The index for the column (default: nil)
     # - **@return** : Nil
-    # - **@raise** : Cql::Error if the column type is not valid
+    # - **@raise** : CQL::Error if the column type is not valid
     #
     # **Example**
     #
     # ```
-    # column = Cql::Column.new(:name, String)
+    # column = CQL::Column.new(:name, String)
     # ```
     def initialize(
       @name : Symbol,
@@ -82,7 +82,7 @@ module Cql
     # **Example**
     #
     # ```
-    # column = Cql::Column.new(:name, String)
+    # column = CQL::Column.new(:name, String)
     # column.expression.eq("John")
     # ```
     def expression
@@ -95,7 +95,7 @@ module Cql
     # **Example**
     #
     # ```
-    # column = Cql::Column.new(:name, String)
+    # column = CQL::Column.new(:name, String)
     # column.validate!("John")
     # ```
     def validate!(value)

@@ -1,7 +1,7 @@
 require "./spec_helper"
 require "./migrations/*"
 
-describe Cql::Migration do
+describe CQL::Migration do
   migrator = Northwind.migrator
 
   after_all do
@@ -9,7 +9,7 @@ describe Cql::Migration do
   end
 
   it "has a migration" do
-    Cql::Migrator.migrations.size.should eq(2)
+    CQL::Migrator.migrations.size.should eq(2)
   end
 
   it "migrates up" do
@@ -31,7 +31,7 @@ describe Cql::Migration do
     migrator.rollback
 
     migrator.last.try(&.version).should eq(nil)
-    migrator.applied_migrations.map(&.version).should eq([] of Cql::Migrator::MigrationRecord)
+    migrator.applied_migrations.map(&.version).should eq([] of CQL::Migrator::MigrationRecord)
   end
 
   it "redo" do
@@ -63,6 +63,6 @@ describe Cql::Migration do
   it "prints pending migrations" do
     migrator.down
     migrator.print_pending_migrations
-    migrator.pending_migrations.should be_a(Array(Cql::BaseMigration.class))
+    migrator.pending_migrations.should be_a(Array(CQL::BaseMigration.class))
   end
 end

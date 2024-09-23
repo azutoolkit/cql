@@ -10,7 +10,7 @@ struct UserPref
   end
 end
 
-describe Cql::Schema do
+describe CQL::Schema do
   context "handles json fields" do
     Example.table :user_pref do
       primary

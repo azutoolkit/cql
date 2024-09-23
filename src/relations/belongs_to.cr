@@ -1,4 +1,4 @@
-module Cql::Relations
+module CQL::Relations
   module BelongsTo
     # Define the belongs_to association
     macro belongs_to(assoc, foreign_key)

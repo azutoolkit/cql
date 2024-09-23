@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # A repository for a specific table
   # This class provides a high-level interface for interacting with a table
   # It provides methods for querying, creating, updating, and deleting records
@@ -7,7 +7,7 @@ module Cql
   # **Example** Creating a new repository
   #
   # ```
-  # class UserRepository < Cql::Repository(User)
+  # class UserRepository < CQL::Repository(User)
   #  def initialize(@schema : Schema, @table : Symbol)
   # end
   #
@@ -25,7 +25,7 @@ module Cql
     # **Example** Creating a new repository
     #
     # ```
-    # class UserRepository < Cql::Repository(User)
+    # class UserRepository < CQL::Repository(User)
     # end
     #
     # user_repo = UserRepository.new(schema, :users

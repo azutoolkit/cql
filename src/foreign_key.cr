@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # A foreign key constraint
   # This class represents a foreign key constraint
   # It provides methods for setting the columns, table, and references

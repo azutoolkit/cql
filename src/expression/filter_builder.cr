@@ -2,13 +2,13 @@ module Expression
   class FilterBuilder
     @tables : Hash(Symbol, Table) = {} of Symbol => Table
 
-    def initialize(sql_tables : Hash(Symbol, Cql::Table))
+    def initialize(sql_tables : Hash(Symbol, CQL::Table))
       sql_tables.each do |name, table|
         @tables[name] = Table.new(table)
       end
     end
 
-    def exists?(sub_query : Cql::Query)
+    def exists?(sub_query : CQL::Query)
       ConditionBuilder.new(Exists.new(sub_query.build))
     end
 

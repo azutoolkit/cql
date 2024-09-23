@@ -10,7 +10,7 @@ module Expression
         "--dbname=#{uri.path[1..-1]}").output || ""
     end
 
-    def auto_increment_primary_key(column : Cql::BaseColumn, col_type : String) : String
+    def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
       String.build do |string|
         string << column.name
         string << " "
