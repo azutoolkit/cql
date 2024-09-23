@@ -165,9 +165,11 @@ Contributions are welcome! To contribute:
 
 1. Fork this repository.
 2. Create your feature branch: `git checkout -b my-new-feature`.
-3. Commit your changes: `git commit -am 'Add some feature'`.
-4. Push to the branch: `git push origin my-new-feature`.
-5. Create a new Pull Request.
+3. Start Postgres: `docker run --rm -e POSTGRES_DB=spec -e POSTGRES_PASSWORD=password -p 5432:5432 postgres`.
+4. Run specs: `DATABASE_URL="postgres://postgres:password@localhost:5432/spec" crystal spec`.
+5. Commit your changes: `git commit -am 'Add some feature'`.
+6. Push to the branch: `git push origin my-new-feature`.
+7. Create a new Pull Request.
 
 ## License
 
