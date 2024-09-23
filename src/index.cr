@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # An index on a table
   # This class represents an index on a table
   # It provides methods for setting the columns and unique constraint
@@ -27,13 +27,13 @@ module Cql
     # - **@param** : unique (Bool) - Whether the index should be unique (default: false)
     # - **@param** : name (String, nil) - The name of the index (default: nil)
     # - **@return** : Nil
-    # - **@raise** : Cql::Error if the table does not exist
-    # - **@raise** : Cql::Error if the column does not exist
+    # - **@raise** : CQL::Error if the table does not exist
+    # - **@raise** : CQL::Error if the column does not exist
     #
     # **Example**
     #
     # ```
-    # index = Cql::Index.new(table, [:name, :email], unique: true)
+    # index = CQL::Index.new(table, [:name, :email], unique: true)
     # ```
     def initialize(@table : Table, @columns : Array(Symbol), @unique : Bool = false, @name : String? = nil)
     end

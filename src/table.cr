@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # Represents a table in the database.
   # This class is responsible for handling table creation, modification, and deletion.
   #

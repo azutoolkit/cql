@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Cql::Table do
+describe CQL::Table do
   it "creates table" do
     TableDB.customers.drop!
     TableDB.customers.create!

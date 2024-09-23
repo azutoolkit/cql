@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Cql::Update do
+describe CQL::Update do
   it "creates Update query" do
     update_query = Northwind.update.table(:users)
       .set(name: "John", email: "john@example.com")

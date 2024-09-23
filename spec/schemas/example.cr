@@ -1,8 +1,8 @@
 require "pg"
 
-Example = Cql::Schema.define(
+Example = CQL::Schema.define(
   :example,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]) do
   table :customers, as: "cust" do
     primary :customer_id, Int64, auto_increment: true

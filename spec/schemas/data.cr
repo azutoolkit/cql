@@ -1,6 +1,6 @@
-Data = Cql::Schema.define(
+Data = CQL::Schema.define(
   :data,
-  adapter: Cql::Adapter::Sqlite,
+  adapter: CQL::Adapter::SQLite,
   uri: "sqlite3://spec/db/data.db") do
   table :customers do
     primary :id, Int32

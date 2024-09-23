@@ -4,7 +4,7 @@ module Expression
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String
 
-    abstract def auto_increment_primary_key(column : Cql::BaseColumn, col_type : String) : String
+    abstract def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
 
     abstract def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
 

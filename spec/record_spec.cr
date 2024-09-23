@@ -1,8 +1,8 @@
 require "./spec_helper"
 
-AcmeDB = Cql::Schema.define(
+AcmeDB = CQL::Schema.define(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]) do
   table :posts do
     primary :id, Int64, auto_increment: true
@@ -18,7 +18,7 @@ AcmeDB = Cql::Schema.define(
   end
 end
 
-struct Post < Cql::Record(Int64)
+struct Post < CQL::Record(Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -30,7 +30,7 @@ struct Post < Cql::Record(Int64)
   end
 end
 
-struct Comment < Cql::Record(Int64)
+struct Comment < CQL::Record(Int64)
   db_context AcmeDB, :comments
 
   getter id : Int64?
@@ -41,7 +41,7 @@ struct Comment < Cql::Record(Int64)
   end
 end
 
-describe Cql::Record do
+describe CQL::Record do
   AcmeDB.posts.create!
   AcmeDB.comments.create!
 
@@ -70,7 +70,7 @@ describe Cql::Record do
         .limit(1)
         .order(published_at: :desc)
 
-      query.should be_a Cql::Query
+      query.should be_a CQL::Query
     end
   end
 

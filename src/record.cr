@@ -1,10 +1,10 @@
-module Cql
+module CQL
   # Write documentation for Record module
   #
   # **Example** Using the Record module
   #
   # ```
-  # AcmeDB = Cql::Schema.define(:acme_db, adapter: Cql::Adapter::Postgres,
+  # AcmeDB = CQL::Schema.define(:acme_db, adapter: CQL::Adapter::Postgres,
   #   uri: "postgresql://example:example@localhost:5432/example") do
   #   table :posts do
   #     primary :id, Int64, auto_increment: true
@@ -20,7 +20,7 @@ module Cql
   #   end
   # end
   #
-  # struct Post < Cql::Record(Int64)
+  # struct Post < CQL::Record(Int64)
   #   db_context AcmeDB, :posts
   #
   #   getter id : Int64?
@@ -32,7 +32,7 @@ module Cql
   #   end
   # end
   #
-  # struct Comment < Cql::Record(Int64)
+  # struct Comment < CQL::Record(Int64)
   #   db_context AcmeDB, :comments
   #
   #   getter id : Int64?
@@ -47,29 +47,29 @@ module Cql
     macro inherited
       include DB::Serializable
       include DB::Serializable::NonStrict
-      include Cql::Relations
-      @@schema : Cql::Schema? = nil
+      include CQL::Relations
+      @@schema : CQL::Schema? = nil
       @@table : Symbol? = nil
 
       # Define the schema and table for the record
-      # - **@param** schema [Cql::Schema] The schema to use
+      # - **@param** schema [CQL::Schema] The schema to use
       # - **@param** table [Symbol] The table to use
       # - **@return** [Nil]
       #
       # **Example** Defining the schema and table
       #
       # ```
-      # struct User < Cql::Record(Int64)
+      # struct User < CQL::Record(Int64)
       #   db_context AcmeDB, :users
       # end
       # ```
-      def self.db_context(schema : Cql::Schema, table : Symbol)
+      def self.db_context(schema : CQL::Schema, table : Symbol)
         @@schema = schema
         @@table = table
       end
 
       # Return the schema for the record
-      # - **@return** [Cql::Schema] The schema
+      # - **@return** [CQL::Schema] The schema
       #
       # **Example** Fetching the schema
       #
@@ -91,7 +91,7 @@ module Cql
       end
 
       # Return the adapter for the schema
-      # - **@return** [Cql::Adapter] The adapter
+      # - **@return** [CQL::Adapter] The adapter
       # **Example** Fetching the adapter
       # ```
       # User.adapter
@@ -125,7 +125,7 @@ module Cql
       # user_repo.query.where(active: true).all({{@type.id}})
       # ```
       def self.query
-        Cql::Query.new({{@type.id}}.schema).from({{@type.id}}.table)
+        CQL::Query.new({{@type.id}}.schema).from({{@type.id}}.table)
       end
 
       # Fetch all records of type T
@@ -215,7 +215,7 @@ module Cql
       # user_repo.insert.values(name: "Alice", email: " [email protected]").commit
       # ```
       def self.insert
-        Cql::Insert.new({{@type.id}}.schema).into({{@type.id}}.table)
+        CQL::Insert.new({{@type.id}}.schema).into({{@type.id}}.table)
       end
 
       # Create a new record with given attributes
@@ -257,7 +257,7 @@ module Cql
       # user_repo.update.set(active: true).where(id: 1).commit
       # ```
       def self.update
-        Cql::Update.new({{@type.id}}.schema).table({{@type.id}}.table)
+        CQL::Update.new({{@type.id}}.schema).table({{@type.id}}.table)
       end
 
       # Update a record by ID with given attributes
@@ -369,7 +369,7 @@ module Cql
       # user_repo.delete.where(id: 1).commit
       # ```
       def self.delete
-        Cql::Delete.new({{@type.id}}.schema).from({{@type.id}}.table)
+        CQL::Delete.new({{@type.id}}.schema).from({{@type.id}}.table)
       end
 
       # Delete a record by ID

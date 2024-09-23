@@ -30,8 +30,8 @@ CQL Toolkit is a powerful library designed to simplify and enhance the managemen
 
 - **Query Builder**: Programmatically create complex SQL queries.
 - **Insert, Update, Delete Operations**: Perform CRUD operations with ease.
-- **Repository Pattern**: Manage your data more effectively using `Cql::Repository(T)`.
-- **Active Record Pattern**: Work with your data models using `Cql::Record(T)`.
+- **Repository Pattern**: Manage your data more effectively using `CQL::Repository(T)`.
+- **Active Record Pattern**: Work with your data models using `CQL::Record(T)`.
 
 ## Installation
 
@@ -56,9 +56,9 @@ shards install
 Define the schema for your database tables:
 
 ```crystal
-schema = Cql::Schema.define(
+schema = CQL::Schema.define(
   :my_database,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   db: DB.open("postgresql://user:password@localhost:5432/database_name")
   ) do
 
@@ -75,7 +75,7 @@ end
 With the schema in place, you can start executing queries:
 
 ```crystal
-q = Cql::Query.new(schema)
+q = CQL::Query.new(schema)
 
 user = q.from(:users).where(id: 1).first(as: User)
 
@@ -87,7 +87,7 @@ puts user.name if user
 Insert new records into the database:
 
 ```crystal
-q = Cql::Query.new(schema)
+q = CQL::Query.new(schema)
 
 q.insert_into(:users, name: "Jane Doe", email: "jane@example.com")
 ```
@@ -97,7 +97,7 @@ q.insert_into(:users, name: "Jane Doe", email: "jane@example.com")
 Update existing records:
 
 ```crystal
-q = Cql::Query.new(schema)
+q = CQL::Query.new(schema)
 
 q.update(:users).set(name: "Jane Smith").where(id: 1)
 ```
@@ -107,7 +107,7 @@ q.update(:users).set(name: "Jane Smith").where(id: 1)
 Delete records from the database:
 
 ```crystal
-q = Cql::Query.new(schema)
+q = CQL::Query.new(schema)
 
 q.delete_from(:users).where(id: 1)
 ```
@@ -117,7 +117,7 @@ q.delete_from(:users).where(id: 1)
 Utilize the repository pattern for organized data management:
 
 ```crystal
-user_repository = Cql::Repository(User, Int64).new(schema, :users)
+user_repository = CQL::Repository(User, Int64).new(schema, :users)
 
 # Create a new user
 user_repository.create(id: 1, name: "Jane Doe", email: "jane@example.com")
@@ -139,9 +139,9 @@ user_repository.update(1, name: "Jane Smith")
 Work with your data using the Active Record pattern:
 
 ```crystal
-AcmeDB = Cql::Schema.define(...) do ... end
+AcmeDB = CQL::Schema.define(...) do ... end
 
-struct User < Cql::Record(Int64)
+struct User < CQL::Record(Int64)
   db_context  schema: AcmeDB, table: :users
 
   # Crystal properties (no macros)

@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # The `Query` class is responsible for building SQL queries in a structured manner.
   # It holds various components like selected columns, tables, conditions, and more.
   # It provides methods to execute the query and return results.
@@ -6,9 +6,9 @@ module Cql
   # **Example** Creating a new query
   #
   # ```
-  # schema = Cql::Schema.new
+  # schema = CQL::Schema.new
   #
-  # Cql::Query.new(schema)
+  # CQL::Query.new(schema)
   # query.select(:name, :age).from(:users).where(name: "John").all(User)
   # => [{"name" => "John", "age" => 30}]
   # ```
@@ -16,8 +16,8 @@ module Cql
   # **Example** Executing a query and iterating over results
   #
   # ```
-  # schema = Cql::Schema.new
-  # query = Cql::Query.new(schema)
+  # schema = CQL::Schema.new
+  # query = CQL::Query.new(schema)
   # query.select(:name, :age).from(:users).where(name: "John").each(User) do |user|
   #   puts user.name
   # end
@@ -43,10 +43,10 @@ module Cql
     #
     # **Example** Creating a new query
     # ```
-    # schema = Cql::Schema.new
-    # query = Cql::Query.new(schema)
+    # schema = CQL::Schema.new
+    # query = CQL::Query.new(schema)
     #
-    # => #<Cql::Query:0x00007f8b1b0b3b00>
+    # => #<CQL::Query:0x00007f8b1b0b3b00>
     # ```
     def initialize(@schema : Schema)
     end
@@ -58,8 +58,8 @@ module Cql
     # **Example**
     #
     # ```
-    # schema = Cql::Schema.new
-    # query = Cql::Query.new(schema)
+    # schema = CQL::Schema.new
+    # query = CQL::Query.new(schema)
     # query.select(:name, :age).from(:users).all(User)
     #
     # => [<User:0x00007f8b1b0b3b00 @name="John", @age=30>, <User:0x00007f8b1b0b3b00 @name="Jane", @age=25>]
@@ -75,8 +75,8 @@ module Cql
     # **Example**
     #
     # ```
-    # schema = Cql::Schema.new
-    # query = Cql::Query.new(schema)
+    # schema = CQL::Schema.new
+    # query = CQL::Query.new(schema)
     # query.select(:name, :age).from(:users).all!(User)
     #
     # => [<User:0x00007f8b1b0b3b00 @name="John", @age=30>, <User:0x00007f8b1b0b3b00 @name="Jane", @age=25>]
@@ -92,8 +92,8 @@ module Cql
     # **Example**
     #
     # ```
-    # schema = Cql::Schema.new
-    # query = Cql::Query.new(schema)
+    # schema = CQL::Schema.new
+    # query = CQL::Query.new(schema)
     # query.select(:name, :age).from(:users).first(User)
     #
     # => <User:0x00007f8b1b0b3b00 @name="John", @age=30>
@@ -110,8 +110,8 @@ module Cql
     # **Example**
     #
     # ```
-    # schema = Cql::Schema.new
-    # query = Cql::Query.new(schema)
+    # schema = CQL::Schema.new
+    # query = CQL::Query.new(schema)
     # query.select(:name, :age).from(:users).first!(User)
     #
     # => <User:0x00007f8b1b0b3b00 @name="John", @age=30>
@@ -125,8 +125,8 @@ module Cql
     # - **@return** [Type] The scalar result of the query
     # Example: `query.get(Int64)`
     # ```
-    # schema = Cql::Schema.new
-    # query = Cql::Query.new(schema)
+    # schema = CQL::Schema.new
+    # query = CQL::Query.new(schema)
     # query.select(:count).from(:users).get(Int64)
     #
     # => 10
@@ -383,7 +383,7 @@ module Cql
 
     # Adds an INNER JOIN to the query.
     # - **@param** table [Symbol] The table to join
-    # - **@param** on [Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any)] The join condition
+    # - **@param** on [Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any)] The join condition
     # - **@return** [Query] The query object
     #
     # **Example**
@@ -392,7 +392,7 @@ module Cql
     # query.inner(:orders, on: { users.id => orders.user_id })
     # => "SELECT * FROM users INNER JOIN orders ON users.id = orders.user_id"
     # ```
-    def inner(table : Symbol, on : Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any))
+    def inner(table : Symbol, on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
       join(Expression::JoinType::INNER, find_table(table), on)
       self
     end
@@ -423,7 +423,7 @@ module Cql
 
     # Adds a LEFT JOIN to the query.
     # - **@param** table [Symbol] The table to join
-    # - **@param** on [Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any)] The join condition
+    # - **@param** on [Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any)] The join condition
     #
     # **Example**
     #
@@ -431,7 +431,7 @@ module Cql
     # query.left(:orders, on: { users.id => orders.user_id })
     # => "SELECT * FROM users LEFT JOIN orders ON users.id = orders.user_id"
     # ```
-    def left(table : Symbol, on : Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any))
+    def left(table : Symbol, on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
       join(Expression::JoinType::LEFT, find_table(table), on)
       self
     end
@@ -462,7 +462,7 @@ module Cql
 
     # Adds a RIGHT JOIN to the query.
     # - **@param** table [Symbol] The table to join
-    # - **@param** on [Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any)] The join condition
+    # - **@param** on [Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any)] The join condition
     # - **@return** [Query] The query object
     #
     # **Example**
@@ -471,7 +471,7 @@ module Cql
     # query.right(:orders, on: { users.id => orders.user_id })
     # => "SELECT * FROM users RIGHT JOIN orders ON users.id = orders.user_id"
     # ```
-    def right(table : Symbol, on : Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any))
+    def right(table : Symbol, on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
       join(Expression::JoinType::RIGHT, find_table(table), on)
       self
     end
@@ -641,7 +641,7 @@ module Cql
       Expression::From.new(@tables.values)
     end
 
-    private def join(type : Expression::JoinType, table : Table, on : Hash(Cql::BaseColumn, Cql::BaseColumn | DB::Any))
+    private def join(type : Expression::JoinType, table : Table, on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
       condition = on.map do |left, right|
         right_col = if right.is_a?(DB::Any)
                       left.validate!(right)
@@ -689,7 +689,7 @@ module Cql
       end
     end
 
-    private def find_table(name : Symbol) : Cql::Table
+    private def find_table(name : Symbol) : CQL::Table
       table = @schema.tables[name]
       raise "Table #{name} not found" unless table
       table
@@ -708,7 +708,7 @@ module Cql
       end
     end
 
-    private def find_column(name : Symbol, table_name : Symbol? = nil) : Cql::BaseColumn
+    private def find_column(name : Symbol, table_name : Symbol? = nil) : CQL::BaseColumn
       if table_name
         table = @schema.tables[table_name]
         column = table.columns[name]

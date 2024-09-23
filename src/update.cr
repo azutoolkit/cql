@@ -1,11 +1,11 @@
-module Cql
+module CQL
   #
-  # The `Cql::Update` class represents an SQL UPDATE statement.
+  # The `CQL::Update` class represents an SQL UPDATE statement.
   #
   # **Example**
   #
   # ```
-  # update = Cql::Update.new(schema)
+  # update = CQL::Update.new(schema)
   #   .table(:users)
   #   .set(name: "John", age: 30)
   #   .where { |w| w.id == 1 }
@@ -14,7 +14,7 @@ module Cql
   #
   # ## Usage
   #
-  # - `initialize(schema : Schema)` - Initializes a new instance of `Cql::Update` with the given schema.
+  # - `initialize(schema : Schema)` - Initializes a new instance of `CQL::Update` with the given schema.
   # - `commit : DB::Result` - Executes the update query and returns the result.
   # - `to_sql(gen = @schema.gen) : {String, Array(DB::Any)}` - Generates the SQL query and parameters.
   # - `table(table : Symbol) : self` - Sets the table to update.
@@ -38,7 +38,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
@@ -57,7 +57,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
@@ -78,7 +78,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
@@ -97,7 +97,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
@@ -117,7 +117,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
@@ -139,7 +139,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
@@ -163,7 +163,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where(id: 1)
@@ -192,7 +192,7 @@ module Cql
     # **Example**
     #
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
@@ -217,7 +217,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }
@@ -238,7 +238,7 @@ module Cql
     #
     # **Example**
     # ```
-    # update = Cql::Update.new(schema)
+    # update = CQL::Update.new(schema)
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where { |w| w.id == 1 }

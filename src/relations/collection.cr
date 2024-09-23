@@ -1,11 +1,11 @@
-module Cql::Relations
+module CQL::Relations
   # A collection of records for a one to many relationship
   # This class is used to manage the relationship between two tables
   # through a foreign key column in the target table
   # and provide methods to manage the association between the two tables
   # and query records in the associated table based on the foreign key value
   # of the parent record.
-  # - **param** : Target (Cql::Model) - The target model
+  # - **param** : Target (CQL::Model) - The target model
   # - **param** : Pk (Int64) - The primary key type
   # - **return** : Nil
   #
@@ -13,7 +13,7 @@ module Cql::Relations
   #
   # ```
   # class User
-  #   include Cql::Model(User, Int64)
+  #   include CQL::Model(User, Int64)
   #   property id : Int64
   #   property name : String
   #   has_many :posts, Post, foreign_key: :user_id
@@ -31,7 +31,7 @@ module Cql::Relations
     # - **param** : id (Pk) - The id value for the parent record
     # - **param** : target_key (Symbol) - The key for the associated record
     # - **param** : cascade (Bool) - Delete associated records
-    # - **param** : query (Cql::Query) - Query object
+    # - **param** : query (CQL::Query) - Query object
     # - **return** : ManyCollection
     #
     # **Example**
@@ -42,14 +42,14 @@ module Cql::Relations
     #   1,
     #   :actor_id,
     #   false,
-    #   Cql::Query.new(Actor.schema).from(Actor.table)
+    #   CQL::Query.new(Actor.schema).from(Actor.table)
     # )
     # ```
     def initialize(
       @key : Symbol,                                                         # movie_id
       @id : Pk,                                                              # movie id value
       @cascade : Bool = false,                                               # delete associated records
-      @query : Cql::Query = Cql::Query.new(Target.schema).from(Target.table) # query object
+      @query : CQL::Query = CQL::Query.new(Target.schema).from(Target.table) # query object
     )
       @target_table = Target.table
       @records = reload
@@ -178,7 +178,7 @@ module Cql::Relations
     # Create a new record and associate it with the parent record
     # - **param** : attributes (Hash(Symbol, String | Int64))
     # - **return** : Array(Target)
-    # - **raise** : Cql::Error
+    # - **raise** : CQL::Error
     #
     # **Example**
     #
@@ -198,7 +198,7 @@ module Cql::Relations
     # Create a new record and associate it with the parent record
     # - **param** : attributes (Hash(Symbol, String | Int64))
     # - **return** : Array(Target)
-    # - **raise** : Cql::Error
+    # - **raise** : CQL::Error
     #
     # **Example**
     #
@@ -310,7 +310,7 @@ module Cql::Relations
   #
   # ```
   # class Movie
-  #   include Cql::Model(Movie, Int64)
+  #   include CQL::Model(Movie, Int64)
   #
   #   property id : Int64
   #   property title : String
@@ -319,13 +319,13 @@ module Cql::Relations
   # end
   #
   # class Actor
-  #   include Cql::Model(Actor, Int64)
+  #   include CQL::Model(Actor, Int64)
   #   property id : Int64
   #   property name : String
   # end
   #
   # class MoviesActors
-  #   include Cql::Model(MoviesActors, Int64)
+  #   include CQL::Model(MoviesActors, Int64)
   #   property id : Int64
   #   property movie_id : Int64
   #   property actor_id : Int64
@@ -342,7 +342,7 @@ module Cql::Relations
     # - **param** : id (Pk) - The id value for the parent record
     # - **param** : target_key (Symbol) - The key for the associated record
     # - **param** : cascade (Bool) - Delete associated records
-    # - **param** : query (Cql::Query) - Query object
+    # - **param** : query (CQL::Query) - Query object
     # - **return** : ManyCollection
     #
     # **Example**
@@ -353,7 +353,7 @@ module Cql::Relations
     #   1,
     #   :actor_id,
     #   false,
-    #   Cql::Query.new(Actor.schema).from(Actor.table)
+    #   CQL::Query.new(Actor.schema).from(Actor.table)
     # )
     # ```
     def initialize(
@@ -361,7 +361,7 @@ module Cql::Relations
       @id : Pk,                                                              # moive id value
       @target_key : Symbol,                                                  # actor_id
       @cascade : Bool = false,                                               # delete associated records
-      @query : Cql::Query = Cql::Query.new(Target.schema).from(Target.table) # query object
+      @query : CQL::Query = CQL::Query.new(Target.schema).from(Target.table) # query object
     )
       super(@key, @id, @cascade, @query)
       @through_table = Through.table
@@ -371,7 +371,7 @@ module Cql::Relations
     # Create a new record and associate it with the parent record
     # - **param** : attributes (Hash(Symbol, String | Int64))
     # - **return** : Array(Target)
-    # - **raise** : Cql::Error
+    # - **raise** : CQL::Error
     #
     # **Example**
     #
@@ -391,7 +391,7 @@ module Cql::Relations
     # Create a new record and associate it with the parent record
     # - **param** : attributes (Hash(Symbol, String | Int64))
     # - **return** : Array(Target)
-    # - **raise** : Cql::Error
+    # - **raise** : CQL::Error
     #
     # **Example**
     #

@@ -42,7 +42,7 @@ jobs:
           apt-get install -y sqlite3 libsqlite3-dev
       - name: Verify SQLite installation
         run: sqlite3 --version
-      - name: Create Sqlite databases
+      - name: Create SQLite databases
         run: |
           mkdir -p ./spec/db
           touch ./spec/db/northwind.db

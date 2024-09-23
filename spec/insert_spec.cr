@@ -1,6 +1,6 @@
 require "./spec_helper"
 
-describe Cql::Insert do
+describe CQL::Insert do
   it "creates Insert Into query" do
     insert_query = Northwind.insert.into(:users).values(name: "John", email: "john@example.com").to_sql
 

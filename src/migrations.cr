@@ -1,7 +1,7 @@
 require "tallboy"
 require "colorize"
 
-module Cql
+module CQL
   # Migrations are used to manage changes to the database schema over time.
   # Each migration is a subclass of `Migration` and must implement the `up` and `down` methods.
   #
@@ -13,7 +13,7 @@ module Cql
   # **Example** Creating a new migration
   #
   # ```
-  # class CreateUsersTable < Cql::Migration(1)
+  # class CreateUsersTable < CQL::Migration(1)
   #   def up
   #     schema.alter :users do
   #       add_column :name, String
@@ -33,7 +33,7 @@ module Cql
   # **Example** Applying migrations
   #
   # ```
-  # migrator = Cql::Migrator.new(schema)
+  # migrator = CQL::Migrator.new(schema)
   # migrator.up
   # ```
   #
@@ -85,14 +85,14 @@ module Cql
 
   abstract class Migration(V) < BaseMigration
     macro inherited
-      getter schema : Cql::Schema
+      getter schema : CQL::Schema
 
-      Cql::Migrator.migrations << {{@type}}
+      CQL::Migrator.migrations << {{@type}}
       def self.version : Int32
         V
       end
 
-      def initialize(@schema : Cql::Schema); end
+      def initialize(@schema : CQL::Schema); end
     end
   end
 
@@ -101,7 +101,7 @@ module Cql
   # The `Migrator` class also provides methods to list applied and pending migrations.
   # **Example** Creating a new migrator
   # ```
-  # schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
+  # schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
   #   table :schema_migrations do
   #     primary :id, Int32
   #     column :name, String
@@ -109,7 +109,7 @@ module Cql
   #     timestamps
   #   end
   # end
-  # migrator = Cql::Migrator.new(schema)
+  # migrator = CQL::Migrator.new(schema)
   # ```
   #
   # **Example** Applying migrations
@@ -127,7 +127,7 @@ module Cql
     # @field updated_at [Time] the update time
     # **Example** Creating a migration record
     # ```
-    # record = Cql::MigrationRecord.new(0_i64, "CreateUsersTable", 1_i64)
+    # record = CQL::MigrationRecord.new(0_i64, "CreateUsersTable", 1_i64)
     # ```
     class MigrationRecord
       include DB::Serializable

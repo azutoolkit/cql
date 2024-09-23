@@ -1,4 +1,4 @@
-module Cql::Relations
+module CQL::Relations
   # Define the has_one association
   module HasOne
     macro has_one(name, kind)

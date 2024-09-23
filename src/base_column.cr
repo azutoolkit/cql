@@ -1,4 +1,4 @@
-module Cql
+module CQL
   # :nodoc:
   abstract class BaseColumn
   end

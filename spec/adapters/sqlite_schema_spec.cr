@@ -1,6 +1,6 @@
 require "../spec_helper"
 
-describe Cql::Schema do
+describe CQL::Schema do
   column_exists = ->(col : Symbol, table : Symbol) do
     begin
       query = "SELECT 1 FROM pragma_table_info('#{table}') WHERE name = '#{col}';\n"

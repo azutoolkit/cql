@@ -1,10 +1,10 @@
 module Expression
-  class SqliteDialect < Dialect
+  class SQLiteDialect < Dialect
     def structure_dump(uri : URI) : String
       ""
     end
 
-    def auto_increment_primary_key(column : Cql::BaseColumn, col_type : String) : String
+    def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
       "#{column.name} #{col_type} PRIMARY KEY AUTOINCREMENT"
     end
 
