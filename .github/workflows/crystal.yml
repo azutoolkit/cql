@@ -44,7 +44,6 @@ jobs:
         run: sqlite3 --version
       - name: Create SQLite databases
         run: |
-          mkdir -p ./spec/db
           touch ./spec/db/northwind.db
           touch ./spec/db/data.db
           touch ./spec/db/billing.db
@@ -57,6 +56,8 @@ jobs:
         run: shards install
       - name: Check code style
         run: crystal tool format --check
+      - name: Check code linting with Ameba
+        run: bin/ameba
       - name: Run tests
         env:
           DATABASE_URL: postgres://example:example@postgres:5432/example

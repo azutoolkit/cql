@@ -199,15 +199,15 @@ module CQL
     # sql = to_sql(visitor)
     # ```
     def to_sql(visitor : Expression::Visitor)
-      String::Builder.build do |sb|
+      String.build do |string|
         @actions.each do |action|
           case action
           when Expression::CreateIndex, Expression::DropIndex, Expression::RenameTable
-            sb << action.accept(visitor)
+            string << action.accept(visitor)
           else
-            sb << Expression::AlterTable.new(@table, action).accept(visitor)
+            string << Expression::AlterTable.new(@table, action).accept(visitor)
           end
-          sb << ";\n"
+          string << ";\n"
         end
       end
     end

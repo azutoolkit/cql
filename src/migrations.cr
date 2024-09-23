@@ -217,7 +217,7 @@ module CQL
     # ```
     # @return [Migration.class | Nil]
     def last : BaseMigration.class | Nil
-      Migrator.migrations.find { |m| m.version == repo.last.version }
+      Migrator.migrations.find { |migration| migration.version == repo.last.version }
     rescue DB::NoResultsError
       nil
     end
@@ -229,7 +229,7 @@ module CQL
     # migrator.down_to(1_i64)
     # ```
     def down_to(version : Int64)
-      index = sorted_migrations.index { |m| m.version == version }
+      index = sorted_migrations.index { |migration| migration.version == version }
       down(index ? index + 1 : 0) if index
     end
 
@@ -240,7 +240,7 @@ module CQL
     # migrator.up_to(1_i64)
     # ```
     def up_to(version : Int64)
-      index = sorted_migrations.index { |m| m.version == version }
+      index = sorted_migrations.index { |migration| migration.version == version }
       up(index ? index + 1 : 0) if index
     end
 
@@ -270,7 +270,7 @@ module CQL
     # migrator.print_pending_migrations
     # ```
     def print_pending_migrations
-      print_table(pending_migrations.map { |m| build_migration_record(m) }, "⏱".colorize.yellow.to_s)
+      print_table(pending_migrations.map { |migration| build_migration_record(migration) }, "⏱".colorize.yellow.to_s)
     end
 
     # Returns the pending migrations.
@@ -280,7 +280,7 @@ module CQL
     # migrator.pending_migrations
     # ```
     def pending_migrations : Array(BaseMigration.class)
-      sorted_migrations.reject { |m| migration_applied?(m.version) }
+      sorted_migrations.reject { |migration| migration_applied?(migration.version) }
     end
 
     # Returns the applied migrations.

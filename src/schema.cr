@@ -98,7 +98,7 @@ module CQL
     # Schema.define
     # ```
     def build
-      @tables.each do |name, table|
+      @tables.each do |_tbl_name, table|
         sql = table.create_sql
         Log.debug { sql }
         exec(sql)

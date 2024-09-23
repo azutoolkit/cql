@@ -33,7 +33,7 @@ module Expression
     end
 
     def drop_foreign_key(table_name : String, constraint_name : String) : String
-      message = <<-MSG
+      <<-MSG
       SQLite does not support dropping foreign keys directly via the ALTER TABLE
       statement. You need to recreate the table without the foreign key constraint.
 

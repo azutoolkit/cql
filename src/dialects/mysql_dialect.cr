@@ -10,12 +10,12 @@ module Expression
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
-      String::Builder.build do |sb|
-        sb << column.name
-        sb << " "
-        sb << col_type
-        sb << " PRIMARY KEY"
-        sb << " AUTO_INCREMENT" if column.auto_increment?
+      String.build do |string|
+        string << column.name
+        string << " "
+        string << col_type
+        string << " PRIMARY KEY"
+        string << " AUTO_INCREMENT" if column.auto_increment?
       end
     end
 

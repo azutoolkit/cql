@@ -48,7 +48,7 @@ module CQL
     # index_name = index.index_name
     # ```
     def index_name
-      @name || "idx_#{columns.map { |c| c.to_s[0..3] }.join("_")}"
+      @name || "idx_#{columns.map { |column| column.to_s[0..3] }.join("_")}"
     end
   end
 end
