@@ -1,2 +1,6 @@
+---
+icon: life-ring
+---
+
 # Troubleshooting
 

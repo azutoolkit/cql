@@ -32,7 +32,7 @@
   * [class CQL::PrimaryKey(T)](api/class-cql-primarykey-t.md)
   * [alias CQL::PrimaryKeyType](api/alias-cql-primarykeytype.md)
   * [class CQL::Query](api/class-cql-query.md)
-  * [module CQL::Record(T, Pk)](api/module-cql-record-t-pk.md)
+  * [module CQL::Record(Pk)](api/module-cql-record-pk.md)
   * [module CQL::Relations](api/module-cql-relations/README.md)
     * [module CQL::Relations::BelongsTo](api/module-cql-relations/module-cql-relations-belongsto.md)
     * [class CQL::Relations::Collection(Target, Pk)](api/module-cql-relations/class-cql-relations-collection-target-pk.md)

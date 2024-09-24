@@ -1,4 +1,4 @@
-# module CQL::Record(T, Pk)
+# module CQL::Record(Pk)
 
 Write documentation for Record module
 
@@ -21,7 +21,7 @@ AcmeDB = CQL::Schema.define(:acme_db, adapter: CQL::Adapter::Postgres,
   end
 end
 
-struct Post < CQL::Record(Post)
+struct Post < CQL::Record(Int64)
 
   db_context AcmeDB, :posts
 
@@ -34,7 +34,7 @@ struct Post < CQL::Record(Post)
   end
 end
 
-struct Comment < CQL::Record(Comment)
+struct Comment < CQL::Record(Int64)
   db_context AcmeDB, :comments
 
   getter id : Int64?
