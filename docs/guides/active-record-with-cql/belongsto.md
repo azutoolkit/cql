@@ -24,9 +24,9 @@ We'll start by implementing the `BelongsTo` relationship from the `Comment` to t
 We'll first define the `posts` and `comments` tables using CQL’s schema DSL.
 
 ```crystal
-codeAcmeDB = Cql::Schema.define(
+codeAcmeDB = CQL::Schema.define(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
 ) do
 
@@ -57,7 +57,7 @@ Next, we'll define the `Post` and `Comment` structs in CQL.
 ### **Post Model**
 
 ```crystal
-struct Post < Cql::Record(Int64)
+struct Post < CQL::Record(Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -74,7 +74,7 @@ end
 ### **Comment Model**
 
 ```crystal
-struct Comment < Cql::Record(Int64)
+struct Comment < CQL::Record(Int64)
   db_context AcmeDB, :comments
 
   getter id : Int64?

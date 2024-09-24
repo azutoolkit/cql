@@ -1,18 +1,17 @@
-
 ---
-title: "Cql::Repository(T, Pk)"
+title: "CQL::Repository(T, Pk)"
 ---
 
-# class Cql::Repository(T, Pk)
+# class CQL::Repository(T, Pk)
 
 `Reference` < `Object`
 
-The `Cql::Repository` class provides a high-level interface for interacting with a specific table in the database. It includes methods for querying, creating, updating, deleting records, as well as pagination and counting.
+The `CQL::Repository` class provides a high-level interface for interacting with a specific table in the database. It includes methods for querying, creating, updating, deleting records, as well as pagination and counting.
 
 ## Example: Creating a Repository
 
 ```crystal
-class UserRepository < Cql::Repository(User)
+class UserRepository < CQL::Repository(User)
   def initialize(@schema : Schema, @table : Symbol)
   end
 end
@@ -114,4 +113,3 @@ Fetches a paginated set of records.
 ```crystal
 user_repo.page(1, 10)
 ```
-

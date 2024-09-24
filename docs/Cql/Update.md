@@ -1,17 +1,17 @@
 ---
-title: "Cql::Update"
+title: "CQL::Update"
 ---
 
-# class Cql::Update
+# class CQL::Update
 
 `Reference` < `Object`
 
-The `Cql::Update` class represents an SQL UPDATE statement.
+The `CQL::Update` class represents an SQL UPDATE statement.
 
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -20,7 +20,7 @@ update = Cql::Update.new(schema)
 
 ## Usage
 
-- `initialize(schema : Schema)` - Initializes a new instance of `Cql::Update` with the given schema.
+- `initialize(schema : Schema)` - Initializes a new instance of `CQL::Update` with the given schema.
 - `commit : DB::Result` - Executes the update query and returns the result.
 - `to_sql(gen = @schema.gen) : {String, Array(DB::Any)}` - Generates the SQL query and parameters.
 - `table(table : Symbol) : self` - Sets the table to update.
@@ -49,7 +49,7 @@ Sets the columns to return after the update.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -69,7 +69,7 @@ Builds the `Expression::Update` object.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -87,7 +87,7 @@ Executes the update query and returns the result.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -106,7 +106,7 @@ Sets the column values to update using a hash.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -125,7 +125,7 @@ Sets the column values to update using keyword arguments.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -145,7 +145,7 @@ Sets the table to update.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -164,7 +164,7 @@ Generates the SQL query and parameters.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -185,7 +185,7 @@ Sets the WHERE clause using a block.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -206,7 +206,7 @@ Sets the columns to return after the update.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -226,7 +226,7 @@ Sets the WHERE clause using keyword arguments.
 **Example**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where(id: 1)

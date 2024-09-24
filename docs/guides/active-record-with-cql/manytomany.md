@@ -36,9 +36,9 @@ We will represent this many-to-many relationship using a join table called **Pos
 We’ll define the `posts`, `tags`, and `post_tags` tables in the schema using CQL’s DSL.
 
 ```crystal
-AcmeDB = Cql::Schema.define(
+AcmeDB = CQL::Schema.define(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
 ) do
   table :posts do
@@ -75,7 +75,7 @@ Let’s define the `Post`, `Tag`, and `PostTag` models in CQL, establishing the 
 ### **Post Model**
 
 ```crystal
-struct Post < Cql::Record(Int64)
+struct Post < CQL::Record(Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -101,7 +101,7 @@ In the `Post` model, we define:
 ### **Tag Model**
 
 ```crystal
-struct Tag < Cql::Record(Int64)
+struct Tag < CQL::Record(Int64)
   db_context AcmeDB, :tags
 
   getter id : Int64?
@@ -125,7 +125,7 @@ Similarly, in the `Tag` model, we db_context:
 ### **PostTag Model (Join Table)**
 
 ```crystal
-struct PostTag < Cql::Record(Int64)
+struct PostTag < CQL::Record(Int64)
   db_context AcmeDB, :post_tags
 
   getter id : Int64?

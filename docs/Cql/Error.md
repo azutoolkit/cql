@@ -1,19 +1,19 @@
 ---
-title: "Cql::Error"
+title: "CQL::Error"
 ---
 
-# class Cql::Error
+# class CQL::Error
 
 `Exception` < `Reference` < `Object`
 
 Error class
-This class represents an error in the Cql library
+This class represents an error in the CQL library
 It provides a message describing the error
 
 **Example** Raising an error
 
 ```crystal
-raise Cql::Error.new("Something went wrong")
+raise CQL::Error.new("Something went wrong")
 ```
 
 ## Constructors

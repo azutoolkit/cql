@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::PrimaryKey(T)"
+title: "CQL::PrimaryKey(T)"
 ---
 
-# class Cql::PrimaryKey(T)
+# class CQL::PrimaryKey(T)
 
-`Cql::Column` < `Cql::BaseColumn` < `Reference` < `Object`
+`CQL::Column` < `CQL::BaseColumn` < `Reference` < `Object`
 
-The `Cql::PrimaryKey` class defines a primary key column in a database schema.
+The `CQL::PrimaryKey` class defines a primary key column in a database schema.
 
 ## Example: Defining a Primary Key
 

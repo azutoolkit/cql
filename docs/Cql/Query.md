@@ -1,27 +1,26 @@
-
 ---
-title: "Cql::Query"
+title: "CQL::Query"
 ---
 
-# class Cql::Query
+# class CQL::Query
 
 `Reference` < `Object`
 
-The `Cql::Query` class is responsible for building and executing SQL queries. It allows you to construct queries with methods for selecting columns, specifying tables, applying conditions, and executing the queries.
+The `CQL::Query` class is responsible for building and executing SQL queries. It allows you to construct queries with methods for selecting columns, specifying tables, applying conditions, and executing the queries.
 
 ## Example: Creating a Query
 
 ```crystal
-schema = Cql::Schema.new
+schema = CQL::Schema.new
 
-query = Cql::Query.new(schema)
+query = CQL::Query.new(schema)
 query.select(:name, :age).from(:users).where(name: "John").all(User)
 # => [{"name" => "John", "age" => 30}]
 ```
 
 ## Methods
 
-### def select(*columns : Symbol)
+### def select(\*columns : Symbol)
 
 Specifies the columns to select in the query.
 
@@ -65,4 +64,3 @@ Executes the query and returns the results.
 ```crystal
 results = query.execute
 ```
-

@@ -1,10 +1,10 @@
 ---
-title: "Cql::Relations::ManyCollection(Target, Through, Pk)"
+title: "CQL::Relations::ManyCollection(Target, Through, Pk)"
 ---
 
-# class Cql::Relations::ManyCollection(Target, Through, Pk)
+# class CQL::Relations::ManyCollection(Target, Through, Pk)
 
-`Cql::Relations::Collection` < `Reference` < `Object`
+`CQL::Relations::Collection` < `Reference` < `Object`
 
 A collection of records for a many to many relationship
 This class is used to manage the relationship between two tables
@@ -22,7 +22,7 @@ in CQL using Crystal.
 
 ```crystal
 class Movie
-  include Cql::Model(Movie, Int64)
+  include CQL::Model(Movie, Int64)
 
   property id : Int64
   property title : String
@@ -31,13 +31,13 @@ class Movie
 end
 
 class Actor
-  include Cql::Model(Actor, Int64)
+  include CQL::Model(Actor, Int64)
   property id : Int64
   property name : String
 end
 
 class MoviesActors
-  include Cql::Model(MoviesActors, Int64)
+  include CQL::Model(MoviesActors, Int64)
   property id : Int64
   property movie_id : Int64
   property actor_id : Int64
@@ -49,7 +49,7 @@ actor = Actor.create(name: "Keanu Reeves")
 
 ## Constructors
 
-### def new`(key : Symbol, id : Pk, target_key : Symbol, cascade : Bool = false, query : Cql::Query = (Cql::Query.new(Target.schema)).from(Target.table))`
+### def new`(key : Symbol, id : Pk, target_key : Symbol, cascade : Bool = false, query : CQL::Query = (CQL::Query.new(Target.schema)).from(Target.table))`
 
 Initialize the many-to-many association collection class
 
@@ -57,7 +57,7 @@ Initialize the many-to-many association collection class
 - **param** : id (Pk) - The id value for the parent record
 - **param** : target_key (Symbol) - The key for the associated record
 - **param** : cascade (Bool) - Delete associated records
-- **param** : query (Cql::Query) - Query object
+- **param** : query (CQL::Query) - Query object
 - **return** : ManyCollection
 
 **Example**
@@ -68,7 +68,7 @@ ManyCollection.new(
   1,
   :actor_id,
   false,
-  Cql::Query.new(Actor.schema).from(Actor.table)
+  CQL::Query.new(Actor.schema).from(Actor.table)
 )
 ```
 
@@ -97,7 +97,7 @@ Create a new record and associate it with the parent record
 
 - **param** : attributes (Hash(Symbol, String | Int64))
 - **return** : Array(Target)
-- **raise** : Cql::Error
+- **raise** : CQL::Error
 
 **Example**
 
@@ -114,7 +114,7 @@ Create a new record and associate it with the parent record
 
 - **param** : attributes (Hash(Symbol, String | Int64))
 - **return** : Array(Target)
-- **raise** : Cql::Error
+- **raise** : CQL::Error
 
 **Example**
 

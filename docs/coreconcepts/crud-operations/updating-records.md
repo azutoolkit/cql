@@ -1,6 +1,6 @@
 # Updating Records
 
-The `Cql::Update` class in the CQL (Crystal Query Language) module is designed to represent and execute SQL `UPDATE` statements in a clean and structured manner. This guide will walk you through using the class to update records in a database, providing real-world examples and detailed explanations for each method.
+The `CQL::Update` class in the CQL (Crystal Query Language) module is designed to represent and execute SQL `UPDATE` statements in a clean and structured manner. This guide will walk you through using the class to update records in a database, providing real-world examples and detailed explanations for each method.
 
 ---
 
@@ -19,7 +19,7 @@ The `Cql::Update` class in the CQL (Crystal Query Language) module is designed t
 Let’s start with a simple example of updating a user’s name and age in the `users` table.
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -32,7 +32,7 @@ This example updates the user with `id = 1` to have the name "John" and age 30.
 
 ### Core Methods
 
-Below is a detailed breakdown of the key methods in the `Cql::Update` class and how to use them.
+Below is a detailed breakdown of the key methods in the `CQL::Update` class and how to use them.
 
 #### 1. `table(table : Symbol)`
 
@@ -138,7 +138,7 @@ This example updates the user where both `id = 1` and `active = true`.
 **Real-World Example: Committing the Update**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where { |w| w.id == 1 }
@@ -181,7 +181,7 @@ This will return the updated `name` and `age` columns after the update.
 **Real-World Example: Generating SQL for an Update**
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
   .table(:users)
   .set(name: "John", age: 30)
   .where(id: 1)
@@ -200,7 +200,7 @@ This generates the raw SQL query and its associated parameters without executing
 Let’s combine multiple methods to handle a more advanced use case. Suppose you want to update a user's data, but only if they are active, and you want to return their updated email address afterward:
 
 ```crystal
-update = Cql::Update.new(schema)
+update = CQL::Update.new(schema)
 
 result = update
   .table(:users)
@@ -223,6 +223,6 @@ In this query:
 
 ### Conclusion
 
-The `Cql::Update` class provides a simple yet powerful interface for building and executing `UPDATE` queries in a Crystal application. With chainable methods for setting values, applying conditions, and controlling the output, you can easily handle any update operation.
+The `CQL::Update` class provides a simple yet powerful interface for building and executing `UPDATE` queries in a Crystal application. With chainable methods for setting values, applying conditions, and controlling the output, you can easily handle any update operation.
 
-Whether you are updating single records or large batches, the flexibility of `Cql::Update` ensures that your queries remain clean, maintainable, and efficient.
+Whether you are updating single records or large batches, the flexibility of `CQL::Update` ensures that your queries remain clean, maintainable, and efficient.

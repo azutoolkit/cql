@@ -1,8 +1,8 @@
 ---
-title: "Cql::Relations::BelongsTo"
+title: "CQL::Relations::BelongsTo"
 ---
 
-# module Cql::Relations::BelongsTo
+# module CQL::Relations::BelongsTo
 
 ## Macros
 

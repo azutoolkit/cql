@@ -26,9 +26,9 @@ This is a common one-to-many relationship where one post can have multiple comme
 We’ll define the `posts` and `comments` tables in the schema using CQL’s DSL.
 
 ```crystal
-AcmeDB = Cql::Schema.db_context(
+AcmeDB = CQL::Schema.db_context(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
 ) do
   table :posts do
@@ -58,7 +58,7 @@ Let’s db_context the `Post` and `Comment` models and establish the `HasMany` a
 ### **Post Model**
 
 ```crystal
-struct Post < Cql::Record(Post, Int64)
+struct Post < CQL::Record(Post, Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -75,12 +75,12 @@ struct Post < Cql::Record(Post, Int64)
 end
 ```
 
-- The `has_many :comments` association in the `Post` model  defines that each post can have multiple comments.
+- The `has_many :comments` association in the `Post` model defines that each post can have multiple comments.
 
 ### **Comment Model**
 
 ```crystal
-struct Comment< Cql::Record(Comment, Int64)
+struct Comment< CQL::Record(Comment, Int64)
   db_context AcmeDB, :comments
 
   getter id : Int64?

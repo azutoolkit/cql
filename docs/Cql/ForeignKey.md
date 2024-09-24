@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::ForeignKey"
+title: "CQL::ForeignKey"
 ---
 
-# class Cql::ForeignKey
+# class CQL::ForeignKey
 
 `Reference` < `Object`
 
-The `Cql::ForeignKey` class defines a foreign key constraint between two tables. It allows you to specify the columns, referenced table, and the actions to be taken on `DELETE` or `UPDATE`.
+The `CQL::ForeignKey` class defines a foreign key constraint between two tables. It allows you to specify the columns, referenced table, and the actions to be taken on `DELETE` or `UPDATE`.
 
 ## Example: Creating a Foreign Key
 
@@ -40,7 +39,7 @@ Creates a new foreign key constraint.
 **Example**:
 
 ```crystal
-foreign_key = Cql::ForeignKey.new([:user_id], :users, on_delete: :cascade)
+foreign_key = CQL::ForeignKey.new([:user_id], :users, on_delete: :cascade)
 ```
 
 ## Methods

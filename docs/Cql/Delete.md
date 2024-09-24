@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::Delete"
+title: "CQL::Delete"
 ---
 
-# class Cql::Delete
+# class CQL::Delete
 
 `Reference` < `Object`
 
-The `Cql::Delete` class represents a SQL `DELETE` query. It provides methods to construct and execute delete queries.
+The `CQL::Delete` class represents a SQL `DELETE` query. It provides methods to construct and execute delete queries.
 
 ## Example: Deleting a Record
 
@@ -27,7 +26,7 @@ Initializes a new delete query.
 **Example**:
 
 ```crystal
-delete = Cql::Delete.new(schema)
+delete = CQL::Delete.new(schema)
 ```
 
 ## Methods

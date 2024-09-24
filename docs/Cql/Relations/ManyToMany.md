@@ -1,8 +1,8 @@
 ---
-title: "Cql::Relations::ManyToMany"
+title: "CQL::Relations::ManyToMany"
 ---
 
-# module Cql::Relations::ManyToMany
+# module CQL::Relations::ManyToMany
 
 ## Macros
 
@@ -13,28 +13,28 @@ This method will define a getter method that returns a ManyToMany::Collection.
 The collection can be used to add and remove records from the join table.
 
 - **param** : name (Symbol) - The name of the association
-- **param** : type (Cql::Model) - The target model
-- **param** : join_through (Cql::Model) - The join table model
+- **param** : type (CQL::Model) - The target model
+- **param** : join_through (CQL::Model) - The join table model
 - **param** : cascade (Bool) - Delete associated records
 
 **Example**
 
 ```crystal
 class Movie
-  include Cql::Model(Movie, Int64)
+  include CQL::Model(Movie, Int64)
   property id : Int64
   property title : String
   many_to_many :actors, Actor, join_through: :movies_actors
 end
 
 class Actor
-  include Cql::Model(Actor, Int64)
+  include CQL::Model(Actor, Int64)
   property id : Int64
   property name : String
 end
 
 class MoviesActors
-  include Cql::Model(MoviesActors, Int64)
+  include CQL::Model(MoviesActors, Int64)
   property id : Int64
   property movie_id : Int64
   property actor_id : Int64

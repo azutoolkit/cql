@@ -29,9 +29,9 @@ This "schema-first" approach differs from the "code-first" or "migration-based" 
 Here’s a basic example of how to define a schema in CQL for a movie-related database:
 
 ```crystal
-AcmeDB2 = Cql::Schema.build(
+AcmeDB2 = CQL::Schema.build(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]) do
 
   table :movies do
@@ -67,7 +67,7 @@ end
 ## Explanation of Schema Definition
 
 - **Database name**: `:acme_db` defines the schema name.
-- **Adapter**: `Cql::Adapter::Postgres` specifies the database adapter (in this case, PostgreSQL).
+- **Adapter**: `CQL::Adapter::Postgres` specifies the database adapter (in this case, PostgreSQL).
 - **Connection URL**: The `uri: ENV["DATABASE_URL"]` specifies the database connection using environment variables.
 
 Each table is explicitly defined with its columns, such as:
@@ -89,11 +89,11 @@ This approach offers the following benefits:
 #### **Example: Managing Multiple Schemas**
 
 ```crystal
-MainDB = Cql::Schema.build(:main, adapter: Cql::Adapter::Postgres, uri: ENV["MAIN_DB_URL"]) do
+MainDB = CQL::Schema.build(:main, adapter: CQL::Adapter::Postgres, uri: ENV["MAIN_DB_URL"]) do
   # Define main schema tables
 end
 
-AnalyticsDB = Cql::Schema.build(:analytics, adapter: Cql::Adapter::Postgres, uri: ENV["ANALYTICS_DB_URL"]) do
+AnalyticsDB = CQL::Schema.build(:analytics, adapter: CQL::Adapter::Postgres, uri: ENV["ANALYTICS_DB_URL"]) do
   # Define analytics schema tables
 end
 ```

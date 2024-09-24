@@ -1,8 +1,8 @@
 ---
-title: "Cql::Migrator::MigrationRecord"
+title: "CQL::Migrator::MigrationRecord"
 ---
 
-# class Cql::Migrator::MigrationRecord
+# class CQL::Migrator::MigrationRecord
 
 `DB::Mappable` < `DB::Serializable` < `Reference` < `Object`
 
@@ -15,7 +15,7 @@ Represents a migration record.
 **Example** Creating a migration record
 
 ```crystal
-record = Cql::MigrationRecord.new(0_i64, "CreateUsersTable", 1_i64)
+record = CQL::MigrationRecord.new(0_i64, "CreateUsersTable", 1_i64)
 ```
 
 # Included Modules

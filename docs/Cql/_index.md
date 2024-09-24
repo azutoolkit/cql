@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::Index"
+title: "CQL::Index"
 ---
 
-# class Cql::Index
+# class CQL::Index
 
 `Reference` < `Object`
 
-The `Cql::Index` class represents an index on a table. Indexes are used to optimize query performance by providing faster access to data. This class provides methods for defining the columns that make up the index and specifying whether the index is unique.
+The `CQL::Index` class represents an index on a table. Indexes are used to optimize query performance by providing faster access to data. This class provides methods for defining the columns that make up the index and specifying whether the index is unique.
 
 ## Example: Creating an Index
 
@@ -35,7 +34,7 @@ Creates a new index on the specified table.
 **Example**:
 
 ```crystal
-index = Cql::Index.new(:users, [:name, :email], unique: true)
+index = CQL::Index.new(:users, [:name, :email], unique: true)
 ```
 
 ## Methods

@@ -1,15 +1,15 @@
 ---
-title: "Cql::Record(T, Pk)"
+title: "CQL::Record(T, Pk)"
 ---
 
-# module Cql::Record(T, Pk)
+# module CQL::Record(T, Pk)
 
 Write documentation for Record module
 
 **Example** Using the Record module
 
 ```crystal
-AcmeDB = Cql::Schema.define(:acme_db, adapter: Cql::Adapter::Postgres,
+AcmeDB = CQL::Schema.define(:acme_db, adapter: CQL::Adapter::Postgres,
   uri: "postgresql://example:example@localhost:5432/example") do
   table :posts do
     primary :id, Int64, auto_increment: true
@@ -25,7 +25,7 @@ AcmeDB = Cql::Schema.define(:acme_db, adapter: Cql::Adapter::Postgres,
   end
 end
 
-struct Post < Cql::Record(Post)
+struct Post < CQL::Record(Post)
 
   db_context AcmeDB, :posts
 
@@ -38,7 +38,7 @@ struct Post < Cql::Record(Post)
   end
 end
 
-struct Comment < Cql::Record(Comment)
+struct Comment < CQL::Record(Comment)
   db_context AcmeDB, :comments
 
   getter id : Int64?

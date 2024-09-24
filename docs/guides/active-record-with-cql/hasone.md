@@ -24,9 +24,9 @@ We will represent this one-to-one relationship using CQL’s `HasOne` and `Belon
 We'll define the `users` and `profiles` tables in the schema using CQL.
 
 ```crystal
-AcmeDB = Cql::Schema.define(
+AcmeDB = CQL::Schema.define(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
 ) do
   table :users do
@@ -56,7 +56,7 @@ Let’s define the `User` and `Profile` models in CQL, establishing the `HasOne`
 ### **User Model**
 
 ```crystal
-struct User< Cql::Record(Int64)
+struct User< CQL::Record(Int64)
   db_context AcmeDB, :users
 
   getter id : Int64?
@@ -77,7 +77,7 @@ end
 ### **Profile Model**
 
 ```crystal
-struct Profile < Cql::Record(Int64)
+struct Profile < CQL::Record(Int64)
   db_context AcmeDB, :profiles
 
   getter id : Int64?

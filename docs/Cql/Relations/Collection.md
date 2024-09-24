@@ -1,8 +1,8 @@
 ---
-title: "Cql::Relations::Collection(Target, Pk)"
+title: "CQL::Relations::Collection(Target, Pk)"
 ---
 
-# class Cql::Relations::Collection(Target, Pk)
+# class CQL::Relations::Collection(Target, Pk)
 
 `Reference` < `Object`
 
@@ -13,7 +13,7 @@ and provide methods to manage the association between the two tables
 and query records in the associated table based on the foreign key value
 of the parent record.
 
-- **param** : Target (Cql::Model) - The target model
+- **param** : Target (CQL::Model) - The target model
 - **param** : Pk (Int64) - The primary key type
 - **return** : Nil
 
@@ -21,7 +21,7 @@ of the parent record.
 
 ```crystal
 class User
-  include Cql::Model(User, Int64)
+  include CQL::Model(User, Int64)
   property id : Int64
   property name : String
   has_many :posts, Post, foreign_key: :user_id
@@ -30,7 +30,7 @@ end
 
 ## Constructors
 
-### def new`(key : Symbol, id : Pk, cascade : Bool = false, query : Cql::Query = (Cql::Query.new(Target.schema)).from(Target.table))`
+### def new`(key : Symbol, id : Pk, cascade : Bool = false, query : CQL::Query = (CQL::Query.new(Target.schema)).from(Target.table))`
 
 Initialize the many-to-many association collection class
 
@@ -38,7 +38,7 @@ Initialize the many-to-many association collection class
 - **param** : id (Pk) - The id value for the parent record
 - **param** : target_key (Symbol) - The key for the associated record
 - **param** : cascade (Bool) - Delete associated records
-- **param** : query (Cql::Query) - Query object
+- **param** : query (CQL::Query) - Query object
 - **return** : ManyCollection
 
 **Example**
@@ -49,7 +49,7 @@ ManyCollection.new(
   1,
   :actor_id,
   false,
-  Cql::Query.new(Actor.schema).from(Actor.table)
+  CQL::Query.new(Actor.schema).from(Actor.table)
 )
 ```
 
@@ -110,7 +110,7 @@ Create a new record and associate it with the parent record
 
 - **param** : attributes (Hash(Symbol, String | Int64))
 - **return** : Array(Target)
-- **raise** : Cql::Error
+- **raise** : CQL::Error
 
 **Example**
 
@@ -127,7 +127,7 @@ Create a new record and associate it with the parent record
 
 - **param** : attributes (Hash(Symbol, String | Int64))
 - **return** : Array(Target)
-- **raise** : Cql::Error
+- **raise** : CQL::Error
 
 **Example**
 

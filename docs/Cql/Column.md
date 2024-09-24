@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::Column(T)"
+title: "CQL::Column(T)"
 ---
 
-# class Cql::Column(T)
+# class CQL::Column(T)
 
-`Cql::BaseColumn` < `Reference` < `Object`
+`CQL::BaseColumn` < `Reference` < `Object`
 
-The `Cql::Column` class represents a column in a table. It provides methods for defining the column type, setting default values, and applying constraints such as `NOT NULL` or `UNIQUE`.
+The `CQL::Column` class represents a column in a table. It provides methods for defining the column type, setting default values, and applying constraints such as `NOT NULL` or `UNIQUE`.
 
 ## Example: Creating a Column
 
@@ -34,7 +33,7 @@ Creates a new column with the specified name, type, and options.
 **Example**:
 
 ```crystal
-column = Cql::Column.new(:name, String, null: false, default: "John")
+column = CQL::Column.new(:name, String, null: false, default: "John")
 ```
 
 ## Methods

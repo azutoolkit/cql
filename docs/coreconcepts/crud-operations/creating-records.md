@@ -1,10 +1,10 @@
 # Creating Records
 
-The `Cql::Insert` class in the CQL (Crystal Query Language) module is a powerful tool designed to simplify the process of inserting records into a database. As a software developer, you'll find this class essential for building `INSERT` queries in a clean, readable, and chainable way.
+The `CQL::Insert` class in the CQL (Crystal Query Language) module is a powerful tool designed to simplify the process of inserting records into a database. As a software developer, you'll find this class essential for building `INSERT` queries in a clean, readable, and chainable way.
 
-In this guide, we’ll walk through the core functionality, explain each method in detail, and provide real-world examples to help you understand how to integrate `Cql::Insert` into your applications.
+In this guide, we’ll walk through the core functionality, explain each method in detail, and provide real-world examples to help you understand how to integrate `CQL::Insert` into your applications.
 
-***
+---
 
 #### Key Features
 
@@ -14,7 +14,7 @@ In this guide, we’ll walk through the core functionality, explain each method 
 4. **Get the last inserted ID after an insert**.
 5. **Chainable, intuitive syntax** for building complex queries.
 
-***
+---
 
 #### Real-World Example: Inserting User Data
 
@@ -29,7 +29,7 @@ insert
 
 This example demonstrates how you can insert a new user with their name, email, and age using the `values` method, followed by `commit` to execute the insert.
 
-***
+---
 
 ### Core Methods
 
@@ -39,8 +39,8 @@ Let's dive into the individual methods and how you can use them.
 
 **Purpose**: Specifies the table into which the data will be inserted. This is your starting point for any insert operation.
 
-* **Parameter**: `table` (Symbol) — The name of the table to insert into.
-* **Returns**: `Insert` object (enabling chaining).
+- **Parameter**: `table` (Symbol) — The name of the table to insert into.
+- **Returns**: `Insert` object (enabling chaining).
 
 **Example**:
 
@@ -50,14 +50,14 @@ insert.into(:users)
 
 In the above code, we're targeting the `users` table. This is where subsequent data will be inserted.
 
-***
+---
 
 #### 2. `values(**fields)`
 
 **Purpose**: Specifies the data (fields and values) to insert. The `values` method can accept either a hash or keyword arguments.
 
-* **Parameter**: `fields` (Hash or keyword arguments) — A mapping of column names to their values.
-* **Returns**: `Insert` object (for chaining).
+- **Parameter**: `fields` (Hash or keyword arguments) — A mapping of column names to their values.
+- **Returns**: `Insert` object (for chaining).
 
 **Real-World Example 1: Adding a Single User**
 
@@ -83,14 +83,14 @@ insert
 
 This example demonstrates how you can insert multiple users in a single query. It’s efficient and reduces database round trips.
 
-***
+---
 
 #### 3. `last_insert_id(as type : PrimaryKeyType = Int64)`
 
 **Purpose**: Retrieves the ID of the last inserted row. This is incredibly useful when you need to work with the inserted record immediately after an insert, especially in cases where the primary key is automatically generated.
 
-* **Parameter**: `type` (default: `Int64`) — The data type of the returned ID.
-* **Returns**: The last inserted ID as `Int64` or the specified type.
+- **Parameter**: `type` (default: `Int64`) — The data type of the returned ID.
+- **Returns**: The last inserted ID as `Int64` or the specified type.
 
 **Example**:
 
@@ -102,14 +102,14 @@ last_id = insert
 puts last_id  # Outputs the last inserted ID
 ```
 
-***
+---
 
 #### 4. `query(query : Query)`
 
 **Purpose**: Instead of manually specifying values, you can use data fetched from another query to populate the insert. This is useful in situations like copying data from one table to another.
 
-* **Parameter**: `query` — A query object that fetches the data to insert.
-* **Returns**: `Insert` object (for chaining).
+- **Parameter**: `query` — A query object that fetches the data to insert.
+- **Returns**: `Insert` object (for chaining).
 
 **Real-World Example: Copying Data from One Table to Another**
 
@@ -124,14 +124,14 @@ insert
 
 In this example, we’re selecting all active users from `archived_users` and inserting them into the `users` table in one go.
 
-***
+---
 
 #### 5. `back(*columns : Symbol)`
 
 **Purpose**: After an insert operation, you may want to return certain columns, like an ID or timestamp. The `back` method allows you to specify which columns should be returned.
 
-* **Parameter**: `columns` — One or more symbols representing the columns to return.
-* **Returns**: `Insert` object (for chaining).
+- **Parameter**: `columns` — One or more symbols representing the columns to return.
+- **Returns**: `Insert` object (for chaining).
 
 **Example**:
 
@@ -145,13 +145,13 @@ insert
 
 In this case, after inserting the new user, we’re returning the `id` of the newly inserted row.
 
-***
+---
 
 #### 6. `commit`
 
 **Purpose**: Executes the built `INSERT` query and commits the transaction to the database. This is the final step in your insert operation.
 
-* **Returns**: The result of the insert, typically the number of affected rows or the last inserted ID.
+- **Returns**: The result of the insert, typically the number of affected rows or the last inserted ID.
 
 **Example**:
 
@@ -164,7 +164,7 @@ insert
 
 This will execute the `INSERT` statement and commit it to the database, saving the new user’s data.
 
-***
+---
 
 #### Advanced Example: Using Insert with Chained Operations
 
@@ -185,7 +185,7 @@ insert
 
 In this example, after inserting the new user, we immediately get the `user_id` and use it to insert data into the `user_profiles` table.
 
-***
+---
 
 ### Handling Errors
 
@@ -204,10 +204,10 @@ rescue ex
 end
 ```
 
-***
+---
 
 ### Conclusion
 
-The `Cql::Insert` class provides a flexible, chainable interface for inserting data into a database, whether you're inserting a single record, multiple records, or even records based on the results of a query. Its intuitive API makes it easy to use in real-world applications, and with error handling built-in, it helps ensure robust database operations.
+The `CQL::Insert` class provides a flexible, chainable interface for inserting data into a database, whether you're inserting a single record, multiple records, or even records based on the results of a query. Its intuitive API makes it easy to use in real-world applications, and with error handling built-in, it helps ensure robust database operations.
 
-With its simple syntax and powerful features, `Cql::Insert` streamlines your database interactions, allowing you to focus on building great features in your Crystal applications.
+With its simple syntax and powerful features, `CQL::Insert` streamlines your database interactions, allowing you to focus on building great features in your Crystal applications.

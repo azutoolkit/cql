@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::Adapter"
+title: "CQL::Adapter"
 ---
 
-# enum Cql::Adapter
+# enum CQL::Adapter
 
 `Enum` < `Comparable` < `Value` < `Object`
 
-The `Cql::Adapter` enum represents different database adapters such as SQLite, MySQL, and PostgreSQL.
+The `CQL::Adapter` enum represents different database adapters such as SQLite, MySQL, and PostgreSQL.
 
 ## Constants
 
@@ -16,7 +15,7 @@ The `Cql::Adapter` enum represents different database adapters such as SQLite, M
 Represents the SQLite adapter.
 
 ```crystal
-Cql::Adapter::Sqlite
+CQL::Adapter::Sqlite
 ```
 
 ### MySql
@@ -24,7 +23,7 @@ Cql::Adapter::Sqlite
 Represents the MySQL adapter.
 
 ```crystal
-Cql::Adapter::MySql
+CQL::Adapter::MySql
 ```
 
 ### Postgres
@@ -32,7 +31,7 @@ Cql::Adapter::MySql
 Represents the PostgreSQL adapter.
 
 ```crystal
-Cql::Adapter::Postgres
+CQL::Adapter::Postgres
 ```
 
 ## Methods
@@ -47,7 +46,7 @@ Returns the SQL type for the given data type.
 **Example**:
 
 ```crystal
-Cql::Adapter::Sqlite.sql_type(String)
+CQL::Adapter::Sqlite.sql_type(String)
 # => "TEXT"
 ```
 

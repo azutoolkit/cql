@@ -21,7 +21,7 @@ In Active Record, a model is a class that represents a database table. The class
 Here’s an example of a `User` model:
 
 ```crystal
-struct User < Cql::Record(User, Int32)
+struct User < CQL::Record(User, Int32)
   # Schame name AcmeDB, table name :users
   db_context AcmeDB, :users
 
@@ -36,11 +36,11 @@ end
 In this example:
 
 - `struct User` is used instead of `class User`
-- `Include Cql::Record(User, Int32)` specifies that `User` is the model and the primary key is of type `Int32`.
-- The model still contains the properties (`id`, `name`, `email`, `created_at`, `updated_at`), but now we delegate all Active Record-like operations (e.g., `save`, `delete`) to `Cql::Record`.
+- `Include CQL::Record(User, Int32)` specifies that `User` is the model and the primary key is of type `Int32`.
+- The model still contains the properties (`id`, `name`, `email`, `created_at`, `updated_at`), but now we delegate all Active Record-like operations (e.g., `save`, `delete`) to `CQL::Record`.
 
 {% hint style="info" %}
-Cql makes no assumptions about table names and it must be explicitly provided. \
+CQL makes no assumptions about table names and it must be explicitly provided. \
 \
 **Schama name** AcmeDB, \
 **Table name** :users
@@ -111,7 +111,7 @@ Active Record also simplifies relationships between tables, such as `has_many` a
 A `User` has many `Posts`. You can db_context the association like this:
 
 ```crystal
-struct User < Cql::Record(User, Int32)
+struct User < CQL::Record(User, Int32)
 
   property id : Int32?
   property name : String
@@ -122,7 +122,7 @@ struct User < Cql::Record(User, Int32)
   has_many :posts, Post
 end
 
-struct Post < Cql::Record(Post, Int32)
+struct Post < CQL::Record(Post, Int32)
 
   property id : Int32?
   property title : String
@@ -152,7 +152,7 @@ user = post.user # SELECT * FROM users WHERE id = post.user_id
 
 ### Managing HasMany and ManyToMany Collections
 
-Here is a summary of the **collection methods** provided in the `Cql::Relations::Collection` and `Cql::Relations::ManyCollection` classes for managing associations in a one-to-many and many-to-many relationship in CQL:
+Here is a summary of the **collection methods** provided in the `CQL::Relations::Collection` and `CQL::Relations::ManyCollection` classes for managing associations in a one-to-many and many-to-many relationship in CQL:
 
 #### **Collection Methods**
 
@@ -220,7 +220,7 @@ These methods provide powerful ways to interact with and manage associations bet
 Active Record often includes validations to ensure that data meets certain criteria before saving. In CQL, you can add custom validation logic inside the class:
 
 ```crystal
-struct User < Cql::Record(User, Int32)
+struct User < CQL::Record(User, Int32)
 
   property id : Int32?
   property name : String
@@ -252,7 +252,7 @@ For example [Schema](https://azutopia.gitbook.io/azu/validations) shard from the
 Although not strictly part of Active Record, migrations are commonly used with it to modify database schemas over time. In CQL, migrations can be written using a migration system to create and alter tables. For example:
 
 ```crystal
-class CreateUsersTable < Cql::Migration
+class CreateUsersTable < CQL::Migration
   self.version = 1_i64
 
   def up

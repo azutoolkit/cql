@@ -1,9 +1,8 @@
-
 ---
-title: "Cql::Migration"
+title: "CQL::Migration"
 ---
 
-# class Cql::Migration
+# class CQL::Migration
 
 `Reference` < `Object`
 
@@ -14,7 +13,7 @@ Migrations are executed in version order, and the `Migrator` class manages them,
 ## Example: Creating a Migration
 
 ```crystal
-class AddEmailToUsers < Cql::Migration
+class AddEmailToUsers < CQL::Migration
   def up
     schema.alter_table(:users) do
       add_column :email, String
@@ -62,4 +61,3 @@ def down
   end
 end
 ```
-

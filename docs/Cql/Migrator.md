@@ -1,18 +1,17 @@
-
 ---
-title: "Cql::Migrator"
+title: "CQL::Migrator"
 ---
 
-# class Cql::Migrator
+# class CQL::Migrator
 
 `Reference` < `Object`
 
-The `Cql::Migrator` class is responsible for managing database migrations. It provides methods to apply, roll back, and redo migrations, as well as list applied and pending migrations.
+The `CQL::Migrator` class is responsible for managing database migrations. It provides methods to apply, roll back, and redo migrations, as well as list applied and pending migrations.
 
 ## Example: Creating a Migrator
 
 ```crystal
-migrator = Cql::Migrator.new(schema)
+migrator = CQL::Migrator.new(schema)
 ```
 
 ## Methods

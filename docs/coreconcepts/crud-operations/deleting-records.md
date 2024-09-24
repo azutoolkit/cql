@@ -1,6 +1,6 @@
 # Deleting Records
 
-The `Cql::Delete` class provides a structured and flexible way to build and execute SQL `DELETE` queries in your Crystal applications. This guide will help you understand how to create delete queries, apply conditions, and execute them to remove records from your database.
+The `CQL::Delete` class provides a structured and flexible way to build and execute SQL `DELETE` queries in your Crystal applications. This guide will help you understand how to create delete queries, apply conditions, and execute them to remove records from your database.
 
 ---
 
@@ -18,7 +18,7 @@ The `Cql::Delete` class provides a structured and flexible way to build and exec
 Let’s start with a simple example of deleting a user from the `users` table where the `id` is 1.
 
 ```crystal
-delete = Cql::Delete.new(schema)
+delete = CQL::Delete.new(schema)
   .from(:users)
   .where(id: 1)
   .commit
@@ -30,7 +30,7 @@ This query deletes the record in the `users` table where `id = 1`.
 
 ### Core Methods
 
-The following section provides a breakdown of the key methods available in the `Cql::Delete` class and how to use them effectively.
+The following section provides a breakdown of the key methods available in the `CQL::Delete` class and how to use them effectively.
 
 #### 1. `from(table : Symbol)`
 
@@ -96,7 +96,7 @@ This deletes all users where the `age` is less than 30.
 **Real-World Example: Committing the Delete**
 
 ```crystal
-delete = Cql::Delete.new(schema)
+delete = CQL::Delete.new(schema)
   .from(:users)
   .where(id: 1)
   .commit
@@ -157,7 +157,7 @@ This deletes the user with `id = 1` and returns the `name` and `email` of the de
 **Real-World Example: Generating SQL for Deletion**
 
 ```crystal
-delete = Cql::Delete.new(schema)
+delete = CQL::Delete.new(schema)
   .from(:users)
   .where(id: 1)
 
@@ -175,7 +175,7 @@ This generates the raw SQL query and its associated parameters without executing
 Let’s combine multiple methods to handle a more advanced use case. Suppose you want to delete a user from the `users` table where they have no associated posts, and you want to return the deleted user’s name and email:
 
 ```crystal
-delete = Cql::Delete.new(schema)
+delete = CQL::Delete.new(schema)
 
 result = delete
   .from(:users)
@@ -197,6 +197,6 @@ In this query:
 
 ### Conclusion
 
-The `Cql::Delete` class provides an intuitive and powerful interface for deleting records in your Crystal applications. With chainable methods for setting conditions, joining tables, and selecting return columns, you can easily construct and execute delete queries with precision and clarity.
+The `CQL::Delete` class provides an intuitive and powerful interface for deleting records in your Crystal applications. With chainable methods for setting conditions, joining tables, and selecting return columns, you can easily construct and execute delete queries with precision and clarity.
 
-Whether you need to delete specific records or perform complex, condition-based deletions, the `Cql::Delete` class ensures that your queries are efficient and maintainable.
+Whether you need to delete specific records or perform complex, condition-based deletions, the `CQL::Delete` class ensures that your queries are efficient and maintainable.

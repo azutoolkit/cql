@@ -1,18 +1,17 @@
-
 ---
-title: "Cql::Schema"
+title: "CQL::Schema"
 ---
 
-# class Cql::Schema
+# class CQL::Schema
 
 `Reference` < `Object`
 
-The `Cql::Schema` class represents a database schema. It provides methods to build and manage database schemas, including creating tables, executing SQL statements, and generating queries.
+The `CQL::Schema` class represents a database schema. It provides methods to build and manage database schemas, including creating tables, executing SQL statements, and generating queries.
 
 ## Example: Creating a New Schema
 
 ```crystal
-schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do
+schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do
   table :users do
     primary :id, Int64, auto_increment: true
     column :name, String

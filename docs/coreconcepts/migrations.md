@@ -1,6 +1,6 @@
 # Migrations
 
-Database migrations are essential for managing changes to your schema over time in a controlled manner. In CQL, migrations are handled through the `Migration` and `Migrator` classes. This guide will help you understand how to create, apply, rollback, and manage migrations using `Cql::Migrator` in your projects.
+Database migrations are essential for managing changes to your schema over time in a controlled manner. In CQL, migrations are handled through the `Migration` and `Migrator` classes. This guide will help you understand how to create, apply, rollback, and manage migrations using `CQL::Migrator` in your projects.
 
 #### Why Use Migrations?
 
@@ -17,7 +17,7 @@ Migrations allow you to:
 Let’s start with a simple example. Suppose we need to add a `users` table to our database with two columns: `name` and `age`.
 
 ```crystal
-class CreateUsersTable < Cql::Migration(1)
+class CreateUsersTable < CQL::Migration(1)
   def up
     schema.alter :users do
       add_column :name, String
@@ -47,11 +47,11 @@ end
 Before applying migrations, you need to set up the schema and create an instance of the `Migrator`.
 
 ```crystal
-schema = Cql::Schema.build(:my_db, adapter: Cql::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
+schema = CQL::Schema.build(:my_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
   ...
 end
 
-migrator = Cql::Migrator.new(schema)
+migrator = CQL::Migrator.new(schema)
 ```
 
 The **migrator,** upon initialization, automatically creates a `schema_migrations` table to track which migrations have been applied.
@@ -156,7 +156,7 @@ This gives you details about the last migration that was successfully applied.
 Here’s an example where we define multiple migrations and apply them sequentially:
 
 ```crystal
-class CreateMoviesTable < Cql::Migration(2)
+class CreateMoviesTable < CQL::Migration(2)
   def up
     schema.alter :movies do
       add_column :title, String
@@ -172,7 +172,7 @@ class CreateMoviesTable < Cql::Migration(2)
   end
 end
 
-class CreateActorsTable < Cql::Migration
+class CreateActorsTable < CQL::Migration
   self.version = 3_i64
 
   def up
@@ -199,7 +199,7 @@ migrator.up
 
 #### Conclusion
 
-The `Cql::Migrator` class makes it easy to manage database migrations in a structured and version-controlled manner. By following this guide, you can:
+The `CQL::Migrator` class makes it easy to manage database migrations in a structured and version-controlled manner. By following this guide, you can:
 
 - Create and apply migrations to modify your schema.
 - Roll back changes if needed.

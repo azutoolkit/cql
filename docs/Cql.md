@@ -1,5 +1,5 @@
 ---
-title: "Cql"
+title: "CQL"
 ---
 
-# module Cql
+# module CQL

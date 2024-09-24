@@ -1,12 +1,12 @@
 # CQL Record Models
 
-The `Cql::Record` module in the CQL toolkit is a crucial part of the Object-Relational Mapping (ORM) system in Crystal. It allows you to define models that map to tables in your database and provides a wide array of functionalities for querying, inserting, updating, and deleting records. In this guide, we'll explore how the `Cql::Record` module works and how to use it effectively.
+The `CQL::Record` module in the CQL toolkit is a crucial part of the Object-Relational Mapping (ORM) system in Crystal. It allows you to define models that map to tables in your database and provides a wide array of functionalities for querying, inserting, updating, and deleting records. In this guide, we'll explore how the `CQL::Record` module works and how to use it effectively.
 
 ### **What is the `Record` Module?**
 
-The `Cql::Record` module is a mixin that provides your Crystal structs with the ability to interact with database tables, treating them as Active Record-style models. This means that each model represents a table in your database, and each instance of that model represents a row within that table.
+The `CQL::Record` module is a mixin that provides your Crystal structs with the ability to interact with database tables, treating them as Active Record-style models. This means that each model represents a table in your database, and each instance of that model represents a row within that table.
 
-***
+---
 
 ## Basic Setup: Defining a Schema
 
@@ -17,9 +17,9 @@ To start working with CQL models, you first need to define your database schema 
 Let's assume we have two tables: `posts` and `comments`. Each post can have many comments, and each comment belongs to one post.
 
 ```crystal
-AcmeDB = Cql::Schema.define(
+AcmeDB = CQL::Schema.define(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: "postgresql://example:example@localhost:5432/example"
 ) do
   table :posts do
@@ -37,10 +37,10 @@ AcmeDB = Cql::Schema.define(
 end
 ```
 
-* **posts table**: Contains columns `id`, `title`, `body`, and `published_at`.
-* **comments table**: Contains columns `id`, `post_id` (foreign key), and `body`.
+- **posts table**: Contains columns `id`, `title`, `body`, and `published_at`.
+- **comments table**: Contains columns `id`, `post_id` (foreign key), and `body`.
 
-***
+---
 
 ## Defining Models with `Record`
 
@@ -49,7 +49,7 @@ Now, let's define the `Post` and `Comment` models that map to the `posts` and `c
 ### **Post Model**
 
 ```crystal
-struct Post < Cql::Record(Int64)
+struct Post < CQL::Record(Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -66,7 +66,7 @@ end
 ### **Comment Model**
 
 ```crystal
-struct Comment <Cql::Record(Int64)
+struct Comment <CQL::Record(Int64)
   db_context AcmeDB, :comments
 
   getter id : Int64?
@@ -84,7 +84,7 @@ end
 
 ### Key Features of the `Record` Module
 
-The `Cql::Record` module adds several useful methods and features to your model:
+The `CQL::Record` module adds several useful methods and features to your model:
 
 **1. Defining Models with `define`**
 
@@ -100,7 +100,7 @@ This associates the `Post` struct with the `posts` table in the `AcmeDB` schema.
 
 The `Record` module provides convenient methods for querying the database.
 
-* **Fetching All Records**:
+- **Fetching All Records**:
 
 ```crystal
 posts = Post.all
@@ -108,7 +108,7 @@ posts = Post.all
 
 This retrieves all the records from the `posts` table.
 
-* **Fetching a Record by ID**:
+- **Fetching a Record by ID**:
 
 ```crystal
 post = Post.find(1)
@@ -116,7 +116,7 @@ post = Post.find(1)
 
 This retrieves the post with ID `1`. If the record is not found, `nil` is returned.
 
-* **Fetching the First or Last Record**:
+- **Fetching the First or Last Record**:
 
 ```crystal
 first_post = Post.first
@@ -125,7 +125,7 @@ last_post = Post.last
 
 These methods fetch the first and last records in the table, respectively.
 
-* **Fetching Records with Conditions**:
+- **Fetching Records with Conditions**:
 
 ```crystal
 active_posts = Post.find_all_by(active: true)
@@ -182,7 +182,7 @@ has_many :comments, Comment
 
 This would go into the `Post` model to define that each post can have multiple comments.
 
-***
+---
 
 ## Instance-Level Methods for Records
 
@@ -242,7 +242,7 @@ You can also set the attributes:
 post.attributes {title: "New Title", body: "Updated Content"}
 ```
 
-***
+---
 
 ## Example: Building a Simple Blog System
 
@@ -251,9 +251,9 @@ Let's combine everything we've learned to build a simple blog system where posts
 ### **Defining the Schema**:
 
 ```crystal
-AcmeDB = Cql::Schema.define(
+AcmeDB = CQL::Schema.define(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: "postgresql://example:example@localhost:5432/example"
 ) do
   table :posts do
@@ -274,7 +274,7 @@ end
 ### **Defining the Models**:
 
 ```crystal
-struct Post < Cql::Record(Int64)
+struct Post < CQL::Record(Int64)
   db_context AcmeDB, :posts
 
   getter id : Int64?
@@ -288,7 +288,7 @@ struct Post < Cql::Record(Int64)
   end
 end
 
-struct Comment < Cql::Record(Int64)
+struct Comment < CQL::Record(Int64)
   db_context AcmeDB, :comments
 
   getter id : Int64?
@@ -304,35 +304,35 @@ end
 
 ### **Using the Models**:
 
-* **Creating a Post**:
+- **Creating a Post**:
 
 ```crystal
 post = Post.new("My First Blog Post", "This is the content of my first blog post.")
 post.save
 ```
 
-* **Adding Comments to the Post**:
+- **Adding Comments to the Post**:
 
 ```crystal
 comment = Comment.new(post.id.not_nil!, "This is a comment.")
 comment.save
 ```
 
-* **Fetching Comments for a Post**:
+- **Fetching Comments for a Post**:
 
 ```crystal
 post = Post.find(1)
 comments = post.comments
 ```
 
-***
+---
 
 ## Conclusion
 
-The `Cql::Record` module provides powerful tools for working with database records in a Crystal application. It simplifies the process of defining models, querying records, and managing associations. By leveraging the capabilities of CQL's Active Record-style ORM, you can build complex applications with ease.
+The `CQL::Record` module provides powerful tools for working with database records in a Crystal application. It simplifies the process of defining models, querying records, and managing associations. By leveraging the capabilities of CQL's Active Record-style ORM, you can build complex applications with ease.
 
-With `Cql::Record`, you have access to:
+With `CQL::Record`, you have access to:
 
-* Easy schema and model definition.
-* A rich set of query and manipulation methods.
-* Powerful association handling (`belongs_to`, `has_many`,
+- Easy schema and model definition.
+- A rich set of query and manipulation methods.
+- Powerful association handling (`belongs_to`, `has_many`,

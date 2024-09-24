@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::Insert"
+title: "CQL::Insert"
 ---
 
-# class Cql::Insert
+# class CQL::Insert
 
 `Reference` < `Object`
 
-The `Cql::Insert` class is responsible for building SQL `INSERT` statements. It provides methods to construct and execute these statements, allowing for both single and multiple record inserts.
+The `CQL::Insert` class is responsible for building SQL `INSERT` statements. It provides methods to construct and execute these statements, allowing for both single and multiple record inserts.
 
 ## Example: Inserting a Single Record
 

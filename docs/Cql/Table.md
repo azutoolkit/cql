@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::Table"
+title: "CQL::Table"
 ---
 
-# class Cql::Table
+# class CQL::Table
 
 `Reference` < `Object`
 
-The `Cql::Table` class represents a table in the database and is responsible for handling table creation, modification, and deletion.
+The `CQL::Table` class represents a table in the database and is responsible for handling table creation, modification, and deletion.
 
 ## Example: Creating a Table
 

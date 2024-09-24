@@ -13,7 +13,7 @@ CQL primarily uses a **Schema-First** approach, where you define your database s
 Example in CQL:
 
 ```crystal
-schema = Cql::Schema.build(:my_db, adapter: Cql::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
+schema = CQL::Schema.build(:my_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
   table :users do
     primary :id, Int32
     column :name, String
@@ -31,13 +31,13 @@ This code defines the `users` table and its columns (`id`, `name`, and `age`), w
 
 In EF, a `DbContext` is used to manage the entities (mapped to database tables), and each `DbSet` represents a collection of entities (mapped to individual tables). Similarly, in CQL:
 
-- `Cql::Schema` manages the structure of your database.
+- `CQL::Schema` manages the structure of your database.
 - Tables are defined within the schema using `table` blocks.
 
 Example:
 
 ```crystal
-schema = Cql::Schema.build(:my_db, adapter: Cql::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
+schema = CQL::Schema.build(:my_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
   table :products do
     primary :id, Int32
     column :name, String
@@ -55,7 +55,7 @@ In CQL, migrations are a key feature, similar to EF’s migrations, for managing
 Example migration in CQL:
 
 ```crystal
-class CreateUsersTable < Cql::Migration
+class CreateUsersTable < CQL::Migration
   self.version = 1_i64
 
   def up
@@ -74,12 +74,12 @@ class CreateUsersTable < Cql::Migration
 end
 ```
 
-In EF, migrations are handled using commands like `Add-Migration` and `Update-Database`. In CQL, migrations are applied and managed using the `Cql::Migrator` class, which provides methods for applying, rolling back, and listing migrations.
+In EF, migrations are handled using commands like `Add-Migration` and `Update-Database`. In CQL, migrations are applied and managed using the `CQL::Migrator` class, which provides methods for applying, rolling back, and listing migrations.
 
 Applying migrations in CQL:
 
 ```crystal
-migrator = Cql::Migrator.new(schema)
+migrator = CQL::Migrator.new(schema)
 migrator.up  # Apply all pending migrations
 ```
 
@@ -92,7 +92,7 @@ In CQL, database tables and columns are defined as part of the schema, and relat
 Example in CQL (adding a foreign key):
 
 ```crystal
-schema = Cql::Schema.build(:my_db, adapter: Cql::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
+schema = CQL::Schema.build(:my_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
   table :orders do
     primary :id, Int32
     bigint :user_id

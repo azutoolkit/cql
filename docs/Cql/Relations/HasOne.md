@@ -1,8 +1,8 @@
 ---
-title: "Cql::Relations::HasOne"
+title: "CQL::Relations::HasOne"
 ---
 
-# module Cql::Relations::HasOne
+# module CQL::Relations::HasOne
 
 Define the `has_one` association
 

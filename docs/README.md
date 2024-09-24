@@ -1,9 +1,9 @@
 ---
-title: Cql
+title: CQL
 icon: database
 ---
 
-# Cql
+# CQL
 
 CQL is a powerful library designed to simplify and enhance the management and execution of SQL queries in the Crystal programming language. It provides utilities for building, validating, and executing SQL statements, ensuring better performance and code maintainability.
 
@@ -11,10 +11,10 @@ CQL is a powerful library designed to simplify and enhance the management and ex
 
 ## Features
 
-* **Query Builder**: Programmatically create complex SQL queries.
-* **Insert, Update, Delete Operations**: Perform CRUD operations with ease.
-* **Repository Pattern**: Manage your data more effectively using `Cql::Repository(T)`.
-* **Active Record Pattern**: Work with your data models using `Cql::Record(T)`.
+- **Query Builder**: Programmatically create complex SQL queries.
+- **Insert, Update, Delete Operations**: Perform CRUD operations with ease.
+- **Repository Pattern**: Manage your data more effectively using `CQL::Repository(T)`.
+- **Active Record Pattern**: Work with your data models using `CQL::Record(T)`.
 
 ## Installation
 
@@ -39,9 +39,9 @@ shards install
 Define the schema for your database tables:
 
 ```crystal
-AcmeDB2 = Cql::Schema.build(
+AcmeDB2 = CQL::Schema.build(
   :acme_db,
-  adapter: Cql::Adapter::Postgres,
+  adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]) do
   table :movies do
     primary :id, Int64, auto_increment: true
@@ -88,7 +88,7 @@ puts user.name
 Insert new records into the database:
 
 ```crystal
-q = Cql::Query.new(schema)
+q = CQL::Query.new(schema)
 q.insert
   .into(:users)
   .values(name: "Jane Doe", email: "jane@example.com")
@@ -121,7 +121,7 @@ d.from(:users).where(id: 1).commit
 Utilize the repository pattern for organized data management:
 
 ```crystal
-user_repository = Cql::Repository(User, Int64).new(schema, :users)
+user_repository = CQL::Repository(User, Int64).new(schema, :users)
 
 # Create a new user
 user_repository.create(name: "Jane Doe", email: "jane@example.com")
@@ -143,7 +143,7 @@ user_repository.update(1, name: "Jane Smith")
 Work with your data using the Active Record pattern:
 
 ```crystal
-struct Actor < Cql::Record(Int64)
+struct Actor < CQL::Record(Int64)
 
   db_context AcmeDB2, :actors
 
@@ -154,7 +154,7 @@ struct Actor < Cql::Record(Int64)
   end
 end
 
-struct Movie < Cql::Record(Int64)
+struct Movie < CQL::Record(Int64)
 
   db_context AcmeDB2, :movies
 
@@ -169,7 +169,7 @@ struct Movie < Cql::Record(Int64)
   end
 end
 
-struct Director < Cql::Record(Int64)
+struct Director < CQL::Record(Int64)
 
   db_context AcmeDB2, :directors
 
@@ -181,7 +181,7 @@ struct Director < Cql::Record(Int64)
   end
 end
 
-struct Screenplay < Cql::Record(Int64)
+struct Screenplay < CQL::Record(Int64)
 
   db_context AcmeDB2, :screenplays
 
@@ -194,7 +194,7 @@ struct Screenplay < Cql::Record(Int64)
   end
 end
 
-struct MoviesActors < Cql::Record(Int64)
+struct MoviesActors < CQL::Record(Int64)
 
   db_context AcmeDB2, :movies_actors
 

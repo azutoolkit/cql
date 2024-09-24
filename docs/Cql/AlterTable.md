@@ -1,13 +1,12 @@
-
 ---
-title: "Cql::AlterTable"
+title: "CQL::AlterTable"
 ---
 
-# class Cql::AlterTable
+# class CQL::AlterTable
 
 `Reference` < `Object`
 
-The `Cql::AlterTable` class is responsible for handling alterations to the database schema. It allows you to add, drop, rename, and change columns in a table.
+The `CQL::AlterTable` class is responsible for handling alterations to the database schema. It allows you to add, drop, rename, and change columns in a table.
 
 ## Example: Altering a Table
 
