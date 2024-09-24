@@ -1,7 +1,3 @@
----
-title: "CQL::Table"
----
-
 # class CQL::Table
 
 `Reference` < `Object`

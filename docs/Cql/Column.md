@@ -1,7 +1,3 @@
----
-title: "CQL::Column(T)"
----
-
 # class CQL::Column(T)
 
 `CQL::BaseColumn` < `Reference` < `Object`

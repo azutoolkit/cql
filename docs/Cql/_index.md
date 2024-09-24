@@ -1,7 +1,3 @@
----
-title: "CQL::Index"
----
-
 # class CQL::Index
 
 `Reference` < `Object`

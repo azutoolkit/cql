@@ -1,7 +1,3 @@
----
-title: "CQL::Update"
----
-
 # class CQL::Update
 
 `Reference` < `Object`

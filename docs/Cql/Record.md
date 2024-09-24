@@ -1,7 +1,3 @@
----
-title: "CQL::Record(T, Pk)"
----
-
 # module CQL::Record(T, Pk)
 
 Write documentation for Record module

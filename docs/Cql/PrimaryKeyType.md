@@ -1,7 +1,3 @@
----
-title: "CQL::PrimaryKeyType"
----
-
 # alias CQL::PrimaryKeyType
 
 The `CQL::PrimaryKeyType` alias represents the type of a primary key column in a database schema. Primary keys can be of various types, such as `Int32`, `Int64`, or other unique identifiers.

@@ -42,6 +42,12 @@
     - [Collection](cql/relations/Collection.md)
     - [Many Collection](cql/relations/ManyCollection.md)
 - Guides
+  - Active Record
+    - [Record Models](guides/active-record-with-cql/cql-record-models.md)
+    - [Belongs To](guides/active-record-with-cql/belongsto.md)
+    - [Has Many](guides/active-record-with-cql/hasmany.md)
+    - [Has One](guides/active-record-with-cql/hasone.md)
+    - [Many To Many](guides/active-record-with-cql/manytomany.md)
   - [Getting Started](guides/getting-started.md)
   - [Complex Queries](guides/complex-queries.md)
   - [Transaction Management](guides/transaction-management.md)

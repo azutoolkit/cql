@@ -1,7 +1,3 @@
----
-title: "CQL::Adapter"
----
-
 # enum CQL::Adapter
 
 `Enum` < `Comparable` < `Value` < `Object`

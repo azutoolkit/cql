@@ -1,7 +1,3 @@
----
-title: "CQL::Relations::Collection(Target, Pk)"
----
-
 # class CQL::Relations::Collection(Target, Pk)
 
 `Reference` < `Object`

@@ -1,8 +1,3 @@
----
-title: "CQL::Schema"
----
-
-# class CQL::Schema
 
 `Reference` < `Object`
 

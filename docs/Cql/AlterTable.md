@@ -1,7 +1,3 @@
----
-title: "CQL::AlterTable"
----
-
 # class CQL::AlterTable
 
 `Reference` < `Object`

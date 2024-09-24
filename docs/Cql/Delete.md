@@ -1,7 +1,3 @@
----
-title: "CQL::Delete"
----
-
 # class CQL::Delete
 
 `Reference` < `Object`

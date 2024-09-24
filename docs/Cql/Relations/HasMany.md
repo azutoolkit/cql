@@ -1,7 +1,3 @@
----
-title: "CQL::Relations::HasMany"
----
-
 # module CQL::Relations::HasMany
 
 Define the has_many association module that will be included in the model

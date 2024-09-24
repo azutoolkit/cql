@@ -1,7 +1,3 @@
----
-title: "CQL::PrimaryKey(T)"
----
-
 # class CQL::PrimaryKey(T)
 
 `CQL::Column` < `CQL::BaseColumn` < `Reference` < `Object`

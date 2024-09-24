@@ -1,7 +1,3 @@
----
-title: "CQL::Repository(T, Pk)"
----
-
 # class CQL::Repository(T, Pk)
 
 `Reference` < `Object`

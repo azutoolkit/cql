@@ -1,7 +1,3 @@
----
-title: "CQL::Query"
----
-
 # class CQL::Query
 
 `Reference` < `Object`

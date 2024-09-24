@@ -1,7 +1,3 @@
----
-title: "CQL::Relations::ManyToMany"
----
-
 # module CQL::Relations::ManyToMany
 
 ## Macros

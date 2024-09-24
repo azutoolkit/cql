@@ -1,7 +1,3 @@
----
-title: "CQL::Relations::BelongsTo"
----
-
 # module CQL::Relations::BelongsTo
 
 ## Macros

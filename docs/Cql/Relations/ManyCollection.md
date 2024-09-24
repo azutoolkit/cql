@@ -1,7 +1,3 @@
----
-title: "CQL::Relations::ManyCollection(Target, Through, Pk)"
----
-
 # class CQL::Relations::ManyCollection(Target, Through, Pk)
 
 `CQL::Relations::Collection` < `Reference` < `Object`

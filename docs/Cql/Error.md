@@ -1,7 +1,3 @@
----
-title: "CQL::Error"
----
-
 # class CQL::Error
 
 `Exception` < `Reference` < `Object`

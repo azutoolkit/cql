@@ -1,7 +1,3 @@
----
-title: "CQL::Relations"
----
-
 # module CQL::Relations
 
 The `CQL::Relations` module provides utilities for managing relationships between tables in a database schema. It allows you to define associations such as `has_many`, `belongs_to`, and `many_to_many`, enabling easy navigation and querying of related data.

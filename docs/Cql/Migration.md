@@ -1,7 +1,3 @@
----
-title: "CQL::Migration"
----
-
 # class CQL::Migration
 
 `Reference` < `Object`

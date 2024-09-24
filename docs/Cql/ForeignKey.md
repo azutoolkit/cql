@@ -1,7 +1,3 @@
----
-title: "CQL::ForeignKey"
----
-
 # class CQL::ForeignKey
 
 `Reference` < `Object`

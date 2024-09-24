@@ -1,7 +1,3 @@
----
-title: "CQL::Insert"
----
-
 # class CQL::Insert
 
 `Reference` < `Object`

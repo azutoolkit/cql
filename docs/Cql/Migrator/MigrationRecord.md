@@ -1,7 +1,3 @@
----
-title: "CQL::Migrator::MigrationRecord"
----
-
 # class CQL::Migrator::MigrationRecord
 
 `DB::Mappable` < `DB::Serializable` < `Reference` < `Object`
