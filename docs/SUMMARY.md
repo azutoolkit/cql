@@ -16,7 +16,7 @@
     - [Active Record](coreconcepts/patterns/active-record.md)
     - [Entity Framework](coreconcepts/patterns/entity-framework.md)
     - [Repository](coreconcepts/patterns/repository.md)
-- CQL API
+- API
   - [Insert](api/Insert.md)
   - [PrimaryKeyType](api/PrimaryKeyType.md)
   - [ForeignKey](api/ForeignKey.md)
