@@ -1,3 +1,4 @@
+
 ---
 title: "Cql::Column(T)"
 ---
@@ -6,12 +7,9 @@ title: "Cql::Column(T)"
 
 `Cql::BaseColumn` < `Reference` < `Object`
 
-A column in a table
-This class represents a column in a table
-It provides methods for setting the column type, default value, and constraints
-It also provides methods for building expressions
+The `Cql::Column` class represents a column in a table. It provides methods for defining the column type, setting default values, and applying constraints such as `NOT NULL` or `UNIQUE`.
 
-**Example** Creating a new column
+## Example: Creating a Column
 
 ```crystal
 schema.define do
@@ -24,51 +22,56 @@ end
 
 ## Constructors
 
-### def new`(name : Symbol, type : T.class, as_name : String | Nil = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32 | Nil = nil, index : Index | Nil = nil)`
+### def new(name : Symbol, type : Type, options : Hash = {})
 
-Create a new column instance
+Creates a new column with the specified name, type, and options.
 
-- **@param** : name (Symbol) - The name of the column
-- **@param** : type (Any) - The data type of the column
-- **@param** : as_name (String, nil) - An optional alias for the column
-- **@param** : null (Bool) - Whether the column allows null values (default: false)
-- **@param** : default (DB::Any) - The default value for the column (default: nil)
-- **@param** : unique (Bool) - Whether the column should have a unique constraint (default: false)
-- **@param** : size (Int32, nil) - The size of the column (default: nil)
-- **@param** : index (Index, nil) - The index for the column (default: nil)
-- **@return** : Nil
-- **@raise** : Cql::Error if the column type is not valid
+- **@param** name \[Symbol] The name of the column.
+- **@param** type \[Type] The data type of the column.
+- **@param** options \[Hash] Additional options for the column (e.g., `null`, `default`, `unique`).
+- **@return** \[Column] The created column object.
 
-**Example**
+**Example**:
 
 ```crystal
-column = Cql::Column.new(:name, String)
+column = Cql::Column.new(:name, String, null: false, default: "John")
 ```
 
-## Instance Methods
+## Methods
 
-### def expression
+### def null
 
-Expressions for this column
+Specifies whether the column allows `NULL` values.
 
-- **@return** [Expression::ColumnBuilder] the column expression builder
+- **@return** \[Bool] `true` if the column allows null values, `false` otherwise.
 
-**Example**
+**Example**:
 
 ```crystal
-column = Cql::Column.new(:name, String)
-column.expression.eq("John")
+column.null(false)
 ```
 
-### def validate!`(value)`
+### def default(value : DB::Any)
 
-Validate the value
+Sets the default value for the column.
 
-- **@param** value [DB::Any] The value to validate
+- **@param** value \[DB::Any] The default value for the column.
+- **@return** \[Column] The updated column object.
 
-**Example**
+**Example**:
 
 ```crystal
-column = Cql::Column.new(:name, String)
-column.validate!("John")
+column.default("John")
+```
+
+### def unique
+
+Specifies whether the column should have a `UNIQUE` constraint.
+
+- **@return** \[Column] The updated column object.
+
+**Example**:
+
+```crystal
+column.unique(true)
 ```

@@ -1,3 +1,4 @@
+
 ---
 title: "Cql::Insert"
 ---
@@ -6,11 +7,9 @@ title: "Cql::Insert"
 
 `Reference` < `Object`
 
-An insert statement builder class
-This class provides methods for building an insert statement
-It also provides methods for executing the statement
+The `Cql::Insert` class is responsible for building SQL `INSERT` statements. It provides methods to construct and execute these statements, allowing for both single and multiple record inserts.
 
-**Example** Inserting a record
+## Example: Inserting a Single Record
 
 ```crystal
 insert
@@ -19,180 +18,41 @@ insert
   .last_insert_id
 ```
 
-**Example** Inserting multiple records
+## Example: Inserting Multiple Records
 
 ```crystal
 insert
   .into(:users)
-  .values(
-    [
-      {name: "John", age: 30},
-      {name: "Jane", age: 25},
-    ]
-  ).commit
+  .values([
+    {name: "John", age: 30},
+    {name: "Jane", age: 25}
+  ])
 ```
 
-**Example** Inserting a record with a query
+## Methods
+
+### def into(table : Symbol)
+
+Specifies the table to insert the records into.
+
+- **@param** table \[Symbol] The name of the table.
+- **@return** \[Insert] The insert statement.
+
+### def values(data : Hash(Symbol, DB::Any))
+
+Specifies the data to insert into the table.
+
+- **@param** data \[Hash(Symbol, DB::Any)] A hash of column names and values.
+- **@return** \[Insert] The insert statement.
+
+### def last_insert_id
+
+Retrieves the last inserted record's ID.
+
+- **@return** \[Int64] The ID of the last inserted record.
+
+**Example**:
 
 ```crystal
-insert
-  .into(:users)
-  .query(
-    select.from(:users).where(id: 1)
-  ).commit
-```
-
-## Constants
-
-### Log
-
-```crystal
-::Log.for(self)
-```
-
-## Constructors
-
-### def new`(schema : Schema)`
-
-## Instance Methods
-
-### def back`(*columns : Symbol)`
-
-Set the columns to return
-
-- **@param** columns [Symbol*] The columns to return
-- **@return** [Insert] The insert object
-- **@raise** [Exception] If the column does not exist
-
-**Example** Inserting a record
-
-```crystal
-insert.into(:users).values(name: "John", age: 30).back(:id).commit
-```
-
-### def build
-
-Build the insert statement object
-**@return** [Expression::Insert] The insert statement
-
-**Example** Building the insert statement
-
-```crystal
-insert.into(:users).values(name: "John", age: 30).commit
-```
-
-### def commit
-
-Executes the insert statement and returns the result
-
-- **@return** [Int64] The last inserted ID
-
-**Example** Inserting a record
-
-```crystal
-insert
-  .into(:users)
-  .values(name: "John", age: 30)
-  .commit
-
-=> 1
-```
-
-### def into`(table : Symbol)`
-
-Set the table to insert into
-
-- **@param** table [Symbol] The table to insert into
-- **@return** [Insert] The insert object
-
-**Example** Inserting a record
-
-```crystal
-insert
-  .into(:users)
-  .values(name: "John", age: 30)
-  .commit
-```
-
-### def last_insert_id`(as type : PrimaryKeyType = Int64)`
-
-Inserts and gets the last inserted ID from the database
-Works with SQLite, PostgreSQL and MySQL.
-
-- **@return** [Int64] The last inserted ID
-
-**Example** Getting the last inserted ID
-
-```crystal
-insert.into(:users).values(name: "John", age: 30).last_insert_id
-```
-
-### def query`(query : Query)`
-
-Set the query to use for the insert
-
-- **@param** query [Query] The query to use
-- **@return** [Insert] The insert object
-
-**Example** Inserting a record with a query
-
-```crystal
-insert.into(:users).query(select.from(:users).where(id: 1)).commit
-```
-
-### def to_sql`(gen = @schema.gen)`
-
-Convert the insert object to a SQL query
-
-- **@param** gen [Generator] The generator to use
-- **@return** [{String, Array(DB::Any)}] The query and parameters
-- **@raise** [Exception] If the table does not exist
-
-**Example** Generating a SQL query
-
-```crystal
-insert.into(:users).values(name: "John", age: 30).to_sql
-```
-
-### def values`(values : Array(Hash(Symbol, DB::Any)))`
-
-Set the columns to insert
-
-- **@param** columns [Array(Symbol)] The columns to insert
-- **@return** [Insert] The insert object
-
-**Example** Inserting a record
-
-```crystal
-insert
-  .into(:users)
-  .columns(:name, :age)
-  .values("John", 30)
-  .commit
-```
-
-### def values`(hash : Hash(Symbol, DB::Any))`
-
-Set the values to insert
-
-- **@param** hash [Hash(Symbol, DB::Any)] The values to insert
-- **@return** [Insert] The insert object
-
-**Example** Inserting a record
-
-```crystal
-insert.into(:users).values(name: "John", age: 30).commit
-```
-
-### def values
-
-Set the values to insert
-
-- **@param** fields [Hash(Symbol, DB::Any)] The values to insert
-- **@return** [Insert] The insert object
-
-**Example** Inserting a record
-
-```crystal
-insert.into(:users).values(name: "John", age: 30).commit
+id = insert.into(:users).values(name: "John").last_insert_id
 ```

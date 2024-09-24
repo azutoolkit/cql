@@ -1,6 +1,0 @@
----
-icon: webhook
----
-
-# Cql API
-

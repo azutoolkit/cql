@@ -1,3 +1,4 @@
+
 ---
 title: "Cql::Adapter"
 ---
@@ -6,43 +7,58 @@ title: "Cql::Adapter"
 
 `Enum` < `Comparable` < `Value` < `Object`
 
-Represents a database adapter module.
+The `Cql::Adapter` enum represents different database adapters such as SQLite, MySQL, and PostgreSQL.
 
 ## Constants
 
 ### Sqlite
 
+Represents the SQLite adapter.
+
 ```crystal
-0
+Cql::Adapter::Sqlite
 ```
 
 ### MySql
 
+Represents the MySQL adapter.
+
 ```crystal
-1
+Cql::Adapter::MySql
 ```
 
 ### Postgres
 
+Represents the PostgreSQL adapter.
+
 ```crystal
-2
+Cql::Adapter::Postgres
 ```
 
-## Instance Methods
+## Methods
+
+### def sql_type(type : Type)
+
+Returns the SQL type for the given data type.
+
+- **@param** type \[Type] The data type.
+- **@return** \[String] The SQL type as a string.
+
+**Example**:
+
+```crystal
+Cql::Adapter::Sqlite.sql_type(String)
+# => "TEXT"
+```
 
 ### def my_sql?
 
+Checks if the adapter is MySQL.
+
+- **@return** \[Bool] `true` if the adapter is MySQL, `false` otherwise.
+
 ### def postgres?
 
-### def sql_type`(type) : String`
+Checks if the adapter is PostgreSQL.
 
-Returns the SQL type for the given type.
-@param type [Type] the type
-@return [String] the SQL type
-**Example** Getting the SQL type
-
-```crystal
-Cql::Adapter::Sqlite.sql_type(Int32) # => "INTEGER"
-```
-
-### def sqlite?
+- **@return** \[Bool] `true` if the adapter is PostgreSQL, `false` otherwise.

@@ -1,3 +1,4 @@
+
 ---
 title: "Cql::Delete"
 ---
@@ -6,12 +7,9 @@ title: "Cql::Delete"
 
 `Reference` < `Object`
 
-A delete query
-This class represents a delete query
-It provides methods for building a delete query
-It also provides methods for executing the query
+The `Cql::Delete` class represents a SQL `DELETE` query. It provides methods to construct and execute delete queries.
 
-**Example** Deleting a record
+## Example: Deleting a Record
 
 ```crystal
 delete.from(:users).where(id: 1).commit
@@ -19,162 +17,55 @@ delete.from(:users).where(id: 1).commit
 
 ## Constructors
 
-### def new`(schema : Schema)`
+### def new(schema : Schema)
 
-Initialize the delete query
+Initializes a new delete query.
 
-- **@param** schema [Schema] The schema to use
-- **@return** [Delete] The delete query object
+- **@param** schema \[Schema] The schema to use.
+- **@return** \[Delete] The delete query object.
 
-**Example** Deleting a record
+**Example**:
 
 ```crystal
 delete = Cql::Delete.new(schema)
-  .from(:users)
-  .where(id: 1)
-  .commit
 ```
 
-## Instance Methods
+## Methods
 
-### def back`(*columns : Symbol)`
+### def from(table : Symbol)
 
-Sets the columns to return after the delete
+Specifies the table to delete from.
 
-- **@param** columns [Symbol*] The columns to return
-- **@return** [self] The current instance
-- **@raise** [Exception] If the column does not exist
+- **@param** table \[Symbol] The name of the table.
+- **@return** \[Delete] The delete query object.
 
-**Example** Setting the columns to return
+**Example**:
 
 ```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-  .back(:name, :age)
+delete.from(:users)
 ```
 
-### def build
+### def where(conditions : Hash(Symbol, DB::Any))
 
-Builds the delete expression
+Adds a `WHERE` clause to the delete query.
 
-- **@return** [Expression::Delete] The delete expression
-- **@raise** [Exception] If the table is not set
-- **@raise** [Exception] If the where clause is not set
+- **@param** conditions \[Hash(Symbol, DB::Any)] A hash of conditions for the delete operation.
+- **@return** \[Delete] The delete query object.
 
-**Example** Building the delete expression
+**Example**:
 
 ```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-  .where(id: 1)
-  .commit
+delete.where(id: 1)
 ```
 
 ### def commit
 
-Executes the delete query and returns the result
+Executes the delete query.
 
-- **@return** [DB::Result] The result of the query
+- **@return** \[Nil]
 
-**Example** Deleting a record
-
-```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-  .where(id: 1)
-  .commit
-```
-
-### def from`(table : Symbol)`
-
-Sets the table to delete from
-
-- **@param** table [Symbol] The name of the table
-- **@return** [self] The current instance
-- **@raise** [Exception] If the table does not exist
-
-**Example** Setting the table
+**Example**:
 
 ```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-```
-
-### def to_sql`(gen = @schema.gen)`
-
-Generates the SQL query and parameters
-
-- **@param** gen [Expression::Generator] The generator to use
-- **@return** [{String, Array(DB::Any)}] The query and parameters
-
-**Example** Generating a delete query
-
-```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-  .where(id: 1)
-  .to_sql
-```
-
-### def using`(table : Symbol)`
-
-Sets the table to use in the using clause
-
-- **@param** table [Symbol] The name of the table
-- **@return** [self] The current instance
-- **@raise** [Exception] If the table does not exist
-
-**Example** Setting the using table
-
-```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-  .using(:posts)
-```
-
-### def where
-
-Sets the columns to return
-
-- **@param** columns [Symbol*] The columns to return
-- **@return** [self] The current instance
-- **@raise** [Exception] If the column does not exist
-
-**Example** Setting the columns to return
-
-```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-  .back(:name, :age)
-```
-
-### def where`(attr : Hash(Symbol, DB::Any))`
-
-Where clause using a hash of conditions to match against
-
-- **@param** attr [Hash(Symbol, DB::Any)] The conditions to match against
-- **@return** [self] The current instance
-
-**Example** Setting the where clause
-
-```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-  .where(id: 1)
-```
-
-### def where
-
-Sets the columns to return
-
-- **@param** columns [Symbol*] The columns to return
-- **@return** [self] The current instance
-- **@raise** [Exception] If the column does not exist
-
-**Example** Setting the columns to return
-
-```crystal
-delete = Cql::Delete.new(schema)
-  .from(:users)
-  .back(:name, :age)
+delete.from(:users).where(id: 1).commit
 ```

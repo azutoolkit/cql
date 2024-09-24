@@ -143,7 +143,7 @@ user_repository.update(1, name: "Jane Smith")
 Work with your data using the Active Record pattern:
 
 ```crystal
-struct Actor < Cql::Record(Actor, Int64)
+struct Actor < Cql::Record(Int64)
 
   db_context AcmeDB2, :actors
 
@@ -154,7 +154,7 @@ struct Actor < Cql::Record(Actor, Int64)
   end
 end
 
-struct Movie < Cql::Record(Movie, Int64)
+struct Movie < Cql::Record(Int64)
 
   db_context AcmeDB2, :movies
 
@@ -169,7 +169,7 @@ struct Movie < Cql::Record(Movie, Int64)
   end
 end
 
-struct Director < Cql::Record(Director, Int64)
+struct Director < Cql::Record(Int64)
 
   db_context AcmeDB2, :directors
 
@@ -181,7 +181,7 @@ struct Director < Cql::Record(Director, Int64)
   end
 end
 
-struct Screenplay < Cql::Record(Screenplay, Int64)
+struct Screenplay < Cql::Record(Int64)
 
   db_context AcmeDB2, :screenplays
 
@@ -194,7 +194,7 @@ struct Screenplay < Cql::Record(Screenplay, Int64)
   end
 end
 
-struct MoviesActors < Cql::Record(MoviesActors, Int64)
+struct MoviesActors < Cql::Record(Int64)
 
   db_context AcmeDB2, :movies_actors
 
@@ -202,7 +202,7 @@ struct MoviesActors < Cql::Record(MoviesActors, Int64)
   getter movie_id : Int64
   getter actor_id : Int64
 
-  # has_many :actors, Actor, :actor_id
+  has_many :actors, Actor, :actor_id
 
   def initialize(@movie_id : Int64, @actor_id : Int64)
   end

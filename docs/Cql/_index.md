@@ -1,3 +1,4 @@
+
 ---
 title: "Cql::Index"
 ---
@@ -6,12 +7,9 @@ title: "Cql::Index"
 
 `Reference` < `Object`
 
-An index on a table
-This class represents an index on a table
-It provides methods for setting the columns and unique constraint
-It also provides methods for generating the index name
+The `Cql::Index` class represents an index on a table. Indexes are used to optimize query performance by providing faster access to data. This class provides methods for defining the columns that make up the index and specifying whether the index is unique.
 
-**Example** Creating a new index
+## Example: Creating an Index
 
 ```crystal
 schema.define do
@@ -25,45 +23,43 @@ end
 
 ## Constructors
 
-### def new`(table : Table, columns : Array(Symbol), unique : Bool = false, name : String | Nil = nil)`
+### def new(table : Table, columns : Array(Symbol), unique : Bool = false)
 
-Create a new index instance on a table
+Creates a new index on the specified table.
 
-- **@param** : table (Table) - The table to create the index on
-- **@param** : columns (Array(Symbol)) - The columns to index
-- **@param** : unique (Bool) - Whether the index should be unique (default: false)
-- **@param** : name (String, nil) - The name of the index (default: nil)
-- **@return** : Nil
-- **@raise** : Cql::Error if the table does not exist
-- **@raise** : Cql::Error if the column does not exist
+- **@param** table \[Table] The table on which the index is created.
+- **@param** columns \[Array(Symbol)] The columns that make up the index.
+- **@param** unique \[Bool] Whether the index should enforce uniqueness (default: `false`).
+- **@return** \[Index] The created index object.
 
-**Example**
+**Example**:
 
 ```crystal
-index = Cql::Index.new(table, [:name, :email], unique: true)
+index = Cql::Index.new(:users, [:name, :email], unique: true)
 ```
 
-## Instance Methods
+## Methods
 
-### def columns
+### def unique
 
-### def index_name
+Specifies whether the index is unique.
 
-Generate the index name
+- **@return** \[Bool] `true` if the index is unique, `false` otherwise.
 
-- **@return** : String
-- **@raise** : Nil
-
-**Example**
+**Example**:
 
 ```crystal
-index_name = index.index_name
+index.unique(true)
 ```
 
-### def name
+### def generate_name
 
-### def name=`(name : String | Nil)`
+Generates a name for the index based on the table and columns.
 
-### def table
+- **@return** \[String] The generated index name.
 
-### def unique?
+**Example**:
+
+```crystal
+index_name = index.generate_name
+```

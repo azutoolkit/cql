@@ -1,3 +1,4 @@
+
 ---
 title: "Cql::Migration"
 ---
@@ -6,105 +7,59 @@ title: "Cql::Migration"
 
 `Reference` < `Object`
 
-Migrations are used to manage changes to the database schema over time.
-Each migration is a subclass of `Migration` and must implement the `up` and `down` methods.
+Migrations are used to manage changes to the database schema over time. Each migration is a subclass of `Migration` and must implement the `up` and `down` methods. The `up` method applies the migration, while the `down` method rolls back the migration.
 
-The `up` method is used to apply the migration, while the `down` method is used to rollback the migration.
-Migrations are executed in their version order define.
-The `Migrator` class is used to manage migrations and provides methods to apply, rollback, and redo migrations.
-The `Migrator` class also provides methods to list applied and pending migrations.
+Migrations are executed in version order, and the `Migrator` class manages them, providing methods to apply, roll back, and track migrations.
 
-**Example** Creating a new migration
+## Example: Creating a Migration
 
 ```crystal
-class CreateUsersTable < Cql::Migration(1)
+class AddEmailToUsers < Cql::Migration
   def up
-    schema.alter :users do
-      add_column :name, String
-      add_column :age, Int32
+    schema.alter_table(:users) do
+      add_column :email, String
     end
   end
 
   def down
-    schema.alter :users do
-      drop_column :name
-      drop_column :age
+    schema.alter_table(:users) do
+      drop_column :email
     end
   end
 end
 ```
 
-**Example** Applying migrations
+## Methods
+
+### def up
+
+Defines the operations to apply when the migration is run.
+
+- **@return** \[Nil]
+
+**Example**:
 
 ```crystal
-schema = Cql::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
-  table :schema_migrations do
-    primary :id, Int32
-    column :name, String
-    column :version, Int64, index: true, unique: true
-    timestamps
+def up
+  schema.alter_table(:users) do
+    add_column :email, String
   end
 end
-migrator = Cql::Migrator.new(schema)
-migrator.up
 ```
-
-**Example** Rolling back migrations
-
-```crystal
-migrator.down
-```
-
-**Example** Redoing migrations
-
-```crystal
-migrator.redo
-```
-
-**Example** Rolling back to a specific version
-
-```crystal
-migrator.down_to(1_i64)
-```
-
-**Example** Applying to a specific version
-
-```crystal
-migrator.up_to(1_i64)
-```
-
-**Example** Listing applied migrations
-
-```crystal
-migrator.print_applied_migrations
-```
-
-**Example** Listing pending migrations
-
-```crystal
-migrator.print_pending_migrations
-```
-
-**Example** Listing rolled back migrations
-
-```crystal
-migrator.print_rolled_back_migrations
-```
-
-**Example** Listing the last migration
-
-```crystal
-migrator.last
-```
-
-## Constructors
-
-### def new`(schema : Schema)`
-
-## Instance Methods
 
 ### def down
 
-### def schema
+Defines the operations to roll back the migration.
 
-### def up
+- **@return** \[Nil]
+
+**Example**:
+
+```crystal
+def down
+  schema.alter_table(:users) do
+    drop_column :email
+  end
+end
+```
+
