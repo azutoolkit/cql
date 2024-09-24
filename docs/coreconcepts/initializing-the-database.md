@@ -4,7 +4,7 @@ Once you've defined your database schema using CQL's `Schema.build`, the next st
 
 ---
 
-### Real-World Example: Defining the Database Schema
+## Real-World Example: Defining the Database Schema
 
 Here’s an example where we define a schema for a movie database using CQL. The schema includes tables for `movies`, `screenplays`, `actors`, `directors`, and a join table `movies_actors` to link movies and actors.
 

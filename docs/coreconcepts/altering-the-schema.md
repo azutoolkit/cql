@@ -4,7 +4,7 @@ The `CQL::AlterTable` class in the CQL framework provides a structured way to ma
 
 ---
 
-#### Why Use `CQL::AlterTable`?
+## Why Use `CQL::AlterTable`?
 
 When your application evolves, you often need to modify your database structure. `CQL::AlterTable` lets you:
 
@@ -15,7 +15,7 @@ When your application evolves, you often need to modify your database structure.
 
 ---
 
-#### Real-World Example: Modifying the Users Table
+## Real-World Example: Modifying the Users Table
 
 Let’s start with a basic example where we modify the `users` table by adding a new column `email`, removing the `age` column, and renaming the `email` column to `user_email`.\
 \
@@ -35,7 +35,7 @@ end
 ```
 
 ```crystal
-alter_table = AlterTable.new(users_table, schema)
+alter = AlterTable.new(users_table, schema)
 
 AcmeDB.alter :users do
   add_column(:email, "string", null: false, unique: true)
@@ -71,7 +71,7 @@ This example:
 **Real-World Example: Adding an Email Column**
 
 ```crystal
-alter_table.add_column(:email, "string", null: false, unique: true)
+alter.add_column(:email, "string", null: false, unique: true)
 ```
 
 This adds an `email` column to the table, ensures it is `NOT NULL`, and enforces a uniqueness constraint.
@@ -88,7 +88,7 @@ This adds an `email` column to the table, ensures it is `NOT NULL`, and enforces
 **Real-World Example: Dropping a Column**
 
 ```crystal
-alter_table.drop_column(:age)
+alter.drop_column(:age)
 ```
 
 This removes the `age` column from the table.
@@ -106,7 +106,7 @@ This removes the `age` column from the table.
 **Real-World Example: Renaming a Column**
 
 ```crystal
-alter_table.rename_column(:email, :user_email)
+alter.rename_column(:email, :user_email)
 ```
 
 This renames the `email` column to `user_email`.
@@ -124,7 +124,7 @@ This renames the `email` column to `user_email`.
 **Real-World Example: Changing a Column’s Type**
 
 ```crystal
-alter_table.change_column(:age, "string")
+alter.change_column(:age, "string")
 ```
 
 This changes the `age` column’s type from whatever it was (likely an `Int32`) to a `string`.
@@ -141,7 +141,7 @@ This changes the `age` column’s type from whatever it was (likely an `Int32`) 
 **Real-World Example: Renaming a Table**
 
 ```crystal
-alter_table.rename_table(:customers)
+alter.rename_table(:customers)
 ```
 
 This renames the table from `users` to `customers`.
@@ -164,7 +164,7 @@ This renames the table from `users` to `customers`.
 **Real-World Example: Adding a Foreign Key**
 
 ```crystal
-alter_table.foreign_key(:fk_movie_id, [:movie_id], :movies, [:id], on_delete: "CASCADE")
+alter.foreign_key(:fk_movie_id, [:movie_id], :movies, [:id], on_delete: "CASCADE")
 ```
 
 This adds a foreign key `fk_movie_id` on the `movie_id` column, linking it to the `id` column in the `movies` table. On delete, it cascades the delete.
@@ -181,7 +181,7 @@ This adds a foreign key `fk_movie_id` on the `movie_id` column, linking it to th
 **Real-World Example: Dropping a Foreign Key**
 
 ```crystal
-alter_table.drop_foreign_key(:fk_movie_id)
+alter.drop_foreign_key(:fk_movie_id)
 ```
 
 This drops the foreign key constraint `fk_movie_id` from the table.
@@ -200,7 +200,7 @@ This drops the foreign key constraint `fk_movie_id` from the table.
 **Real-World Example: Creating a Unique Index**
 
 ```crystal
-alter_table.create_index(:index_users_on_email, [:email], unique: true)
+alter.create_index(:index_users_on_email, [:email], unique: true)
 ```
 
 This creates a unique index on the `email` column, ensuring that email addresses are unique across the table.
@@ -217,7 +217,7 @@ This creates a unique index on the `email` column, ensuring that email addresses
 **Real-World Example: Dropping an Index**
 
 ```crystal
-alter_table.drop_index(:index_users_on_email)
+alter.drop_index(:index_users_on_email)
 ```
 
 This drops the index `index_users_on_email` from the table.
@@ -234,7 +234,7 @@ This drops the index `index_users_on_email` from the table.
 **Real-World Example: Generating SQL for Table Alterations**
 
 ```crystal
-sql = alter_table.to_sql(visitor)
+sql = alter.to_sql(visitor)
 puts sql
 ```
 
@@ -247,7 +247,7 @@ This will generate the SQL statements that correspond to the actions taken (e.g.
 Here’s an advanced example where we modify the `users` table by adding and removing columns, renaming the table, and creating an index:
 
 ```crystal
-alter_table = AlterTable.new(users_table, schema)
+alter = AlterTable.new(users_table, schema)
 
 sql = AcmeDB2.alter :users do
   add_column(:email, "string", null: false, unique: true)
