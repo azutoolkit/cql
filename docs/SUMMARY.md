@@ -17,7 +17,7 @@
     - [Entity Framework](coreconcepts/patterns/entity-framework.md)
     - [Repository](coreconcepts/patterns/repository.md)
 - API
-  - [Insert](api/Insert.md)
+  - [Insert](api/insert.md)
   - [PrimaryKeyType](api/PrimaryKeyType.md)
   - [ForeignKey](api/ForeignKey.md)
   - [Record](api/Record.md)

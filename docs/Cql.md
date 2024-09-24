@@ -1,5 +1,0 @@
----
-title: "CQL"
----
-
-# module CQL
