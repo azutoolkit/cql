@@ -11,8 +11,7 @@ A collection of records for a one to many relationship This class is used to man
 **Example**
 
 ```crystal
-class User
-  include CQL::Model(User, Int64)
+class User < CQL::Model(Int64)
   property id : Int64
   property name : String
   has_many :posts, Post, foreign_key: :user_id
