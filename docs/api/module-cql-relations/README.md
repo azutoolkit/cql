@@ -5,13 +5,11 @@ The `CQL::Relations` module provides utilities for managing relationships betwee
 ## Example: Defining Relations
 
 ```crystal
-class User
-  include CQL::Record(User)
+struct User < CQL::Record(Int64)
   has_many :posts
 end
 
-class Post
-  include CQL::Record(Post)
+struct Post < CQL::Record(Int64)
   belongs_to :user
 end
 ```
