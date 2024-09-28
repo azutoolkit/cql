@@ -11,23 +11,19 @@ Here’s how a many-to-many association is commonly implemented in CQL using Cry
 **Example**
 
 ```crystal
-class Movie
-  include CQL::Model(Movie, Int64)
-
+struct Movie < CQL::Model(Int64)
   property id : Int64
   property title : String
 
   many_to_many :actors, Actor, join_through: :movies_actors
 end
 
-class Actor
-  include CQL::Model(Actor, Int64)
+struct Actor < CQL::Model(Int64)
   property id : Int64
   property name : String
 end
 
-class MoviesActors
-  include CQL::Model(MoviesActors, Int64)
+struct MoviesActors < CQL::Model(Int64)
   property id : Int64
   property movie_id : Int64
   property actor_id : Int64
@@ -43,12 +39,12 @@ actor = Actor.create(name: "Keanu Reeves")
 
 Initialize the many-to-many association collection class
 
-* **param** : key (Symbol) - The key for the parent record
-* **param** : id (Pk) - The id value for the parent record
-* **param** : target\_key (Symbol) - The key for the associated record
-* **param** : cascade (Bool) - Delete associated records
-* **param** : query (CQL::Query) - Query object
-* **return** : ManyCollection
+- **param** : key (Symbol) - The key for the parent record
+- **param** : id (Pk) - The id value for the parent record
+- **param** : target_key (Symbol) - The key for the associated record
+- **param** : cascade (Bool) - Delete associated records
+- **param** : query (CQL::Query) - Query object
+- **return** : ManyCollection
 
 **Example**
 
@@ -68,7 +64,7 @@ ManyCollection.new(
 
 Clears all associated records from the parent record and the database
 
-* **return** : \[] of T
+- **return** : \[] of T
 
 **Example**
 
@@ -85,9 +81,9 @@ movie.actors.all => []
 
 Create a new record and associate it with the parent record
 
-* **param** : attributes (Hash(Symbol, String | Int64))
-* **return** : Array(Target)
-* **raise** : CQL::Error
+- **param** : attributes (Hash(Symbol, String | Int64))
+- **return** : Array(Target)
+- **raise** : CQL::Error
 
 **Example**
 
@@ -102,9 +98,9 @@ movie.actors.all
 
 Create a new record and associate it with the parent record
 
-* **param** : attributes (Hash(Symbol, String | Int64))
-* **return** : Array(Target)
-* **raise** : CQL::Error
+- **param** : attributes (Hash(Symbol, String | Int64))
+- **return** : Array(Target)
+- **raise** : CQL::Error
 
 **Example**
 
@@ -119,8 +115,8 @@ movie.actors.all
 
 Delete the associated record from the parent record if it exists
 
-* **param** : record (Target)
-* **return** : Bool
+- **param** : record (Target)
+- **return** : Bool
 
 **Example**
 
@@ -140,8 +136,8 @@ movie.actors.all
 
 Delete the associated record from the parent record if it exists
 
-* **param** : id (Pk)
-* **return** : Bool
+- **param** : id (Pk)
+- **return** : Bool
 
 **Example**
 
@@ -158,8 +154,8 @@ movie.actors.all => []
 
 Associates the parent record with the records that match the primary keys provided
 
-* **param** : ids (Array(Pk))
-* **return** : Array(Target)
+- **param** : ids (Array(Pk))
+- **return** : Array(Target)
 
 **Example**
 

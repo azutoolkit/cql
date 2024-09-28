@@ -63,9 +63,9 @@ schema = CQL::Schema.define(
   ) do
 
   table :users do
-    primary_key :id, Int64, auto_increment: true
-    column :name, String
-    column :email, String
+    primary :id
+    varchar :name, size: 150
+    varchar :email, size: 150
   end
 end
 ```
@@ -76,7 +76,6 @@ With the schema in place, you can start executing queries:
 
 ```crystal
 q = CQL::Query.new(schema)
-
 user = q.from(:users).where(id: 1).first(as: User)
 
 puts user.name if user
@@ -87,9 +86,8 @@ puts user.name if user
 Insert new records into the database:
 
 ```crystal
-q = CQL::Query.new(schema)
-
-q.insert_into(:users, name: "Jane Doe", email: "jane@example.com")
+i = CQL::Insert.new(schema)
+i.into(:users, name: "Jane Doe", email: "jane@example.com")
 ```
 
 ### 4. Updating Data
@@ -97,9 +95,8 @@ q.insert_into(:users, name: "Jane Doe", email: "jane@example.com")
 Update existing records:
 
 ```crystal
-q = CQL::Query.new(schema)
-
-q.update(:users).set(name: "Jane Smith").where(id: 1)
+ u = CQL::Update.new(schema)
+ u.table(:users).set(name: "Jane Smith").where(id: 1)
 ```
 
 ### 5. Deleting Data
@@ -107,9 +104,9 @@ q.update(:users).set(name: "Jane Smith").where(id: 1)
 Delete records from the database:
 
 ```crystal
-q = CQL::Query.new(schema)
+d = CQL::Delete.new(schema)
 
-q.delete_from(:users).where(id: 1)
+d.from(:users).where(id: 1)
 ```
 
 ### 6. Using the Repository Pattern
