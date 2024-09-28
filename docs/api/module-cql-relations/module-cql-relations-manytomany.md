@@ -14,21 +14,18 @@ Defines a many-to-many relationship between two models. This method will define 
 **Example**
 
 ```crystal
-class Movie
-  include CQL::Model(Movie, Int64)
+class Movie < CQL::Model(Int64)
   property id : Int64
   property title : String
   many_to_many :actors, Actor, join_through: :movies_actors
 end
 
-class Actor
-  include CQL::Model(Actor, Int64)
+class Actor < CQL::Model(Int64)
   property id : Int64
   property name : String
 end
 
-class MoviesActors
-  include CQL::Model(MoviesActors, Int64)
+class MoviesActors < CQL::Model(Int64)
   property id : Int64
   property movie_id : Int64
   property actor_id : Int64
