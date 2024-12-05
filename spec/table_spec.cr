@@ -50,7 +50,7 @@ describe CQL::Table do
     check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
 
     expect_raises(DB::NoResultsError) do
-      TableDB.exec_query { |conn| conn.query_one(check_query, as: String) }
+      TableDB.exec_query(&.query_one(check_query, as: String))
     end
   end
 end
