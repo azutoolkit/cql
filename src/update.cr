@@ -48,8 +48,8 @@ module CQL
     # ```
     def commit
       query, params = to_sql
-      @schame.exec_query do |conn|
-        conn.exec query, args: params
+      @schema.exec_query do |conn|
+        conn.exec(query, args: params)
       end
     end
 

@@ -56,7 +56,9 @@ describe CQL::Schema do
       FROM information_schema.columns
       WHERE table_schema = 'public'  AND table_name = '#{table}'  AND column_name = '#{col}';
       SQL
-      Example.db.query_one(query, as: Int32)
+      Example.exec_query do |conn|
+        conn.query_one(query, as: Int32)
+      end
     rescue exception
       Log.debug { exception }
       0
@@ -68,7 +70,9 @@ describe CQL::Schema do
       query = <<-SQL
       SELECT 1 FROM pg_indexes WHERE tablename = '#{table}' AND indexname = '#{index}';
       SQL
-      Example.db.query_one(query, as: Int32)
+      Example.exec_query do |conn|
+        conn.query_one(query, as: Int32)
+      end
     rescue exception
       0
     end

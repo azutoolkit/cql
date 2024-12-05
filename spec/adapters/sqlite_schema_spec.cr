@@ -4,7 +4,9 @@ describe CQL::Schema do
   column_exists = ->(col : Symbol, table : Symbol) do
     begin
       query = "SELECT 1 FROM pragma_table_info('#{table}') WHERE name = '#{col}';\n"
-      result = Data.db.query_one(query, as: Int32)
+      result = Data.exec_query do |conn|
+        conn.query_one(query, as: Int32)
+      end
       result
     rescue exception
       0
@@ -16,7 +18,9 @@ describe CQL::Schema do
       query = <<-SQL
       SELECT 1 FROM SQLite_master  WHERE type = 'index' AND tbl_name = '#{table}' AND name = '#{index}';
       SQL
-      result = Data.db.query_one(query, as: Int32)
+      result = Data.exec_query do |conn|
+        conn.query_one(query, as: Int32)
+      end
       result
     rescue exception
       0
@@ -29,7 +33,9 @@ describe CQL::Schema do
 
     table = Data.customers.table_name.to_s
     check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
-    name = Data.db.query_one(check_query, as: String)
+    name = Data.exec_query do |conn|
+      conn.query_one(check_query, as: Int32)
+    end
 
     name.should eq table
   end

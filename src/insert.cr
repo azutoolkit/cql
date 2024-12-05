@@ -60,11 +60,11 @@ module CQL
         # Reset to ensure nothing else but the :id is returned
         @back = Array(Expression::Column).new
         query, params = back(:id).to_sql
-        @schame.exec_query do |conn|
+        @schema.exec_query do |conn|
           conn.query_one(query, args: params, as: type)
         end
       else
-        commit.last_insert_id
+        self.commit.last_insert_id
       end
     end
 
@@ -87,7 +87,7 @@ module CQL
     # ```
     def commit
       query, params = to_sql
-      @schame.exec_query do |conn|
+      @schema.exec_query do |conn|
         conn.exec(query, args: params)
       end
     rescue ex

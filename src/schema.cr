@@ -110,17 +110,15 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      db = DB.open(@uri)
-      db.exec(sql)
-    ensure
-      db.close
+      DB.open(@uri) do |conn|
+        conn.exec(sql)
+      end
     end
 
     def exec_query(&)
-      db = DB.open(@uri)
-      yield db
-    ensure
-      db.close
+      DB.open(@uri) do |conn|
+        yield conn
+      end
     end
 
     # Creates a new query for the schema.
@@ -217,10 +215,12 @@ module CQL
       sql_statements = alter_table.to_sql(@gen)
       Log.debug { sql_statements }
 
-      db.transaction do |tx|
-        cnn = tx.connection
-        sql_statements.split(";\n").each do |sql|
-          cnn.exec(sql) unless sql.empty?
+      exec_query do |conn|
+        conn.transaction do |tx|
+          cnn = tx.connection
+          sql_statements.split(";\n").each do |sql|
+            cnn.exec(sql) unless sql.empty?
+          end
         end
       end
     end

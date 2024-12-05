@@ -66,10 +66,9 @@ module CQL
     # ```
     def all(as as_kind)
       query, params = to_sql
-      as_kind.from_rs
 
-      @schame.exec_query do |conn|
-        conn.query(query, args: params)
+      @schema.exec_query do |conn|
+        as_kind.from_rs(conn.query(query, args: params))
       end
     end
 
@@ -104,8 +103,7 @@ module CQL
     # ```
     def first(as as_kind)
       query, params = to_sql
-      Log.debug { "Query: #{query}, Params: #{params}" }
-      @schame.exec_query do |conn|
+      @schema.exec_query do |conn|
         conn.query_one(query, args: params, as: as_kind)
       end
     end
@@ -139,7 +137,7 @@ module CQL
     # ```
     def get(as as_kind)
       query, params = to_sql
-      @schame.exec_query do |conn|
+      @schema.exec_query do |conn|
         conn.scalar(query, args: params, as: as_kind)
       end
     end
@@ -155,7 +153,7 @@ module CQL
     # ```
     def each(as as_kind, &)
       query, params = to_sql
-      @schame.exec_query do |conn|
+      @schema.exec_query do |conn|
         conn.query_each(query, args: params) do |result|
           yield as_kind.from_rs(result)
         end
