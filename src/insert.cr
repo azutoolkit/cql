@@ -60,8 +60,8 @@ module CQL
         # Reset to ensure nothing else but the :id is returned
         @back = Array(Expression::Column).new
         query, params = back(:id).to_sql
-        @schame.exec_query do |db|
-          db.query_one(query, args: params, as: type)
+        @schame.exec_query do |conn|
+          conn.query_one(query, args: params, as: type)
         end
       else
         commit.last_insert_id
@@ -87,8 +87,8 @@ module CQL
     # ```
     def commit
       query, params = to_sql
-      @schame.exec_query do |db|
-        db.exec(query, args: params)
+      @schame.exec_query do |conn|
+        conn.exec(query, args: params)
       end
     rescue ex
       Log.error { "Insert failed: #{ex.message}" }
