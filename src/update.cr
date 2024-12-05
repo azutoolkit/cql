@@ -48,7 +48,9 @@ module CQL
     # ```
     def commit
       query, params = to_sql
-      @schema.db.exec query, args: params
+      @schame.exec_query do |db|
+        db.exec query, args: params
+      end
     end
 
     # Generates the SQL query and parameters.

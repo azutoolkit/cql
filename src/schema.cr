@@ -86,7 +86,6 @@ module CQL
     # schema = CQL::Schema.new(:northwind, "sqlite3://db.sqlite3")
     # ```
     def initialize(@name : Symbol, @uri : String, @adapter : Adapter = Adapter::SQLite, @version : String = "1.0")
-      @db = DB.connect(@uri)
       @gen = Expression::Generator.new(@adapter)
     end
 
@@ -114,10 +113,17 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      @db.transaction do |tx|
-        cnn = tx.connection
-        cnn.exec(sql)
-      end
+      db = DB.open(@uri)
+      db.exec(sql)
+    ensure
+      db.close
+    end
+
+    def exec_query(&)
+      db = DB.open(@uri)
+      yield db
+    ensure
+      db.close
     end
 
     # Creates a new query for the schema.
@@ -234,7 +240,19 @@ module CQL
     # ```
     # schema.dump_structure("db/structure.sql")
     # ```
-    def dump_structure
+    def dump_structure(file = "db/structure.sql")
+      Dir.mkdir_p(File.dirname(file))
+
+      tables_structure = @tables.map do |_, table|
+        String.build do |str|
+          str << "-- Table: #{table.table_name}\n\n"
+          str << "-- Primary Key: #{table.primary.name} - Type: #{table.primary.type} \n\n"
+          str << table.create_sql
+          str << "\n\n"
+        end
+      end.join("\n")
+
+      File.write(file, tables_structure)
     end
 
     macro method_missing(call)

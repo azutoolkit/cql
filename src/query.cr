@@ -66,7 +66,11 @@ module CQL
     # ```
     def all(as as_kind)
       query, params = to_sql
-      as_kind.from_rs @schema.db.query(query, args: params)
+      as_kind.from_rs
+
+      @schame.exec_query do |db|
+        db.query(query, args: params)
+      end
     end
 
     # - **@param** as [Type] The type to cast the results to
@@ -101,7 +105,9 @@ module CQL
     def first(as as_kind)
       query, params = to_sql
       Log.debug { "Query: #{query}, Params: #{params}" }
-      @schema.db.query_one(query, args: params, as: as_kind)
+      @schame.exec_query do |db|
+        db.query_one(query, args: params, as: as_kind)
+      end
     end
 
     # - **@param** as [Type] The type to cast the result to
@@ -133,7 +139,9 @@ module CQL
     # ```
     def get(as as_kind)
       query, params = to_sql
-      @schema.db.scalar(query, args: params, as: as_kind)
+      @schame.exec_query do |db|
+        db.scalar(query, args: params, as: as_kind)
+      end
     end
 
     # Iterates over each result and yields it to the provided block.
@@ -147,8 +155,10 @@ module CQL
     # ```
     def each(as as_kind, &)
       query, params = to_sql
-      @schema.db.query_each(query, args: params) do |result|
-        yield as_kind.from_rs(result)
+      @schame.exec_query do |db|
+        db.query_each(query, args: params) do |result|
+          yield as_kind.from_rs(result)
+        end
       end
     end
 
