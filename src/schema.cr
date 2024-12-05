@@ -34,9 +34,6 @@ module CQL
     # - **@return** [String] the URI of the database
     getter uri : String
 
-    # - **@return** [DB::Connection] the database connection
-    getter db : DB::Connection
-
     # - **@return** [String] the version of the schema
     getter version : String
 
