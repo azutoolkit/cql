@@ -34,7 +34,7 @@ describe CQL::Schema do
     table = Data.customers.table_name.to_s
     check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='#{table}'"
     name = Data.exec_query do |conn|
-      conn.query_one(check_query, as: Int32)
+      conn.query_one(check_query, as: String)
     end
 
     name.should eq table

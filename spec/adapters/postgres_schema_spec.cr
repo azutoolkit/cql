@@ -91,8 +91,6 @@ describe CQL::Schema do
       add_column :country, String, size: 50
     end
 
-    sleep 1
-
     column_exists.call(:country, :customers).should eq(1)
     Example.tables[:customers].columns.size.should eq(5)
   end
