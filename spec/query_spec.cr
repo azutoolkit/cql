@@ -99,6 +99,21 @@ describe CQL::Query do
       select_query_complex.should eq({output.strip, ["Berlin", "London", 1, 2, 3]})
     end
 
+    it "merges multiple WHERE clauses" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city)
+        .where { customers.name.eq("Tulum") }
+        .where { customers.city.eq("Kantenah") }
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city FROM customers WHERE (customers.name = ? AND customers.city = ?)
+      SQL
+
+      select_query.should eq({output.strip, ["Tulum", "Kantenah"]})
+    end
+
     it "handles BETWEEN operator" do
       select_query = Northwind.query
         .from(:orders)

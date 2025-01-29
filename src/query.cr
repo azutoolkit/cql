@@ -329,13 +329,8 @@ module CQL
     # => "SELECT * FROM users WHERE name = 'John' AND age = 30"
     # ```
     def where(hash : Hash(Symbol, DB::Any))
-      condition = nil
-      hash.each_with_index do |(k, v), index|
-        expr = get_expression(k, v)
-        condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
-      end
-      @where = Expression::Where.new(condition.not_nil!)
-
+      new_condition = build_condition_from_hash(hash)
+      merge_where_condition(new_condition)
       self
     end
 
@@ -353,14 +348,8 @@ module CQL
     # => "SELECT * FROM users WHERE name = 'John'"
     # ```
     def where(**fields)
-      condition = nil
-      fields.to_h.each_with_index do |(k, v), index|
-        expr = get_expression(k, v)
-        condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
-      end
-
-      @where = Expression::Where.new(condition.not_nil!)
-
+      new_condition = build_condition_from_hash(fields.to_h)
+      merge_where_condition(new_condition)
       self
     end
 
@@ -379,13 +368,13 @@ module CQL
     # ```
     def where(&)
       all_tables = @tables.dup
-
       @joins.each do |j|
         all_tables[j.table.table.table_name] = j.table.table
       end
 
       builder = with Expression::FilterBuilder.new(all_tables) yield
-      @where = Expression::Where.new(builder.as(Expression::ConditionBuilder).condition)
+      new_condition = builder.as(Expression::ConditionBuilder).condition
+      merge_where_condition(new_condition)
       self
     end
 
@@ -647,6 +636,25 @@ module CQL
 
     private def build_from
       Expression::From.new(@tables.values)
+    end
+
+    private def build_condition_from_hash(hash)
+      condition = nil
+      hash.each_with_index do |(k, v), index|
+        expr = get_expression(k, v)
+        condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
+      end
+      condition.not_nil!
+    end
+
+    private def merge_where_condition(new_condition)
+      if @where.nil?
+        @where = Expression::Where.new(new_condition)
+      else
+        # Merge the new condition with the existing one using AND
+        merged_condition = Expression::And.new(@where.not_nil!.condition, new_condition)
+        @where = Expression::Where.new(merged_condition)
+      end
     end
 
     private def join(type : Expression::JoinType, table : Table, on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
