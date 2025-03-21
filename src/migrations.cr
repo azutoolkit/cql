@@ -1,6 +1,3 @@
-require "tallboy"
-require "colorize"
-
 module CQL
   # Migrations are used to manage changes to the database schema over time.
   # Each migration is a subclass of `Migration` and must implement the `up` and `down` methods.
@@ -78,9 +75,43 @@ module CQL
   # ```
   #
 
+  class MigrationRecord
+    include DB::Serializable
+
+    getter id : Int64
+    getter name : String
+    getter version : Int32
+    getter? created_at : Time?
+    getter? updated_at : Time?
+
+    def initialize(
+      @id : Int64,
+      @name : String,
+      @version : Int32,
+      @created_at = Time.local,
+      @updated_at = Time.local,
+    )
+    end
+  end
+
   abstract class BaseMigration
+    @@version : Int32 = 0 # Initialize with a default value
+
     abstract def up
     abstract def down
+
+    # Default implementation, can be overridden
+    def self.name
+      super.gsub(/([A-Z])/, " \\1").strip.gsub(" ", "_").downcase
+    end
+
+    # Class method to access the migration version
+    # Subclasses MUST define @@version
+    def self.version : Int32
+      @@version
+    rescue ex : Exception
+      raise NotImplementedError.new("#{self.name} must define @@version as Int32")
+    end
   end
 
   abstract class Migration(V) < BaseMigration
@@ -129,26 +160,8 @@ module CQL
     # ```
     # record = CQL::MigrationRecord.new(0_i64, "CreateUsersTable", 1_i64)
     # ```
-    class MigrationRecord
-      include DB::Serializable
 
-      getter id : Int64
-      getter name : String
-      getter version : Int32
-      getter created_at : Time
-      getter updated_at : Time
-
-      def initialize(
-        @id : Int64,
-        @name : String,
-        @version : Int32,
-        @created_at = Time.local,
-        @updated_at = Time.local
-      )
-      end
-    end
-
-    getter schema : Schema
+    getter schema : CQL::Schema
     class_property migrations : Array(BaseMigration.class) = [] of BaseMigration.class
     getter repo : Repository(MigrationRecord, Int32)
 
@@ -164,10 +177,14 @@ module CQL
     # migrator.up
     # ```
     def up(steps : Int32 = Migrator.migrations.size)
-      sorted_migrations[0, steps].each do |migration_class|
-        unless migration_applied?(migration_class.version)
-          migration_class.new(schema).up
-          record_migration(migration_class)
+      schema.exec_query do |conn|
+        conn.transaction do
+          sorted_migrations[0, steps].each do |migration_class|
+            unless migration_applied?(migration_class.version)
+              migration_class.new(schema).up
+              record_migration(migration_class)
+            end
+          end
         end
       end
       print_applied_migrations
@@ -180,13 +197,20 @@ module CQL
     # migrator.down
     # ```
     def down(steps : Int32 = Migrator.migrations.size)
-      sorted_migrations.reverse[0, steps].each do |migration_class|
-        if migration_applied?(migration_class.version)
-          migration_class.new(schema).down
-          remove_migration_record(migration_class)
+      rolled_back_migrations = [] of BaseMigration.class
+      schema.exec_query do |conn|
+        conn.transaction do
+          sorted_migrations.reverse[0, steps].each do |migration_class|
+            if migration_applied?(migration_class.version)
+              migration_class.new(schema).down
+              remove_migration_record(migration_class)
+              rolled_back_migrations << migration_class
+            end
+          end
         end
       end
-      print_rolled_back_migrations(sorted_migrations.reverse[0, steps])
+      # Pass the actually rolled back migrations to the print method
+      print_rolled_back_migrations(rolled_back_migrations)
     end
 
     # Rolls back the last migration.
@@ -217,8 +241,11 @@ module CQL
     # ```
     # @return [Migration.class | Nil]
     def last : BaseMigration.class | Nil
-      Migrator.migrations.find { |migration| migration.version == repo.last.version }
-    rescue DB::NoResultsError
+      last_record = repo.last
+      return nil if last_record.nil?
+
+      Migrator.migrations.find { |migration| migration.version == last_record.version }
+    rescue DB::NoResultsError | CQL::Schema::ConnectionError
       nil
     end
 
@@ -316,23 +343,39 @@ module CQL
     end
 
     private def ensure_schema_migrations_table
+      # Check if table exists first
+      schema.exec_query do |conn|
+        conn.query_one?("SELECT 1 FROM schema_migrations LIMIT 1", as: Int32)
+      end
+    rescue
+      # Table doesn't exist, create it
       schema.table :schema_migrations do
         primary :id, Int32
         column :name, String
         column :version, Int32, index: true, unique: true
-        timestamps
+        # Don't use timestamps macro for SQLite compatibility
+        column :created_at, String, null: true
+        column :updated_at, String, null: true
       end
       schema.schema_migrations.create!
     end
 
     private def migration_applied?(version)
-      repo.exists?(version: version)
-    rescue DB::NoResultsError
-      false
+      # Ensure the schema_migrations table exists before checking
+      ensure_schema_migrations_table
+
+      begin
+        repo.exists?(version: version)
+      rescue DB::NoResultsError | CQL::Schema::ConnectionError
+        false
+      end
     end
 
     private def record_migration(migration : BaseMigration.class)
-      repo.create(name: migration.name, version: migration.version)
+      # Check if the migration already exists to avoid unique constraint errors
+      unless migration_applied?(migration.version)
+        repo.create(name: migration.name, version: migration.version)
+      end
     end
 
     private def remove_migration_record(migration : BaseMigration.class)
