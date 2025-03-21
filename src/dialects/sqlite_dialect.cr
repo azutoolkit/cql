@@ -1,3 +1,5 @@
+require "./dialect"
+
 module Expression
   class SQLiteDialect < Dialect
     def structure_dump(uri : URI) : String
@@ -5,7 +7,11 @@ module Expression
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
-      "#{column.name} #{col_type} PRIMARY KEY AUTOINCREMENT"
+      if col_type == "INTEGER"
+        "#{column.name} #{col_type} PRIMARY KEY AUTOINCREMENT"
+      else
+        "#{column.name} #{col_type} PRIMARY KEY"
+      end
     end
 
     def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
@@ -17,7 +23,7 @@ module Expression
       SQLite does not support the ALTER COLUMN syntax directly. Instead,
       you need to follow a series of steps to achieve the same result.
 
-      Here’s how you can change the data type of a column in SQLite:
+      Here's how you can change the data type of a column in SQLite:
 
         1. Create a new table with the desired schema.
         2. Copy data from the old table to the new table.

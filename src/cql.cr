@@ -2,6 +2,7 @@ require "log"
 require "uuid"
 require "ulid"
 require "db"
+require "json"
 require "./base_column"
 require "./index"
 require "./foreign_key"
@@ -33,9 +34,10 @@ module CQL
               Float64.class |
               Int32.class |
               Int64.class |
-              Slice(UInt8) |
+              Slice(UInt8).class |
               String.class |
               Time.class |
+              Time::Span.class |
               UUID.class |
               Nil.class |
               JSON::Any.class

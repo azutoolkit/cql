@@ -432,7 +432,12 @@ module Expression
     end
 
     def visit(node : TruncateTable) : String
-      @query = "TRUNCATE TABLE #{node.table.table_name}"
+      case @adapter
+      when CQL::Adapter::SQLite
+        @query = "DELETE FROM #{node.table.table_name}"
+      else
+        @query = "TRUNCATE TABLE #{node.table.table_name}"
+      end
     end
 
     # Add support for AlterTable

@@ -1,3 +1,6 @@
+require "./base_column"
+require "./schema"
+
 module CQL
   # Represents a table in the database.
   # This class is responsible for handling table creation, modification, and deletion.
@@ -44,15 +47,40 @@ module CQL
 
     private getter schema : Schema
 
+    # Creates a new table instance.
+    # - **@param** table_name [Symbol] The name of the table
+    # - **@param** schema [Schema] The schema this table belongs to
+    # - **@param** as_name [String, nil] An optional alias for the table
+    # - **@raise** [Error] If the table name is invalid
+    #
+    # **Example**
+    # ```
+    # table = Table.new(:users, schema)
+    # table = Table.new(:users, schema, as: "user_table")
+    # ```
     def initialize(@table_name : Symbol, @schema : Schema, @as_name : String? = nil)
+      validate_table_name!
     end
 
-    # Adds a new column to the table.
-    # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** type [Any] the data type of the column
+    private def validate_table_name!
+      if table_name.to_s.empty?
+        raise Error.new("Table name cannot be empty")
+      end
+      if table_name.to_s.includes?(" ")
+        raise Error.new("Table name cannot contain spaces")
+      end
+      if table_name.to_s[0].ascii_number?
+        raise Error.new("Table name cannot start with a number")
+      end
+    end
+
+    # Adds a new primary key column to the table.
+    # - **@param** name [Symbol] the name of the column to be added (default: :id)
+    # - **@param** type [T.class] the data type of the column (default: Int64)
     # - **@param** auto_increment [Bool] whether the column should auto increment (default: true)
     # - **@param** as_name [String, nil] an optional alias for the column
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: true)
+    # - **@return** [PrimaryKey(T)] the new primary key column
     #
     # **Example** Adding a new primary key column
     #
@@ -63,11 +91,9 @@ module CQL
     def primary(
       name : Symbol = :id,
       type : T.class = Int64,
-      auto_increment : Bool = true,
-      as as_name = nil,
-      unique : Bool = true
+      auto_increment : Bool = true
     ) forall T
-      primary = PrimaryKey(T).new(name, type, as_name, auto_increment, unique)
+      primary = PrimaryKey(T).new(name: name, type: type, auto_increment: auto_increment)
       primary.table = self
       @primary = primary
       @columns[name] = @primary
@@ -380,8 +406,9 @@ module CQL
     # add_index([:email, :username], unique: true)
     # add_index([:email, :username], unique: true, table: users)
     # ```
-    def add_index(columns : Array(Symbol), unique : Bool = false, table : Table = self)
-      Index.new(table, columns, unique)
+    def add_index(columns : Array(Symbol), unique : Bool = false)
+      index = Index.new(self, columns, unique, nil)
+      index
     end
 
     # Generates the SQL to create the table.
@@ -478,7 +505,7 @@ module CQL
     def truncate!
       Log.debug { "Truncating table #{table_name}" }
       schema.exec "#{truncate_sql};"
-      schema.tables.delete[table_name]
+      schema.tables.delete(table_name)
     end
 
     # Gets table expression for Sql query generation
