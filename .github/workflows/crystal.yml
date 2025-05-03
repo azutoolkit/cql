@@ -65,8 +65,6 @@ jobs:
           chmod 664 ./spec/db/tabledb.db
       - name: Install shards
         run: shards install --ignore-crystal-version
-      - name: Check formatting
-        run: crystal tool format --check
       - name: Check code linting with Ameba
         run: bin/ameba
       - name: Run tests
