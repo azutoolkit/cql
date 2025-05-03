@@ -51,11 +51,6 @@ jobs:
           path: ~/.cache/shards
           key: ${{ runner.os }}-shards-${{ hashFiles('shard.yml') }}
           restore-keys: ${{ runner.os }}-shards-${{ matrix.crystal }}
-
-      - name: Update package list and install SQLite and development files
-        run: |
-          apt-get update
-          apt-get install -y sqlite3 libsqlite3-dev
       - name: Verify SQLite installation
         run: sqlite3 --version
       - name: Create SQLite databases
