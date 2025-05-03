@@ -17,9 +17,13 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    container:
-      image: crystallang/crystal
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        crystal: ["1.15.1"]
+
+    runs-on: ${{ matrix.os }}
     services:
       postgres:
         image: postgres
@@ -35,7 +39,19 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     steps:
-      - uses: actions/checkout@v4
+      - name: Download source
+        uses: actions/checkout@v4
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: ${{ matrix.crystal }}
+      - name: Cache shards
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/shards
+          key: ${{ runner.os }}-shards-${{ hashFiles('shard.yml') }}
+          restore-keys: ${{ runner.os }}-shards-${{ matrix.crystal }}
+
       - name: Update package list and install SQLite and development files
         run: |
           apt-get update
@@ -44,17 +60,17 @@ jobs:
         run: sqlite3 --version
       - name: Create SQLite databases
         run: |
-          touch ./spec/db/northwind.db
-          touch ./spec/db/data.db
-          touch ./spec/db/billing.db
-          touch ./spec/db/tabledb.db
-          chmod 664 ./spec/db/northwind.db
-          chmod 664 ./spec/db/data.db
-          chmod 664 ./spec/db/billing.db
-          chmod 664 ./spec/db/tabledb.db
-      - name: Install dependencies
-        run: shards install
-      - name: Check code style
+          touch ./spec/support/db/northwind.db
+          touch ./spec/support/db/data.db
+          touch ./spec/support/db/billing.db
+          touch ./spec/support/db/tabledb.db
+          chmod 664 ./spec/support/db/northwind.db
+          chmod 664 ./spec/support/db/data.db
+          chmod 664 ./spec/support/db/billing.db
+          chmod 664 ./spec/support/db/tabledb.db
+      - name: Install shards
+        run: shards install --ignore-crystal-version
+      - name: Check formatting
         run: crystal tool format --check
       - name: Check code linting with Ameba
         run: bin/ameba
