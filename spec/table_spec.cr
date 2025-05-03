@@ -120,21 +120,21 @@ describe CQL::Table do
 
       customers = [
         {
-          :name => "John",
-          :city => "New York",
-          :email => "john@example.com",
-          :balance => 100,
+          :name       => "John",
+          :city       => "New York",
+          :email      => "john@example.com",
+          :balance    => 100,
           :created_at => Time.local,
-          :updated_at => Time.local
+          :updated_at => Time.local,
         } of Symbol => DB::Any,
         {
-          :name => "Jane",
-          :city => "New York",
-          :email => "jane@example.com",
-          :balance => 200,
+          :name       => "Jane",
+          :city       => "New York",
+          :email      => "jane@example.com",
+          :balance    => 200,
           :created_at => Time.local,
-          :updated_at => Time.local
-        } of Symbol => DB::Any
+          :updated_at => Time.local,
+        } of Symbol => DB::Any,
       ]
 
       TableDB
