@@ -41,6 +41,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y sqlite3 libsqlite3-dev
+          apt-get install -y postgresql-client mysql-client
       - name: Verify SQLite installation
         run: sqlite3 --version
       - name: Create SQLite databases
