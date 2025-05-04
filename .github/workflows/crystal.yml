@@ -17,13 +17,10 @@ concurrency:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        crystal: ["1.15.1"]
+    runs-on: ubuntu-latest
+    container:
+      image: crystallang/crystal:1.15.1-alpine
 
-    runs-on: ${{ matrix.os }}
     services:
       postgres:
         image: postgres
@@ -39,12 +36,11 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     steps:
-      - name: Download source
-        uses: actions/checkout@v4
-      - name: Install Crystal
-        uses: crystal-lang/install-crystal@v1
-        with:
-          crystal: ${{ matrix.crystal }}
+      - uses: actions/checkout@v4
+      - name: Update package list and install SQLite and development files
+        run: |
+          apt-get update
+          apt-get install -y sqlite3 libsqlite3-dev
       - name: Verify SQLite installation
         run: sqlite3 --version
       - name: Create SQLite databases
@@ -57,10 +53,12 @@ jobs:
           chmod 664 ./spec/db/data.db
           chmod 664 ./spec/db/billing.db
           chmod 664 ./spec/db/tabledb.db
-      - name: Install shards
-        run: shards install --ignore-crystal-version
+      - name: Install dependencies
+        run: shards install
+      - name: Check code style
+        run: crystal tool format --check
       - name: Check code linting with Ameba
-        run: bin/ameba --fix -f progress
+        run: bin/ameba
       - name: Run tests
         env:
           DATABASE_URL: postgres://example:example@postgres:5432/example
