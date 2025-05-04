@@ -17,13 +17,10 @@ concurrency:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        crystal: ["1.15.1"]
+    runs-on: ubuntu-latest
+    container:
+      image: crystallang/crystal:1.15.1
 
-    runs-on: ${{ matrix.os }}
     services:
       postgres:
         image: postgres
@@ -39,12 +36,11 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     steps:
-      - name: Download source
-        uses: actions/checkout@v4
-      - name: Install Crystal
-        uses: crystal-lang/install-crystal@v1
-        with:
-          crystal: ${{ matrix.crystal }}
+      - uses: actions/checkout@v4
+      - name: Update package list and install SQLite and development files
+        run: |
+          apt-get update
+          apt-get install -y sqlite3 libsqlite3-dev
       - name: Verify SQLite installation
         run: sqlite3 --version
       - name: Create SQLite databases
@@ -62,7 +58,14 @@ jobs:
       - name: Check formatting
         run: crystal tool format --check
       - name: Check code linting with Ameba
-        run: bin/ameba --fix -f progress
+        run: bin/ameba
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h postgres -U example && break
+            echo "Waiting for postgres..."
+            sleep 1
+          done
       - name: Run tests
         env:
           DATABASE_URL: postgres://example:example@postgres:5432/example

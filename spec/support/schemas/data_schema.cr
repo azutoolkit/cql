@@ -5,6 +5,7 @@ Data = CQL::Schema.define(
   table :customers do
     primary :id, Int32
     column :name, String
+    column :email, String
     column :city, String
     column :balance, Int32
     timestamps

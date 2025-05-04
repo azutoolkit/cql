@@ -50,6 +50,7 @@ describe CQL::Schema do
       .into(:customers)
       .values(
         name: customer.name,
+        email: customer.email,
         city: customer.city,
         balance: customer.balance
       ).commit
@@ -68,6 +69,7 @@ describe CQL::Schema do
       .into(:customers)
       .values(
         name: customer.name,
+        email: customer.email,
         city: customer.city,
         balance: customer.balance
       ).commit
@@ -78,7 +80,7 @@ describe CQL::Schema do
 
   it "creates a schema" do
     Data.tables.size.should eq(2)
-    Data.tables[:customers].columns.size.should eq(6)
+    Data.tables[:customers].columns.size.should eq(7)
   end
 
   it "add a column to an existing table" do
@@ -90,7 +92,7 @@ describe CQL::Schema do
     end
 
     column_exists.call(:country, :customers).should eq(1)
-    Data.tables[:customers].columns.size.should eq(7)
+    Data.tables[:customers].columns.size.should eq(8)
   end
 
   it "drops a column from an existing table" do
@@ -104,7 +106,7 @@ describe CQL::Schema do
     end
 
     column_exists.call(:city, :customers).should eq(0)
-    Data.tables[:customers].columns.size.should eq(6)
+    Data.tables[:customers].columns.size.should eq(7)
   end
 
   it "adds an index to a table" do
