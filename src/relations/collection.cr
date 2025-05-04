@@ -46,10 +46,10 @@ module CQL::Relations
     # )
     # ```
     def initialize(
-      @key : Symbol,                                                         # movie_id
-      @id : Pk,                                                              # movie id value
-      @cascade : Bool = false,                                               # delete associated records
-      @query : CQL::Query = CQL::Query.new(Target.schema).from(Target.table) # query object
+      @key : Symbol,                                                          # movie_id
+      @id : Pk,                                                               # movie id value
+      @cascade : Bool = false,                                                # delete associated records
+      @query : CQL::Query = CQL::Query.new(Target.schema).from(Target.table), # query object
     )
       @target_table = Target.table
       @records = reload
@@ -357,11 +357,11 @@ module CQL::Relations
     # )
     # ```
     def initialize(
-      @key : Symbol,                                                         # movie_id
-      @id : Pk,                                                              # moive id value
-      @target_key : Symbol,                                                  # actor_id
-      @cascade : Bool = false,                                               # delete associated records
-      @query : CQL::Query = CQL::Query.new(Target.schema).from(Target.table) # query object
+      @key : Symbol,                                                          # movie_id
+      @id : Pk,                                                               # moive id value
+      @target_key : Symbol,                                                   # actor_id
+      @cascade : Bool = false,                                                # delete associated records
+      @query : CQL::Query = CQL::Query.new(Target.schema).from(Target.table), # query object
     )
       super(@key, @id, @cascade, @query)
       @through_table = Through.table

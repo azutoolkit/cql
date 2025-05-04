@@ -49,7 +49,7 @@ module CQL
       default : DB::Any = nil,
       unique : Bool = false,
       size : Int32? = nil,
-      index : Bool = false
+      index : Bool = false,
     )
       @table.column(name, type, as_name, null, default, unique, size)
       col = @table.columns[name]
@@ -140,7 +140,7 @@ module CQL
       table : Symbol,
       references : Array(Symbol),
       on_delete : String = "NO ACTION",
-      on_update : String = "NO ACTION"
+      on_update : String = "NO ACTION",
     )
       fk = ForeignKey.new(name, columns, table, references, on_delete, on_update)
       @actions << Expression::AddForeignKey.new(fk)

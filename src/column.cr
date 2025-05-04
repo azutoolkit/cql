@@ -72,7 +72,7 @@ module CQL
       @default : DB::Any = nil,
       @unique : Bool = false,
       @size : Int32? = nil,
-      @index : Index? = nil
+      @index : Index? = nil,
     )
     end
 

@@ -143,7 +143,7 @@ module CQL
         @name : String,
         @version : Int32,
         @created_at = Time.local,
-        @updated_at = Time.local
+        @updated_at = Time.local,
       )
       end
     end

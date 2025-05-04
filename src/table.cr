@@ -91,7 +91,7 @@ module CQL
     def primary(
       name : Symbol = :id,
       type : T.class = Int64,
-      auto_increment : Bool = true
+      auto_increment : Bool = true,
     ) forall T
       primary = PrimaryKey(T).new(name: name, type: type, auto_increment: auto_increment)
       primary.table = self
@@ -124,7 +124,7 @@ module CQL
       default : DB::Any = nil,
       unique : Bool = false,
       size : Int32? = nil,
-      index : Bool = false
+      index : Bool = false,
     ) forall T
       col = Column(T).new(name, T, as_name, null, default, unique, size)
       col.table = self

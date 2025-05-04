@@ -20,7 +20,7 @@ module CQL
       @as_name : String? = nil,
       @auto_increment : Bool = true,
       @unique : Bool = true,
-      @default : DB::Any = nil
+      @default : DB::Any = nil,
     )
     end
 

@@ -181,7 +181,7 @@ module CQL
     # ```
     def update_by(
       where_attrs : Hash(Symbol, DB::Any),
-      update_attrs : Hash(Symbol, DB::Any)
+      update_attrs : Hash(Symbol, DB::Any),
     )
       update.set(**update_attrs).where(**where_attrs).commit
     end

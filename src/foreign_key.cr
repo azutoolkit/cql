@@ -40,7 +40,7 @@ module CQL
       @table : Symbol,
       @references : Array(Symbol),
       @on_delete : String = "NO ACTION",
-      @on_update : String = "NO ACTION"
+      @on_update : String = "NO ACTION",
     )
     end
   end

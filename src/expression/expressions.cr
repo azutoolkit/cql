@@ -375,7 +375,7 @@ module Expression
       @columns : Set(Column) = Set(Column).new,
       @values : Array(Array(DB::Any)) = [] of Array(DB::Any),
       @back : Array(Column) = Array(Column).new,
-      @query : Query? = nil
+      @query : Query? = nil,
     )
     end
 
@@ -394,7 +394,7 @@ module Expression
       @table : Table,
       @setters : Array(Setter) = [] of Setter,
       @where : Where? = nil,
-      @back : Set(Column) = Set(Column).new
+      @back : Set(Column) = Set(Column).new,
     )
     end
 
@@ -547,7 +547,7 @@ module Expression
       @joins : Array(Join) = [] of Join,
       @limit : Limit? = nil,
       @distinct : Bool = false,
-      @aggr_columns : Array(Aggregate) = [] of Aggregate
+      @aggr_columns : Array(Aggregate) = [] of Aggregate,
     )
     end
 
