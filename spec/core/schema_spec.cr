@@ -225,7 +225,13 @@ describe CQL::Schema do
     end
 
     it "handles structure dump errors gracefully" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      invalid_path = "/invalid/path/structure.sql"
+      File.delete(invalid_path) if File.exists?(invalid_path)
+
+      schema = CQL::Schema.define(
+          :test_db,
+          adapter: CQL::Adapter::SQLite,
+          uri: "sqlite3://#{db_file}") do
         table :users do
           primary :id, Int32
           column :name, String
@@ -233,7 +239,7 @@ describe CQL::Schema do
       end
 
       expect_raises(CQL::Schema::Error) do
-        schema.dump_structure("/invalid/path/structure.sql")
+        schema.dump_structure(invalid_path)
       end
     end
   end
