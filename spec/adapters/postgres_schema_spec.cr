@@ -5,8 +5,10 @@ struct UserPref
   include DB::Serializable
 
   property id : Int64
-  getter preferences do |value|
-    JSON.parse(value)
+  property preferences : JSON::Any
+
+  def initialize(@id : Int64, preferences_value : String)
+    @preferences = JSON.parse(preferences_value)
   end
 end
 
