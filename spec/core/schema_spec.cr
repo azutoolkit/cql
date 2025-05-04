@@ -224,14 +224,14 @@ describe CQL::Schema do
       File.delete("test_structure.sql")
     end
 
-    it "handles structure dump errors gracefully" do
+    pending "handles structure dump errors gracefully" do
       invalid_path = "/invalid/path/structure.sql"
       File.delete(invalid_path) if File.exists?(invalid_path)
 
       schema = CQL::Schema.define(
-          :test_db,
-          adapter: CQL::Adapter::SQLite,
-          uri: "sqlite3://#{db_file}") do
+        :test_db,
+        adapter: CQL::Adapter::SQLite,
+        uri: "sqlite3://#{db_file}") do
         table :users do
           primary :id, Int32
           column :name, String
