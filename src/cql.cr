@@ -1,25 +1,32 @@
-require "log"
-require "uuid"
-require "ulid"
+# Crystal Standard Library
+
 require "db"
 require "json"
-require "./base_column"
-require "./index"
-require "./foreign_key"
-require "./column"
-require "./primary_key"
-require "./alter_table"
-require "./table"
+require "log"
+require "ulid"
+require "uuid"
+require "colorize"
+require "tallboy"
+
 require "./expression"
-require "./query"
+require "./exceptions"
+require "./error_handler"
+require "./converters/*"
+require "./alter_table"
 require "./insert"
 require "./update"
 require "./delete"
-require "./schema"
-require "./repository"
-require "./record"
-require "./relations"
+require "./base_column"
+require "./column"
+require "./primary_key"
+require "./index"
+require "./foreign_key"
+require "./table"
 require "./migrations"
+require "./schema"
+require "./query"
+require "./repository"
+require "./active_record/model"
 
 module CQL
   # :nodoc:
@@ -106,6 +113,19 @@ module CQL
     # ```
     def sql_type(type) : String
       DB_TYPE_MAPPING[self][type]
+    end
+
+    def dialect
+      case self
+      when SQLite
+        Expression::SqliteDialect.new
+      when MySql
+        Expression::MySqlDialect.new
+      when Postgres
+        Expression::PostgresDialect.new
+      else
+        raise "Unsupported adapter: #{self}"
+      end
     end
   end
 end
