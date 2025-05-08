@@ -49,7 +49,8 @@ class ScopesPost
     @body : String,
     @category : String,
     @published = false,
-    @created_at = Time.utc)
+    @created_at = Time.utc,
+  )
   end
 end
 
@@ -137,7 +138,6 @@ describe CQL::ActiveRecord::Scopes do
     all_posts = programming_posts.all
     all_posts.first.title.should eq("Getting Started with Crystal")
     programming_posts.count.should eq(2)
-
 
     # Published, with title "Crystal", and by category "Programming"
     crystal_programming_posts = ScopesPost.published.with_title("Crystal").by_category("Programming")

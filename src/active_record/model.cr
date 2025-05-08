@@ -10,6 +10,7 @@ require "./persistence"
 require "./identifyable"
 require "./relations"
 require "./scopes"
+
 module CQL
   module ActiveRecord
     # The Model module provides Active Record functionality for your models.
