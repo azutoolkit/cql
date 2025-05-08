@@ -29,7 +29,7 @@ module CQL
         # ```
         # User.create(name: "Alice", email: "alice@example.com")
         # ```
-        def self.create!(attrs : Hash(Symbol, DB::Any))
+        def self.create!(attrs : Hash(Symbol, DB::Any)) : Pk
           id = CQL::Insert
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
@@ -53,7 +53,7 @@ module CQL
         # ```
         # User.create(name: "Alice", email: "alice@example.com")
         # ```
-        def self.create!(**fields)
+        def self.create!(**fields) : Pk
           id = CQL::Insert
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
@@ -78,7 +78,7 @@ module CQL
         # user = User.new(name: "Alice", email: "alice@example.com")
         # User.create(user)
         # ```
-        def self.create!(record : {{@type.id}})
+        def self.create!(record : {{@type.id}}) : {{@type.id}}
           attrs = record.attributes
           attrs.delete(:id)
 
@@ -90,11 +90,13 @@ module CQL
             .commit
             .last_insert_id
 
-          record.id = if Pk.is_a?(Int32.class)
+          new_id = if Pk.is_a?(Int32.class)
             id.to_i32
           else
             id.as(Pk)
           end
+
+          record.id = new_id.as(Pk)
 
           record.as({{@type.id}})
         end
@@ -109,7 +111,7 @@ module CQL
         # ```
         # User.create!(name: "Alice", email: "alice@example.com")
         # ```
-        def self.create!(**fields)
+        def self.create!(**fields) : Pk
           id = CQL::Insert
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
