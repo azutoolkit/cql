@@ -9,7 +9,7 @@ require "./callbacks"
 require "./persistence"
 require "./identifyable"
 require "./relations"
-
+require "./scopes"
 module CQL
   module ActiveRecord
     # The Model module provides Active Record functionality for your models.
@@ -63,6 +63,7 @@ module CQL
         include CQL::ActiveRecord::Deleteable
         include CQL::ActiveRecord::Persistence
         include CQL::ActiveRecord::Relations
+        include CQL::ActiveRecord::Scopes
       end
     end
   end

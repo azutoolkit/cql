@@ -37,7 +37,6 @@ module CQL
     # ```
     module Queryable
       macro included
-
         # Return a new query object for the current table
         # - **@return** [Query] The query object
         #
@@ -349,6 +348,8 @@ module CQL
       # and knows about the model type it's querying
       class ChainableQuery(Target)
         @model_class : Target.class = Target
+
+        forward_missing_to Target
 
         def initialize(@query : CQL::Query)
         end
