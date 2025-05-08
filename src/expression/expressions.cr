@@ -39,8 +39,9 @@ module Expression
 
   class Column < Node
     getter column : CQL::BaseColumn
+    getter alias_name : String?
 
-    def initialize(@column : CQL::BaseColumn)
+    def initialize(@column : CQL::BaseColumn, @alias_name : String? = nil)
     end
 
     def accept(visitor : Visitor)
@@ -86,9 +87,9 @@ module Expression
   end
 
   class From < Node
-    getter tables : Array(CQL::Table)
+    getter tables : Array(Expression::Table)
 
-    def initialize(@tables : Array(CQL::Table))
+    def initialize(@tables : Array(Expression::Table))
     end
 
     def accept(visitor : Visitor)
@@ -99,7 +100,7 @@ module Expression
   class GroupBy < Node
     getter columns : Array(Column)
 
-    def initialize(@columns : Array(Column) = [] of CQL::BaseColumn)
+    def initialize(@columns : Array(Column) = [] of Column)
     end
 
     def accept(visitor : Visitor)
@@ -348,8 +349,9 @@ module Expression
 
   class Table < Node
     getter table : CQL::Table
+    getter alias_name : String?
 
-    def initialize(@table : CQL::Table)
+    def initialize(@table : CQL::Table, @alias_name : String? = nil)
     end
 
     def accept(visitor : Visitor)
@@ -531,23 +533,23 @@ module Expression
     getter where : Where? = nil
     getter group_by : GroupBy? = nil
     getter having : Having? = nil
-    getter order_by : OrderBy
+    getter order_by : OrderBy?
     getter joins : Array(Join) = [] of Join
     getter limit : Limit? = nil
     getter? distinct : Bool = false
     getter aggr_columns : Array(Aggregate) = [] of Aggregate
 
     def initialize(
-      @columns : Array(Column) = [] of CQL::BaseColumn,
-      @from : From = [] of CQL::Table,
-      @where : Where? = nil,
-      @group_by : GroupBy? = nil,
-      @having : Having? = nil,
-      @order_by : OrderBy? = nil,
-      @joins : Array(Join) = [] of Join,
-      @limit : Limit? = nil,
-      @distinct : Bool = false,
-      @aggr_columns : Array(Aggregate) = [] of Aggregate,
+      @columns : Array(Column),
+      @from : From,
+      @where : Where?,
+      @group_by : GroupBy?,
+      @having : Having?,
+      @order_by : OrderBy?,
+      @joins : Array(Join),
+      @limit : Limit?,
+      @distinct : Bool,
+      @aggr_columns : Array(Aggregate),
     )
     end
 
