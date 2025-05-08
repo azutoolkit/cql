@@ -344,6 +344,39 @@ module CQL
         end
       end
 
+      macro create_scope_method(name_ident, scope_proc_code)
+        def {{name_ident.id}}(*args)
+          # `self` here is an instance of ::CQL::ChainableQuery(CURRENT_MODEL_CLASS).
+          # `self.query` should be the current accumulated CQL::Query.
+          # `self.model_class` should be CURRENT_MODEL_CLASS.
+
+          # Execute the scope_proc_code. `self` inside the proc is CURRENT_MODEL_CLASS.
+          # This will typically return a ChainableQuery(CURRENT_MODEL_CLASS) or a raw CQL::Query.
+          scope_logic_result = ({{scope_proc_code}}).call(*args)
+
+          cql_query_fragment_for_scope : ::CQL::Query
+          if scope_logic_result.is_a?(::CQL::Query)
+            cql_query_fragment_for_scope = scope_logic_result
+          elsif scope_logic_result.is_a?(ChainableQuery({{@type.id}}))
+            # Assumes ChainableQuery has a `query` getter for its underlying CQL::Query.
+            cql_query_fragment_for_scope = scope_logic_result.query
+          else
+            raise "Scope '{{name_ident.id}}' for model #{CURRENT_MODEL_CLASS}, when applied in a chain, " \
+                  "did not produce a compatible CQL::Query or ChainableQuery(#{{{@type.id}}}). " \
+                  "Received: #{scope_logic_result.class}"
+          end
+
+          # Merge the new scope's CQL query fragment into the existing query of this ChainableQuery instance.
+          # Assumes `self.query.merge(...)` returns a new, merged CQL::Query instance.
+          current_underlying_query = self.query # Assumes .query getter
+          new_underlying_query = current_underlying_query.merge(cql_query_fragment_for_scope)
+
+          # Return a new ChainableQuery instance with the merged query, promoting immutability.
+          # Assumes ChainableQuery(ModelType).new(cql_query) constructor.
+          ChainableQuery({{@type.id}}).new(new_underlying_query)
+        end
+      end
+
       # A chainable query class that wraps a CQL::Query
       # and knows about the model type it's querying
       class ChainableQuery(Target)

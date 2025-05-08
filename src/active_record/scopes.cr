@@ -1,21 +1,33 @@
 module CQL
   module ActiveRecord
     module Scopes
-      macro scope(name_ident, scope_proc)
-        def self.{{name_ident.id}}(*args)
-          scope_result = {{scope_proc}}.call(*args)
+      macro included
+        # Determine the current model class where the scope is being defined
+        CURRENT_MODEL_CLASS = {{@type.id}}
+      end
 
-          if scope_result.is_a?(::CQL::Query)
-            # If the scope's proc returns a base CQL::Query,
-            # wrap it in ChainableQuery to make it chainable.
-            # `self` refers to the model class (e.g., Post).
-            ChainableQuery({{@type.id}}).new(scope_result)
+      macro scope(name_ident, scope_proc_code)
+
+
+        # I. Define the class method on the model (e.g., Post.published)
+        # This method starts a new query chain.
+        def self.{{name_ident.id}}(*args)
+          # The scope_proc_code (e.g., `-> { where(published: true) }`) is invoked.
+          # `self` inside the proc will refer to CURRENT_MODEL_CLASS due to lexical scoping.
+          scope_call_result = ({{scope_proc_code}}).call(*args)
+
+          if scope_call_result.is_a?(CQL::Query)
+            # Proc directly returned a raw CQL::Query. Wrap it in ChainableQuery.
+            # Assumes ChainableQuery(ModelType).new(cql_query) constructor.
+            ChainableQuery({{@type.id}}).new(scope_call_result)
           else
-            # Otherwise, assume the proc already returned a ChainableQuery
-            # or another intended type.
-            scope_result
+            # Assume scope_call_result is already a ChainableQuery(CURRENT_MODEL_CLASS) instance
+            # or a compatible type as per the original macro's logic.
+            scope_call_result
           end
         end
+
+        create_scope_method(name_ident, scope_proc_code)
       end
     end
   end

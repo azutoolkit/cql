@@ -25,18 +25,19 @@ module CQL
   # => John
   # ```
   class Query
-    getter columns : Array(BaseColumn) = [] of BaseColumn
+    getter columns : Array(CQL::BaseColumn) = [] of CQL::BaseColumn
+    getter schema : Schema
     # Ensure alias is String
-    alias QueryTableInfo = {table: Table, alias: String}
+    alias QueryTableInfo = {table: CQL::Table, alias: String}
     getter query_tables : Hash(String, QueryTableInfo) = {} of String => QueryTableInfo # Key is alias (String)
-    getter where : Expression::Where? = nil
-    getter group_by : Array(BaseColumn) = [] of BaseColumn
-    getter having : Expression::Having? = nil
-    getter order_by : Hash(BaseColumn, Expression::OrderDirection) = {} of BaseColumn => Expression::OrderDirection
+    property where : Expression::Where? = nil
+    getter group_by : Array(CQL::BaseColumn) = [] of CQL::BaseColumn
+    property having : Expression::Having? = nil
+    getter order_by : Hash(CQL::BaseColumn, Expression::OrderDirection) = {} of CQL::BaseColumn => Expression::OrderDirection
     getter joins : Array(Expression::Join) = [] of Expression::Join
-    getter limit : Int32? = nil
-    getter offset : Int32? = nil
-    getter? distinct : Bool = false
+    property limit : Int32? = nil
+    property offset : Int32? = nil
+    property? distinct : Bool = false
     getter aggr_columns : Array(Expression::Aggregate) = [] of Expression::Aggregate
 
     # Initializes the `Query` object with the provided schema.
@@ -616,6 +617,33 @@ module CQL
       self
     end
 
+    # Merges the properties of another Query object into this one.
+    # The current query is modified in place.
+    #
+    # - **@param** other_query [Query] The query object to merge from.
+    # - **@return** [Query] The current query object, modified.
+    #
+    # **Behavior:**
+    # - **Schema:** Must be the same for both queries.
+    # - **Distinct:** Becomes `true` if either query is distinct.
+    # - **Select Columns (`@columns`):** Concatenated and uniqued by object identity.
+    # - **Aggregate Columns (`@aggr_columns`):** Concatenated and uniqued by object identity.
+    # - **Query Tables (`@query_tables`):** Merged. Conflicts on alias pointing to different tables raise an error.
+    # - **Joins (`@joins`):** Concatenated and uniqued by object identity.
+    # - **Where (`@where`):** Conditions are combined using `AND`.
+    # - **Group By (`@group_by`):** Concatenated and uniqued by object identity.
+    # - **Having (`@having`):** Conditions are combined using `AND`.
+    # - **Order By (`@order_by`):** Entries from `other_query` take precedence.
+    # - **Limit (`@limit`):** The minimum of the two limits is taken if both are set; otherwise, the set limit is used.
+    # - **Offset (`@offset`):** The `other_query`'s offset takes precedence if set.
+    #
+    # ameba/disable Metrics/CyclomaticComplexity
+    def merge(other_query : Query) : Query
+      MergeQuery.new(self, other_query).execute
+    end
+
+    # ameba/enable Metrics/CyclomaticComplexity
+
     # Builds the final query expression.
     # - **@return** [Expression::Query] The query expression
     #
@@ -864,7 +892,7 @@ module CQL
         column
       else
         # Search across all tables/aliases in the query (using String aliases)
-        found_column : BaseColumn? = nil
+        found_column : CQL::BaseColumn? = nil
         found_in_alias_str : String? = nil
         @query_tables.each do |current_alias_str, info|
           # Pass String column name
@@ -883,7 +911,7 @@ module CQL
     end
 
     # Helper to find column in table using String comparison
-    private def find_column_in_table(table : Table, column_name_str : String) : BaseColumn?
+    private def find_column_in_table(table : CQL::Table, column_name_str : String) : CQL::BaseColumn?
       # Iterate and compare strings
       table.columns.each_value do |col|
         return col if col.name.to_s == column_name_str
@@ -963,7 +991,7 @@ module CQL
     end
 
     # Finds the String alias for a given Table object
-    private def find_alias_for_table(table_to_find : Table) : String
+    private def find_alias_for_table(table_to_find : CQL::Table) : String
       @query_tables.each do |alias_str, info|
         return alias_str if info[:table].object_id == table_to_find.object_id
       end
@@ -1061,7 +1089,7 @@ module CQL
         # find_alias_for_table returns String alias
         left_alias_str = find_alias_for_table(left_col_def.table.not_nil!)
         right_expr = case right_val_or_col_def
-                     when BaseColumn
+                     when CQL::BaseColumn
                        # find_alias_for_table returns String alias
                        right_alias_str = find_alias_for_table(right_val_or_col_def.table.not_nil!)
                        # Create Expression::Column with String alias
@@ -1119,8 +1147,8 @@ module CQL
       end
     end
 
-    # Expects String alias_name
-    private def add_join_expression(table : Table, alias_name_str : String, type : Expression::JoinType, condition : Expression::Condition)
+    # Expects String alias
+    private def add_join_expression(table : CQL::Table, alias_name_str : String, type : Expression::JoinType, condition : Expression::Condition)
       # Create Expression::Table with String alias
       join_table_expr = Expression::Table.new(table, alias_name_str)
       @joins << Expression::Join.new(type, join_table_expr, condition)
@@ -1129,7 +1157,7 @@ module CQL
     end
 
     # This seems okay, it deals with schema relationships (Symbols)
-    private def find_foreign_key_link(target_table : Table) : ForeignKey
+    private def find_foreign_key_link(target_table : CQL::Table) : ForeignKey
       possible_links = [] of ForeignKey
       existing_aliases_str = @query_tables.keys # Get String aliases
 
