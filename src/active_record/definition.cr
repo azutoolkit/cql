@@ -67,6 +67,23 @@ module CQL
         def self.build(**fields)
           new(**fields)
         end
+
+        # Build a new object of type T with the given attributes
+        # - **@param** hash_attrs [Hash(Symbol, DB::Any)] The attributes to use
+        # - **@return** [T] The new object
+        #
+        # **Example** Building a new user object
+        #
+        # ```
+        # User.from_hash({name: "Alice", email: "alice@example.com"})
+        # ```
+        def self.from_hash(hash_attrs : Hash(Symbol, DB::Any))
+          {% for field in @type.instance_vars %}
+            {% if field.type.is_a?(CQL::Column) %}
+              @{{field.name}} = hash_attrs[{{field.name.stringify}}]
+            {% end %}
+          {% end %}
+        end
       end
     end
   end

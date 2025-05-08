@@ -12,60 +12,77 @@ module CQL
         # ```
         # user = User.find_or_create_by(email: "user@example.com")
         # ```
-        def self.find_or_create_by(**attributes)
+        def self.find_or_create_by(**attributes) : {{@type.id}}
           find_by(**attributes) || create!(**attributes)
         end
 
-        def self.find_or_create_by(attributes : Hash(Symbol, DB::Any))
+        def self.find_or_create_by(attributes : Hash(Symbol, DB::Any)) : {{@type.id}}
           find_by(attributes) || create!(attributes)
         end
 
         # Create a new record with given attributes
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
-        # - **@return** [PrimaryKey] The ID of the new record
+        # - **@return** [{{@type.id}}] The created record instance
         #
         # **Example** Creating a new record
         #
         # ```
-        # User.create(name: "Alice", email: "alice@example.com")
+        # user = User.create!(name: "Alice", email: "alice@example.com")
         # ```
-        def self.create!(attrs : Hash(Symbol, DB::Any)) : Pk
-          id = CQL::Insert
-            .new({{@type.id}}.schema)
-            .into({{@type.id}}.table)
-            .values(attrs)
-            .commit
-            .last_insert_id
+        def self.create!(attrs : Hash(Symbol, DB::Any)) : {{@type.id}}
+          schema = {{@type.id}}.schema
+          table_name = {{@type.id}}.table
 
-          if Pk.is_a?(Int32.class)
-            id.to_i32
-          else
-            id.as(Pk)
-          end
+          insertable_attrs = attrs.dup
+          insertable_attrs.delete(:id)
+
+          # Fallback for non-PostgreSQL
+          pk_id = CQL::Insert.new(schema)
+            .into(table_name)
+            .values(insertable_attrs)
+            .commit
+            .last_insert_id # Int64
+
+          actual_pk = if Pk.is_a?(Int32.class)
+                        pk_id.to_i32
+                      else
+                        pk_id.as(Pk)
+                      end
+
+          {{@type.id}}.find!(actual_pk)
         end
 
         # Create a new record with given fields
-        # - **@param** fields [Hash(Symbol, DB::Any)] The fields to use
-        # - **@return** [PrimaryKey] The ID of the new record
+        # - **@param** fields [NamedTuple] The fields to use
+        # - **@return** [{{@type.id}}] The created record instance
         #
         # **Example** Creating a new record
         #
         # ```
-        # User.create(name: "Alice", email: "alice@example.com")
+        # user = User.create!(name: "Alice", email: "alice@example.com")
         # ```
-        def self.create!(**fields) : Pk
-          id = CQL::Insert
-            .new({{@type.id}}.schema)
-            .into({{@type.id}}.table)
-            .values(**fields)
-            .commit
-            .last_insert_id
+        def self.create!(**fields) : {{@type.id}}
+          schema = {{@type.id}}.schema
+          table_name = {{@type.id}}.table
 
-          if Pk.is_a?(Int32.class)
-            id.to_i32
-          else
-            id.as(Pk)
-          end
+          fields_hash = {} of Symbol => DB::Any
+          fields.each { |key, value| fields_hash[key] = value.as(DB::Any) }
+          fields_hash.delete(:id)
+
+          # Fallback for non-PostgreSQL
+          pk_id = CQL::Insert.new(schema)
+            .into(table_name)
+            .values(fields_hash)
+            .commit
+            .last_insert_id # Int64
+
+          actual_pk = if Pk.is_a?(Int32.class)
+                        pk_id.to_i32
+                      else
+                        pk_id.as(Pk)
+                      end
+
+          {{@type.id}}.find!(actual_pk)
         end
 
         # Create a new record from a model instance
@@ -111,7 +128,7 @@ module CQL
         # ```
         # User.create!(name: "Alice", email: "alice@example.com")
         # ```
-        def self.create!(**fields) : Pk
+        def self.create!(**fields) : {{@type.id}}
           id = CQL::Insert
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
@@ -119,11 +136,13 @@ module CQL
             .commit
             .last_insert_id
 
-          if Pk.is_a?(Int32.class)
+          id = if Pk.is_a?(Int32.class)
             id.to_i32
           else
             id.as(Pk)
           end
+
+          {{@type.id}}.find!(id)
         end
 
         # Create a new record with given attributes
