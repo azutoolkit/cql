@@ -20,7 +20,8 @@ module CQL
     # **Example** Using the Model module
     #
     # ```
-    # struct Post < CQL::Model(Int64)
+    # struct Post
+    #   include CQL::ActiveRecord::Model
     #   db_context AcmeDB, :posts
     #
     #   # Define attributes

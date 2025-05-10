@@ -13,7 +13,8 @@ module CQL
         # **Example** Defining the schema and table
         #
         # ```
-        # struct User < CQL::Model(Int64)
+        # struct User
+        #   include CQL::ActiveRecord::Model
         #   db_context AcmeDB, :users
         # end
         # ```
