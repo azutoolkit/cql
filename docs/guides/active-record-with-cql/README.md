@@ -23,10 +23,10 @@ This central README provides a high-level introduction. For in-depth information
 - **[Validations](./validations.md)**: Ensure data integrity by defining and using model validations.
 - **[Callbacks](./callbacks.md)**: Hook into the lifecycle of your models to trigger logic at specific events (e.g., before save, after create).
 - **[Relations](#relations)**: Define and use associations between models:
-  - [`belongs_to`](./relationships/belongsto.md)
-  - [`has_one`](./relationships/hasone.md)
-  - [`has_many`](./relationships/hasmany.md)
-  - [`many_to_many`](./relationships/manytomany.md) (covers `has_and_belongs_to_many`)
+  - [`belongs_to`](./relations/belongsto.md)
+  - [`has_one`](./relations/hasone.md)
+  - [`has_many`](./relations/hasmany.md)
+  - [`many_to_many`](./relations/manytomany.md) (covers `has_and_belongs_to_many`)
 - **[Database Migrations](./migrations.md)**: Manage your database schema changes over time.
 - **[Scopes](./scopes.md)**: Define reusable query constraints for cleaner and more readable code.
 - **[Pagination](./pagination.md)**: Easily paginate query results.
