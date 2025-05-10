@@ -165,27 +165,14 @@ module CQL
         conn.exec(sql)
       else
         @db.using_connection do |db_conn|
-          begin
-            db_conn.exec(sql)
-          rescue ex : DB::Error
-            Log.error { "Failed to execute SQL: #{sql}" }
-            Log.error { ex.message }
-            raise ConnectionError.new("Failed to execute SQL: #{ex.message}")
-          end
+          db_conn.exec(sql)
         end
       end
-
     end
 
     def exec_query(&)
       if conn = @active_connection
-        begin
-          yield conn
-        rescue ex : DB::Error
-          Log.error { "Failed to execute query" }
-          Log.error { ex.message }
-          raise ConnectionError.new("Failed to execute query: #{ex.message}")
-        end
+        yield conn
       else
         @db.using_connection do |db_conn|
           yield db_conn
@@ -261,10 +248,6 @@ module CQL
       # and perform the rollback without propagating the exception further.
       # We log it for debugging, but don't convert to ConnectionError.
       Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
-    rescue ex : DB::Error
-      Log.error { "Transaction failed" }
-      Log.error { ex.message }
-      raise ConnectionError.new("Transaction failed: #{ex.message}")
     end
 
     # Creates a new migrator for the schema.

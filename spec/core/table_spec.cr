@@ -163,7 +163,7 @@ describe CQL::Table do
       table.drop!
       check_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='customers'"
 
-      expect_raises(CQL::Schema::ConnectionError) do
+      expect_raises(DB::NoResultsError) do
         TableDB.exec_query(&.query_one(check_query, as: String))
       end
     end

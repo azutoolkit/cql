@@ -11,7 +11,7 @@ describe "CQL::ActiveRecord::Transactional" do
 
   describe ".transaction" do
     it "commits operations if the block executes successfully" do
-      TestUserTransactional.transaction do |tx|
+      TestUserTransactional.transaction do |_|
         TestUserTransactional.create!(name: "Alice Transactional")
         TestUserTransactional.create!(name: "Bob Transactional")
       end
@@ -22,7 +22,7 @@ describe "CQL::ActiveRecord::Transactional" do
     end
 
     it "rolls back operations without raising an exception" do
-      TestUserTransactional.transaction do |tx|
+      TestUserTransactional.transaction do |_|
         TestUserTransactional.create!(name: "Charlie Transactional")
         raise DB::Rollback.new("Intentional rollback")
         TestUserTransactional.create!(name: "David Transactional") # This should not be created
@@ -38,7 +38,7 @@ describe "CQL::ActiveRecord::Transactional" do
     end
 
     it "rolls back operations if DB::Rollback is raised" do
-      TestUserTransactional.transaction do |tx|
+      TestUserTransactional.transaction do |_|
         TestUserTransactional.create!(name: "Eve Transactional")
         raise DB::Rollback.new("Intentional rollback")
         TestUserTransactional.create!(name: "Frank Transactional") # This should not be created
@@ -57,7 +57,7 @@ describe "CQL::ActiveRecord::Transactional" do
 
     it "allows yielding the transaction object" do
       did_yield_tx = false
-      TestUserTransactional.transaction do |tx|
+      TestUserTransactional.transaction do |_|
         TestUserTransactional.create!(name: "Yielding Tx User")
         did_yield_tx = true
       end
@@ -74,7 +74,7 @@ describe "CQL::ActiveRecord::Transactional" do
     end
 
     it "correctly uses schema's transaction so exec calls are part of it" do
-      TestUserTransactional.transaction do |tx|
+      TestUserTransactional.transaction do |_|
         user = TestUserTransactional.create!(name: "Schema Level Test")
         # Use schema.exec directly, should be part of the same transaction
         TestUserTransactional.schema.exec("UPDATE test_users_transactional SET email = 'test@example.com' WHERE id = #{user.id.not_nil!}")
@@ -86,7 +86,7 @@ describe "CQL::ActiveRecord::Transactional" do
       reloaded_user.not_nil!.email.should eq("test@example.com")
 
       # Now test rollback part for schema.exec
-      TestUserTransactional.transaction do |tx|
+      TestUserTransactional.transaction do |_|
         user = TestUserTransactional.create!(name: "Schema Rollback Test")
         TestUserTransactional.schema.exec("UPDATE test_users_transactional SET email = 'rollback@example.com' WHERE id = #{user.id.not_nil!}")
         raise DB::Rollback.new("Intentional rollback") # This will be caught by Schema#transaction silently
