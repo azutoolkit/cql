@@ -1,3 +1,12 @@
+# Standard Lib
+require "db"
+require "uri"
+require "log"
+require "file_utils" # For Dir.mkdir_p
+
+# Internal CQL Entry Point
+require "./cql"
+
 module CQL
   # The `Schema` class represents a database schema.
   #
@@ -8,7 +17,7 @@ module CQL
   # ```
   # schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do
   #   table :users do
-  #     primary :id, Int64, auto_increment: true
+  #     primary :id, Int32, auto_increment: true
   #     column :name, String
   #     column :email, String
   #   end
@@ -28,6 +37,14 @@ module CQL
   class Schema
     Log = ::Log.for(self)
 
+    class Error < Exception; end
+
+    class InvalidURIError < Error; end
+
+    class VersionConflictError < Error; end
+
+    class ConnectionError < Error; end
+
     # - **@return** [Symbol] the name of the schema
     getter name : Symbol
 
@@ -46,6 +63,9 @@ module CQL
     # - **@return** [Expression::Generator] the expression generator
     getter gen : Expression::Generator
 
+    # - **@return** [DB::Database] the database connection pool
+    private getter db : DB::Database
+
     # Builds a new schema.
     #
     # - **@param** name [Symbol] the name of the schema
@@ -59,13 +79,13 @@ module CQL
     # ```
     # schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
     #   s.create_table :users do
-    #     primary :id, Int64, auto_increment: true
+    #     primary :id, Int32, auto_increment: true
     #     column :name, String
     #     column :email, String
     #   end
     # end
     # ```
-    def self.define(name : Symbol, uri : String, adapter : Adapter = Adapter::SQLite, version : String = "1.0", &)
+    def self.define(name : Symbol, uri : String, adapter : Adapter, version : String = "1.0", &)
       schema = new(name, uri, adapter, version)
       with schema yield
       schema
@@ -82,8 +102,36 @@ module CQL
     # ```
     # schema = CQL::Schema.new(:northwind, "sqlite3://db.sqlite3")
     # ```
-    def initialize(@name : Symbol, @uri : String, @adapter : Adapter = Adapter::SQLite, @version : String = "1.0")
+    def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0")
+      validate_uri!
       @gen = Expression::Generator.new(@adapter)
+      @db = DB.open(@uri)
+    end
+
+    def dialect
+      @adapter.dialect
+    end
+
+    # Validates the database URI format
+    private def validate_uri!
+      uri = URI.parse(@uri)
+      raise InvalidURIError.new("Invalid database URI format") unless uri.scheme && uri.path
+
+      case uri.scheme
+      when "sqlite3"
+        # Valid SQLite URI
+      when "postgres", "postgresql"
+        raise InvalidURIError.new("Missing host in PostgreSQL URI") unless uri.host
+      else
+        raise InvalidURIError.new("Unsupported database type: #{uri.scheme}")
+      end
+    rescue URI::Error
+      raise InvalidURIError.new("Invalid URI format")
+    end
+
+    # Ensures the database connection is closed when the schema is garbage collected
+    def finalize
+      @db.close
     end
 
     # Builds the schema. This method creates the tables in the schema.
@@ -110,15 +158,23 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      DB.open(@uri) do |conn|
+      @db.using_connection do |conn|
         conn.exec(sql)
       end
+    rescue ex : DB::Error
+      Log.error { "Failed to execute SQL: #{sql}" }
+      Log.error { ex.message }
+      raise ConnectionError.new("Failed to execute SQL: #{ex.message}")
     end
 
     def exec_query(&)
-      DB.open(@uri) do |conn|
+      @db.using_connection do |conn|
         yield conn
       end
+    rescue ex : DB::Error
+      Log.error { "Failed to execute query" }
+      Log.error { ex.message }
+      raise ConnectionError.new("Failed to execute query: #{ex.message}")
     end
 
     # Creates a new query for the schema.
@@ -181,14 +237,21 @@ module CQL
     # **Example**
     # ```
     # schema.create_table :users do
-    #   primary :id, Int64, auto_increment: true
+    #   primary :id, Int32, auto_increment: true
     #   column :name, String
     #   column :email, String
     # end
     # ```
     #
-    def table(name : Symbol, as as_name = nil, &)
-      table = Table.new(name, self, as_name)
+    def table(name : Symbol, as as_name : Symbol? = nil, &)
+      table = Table.new(name, self, as_name.try(&.to_s))
+      with table yield
+      @tables[name] = table
+      table
+    end
+
+    def table(name : Symbol, as as_name : String? = nil, &)
+      table = Table.new(name, self, as_name || "")
       with table yield
       @tables[name] = table
       table
@@ -210,6 +273,8 @@ module CQL
     # end
     # ```
     def alter(table_name : Symbol, &)
+      raise Error.new("Table '#{table_name}' not found") unless tables[table_name]?
+
       alter_table = AlterTable.new(tables[table_name], self)
       with alter_table yield
       sql_statements = alter_table.to_sql(@gen)
@@ -219,7 +284,9 @@ module CQL
         conn.transaction do |tx|
           cnn = tx.connection
           sql_statements.split(";\n").each do |sql|
-            cnn.exec(sql) unless sql.empty?
+            next if sql.empty?
+            Log.debug { "Executing: #{sql}" }
+            cnn.exec(sql)
           end
         end
       end
@@ -240,16 +307,19 @@ module CQL
     def dump_structure(file = "db/structure.sql")
       Dir.mkdir_p(File.dirname(file))
 
-      tables_structure = @tables.map do |_, table|
-        String.build do |str|
-          str << "-- Table: #{table.table_name}\n\n"
-          str << "-- Primary Key: #{table.primary.name} - Type: #{table.primary.type} \n\n"
-          str << table.create_sql
-          str << "\n\n"
-        end
-      end.join("\n")
+      content = @tables.map do |_, table|
+        lines = [] of String
+        lines << "-- Table: #{table.table_name}"
+        lines << "-- Primary Key: #{table.primary.name}" if table.primary
+        lines << table.create_sql
+        lines.join("\n")
+      end.join("\n\n")
 
-      File.write(file, tables_structure)
+      File.write(file, content)
+    rescue ex : IO::Error
+      Log.error { "Failed to write structure file: #{file}" }
+      Log.error { ex.message }
+      raise Error.new("Failed to write structure file: #{ex.message}")
     end
 
     macro method_missing(call)
