@@ -6,7 +6,7 @@ This guide walks you through how to create, modify, and execute queries using re
 
 ---
 
-#### Key Features
+## Key Features
 
 1. **Select columns and filter records** using simple, chainable methods.
 2. **Join tables** for complex queries involving multiple relationships.
@@ -16,7 +16,7 @@ This guide walks you through how to create, modify, and execute queries using re
 
 ---
 
-#### Real-World Example: Fetching User Data
+### Real-World Example: Fetching User Data
 
 Let's begin by selecting user data from a `users` table:
 

@@ -1,17 +1,17 @@
 module Expression
   class ColumnBuilder
-    getter column : Column
+    getter column : Expression::Column
 
-    def initialize(@column : Column)
+    def initialize(@column : Expression::Column)
     end
 
-    private def compare(operator : String, value : Column | ConditionBuilder)
-      ConditionBuilder.new(CompareCondition.new(@column, operator, value))
+    private def compare(operator : String, value : Expression::Column | ConditionBuilder)
+      ConditionBuilder.new(Expression::CompareCondition.new(@column, operator, value))
     end
 
     private def compare(operator : String, value : DB::Any)
       @column.column.validate!(value)
-      ConditionBuilder.new(Compare.new(@column, operator, value))
+      ConditionBuilder.new(Expression::Compare.new(@column, operator, value))
     end
 
     # Redefine comparison operators using method aliases
@@ -43,39 +43,39 @@ module Expression
     {% end %}
 
     def in(items : Array(DB::Any)) : ConditionBuilder
-      ConditionBuilder.new(InCondition.new(@column, items))
+      ConditionBuilder.new(Expression::InCondition.new(@column, items))
     end
 
     def in(sub_query : CQL::Query) : ConditionBuilder
-      ConditionBuilder.new(InSelect.new(@column, sub_query.build))
+      ConditionBuilder.new(Expression::InSelect.new(@column, sub_query.build))
     end
 
     def not_in(values : Array(DB::Any)) : ConditionBuilder
-      ConditionBuilder.new(Not.new(InCondition.new(@column, values)))
+      ConditionBuilder.new(Expression::Not.new(Expression::InCondition.new(@column, values)))
     end
 
     def not_in(sub_query : CQL::Query) : ConditionBuilder
-      ConditionBuilder.new(Not.new(InSelect.new(@column, sub_query.build)))
+      ConditionBuilder.new(Expression::Not.new(Expression::InSelect.new(@column, sub_query.build)))
     end
 
     def like(pattern : String) : ConditionBuilder
-      ConditionBuilder.new(Like.new(@column, pattern))
+      ConditionBuilder.new(Expression::Like.new(@column, pattern))
     end
 
     def not_like(pattern : String) : ConditionBuilder
-      ConditionBuilder.new(NotLike.new(@column, pattern))
+      ConditionBuilder.new(Expression::NotLike.new(@column, pattern))
     end
 
     def null : ConditionBuilder
-      ConditionBuilder.new(IsNull.new(@column))
+      ConditionBuilder.new(Expression::IsNull.new(@column))
     end
 
     def not_null : ConditionBuilder
-      ConditionBuilder.new(IsNotNull.new(@column))
+      ConditionBuilder.new(Expression::IsNotNull.new(@column))
     end
 
     def between(min : DB::Any, max : DB::Any) : ConditionBuilder
-      ConditionBuilder.new(Between.new(@column, min, max))
+      ConditionBuilder.new(Expression::Between.new(@column, min, max))
     end
   end
 end

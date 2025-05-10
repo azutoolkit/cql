@@ -123,27 +123,66 @@ module CQL
 
     # Adds a foreign key to the table.
     #
-    # - **@param** name [Symbol] the name of the foreign key
+    # - **@param** name [Symbol, nil] the optional name of the foreign key constraint
     # - **@param** columns [Array(Symbol)] the columns in the current table
     # - **@param** table [Symbol] the referenced table
-    # - **@param** references [Array(Symbol)] the columns in the referenced table
-    # - **@param** on_delete [String] the action on delete (default: "NO ACTION")
-    # - **@param** on_update [String] the action on update (default: "NO ACTION")
+    # - **@param** references [Array(Symbol), Symbol, nil] the columns in the referenced table (defaults to PK)
+    # - **@param** on_delete [Symbol] the action on delete (default: :no_action)
+    # - **@param** on_update [Symbol] the action on update (default: :no_action)
     #
     # **Example**  Adding a foreign key
     # ```
-    # foreign_key(:fk_user_id, [:user_id], :users, [:id], on_delete: "CASCADE")
+    # foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
     # ```
     def foreign_key(
-      name : Symbol,
-      columns : Array(Symbol),
-      table : Symbol,
-      references : Array(Symbol),
-      on_delete : String = "NO ACTION",
-      on_update : String = "NO ACTION",
+      columns local_columns : Array(Symbol),
+      references references_table : Symbol,
+      references_columns : Array(Symbol) | Symbol | Nil = nil,
+      name : Symbol? = nil,            # Use Symbol? for name
+      on_delete : Symbol = :no_action, # Use Symbol for actions
+      on_update : Symbol = :no_action, # Use Symbol for actions
     )
-      fk = ForeignKey.new(name, columns, table, references, on_delete, on_update)
+      # Resolve referenced columns if nil (default to PK :id)
+      ref_columns_array = case references_columns
+                          when Array(Symbol) then references_columns
+                          when Symbol        then [references_columns]
+                          else                    [:id] # Default PK assumption
+                          end
+
+      # Ensure column counts match
+      unless local_columns.size == ref_columns_array.size
+        raise ArgumentError.new("Number of local columns must match number of referenced columns")
+      end
+
+      fk = ForeignKey.new(
+        table: @table, # Pass the table instance
+        columns: local_columns,
+        references_table: references_table,
+        references_columns: ref_columns_array,
+        name: name.nil? ? nil : name.to_s, # Convert Symbol? name to String?
+        on_delete: on_delete,
+        on_update: on_update
+      )
       @actions << Expression::AddForeignKey.new(fk)
+    end
+
+    # Overload for single column case
+    def foreign_key(
+      column local_column : Symbol,
+      references references_table : Symbol,
+      references_columns : Array(Symbol) | Symbol | Nil = nil,
+      name : Symbol? = nil,
+      on_delete : Symbol = :no_action,
+      on_update : Symbol = :no_action,
+    )
+      foreign_key(
+        [local_column],
+        references: references_table,
+        references_columns: references_columns,
+        name: name,
+        on_delete: on_delete,
+        on_update: on_update
+      )
     end
 
     # Drops a foreign key from the table.
