@@ -19,10 +19,10 @@ It calculates the necessary `offset` and applies a `limit` to the query.
 
 ```crystal
 # Assuming you have a User model defined:
-# struct User < CQL::ActiveRecord::Model(Int64)
-#   db_context YourDB, :users
-#   # ... properties ...
-# end
+struct User < CQL::ActiveRecord::Model(Int64)
+  db_context YourDB, :users
+  # ... properties ...
+end
 
 # Get the first page, 10 users per page (default per_page)
 page1_users = User.page(1)

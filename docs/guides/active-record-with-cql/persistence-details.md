@@ -5,12 +5,12 @@ Beyond basic CRUD operations, CQL Active Record models offer methods to understa
 This guide assumes you have a model defined, for example:
 
 ```crystal
-# struct User
-#   include CQL::ActiveRecord::Model(Int64)
-#   db_context AcmeDB, :users
-#   property id : Int64?
-#   # ... other properties ...
-# end
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context AcmeDB, :users
+  property id : Int64?
+  # ... other properties ...
+end
 ```
 
 ---

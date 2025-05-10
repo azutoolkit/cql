@@ -5,15 +5,15 @@ CQL Active Record models provide a rich set of methods for performing CRUD (Crea
 This guide assumes you have a model defined, for example:
 
 ```crystal
-# struct User
-#   include CQL::ActiveRecord::Model(Int64)
-#   db_context AcmeDB, :users
-#   property id : Int64?
-#   property name : String
-#   property email : String
-#   property active : Bool = false
-#   # ... other properties and initializers ...
-# end
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context AcmeDB, :users
+  property id : Int64?
+  property name : String
+  property email : String
+  property active : Bool = false
+  # ... other properties and initializers ...
+end
 ```
 
 ---
