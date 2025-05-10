@@ -2,7 +2,7 @@
 
 ## CQL Active Record: `HasMany` Relationship Guide
 
-In this guide, we’ll focus on the `HasMany` relationship using CQL's Active Record syntax. Like the previous `BelongsTo` and `HasOne` relationships, we’ll start with an Entity-Relationship Diagram (ERD) to visually explain how the `HasMany` relationship works and build on our previous schema.
+In this guide, we'll focus on the `HasMany` relationship using CQL's Active Record syntax. This describes a one-to-many connection between models.
 
 ## **What is a `HasMany` Relationship?**
 
@@ -23,10 +23,10 @@ This is a common one-to-many relationship where one post can have multiple comme
 
 ## Defining the Schema
 
-We’ll define the `posts` and `comments` tables in the schema using CQL’s DSL.
+We'll define the `posts` and `comments` tables in the schema using CQL's DSL.
 
 ```crystal
-AcmeDB = CQL::Schema.db_context(
+AcmeDB = CQL::Schema.define(
   :acme_db,
   adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
@@ -53,176 +53,208 @@ end
 
 ## Defining the Models
 
-Let’s db_context the `Post` and `Comment` models and establish the `HasMany` and `BelongsTo` relationships in CQL.
+Let's db_context the `Post` and `Comment` models and establish the `HasMany` and `BelongsTo` relationships in CQL.
 
 ### **Post Model**
 
 ```crystal
-struct Post < CQL::Record(Post, Int64)
+struct Post
+  include CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :posts
 
-  getter id : Int64?
-  getter title : String
-  getter body : String
-  getter published_at : Time
+  property id : Int64?
+  property title : String
+  property body : String
+  property published_at : Time?
 
-  # Initializing a new post with title, body, and published_at
-  def initialize(@title : String, @body : String, @published_at : Time = Time.utc)
+  # Initializing a new post
+  def initialize(@title : String, @body : String, @published_at : Time? = Time.utc)
   end
 
   # Association: A Post has many Comments
-  has_many :comments, Comment
+  # The `foreign_key` option specifies the column on the `comments` table
+  # that references the `posts` table.
+  has_many :comments, Comment, foreign_key: :post_id
 end
 ```
 
-- The `has_many :comments` association in the `Post` model defines that each post can have multiple comments.
+- The `has_many :comments, Comment, foreign_key: :post_id` association in the `Post` model defines that each post can have multiple comments. The `comments` table must have a `post_id` column.
 
 ### **Comment Model**
 
 ```crystal
-struct Comment< CQL::Record(Comment, Int64)
+struct Comment
+  include CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :comments
 
-  getter id : Int64?
-  getter post_id : Int64
-  getter body : String
+  property id : Int64?
+  property post_id : Int64?
+  property body : String
 
-  # Initializing a comment with post_id (foreign key) and body
-  def initialize(@post_id : Int64, @body : String)
+  # Initializing a comment. Post can be associated later or by the collection.
+  def initialize(@body : String, @post_id : Int64? = nil)
   end
 
   # Association: A Comment belongs to one Post
-  belongs_to :post, Post
+  belongs_to :post, Post, foreign_key: :post_id
 end
 ```
 
-- The `belongs_to :post` association in the `Comment` model links each comment to a post by using the `post_id` foreign key.
+- The `belongs_to :post, Post, foreign_key: :post_id` in the `Comment` model links each comment back to its post.
 
-## Creating and Querying Records
+## Working with the `HasMany` Collection
 
-Now that we have defined the `Post` and `Comment` models with a `HasMany` and `BelongsTo` relationship, let’s create and query records in CQL.
+When you access a `has_many` association (e.g., `post.comments`), you get a collection proxy object that offers several methods to query and manipulate the associated records.
 
-### **Creating a Post and Comments**
+### **Creating and Adding Records**
 
 ```crystal
-# Create a new Post
-post = Post.new("My First Blog Post", "This is the content of my first blog post.")
-post.save
+# Fetch or create a Post
+post = Post.find_or_create_by(title: "HasMany Guide Post", body: "Content for HasMany.")
+post.save! if !post.persisted? # Ensure post is saved and has an ID
 
-# Create Comments for the Post
-comment1 = Comment.new(post.id.not_nil!, "Great post!")
-comment2 = Comment.new(post.id.not_nil!, "Thanks for sharing.")
-comment1.save
-comment2.save
+# Option 1: Using `create` on the collection (builds, sets FK, saves, adds to collection)
+comment1 = post.comments.create(body: "First comment via create!")
+puts "Comment 1: #{comment1.body}, Post ID: #{comment1.post_id}"
+
+# Option 2: Using `build` on the collection (builds, sets FK, but does NOT save yet)
+comment2 = post.comments.build(body: "Second comment via build.")
+# comment2 is now associated with post (comment2.post_id == post.id) but not saved.
+puts "Comment 2 (unsaved): #{comment2.body}, Post ID: #{comment2.post_id}"
+comment2.save!
+puts "Comment 2 (saved): #{comment2.id}"
+
+# Option 3: Using `<<` operator (creates a new record from an instance and saves it)
+# The Comment instance should ideally not have post_id set if `<<` handles it,
+# or it should match the parent post. Behavior may vary; `create` is often clearer.
+comment3 = Comment.new(body: "Third comment via << operator.")
+post.comments << comment3 # This will save comment3 and associate it.
+puts "Comment 3: #{comment3.body}, ID: #{comment3.id}, Post ID: #{comment3.post_id}"
+
+# Option 4: Manual creation and association (less common for adding to existing parent)
+# comment4 = Comment.new(body: "Fourth comment, manual.", post_id: post.id.not_nil!)
+# comment4.save!
+# post.comments.reload # Important to see it in the cached collection
 ```
 
-- First, we create a `Post` and save it to the database.
-- Then, we create two `Comments` and associate them with the post by passing `post.id` as the `post_id` for each comment.
+### **Retrieving Records from the Collection**
 
-### **Accessing Comments from the Post**
-
-Once a post has comments, you can retrieve all the comments using the `HasMany` association.
+The collection is enumerable and provides methods to access its records.
 
 ```crystal
-# Fetch the post
-post = Post.find(1)
+# Fetch the post again to ensure a clean comments collection or use post.comments.reload
+loaded_post = Post.find!(post.id.not_nil!)
 
-# Fetch all associated comments
-post.comments.each do |comment|
-  puts comment.body
+puts "\nComments for Post: '#{loaded_post.title}'"
+# Iterating through the collection (implicitly loads if not already loaded)
+loaded_post.comments.each do |comment|
+  puts "- #{comment.body} (ID: #{comment.id})"
 end
+
+# Get all comments as an array
+all_comments_array = loaded_post.comments.all
+puts "Total comments in array: #{all_comments_array.size}"
+
+# Find a specific comment within the association
+found_comment = loaded_post.comments.find_by(body: "First comment via create!")
+if c = found_comment
+  puts "Found comment by body: #{c.id}"
+end
+
+# Check for existence
+is_present = loaded_post.comments.exists?(body: "Second comment via build.")
+puts "Does 'Second comment via build.' exist? #{is_present}"
+
+# Get size and check if empty
+puts "Number of comments: #{loaded_post.comments.size}"
+puts "Are there any comments? #{!loaded_post.comments.empty?}"
+
+# Get first comment
+first_comment = loaded_post.comments.first
+puts "First comment body: #{first_comment.try(&.body)}"
+
+# Get array of IDs
+comment_ids = loaded_post.comments.ids
+puts "Comment IDs: #{comment_ids}"
 ```
 
-Here, `post.comments` retrieves all the comments associated with the post, and we loop through them to print each comment’s body.
+### **Reloading the Collection**
 
-### **Accessing the Post from a Comment**
-
-You can also retrieve the post associated with a comment using the `BelongsTo` association.
+If the database might have changed, reload the collection:
 
 ```crystal
-# Fetch the comment
-comment = Comment.find(1)
-
-# Fetch the associated post
-post = comment.post
-
-puts post.title  # Outputs: "My First Blog Post"
+loaded_post.comments.reload # Fetches fresh data from DB
+# or for a specific association on a model instance:
+# loaded_post.reload_comments # if such a specific reloader is generated by has_many macro
 ```
 
-In this example, `comment.post` fetches the post that the comment belongs to.
+The `has_many` macro generates `reload_{{association_name}}` (e.g., `reload_comments`).
+
+### **Removing and Deleting Records**
+
+**Deleting a specific comment from the association (and database):**
+
+```crystal
+comment_to_delete = loaded_post.comments.find_by(body: "Third comment via << operator.")
+if ctd = comment_to_delete
+  if loaded_post.comments.delete(ctd) # Pass instance or its ID
+    puts "Successfully deleted comment ID: #{ctd.id}"
+  else
+    puts "Could not delete comment ID: #{ctd.id}"
+  end
+end
+# Verify deletion
+puts "Comment count after delete: #{loaded_post.comments.size}"
+```
+
+Note: The `delete` method on the collection typically removes the record from the database.
+
+**Clearing the association (deletes all associated comments):**
+
+```crystal
+# First, add some comments if cleared previously
+loaded_post.comments.create(body: "Temp comment 1 for clear test")
+loaded_post.comments.create(body: "Temp comment 2 for clear test")
+puts "Comments before clear: #{loaded_post.comments.size}"
+
+loaded_post.comments.clear # Deletes all comments associated with this post from the database
+puts "Comments after clear: #{loaded_post.comments.size}" # Should be 0
+```
+
+- `clear` usually implies deleting the associated records from the database. Be cautious with this method.
+
+If you delete the parent record (`post.delete`), associated comments are _not_ automatically deleted unless `cascade: true` was specified in the `has_many` definition or database-level cascade rules are in place.
 
 ---
 
-## Updating and Deleting the Associations
+## Eager Loading
 
-### **Adding a New Comment to an Existing Post**
-
-You can add a new comment to an existing post as follows:
+To avoid N+1 query problems when loading many posts and their comments, use eager loading:
 
 ```crystal
-# Fetch the post
-post = Post.find(1)
+# Fetches all posts and their associated comments in a more optimized way (typically 2 queries)
+posts_with_comments = Post.query.includes(:comments).all(Post)
 
-# Create a new comment for the post
-new_comment = Comment.new(post.id.not_nil!, "Another comment")
-new_comment.save
-```
-
-### **Deleting a Post and Its Associated Comments**
-
-If you delete a post, you may want to delete all associated comments as well. However, by default, this will not happen unless you specify cascade deletion in your database.
-
-```crystal
-# Fetch the post
-post = Post.find(1)
-
-# Delete the post
-post.delete
-
-# (Optional) Manually delete the associated comments
-post.comments.each do |comment|
-  comment.delete
+posts_with_comments.each do |p|
+  puts "Post: #{p.title} has #{p.comments.size} comments (already loaded):"
+  p.comments.each do |c| # Accesses the already loaded comments
+    puts "  - #{c.body}"
+  end
 end
 ```
 
----
-
-## Advanced Querying
-
-You can also perform advanced queries using the `HasMany` relationship. For example, finding posts with a certain number of comments or filtering comments for a post based on specific conditions.
-
-### **Fetching Posts with Comments**
-
-You can load posts along with their comments in one query:
-
-```crystal
-posts_with_comments = Post.includes(:comments).all
-```
-
-### **Finding Comments for a Specific Post**
-
-If you want to query for specific comments associated with a post, you can filter them as follows:
-
-```crystal
-# Fetch the post
-post = Post.find(1)
-
-# Find comments with specific condition (e.g., containing the word "Great")
-filtered_comments = post.comments.where { body.like("%Great%") }
-```
+- `includes(:comments)` tells CQL to fetch all comments for the retrieved posts in a separate, optimized query.
 
 ---
 
 ## Summary
 
-In this guide, we’ve explored the `HasMany` relationship in CQL. We:
+In this guide, we've explored the `HasMany` relationship in CQL. We covered:
 
-- Defined the `Post` and `Comment` tables in the schema.
-- Created corresponding models, specifying the `HasMany` relationship in the `Post` model and the `BelongsTo` relationship in the `Comment` model.
-- Demonstrated how to create, query, update, and delete records using the `HasMany` and `BelongsTo` associations.
+- Defining `Post` and `Comment` models with `has_many` and `belongs_to` associations, including the `foreign_key` option.
+- Interacting with the `has_many` collection using methods like `create`, `build`, `<<`, `all`, `find_by`, `exists?`, `size`, `delete`, and `clear`.
+- Eager loading associations with `includes`.
 
 ### Next Steps
 
-In the next guide, we’ll build upon this ERD and cover the `ManyToMany` relationship, which is useful when two entities are associated with many of each other (e.g., a post can have many tags, and a tag can belong to many posts).
-
-Feel free to experiment with the `HasMany` relationship by adding more fields, filtering queries, or extending your schema to handle more complex use cases.
+In the next guide, we'll build upon this ERD and cover the `ManyToMany` relationship.

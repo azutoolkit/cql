@@ -6,7 +6,7 @@ In this guide, we’ll walk through the core functionality, explain each method 
 
 ---
 
-#### Key Features
+## Key Features
 
 1. **Insert records into any table with ease**.
 2. **Insert multiple records in a single query**.
@@ -16,7 +16,7 @@ In this guide, we’ll walk through the core functionality, explain each method 
 
 ---
 
-#### Real-World Example: Inserting User Data
+### Real-World Example: Inserting User Data
 
 Let’s start with a simple example of inserting a new user into the `users` table.
 

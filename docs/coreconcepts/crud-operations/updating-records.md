@@ -4,7 +4,7 @@ The `CQL::Update` class in the CQL (Crystal Query Language) module is designed t
 
 ---
 
-#### Key Features
+## Key Features
 
 1. **Update records** in a database with a simple and readable syntax.
 2. **Set column values** dynamically using hashes or keyword arguments.
@@ -14,7 +14,7 @@ The `CQL::Update` class in the CQL (Crystal Query Language) module is designed t
 
 ---
 
-#### Real-World Example: Updating a User's Data
+### Real-World Example: Updating a User's Data
 
 Let’s start with a simple example of updating a user’s name and age in the `users` table.
 
