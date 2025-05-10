@@ -81,11 +81,11 @@ module AcmeDB
 end
 
 # Ensure your models can reference this context, e.g.:
-# struct User
-#   include CQL::ActiveRecord::Model(Int64)
-#   db_context AcmeDB, :users
-#   # ...
-# end
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context AcmeDB, :users
+  # ...
+end
 ```
 
 **Note:** The exact mechanism for defining your database context (`AcmeDB` in the example) and making it accessible to your models should align with CQL's specific API and your application structure. Refer to CQL's core documentation for advanced database connection management, pooling, and context configuration.

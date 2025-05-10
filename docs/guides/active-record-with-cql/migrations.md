@@ -164,7 +164,7 @@ Here are some common operations you might perform within the `up` and `down` met
 ```crystal
 # Assuming t.references in create_table does this.
 # If not, explicitly:
-# schema.add_foreign_key :posts, :users, column: :user_id, primary_key: :id
+schema.add_foreign_key :posts, :users, column: :user_id, primary_key: :id
 ```
 
 **Important**: The exact method names and options for schema manipulation (`create_table`, `add_column`, available data types like `:text`, `:integer`, `:bool`, options like `null:`, `default:`, `unique:`) can vary significantly between different database adapters (PostgreSQL, MySQL) and ORM/query builder implementations. **Always refer to the specific CQL documentation for the version you are using** to ensure you are using the correct API for schema definition.
