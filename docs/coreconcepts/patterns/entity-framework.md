@@ -2,11 +2,11 @@
 
 In the context of CQL (Crystal Query Language), Entity Framework (EF) serves as a useful comparison to help developers understand how CQL and its features (like migrations, schema management, and object-relational mapping) work. Just as EF simplifies database interactions in .NET applications, CQL does the same for Crystal applications. Let’s break down the key concepts and approaches of EF and see how they align with CQL’s functionalities.
 
-### 1. **Development Patterns**
+## 1. **Development Patterns**
 
 In Entity Framework, developers have three approaches to database design: **Database-First**, **Code-First**, and **Model-First**. CQL shares some similarities, especially with the **Code-First** and **Database-First** approaches, but with Crystal-specific tooling.
 
-#### **CQL's Schema-First Approach (Similar to Code-First)**
+### **CQL's Schema-First Approach (Similar to Code-First)**
 
 CQL primarily uses a **Schema-First** approach, where you define your database schema using Crystal code and CQL builds and manages the database based on this schema. This is similar to EF’s Code-First approach, where the developer defines the entity classes and EF generates the database schema.
 

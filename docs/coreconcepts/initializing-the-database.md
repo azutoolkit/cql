@@ -1,15 +1,15 @@
 # Initializing the Database
 
-Once you've defined your database schema using CQL's `Schema.build`, the next step is to initialize the database by creating the necessary tables and structures. In this guide, we will walk through how to define your schema and use `Schema.init` to initialize the database.
+Once you've defined your database schema using CQL's `Schema.define`, the next step is to initialize the database by creating the necessary tables and structures. In this guide, we will walk through how to define your schema and use `Schema.init` to initialize the database.
 
 ---
 
 ## Real-World Example: Defining the Database Schema
 
-Here’s an example where we define a schema for a movie database using CQL. The schema includes tables for `movies`, `screenplays`, `actors`, `directors`, and a join table `movies_actors` to link movies and actors.
+Here's an example where we define a schema for a movie database using CQL. The schema includes tables for `movies`, `screenplays`, `actors`, `directors`, and a join table `movies_actors` to link movies and actors.
 
 ```crystal
-AcmeDB2 = CQL::Schema.build(
+AcmeDB2 = CQL::Schema.define(
   :acme_db,
   adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
@@ -77,7 +77,7 @@ This command creates all the tables and applies the structure you defined in the
 
 ```crystal
 # db_context the schema
-AcmeDB2 = CQL::Schema.build(
+AcmeDB2 = CQL::Schema.define(
   :acme_db,
   adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
@@ -124,7 +124,7 @@ AcmeDB2.init
 When `AcmeDB2.init` is called, the following happens:
 
 - The database connection is established using the URI provided in the schema (e.g., the PostgreSQL database connection).
-- CQL creates the tables (`movies`, `screenplays`, `actors`, `directors`, and `movies_actors`) in the database if they don’t already exist.
+- CQL creates the tables (`movies`, `screenplays`, `actors`, `directors`, and `movies_actors`) in the database if they don't already exist.
 - Primary keys, relationships, and any constraints are applied as defined in the schema.
 
 ---
@@ -145,7 +145,7 @@ SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
 
 ### Summary
 
-Initializing the database after schema creation is a simple process with CQL. After defining your tables and relationships using `CQL::Schema.build`, you can call the `init` method to apply your schema to the actual database.
+Initializing the database after schema creation is a simple process with CQL. After defining your tables and relationships using `CQL::Schema.define`, you can call the `init` method to apply your schema to the actual database.
 
 This method ensures that your database is correctly structured and ready to use, allowing you to focus on developing the application logic without worrying about manual database setup.
 

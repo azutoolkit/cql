@@ -86,7 +86,7 @@ module CQL
     # ```
     def find(id : Pk)
       query.where(id: id).first(T)
-    rescue DB::NoResultsError
+    rescue DB::NoResultsError | CQL::Schema::ConnectionError
       nil
     end
 
@@ -256,7 +256,7 @@ module CQL
     # ```
     def exists?(**fields)
       query.select.where(**fields).limit(1).first(T) != nil
-    rescue DB::NoResultsError
+    rescue DB::NoResultsError | CQL::Schema::ConnectionError
       false
     end
 
@@ -282,6 +282,8 @@ module CQL
     # ```
     def last
       query.order(id: :desc).limit(1).first(T)
+    rescue DB::NoResultsError
+      nil
     end
 
     # Paginate results based on page number and items per page
