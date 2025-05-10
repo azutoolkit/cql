@@ -1,10 +1,12 @@
+require "./expressions"
+
 module Expression
   class FilterBuilder
-    @tables : Hash(Symbol, Table) = {} of Symbol => Table
+    @tables : Hash(String, Expression::Table) = {} of String => Expression::Table
 
-    def initialize(sql_tables : Hash(Symbol, CQL::Table))
-      sql_tables.each do |name, table|
-        @tables[name] = Table.new(table)
+    def initialize(query_tables : Hash(String, CQL::Query::QueryTableInfo))
+      query_tables.each do |alias_str, table_info|
+        @tables[alias_str] = Expression::Table.new(table_info[:table], alias_str)
       end
     end
 
@@ -15,7 +17,7 @@ module Expression
     # Generate methods for each column
     macro method_missing(call)
       def {{call.name.id}}
-        @tables[:{{call.name.id}}]
+        @tables[{{call.name.stringify}}]
       end
     end
   end
