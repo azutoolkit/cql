@@ -4,7 +4,7 @@ The `CQL::Delete` class provides a structured and flexible way to build and exec
 
 ---
 
-#### Key Features
+## Key Features
 
 1. **Delete records** from any table in a straightforward manner.
 2. **Filter records** to delete using flexible `WHERE` conditions.
@@ -13,7 +13,7 @@ The `CQL::Delete` class provides a structured and flexible way to build and exec
 
 ---
 
-#### Real-World Example: Deleting a User Record
+### Real-World Example: Deleting a User Record
 
 Let’s start with a simple example of deleting a user from the `users` table where the `id` is 1.
 

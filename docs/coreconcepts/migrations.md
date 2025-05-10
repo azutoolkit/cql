@@ -2,7 +2,7 @@
 
 Database migrations are essential for managing changes to your schema over time in a controlled manner. In CQL, migrations are handled through the `Migration` and `Migrator` classes. This guide will help you understand how to create, apply, rollback, and manage migrations using `CQL::Migrator` in your projects.
 
-#### Why Use Migrations?
+## Why Use Migrations?
 
 Migrations allow you to:
 
@@ -12,7 +12,7 @@ Migrations allow you to:
 
 ---
 
-#### Real-World Example: Creating and Applying Migrations
+### Real-World Example: Creating and Applying Migrations
 
 Let’s start with a simple example. Suppose we need to add a `users` table to our database with two columns: `name` and `age`.
 
