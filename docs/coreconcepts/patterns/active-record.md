@@ -4,7 +4,7 @@
 
 In the context of **CQL (Crystal Query Language)** and **Crystal**, the Active Record pattern can be implemented by leveraging the object-oriented nature of Crystal and the querying capabilities provided by CQL. Here's how you can think about the **Active Record pattern** using CQL:
 
-#### Key Concepts of Active Record
+## Key Concepts of Active Record
 
 1. **Table-Class Mapping**: Each class corresponds to a table in the database.
 2. **Row-Object Mapping**: Each object is an instance of a class and corresponds to a row in the database table.
@@ -21,7 +21,8 @@ In Active Record, a model is a class that represents a database table. The class
 Here’s an example of a `User` model:
 
 ```crystal
-struct User < CQL::Record(User, Int32)
+struct User
+  include CQL::ActiveRecord::Model(Int32)
   # Schame name AcmeDB, table name :users
   db_context AcmeDB, :users
 
@@ -122,7 +123,8 @@ struct User < CQL::Record(User, Int32)
   has_many :posts, Post
 end
 
-struct Post < CQL::Record(Post, Int32)
+struct Post
+  include CQL::ActiveRecord::Model(Int32)
 
   property id : Int32?
   property title : String
@@ -220,7 +222,8 @@ These methods provide powerful ways to interact with and manage associations bet
 Active Record often includes validations to ensure that data meets certain criteria before saving. In CQL, you can add custom validation logic inside the class:
 
 ```crystal
-struct User < CQL::Record(User, Int32)
+struct User
+  include CQL::ActiveRecord::Model(Int32)
 
   property id : Int32?
   property name : String

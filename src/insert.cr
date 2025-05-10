@@ -1,3 +1,6 @@
+require "./table"  # Assuming table.cr defines Table
+require "./schema" # Assuming schema.cr defines Schema
+
 module CQL
   # An insert statement builder class
   # This class provides methods for building an insert statement
@@ -183,6 +186,11 @@ module CQL
     # insert.into(:users).values(name: "John", age: 30).back(:id).commit
     # ```
     def back(*columns : Symbol)
+      @back = columns.to_a.map { |column| Expression::Column.new(find_column(column)) }
+      self
+    end
+
+    def back(columns : Array(Symbol))
       @back = columns.to_a.map { |column| Expression::Column.new(find_column(column)) }
       self
     end
