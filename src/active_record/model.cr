@@ -10,6 +10,7 @@ require "./persistence"
 require "./identifyable"
 require "./relations"
 require "./scopes"
+require "./transactional"
 
 module CQL
   module ActiveRecord
@@ -66,6 +67,7 @@ module CQL
         include CQL::ActiveRecord::Persistence
         include CQL::ActiveRecord::Relations
         include CQL::ActiveRecord::Scopes
+        include CQL::ActiveRecord::Transactional
       end
     end
   end

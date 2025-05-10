@@ -49,7 +49,7 @@ module CQL
                         pk_id.as(Pk)
                       end
 
-          {{@type.id}}.find!(actual_pk)
+          {{@type.id}}.find!(actual_pk.as(Pk))
         end
 
         # Create a new record with given fields
@@ -82,7 +82,7 @@ module CQL
                         pk_id.as(Pk)
                       end
 
-          {{@type.id}}.find!(actual_pk)
+          {{@type.id}}.find!(actual_pk.as(Pk))
         end
 
         # Create a new record from a model instance
@@ -142,7 +142,7 @@ module CQL
             id.as(Pk)
           end
 
-          {{@type.id}}.find!(id)
+          {{@type.id}}.find!(id.as(Pk))
         end
 
         # Create a new record with given attributes

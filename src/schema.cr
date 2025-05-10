@@ -66,6 +66,9 @@ module CQL
     # - **@return** [DB::Database] the database connection pool
     private getter db : DB::Database
 
+    # Holds the active connection if currently inside a transaction block
+    private getter? active_connection : DB::Connection? = nil
+
     # Builds a new schema.
     #
     # - **@param** name [Symbol] the name of the schema
@@ -139,7 +142,7 @@ module CQL
     # **Example**
     #
     # ```
-    # Schema.define
+    # schema.build
     # ```
     def build
       @tables.each do |_tbl_name, table|
@@ -158,23 +161,36 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      @db.using_connection do |conn|
+      if conn = @active_connection
         conn.exec(sql)
+      else
+        @db.using_connection do |db_conn|
+          begin
+            db_conn.exec(sql)
+          rescue ex : DB::Error
+            Log.error { "Failed to execute SQL: #{sql}" }
+            Log.error { ex.message }
+            raise ConnectionError.new("Failed to execute SQL: #{ex.message}")
+          end
+        end
       end
-    rescue ex : DB::Error
-      Log.error { "Failed to execute SQL: #{sql}" }
-      Log.error { ex.message }
-      raise ConnectionError.new("Failed to execute SQL: #{ex.message}")
+
     end
 
     def exec_query(&)
-      @db.using_connection do |conn|
-        yield conn
+      if conn = @active_connection
+        begin
+          yield conn
+        rescue ex : DB::Error
+          Log.error { "Failed to execute query" }
+          Log.error { ex.message }
+          raise ConnectionError.new("Failed to execute query: #{ex.message}")
+        end
+      else
+        @db.using_connection do |db_conn|
+          yield db_conn
+        end
       end
-    rescue ex : DB::Error
-      Log.error { "Failed to execute query" }
-      Log.error { ex.message }
-      raise ConnectionError.new("Failed to execute query: #{ex.message}")
     end
 
     # Creates a new query for the schema.
@@ -217,6 +233,38 @@ module CQL
     # ```
     def delete
       Delete.new(self)
+    end
+
+    # Executes a block within a database transaction.
+    # - **@yield** [DB::Transaction] the transaction object
+    # - **@return** [Nil] the result of the block
+    # **Example**
+    # ```
+    # schema.transaction do |tx|
+    #   cnn = tx.connection
+    #   cnn.exec("INSERT INTO users (name) VALUES (?)", "John")
+    #   cnn.exec("UPDATE accounts SET balance = balance - 100 WHERE user_id = ?", 1)
+    # end
+    # ```
+    def transaction(&)
+      previous_connection = @active_connection
+      @db.transaction do |tx|
+        @active_connection = tx.connection
+        begin
+          yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
+        ensure
+          @active_connection = previous_connection
+        end
+      end
+    rescue ex : DB::Rollback
+      # DB::Rollback should be caught silently by the outer @db.transaction
+      # and perform the rollback without propagating the exception further.
+      # We log it for debugging, but don't convert to ConnectionError.
+      Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
+    rescue ex : DB::Error
+      Log.error { "Transaction failed" }
+      Log.error { ex.message }
+      raise ConnectionError.new("Transaction failed: #{ex.message}")
     end
 
     # Creates a new migrator for the schema.
