@@ -36,7 +36,8 @@ The `Queryable` module, when included in your model, provides methods like `wher
 **Example: Basic Scopes**
 
 ```crystal
-struct Article < CQL::ActiveRecord::Model(Int64)
+struct Article
+  includes CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :articles
 
   property id : Int64?
@@ -72,7 +73,8 @@ In this example:
 Scopes can also accept arguments to make them more flexible.
 
 ```crystal
-struct Post < CQL::ActiveRecord::Model(Int64)
+struct Post
+  includes CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :posts
   # ... properties ...
   property created_at : Time
@@ -103,7 +105,8 @@ end
 While returning `ChainableQuery(YourModel)` is common for seamless chaining with other Active Record query methods, a scope can also return a raw `CQL::Query` object. This might be useful for more complex query constructions that don't neatly fit the `ChainableQuery` API directly, or if you intend to pass the query object to a part of the system that expects `CQL::Query`.
 
 ```crystal
-struct Product < CQL::ActiveRecord::Model(Int64)
+struct Product
+  includes CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :products
   # ... properties ...
 

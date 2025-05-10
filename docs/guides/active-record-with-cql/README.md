@@ -15,14 +15,14 @@ CQL's Active Record module offers a powerful and intuitive way to manage your da
 
 This central README provides a high-level introduction. For in-depth information on specific aspects of CQL Active Record, please refer to the following guides:
 
-- **[Setup and Prerequisites](./README.md#prerequisites-and-setup)**: Initial configuration for using CQL and Active Record. (Covered below)
+- **[Setup and Prerequisites](#prerequisites-and-setup)**: Initial configuration for using CQL and Active Record. (Covered below)
 - **[Defining Models](./defining-models.md)**: Learn how to define your Active Record models, map them to database tables, specify primary keys, and work with attributes.
 - **[CRUD Operations](./crud-operations.md)**: Detailed guide on creating, reading, updating, and deleting records using Active Record methods.
 - **[Querying](./querying.md)**: Explore the powerful query interface, including direct finders, chainable queries, aggregations, and scopes.
 - **[Persistence Details](./persistence-details.md)**: Understand how to check if a record is persisted and how to reload its data from the database.
 - **[Validations](./validations.md)**: Ensure data integrity by defining and using model validations.
 - **[Callbacks](./callbacks.md)**: Hook into the lifecycle of your models to trigger logic at specific events (e.g., before save, after create).
-- **[Relations](#relations)**: Define and use associations between models:
+- **[Relations](./relations/README.md)**: Define and use associations between models:
   - [`belongs_to`](./relations/belongsto.md)
   - [`has_one`](./relations/hasone.md)
   - [`has_many`](./relations/hasmany.md)
