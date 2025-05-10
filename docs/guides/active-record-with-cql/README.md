@@ -22,11 +22,11 @@ This central README provides a high-level introduction. For in-depth information
 - **[Persistence Details](./persistence-details.md)**: Understand how to check if a record is persisted and how to reload its data from the database.
 - **[Validations](./validations.md)**: Ensure data integrity by defining and using model validations.
 - **[Callbacks](./callbacks.md)**: Hook into the lifecycle of your models to trigger logic at specific events (e.g., before save, after create).
-- **[Relations](./README.md#relations)**: Define and use associations between models:
-  - [`belongs_to`](./belongsto.md)
-  - [`has_one`](./hasone.md)
-  - [`has_many`](./hasmany.md)
-  - [`many_to_many`](./manytomany.md) (covers `has_and_belongs_to_many`)
+- **[Relations](#relations)**: Define and use associations between models:
+  - [`belongs_to`](./relationships/belongsto.md)
+  - [`has_one`](./relationships/hasone.md)
+  - [`has_many`](./relationships/hasmany.md)
+  - [`many_to_many`](./relationships/manytomany.md) (covers `has_and_belongs_to_many`)
 - **[Database Migrations](./migrations.md)**: Manage your database schema changes over time.
 - **[Scopes](./scopes.md)**: Define reusable query constraints for cleaner and more readable code.
 - **[Pagination](./pagination.md)**: Easily paginate query results.
@@ -128,10 +128,10 @@ _Consult the [Callbacks Guide](./callbacks.md) for usage details._
 
 Define associations like `belongs_to`, `has_many`, `has_one`, and `many_to_many` to manage relationships between models.
 
-- [`belongs_to`](./belongsto.md)
-- [`has_one`](./hasone.md)
-- [`has_many`](./hasmany.md)
-- [`many_to_many`](./manytomany.md)
+- [`belongs_to`](./relationships/belongsto.md)
+- [`has_one`](./relationships/hasone.md)
+- [`has_many`](./relationships/hasmany.md)
+- [`many_to_many`](./relationships/manytomany.md)
 
 ### Migrations
 
