@@ -1,295 +1,150 @@
 ---
 description: >-
-  In this guide, we'll walk through using CQL with Crystal for setting up a
-  database schema, defining records (models), establishing relationships between
-  them, and handling migrations
+  An overview of CQL's Active Record capabilities for defining models, interacting with your database, managing data integrity, and more.
 ---
 
 # Active Record with CQL
 
-Getting Started with Active Record, Relations, and Migrations in CQL
+This guide provides a comprehensive overview of Crystal Query Language (CQL)'s Active Record implementation. Active Record is a design pattern that connects database tables to classes (or structs in Crystal), allowing you to interact with your data through objects and methods rather than raw SQL queries.
 
-In this guide, we'll walk through using CQL with Crystal for setting up a database schema, defining records (models), establishing relationships between them, and handling migrations. This will be a foundational guide for developers who are familiar with Object-Relational Mapping (ORM) concepts from other frameworks like ActiveRecord (Rails), Ecto, or Hibernate, but are now learning CQL with Crystal.
+CQL's Active Record module offers a powerful and intuitive way to manage your database records, inspired by established ORMs while leveraging Crystal's type safety and performance.
 
 ---
 
-### Prerequisites
+## Core Concepts & Guides
+
+This central README provides a high-level introduction. For in-depth information on specific aspects of CQL Active Record, please refer to the following guides:
+
+- **[Setup and Prerequisites](#prerequisites-and-setup)**: Initial configuration for using CQL and Active Record. (Covered below)
+- **[Defining Models](./defining-models.md)**: Learn how to define your Active Record models, map them to database tables, specify primary keys, and work with attributes.
+- **[CRUD Operations](./crud-operations.md)**: Detailed guide on creating, reading, updating, and deleting records using Active Record methods.
+- **[Querying](./querying.md)**: Explore the powerful query interface, including direct finders, chainable queries, aggregations, and scopes.
+- **[Persistence Details](./persistence-details.md)**: Understand how to check if a record is persisted and how to reload its data from the database.
+- **[Validations](./validations.md)**: Ensure data integrity by defining and using model validations.
+- **[Callbacks](./callbacks.md)**: Hook into the lifecycle of your models to trigger logic at specific events (e.g., before save, after create).
+- **[Relations](./relations/README.md)**: Define and use associations between models:
+  - [`belongs_to`](./relations/belongsto.md)
+  - [`has_one`](./relations/hasone.md)
+  - [`has_many`](./relations/hasmany.md)
+  - [`many_to_many`](./relations/manytomany.md) (covers `has_and_belongs_to_many`)
+- **[Database Migrations](./migrations.md)**: Manage your database schema changes over time.
+- **[Scopes](./scopes.md)**: Define reusable query constraints for cleaner and more readable code.
+- **[Pagination](./pagination.md)**: Easily paginate query results.
+
+---
+
+## Prerequisites and Setup
 
 Before getting started, ensure you have the following:
 
-- Crystal language installed (latest stable version).
-- PostgreSQL or MySQL set up locally or in the cloud.
-- CQL installed in your Crystal project.
+- Crystal language installed (latest stable version recommended).
+- A supported relational database (e.g., PostgreSQL, MySQL) set up and accessible.
+- CQL added to your Crystal project.
 
-You can add CQL to your project by including it in your `shard.yml`:
+### Adding CQL to Your Project
+
+Include CQL in your project's `shard.yml`:
 
 ```yaml
 dependencies:
   cql:
-    github: azutoolkit/cql
-    version: "~> 0.1.0"
+    github: azutoolkit/cql # Or the appropriate source for your CQL version
+    version: "~> x.y.z" # Specify the version you are using
 ```
 
-Run `shards install` to add the library to your project.
+Then, run `shards install` to download and install the dependency.
 
----
+### Database Connection Setup
 
-### Setting up CQL
-
-First, you need to configure CQL in your application. Let's create a basic `config/database.cr` file for connecting to a PostgreSQL database:
+You need to configure CQL to connect to your database. This is typically done by setting a database URL and opening a connection. You might also define a database context for your application.
 
 ```crystal
 require "cql"
 
-# Database configuration
-CQL::DB.open("postgres://username:password@localhost:5432/myapp_development") do |db|
-  CQL::DB.setup(db)
+# Example: Define your database connection URL (replace with your actual credentials)
+# For PostgreSQL:
+ENV_DB_URL = ENV["DATABASE_URL"]? || "postgres://username:password@localhost:5432/myapp_development"
+
+# Define a database context. This is often a class or module that your models will reference.
+# The name `AcmeDB` is used as a placeholder in these guides.
+module AcmeDB
+  # Establishes and memoizes the database connection.
+  def self.db
+    @@db ||= DB.open(ENV_DB_URL)
+  end
+
+  # Optional: A method to close the connection if needed during shutdown or testing.
+  def self.close_db
+    @@db.try(&.close)
+    @@db = nil
+  end
+end
+
+# Ensure your models can reference this context, e.g.:
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context AcmeDB, :users
+  # ...
 end
 ```
 
-Replace the database connection string with your actual PostgreSQL or MySQL credentials.
+**Note:** The exact mechanism for defining your database context (`AcmeDB` in the example) and making it accessible to your models should align with CQL's specific API and your application structure. Refer to CQL's core documentation for advanced database connection management, pooling, and context configuration.
 
 ---
 
-### Creating the Database Schema
+## Quick Overview of Key Features
 
-CQL uses migrations to manage the database schema, similar to Rails' ActiveRecord or Ecto's migrations.
+### Defining Models
 
-1.  **Create a migration**: Let's define a `users` table in this migration:
+Models are Crystal `structs` including `CQL::ActiveRecord::Model(PkType)` and use `db_context` to link to a table.
 
-    Create a file in the `db/migrate` directory, for example, `20230817000000_create_users.cr`\
+_See the full [Defining Models Guide](./defining-models.md) for details on attributes, primary keys, and more._
 
-    ```crystal
-    # db/migrate/20230817000000_create_users.cr
+### CRUD Operations
 
-    class CreateUsers < CQL::Migration
-      self.version = 20230817000000
+CQL provides intuitive methods for creating, reading, updating, and deleting records (e.g., `save`, `create!`, `find?`, `find_by!`, `update!`, `delete!`).
 
-      def up
-        schema.alter :users do
-          text :name, null: false
-          text :email, null: false, unique: true
-          timestamps
-        end
-      end
+_Explore the [CRUD Operations Guide](./crud-operations.md) for comprehensive examples._
 
-      def down
-        schema.alter :users do
-          drop_table :users
-        end
-      end
-    end
-    ```
+### Querying
 
-Here, we create a `users` table with columns `name`, `email`, and `timestamps`.
+Fetch records using direct finders or build complex queries with a chainable interface (`.where`, `.order`, `.limit`, etc.).
 
-1.  **Run the migration**: After defining your migration, you can run it with:\\
+_Dive into the [Querying Guide](./querying.md) for all query-building capabilities._
 
-    ```crystal
-    AcmeDB.migrator.up
-    ```
+### Validations
 
-This command will execute all pending migrations and update your database schema.
+Ensure data integrity with built-in or custom validation rules triggered before saving records.
 
----
+_Learn more in the [Validations Guide](./validations.md)._
 
-### Defining Records (Models)
+### Callbacks
 
-Now that the schema is ready, we can define the `User` record (model) that maps to the `users` table.
+Execute custom logic at different points in a model's lifecycle (e.g., `before_save`, `after_create`).
 
-1.  **Create the Record**:
+_Consult the [Callbacks Guide](./callbacks.md) for usage details._
 
-    ```crystal
-    # src/models/user.cr
-    struct User < CQL::Record(Int64)
-      db_context AcmeDB, :users
+### Relations
 
-      property id : Int64?
-      property name : String
-      property email : String
-      property created_at : Time
-      property updated_at : Time
-    end
-    ```
+Define associations like `belongs_to`, `has_many`, `has_one`, and `many_to_many` to manage relationships between models.
 
-    The `User` model is mapped to the `users` table. Here, we've define the fields for `id`, `name`, `email`, and timestamps. We also added basic validations for `name` and `email`.
+- [`belongs_to`](./relationships/belongsto.md)
+- [`has_one`](./relationships/hasone.md)
+- [`has_many`](./relationships/hasmany.md)
+- [`many_to_many`](./relationships/manytomany.md)
 
-2.  **Create Records**: You can now create user records using the `User` model.
+### Migrations
 
-    ```crystal
-    user = User.new(name: "John Doe", email: "john@example.com")
-    user.save
-    ```
+Manage database schema changes systematically using Crystal-based migration files.
 
-    This will insert a new record into the `users` table.
+_See the [Database Migrations Guide](./migrations.md) for how to write and run migrations._
 
-3.  **Query Records**: You can query users using the `User` model.
+### Scopes
 
-    ```crystal
-    users = User.all
-    user = User.find(1)
-    ```
+Create reusable query shortcuts to keep your code clean and expressive.
 
-    `User.all` fetches all users, and `User.find(1)` fetches the user with ID `1`.
+_Read the [Scopes Guide](./scopes.md) for defining and using scopes._
 
 ---
 
-### Establishing Relations
-
-CQL supports associations similar to ActiveRecord, Ecto, and other ORMs. Let's define some common relationships such as `has_many` and `belongs_to`.
-
-**Example: Users and Posts**
-
-1.  **Migration for Posts**:
-
-    Create a new migration for the `posts` table.
-
-    ```bash
-    crystal lib/cql/bin/cql generate migration CreatePosts
-    ```
-
-    Edit the migration to add the `posts` table, which has a foreign key to the `users` table:
-
-    ```crystal
-    # db/migrate/20230817000001_create_posts.cr
-
-    class CreatePosts < CQL::Migration
-      schema.table :posts do
-        primary
-        text :title, null: false
-        text :body, null: false
-        bigint :user_id, null: false, index: true
-        timestamps
-      end
-
-      def up
-        schema.alter :posts { AcmeDB.posts.create! }
-      end
-
-      def down
-        schema.alter :posts { AcmeDB.posts.drop! }
-      end
-    end
-    ```
-
-2.  **db_context the Post Model**:
-
-    Now, let's define the `Post` record and establish the relationships.
-
-    ```crystal
-    # src/models/post.cr
-    struct Post< CQL::Record(Int64)
-      db_context AcmeDB, :posts
-
-      property id : Int64?
-      property title : String
-      property body : String
-      property user_id : Int64
-      property created_at : Time
-      property updated_at : Time
-
-      belongs_to :user, User
-    end
-    ```
-
-    Here, the `Post` model includes a foreign key `user_id` and define a `belongs_to` association to the `User` model.
-
-3.  **db_context the `User` model's association**:
-
-    Update the `User` model to reflect the relationship with `Post`.
-
-    ```crystal
-    # src/models/user.cr
-    struct User < CQL::Record(Int64)
-      db_context AcmeDB, :users
-
-      column id : Int64?
-      column name : String
-      column email : String
-      column created_at : Time
-      column updated_at : Time
-
-      has_many :posts, Post
-    end
-    ```
-
-    This define a `has_many` association on `User` so that each user can have multiple posts.
-
-4.  **Working with Relations**:
-
-    - Create a user and associate posts with them:
-
-      ```crystal
-      user = User.create(name: "Jane Doe", email: "jane@example.com")
-      post = Post.new(title: "First Post", body: "This is the first post", user: user)
-      post.save
-      ```
-
-    - Access posts through the user:
-
-      ```crystal
-      user = User.find(1)
-
-      user.posts.each do |post|
-        puts post.title
-      end
-      ```
-
----
-
-### Handling Migrations
-
-CQL migrations allow you to create and alter your database schema easily. Here are some common migration tasks:
-
-1.  **Adding Columns**:
-
-    If you need to add a new column to an existing table, generate a migration:
-
-    ```bash
-    crystal lib/cql/bin/cql generate migration AddAgeToUsers
-    ```
-
-    Update the migration to add the `age` column:
-
-    ```crystal
-    class AddAgeToUsers < CQL::Migration
-      def up
-        schema.table :users do
-          add_column :age, Int32
-        end
-      end
-
-      def down
-        schema.table :users do
-          drop_column :age
-        end
-      end
-    end
-    ```
-
-2.  **Rolling Back Migrations**:
-
-    If something goes wrong with a migration, you can roll it back using:
-
-    ```bash
-    AcmeDB.migrator.rollback
-    ```
-
-    This will undo the last migration that was applied.
-
----
-
-### Conclusion
-
-This guide has provided a basic overview of using CQL with Crystal to define records (models), create relationships, and handle migrations. You've learned how to:
-
-- Set up CQL and connect it to a database.
-- Create and run migrations to define your schema.
-- Define records and establish relationships using `has_many` and `belongs_to`.
-- Manage your database schema with migrations.
-
-With this foundation, you can now expand your models, add validations, and explore more advanced querying and relationships in CQL.\
-\
-In the following guide, we'll take a closer look at the different relationships you can establish between models in CQL: `BelongsTo`, `HasOne`, `HasMany`, and `ManyToMany`. These relationships allow you to associate models with one another, making it easy to retrieve related data, enforce foreign key constraints, and maintain data integrity.
-
-We'll use simple examples with CQL's DSL to help you understand how to define and use these associations effectively.
+This revised `README.md` now serves as a central hub, providing a brief overview and directing users to specialized guides for detailed information on each aspect of CQL Active Record.
