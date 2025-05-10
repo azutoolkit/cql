@@ -23,6 +23,6 @@ If you're querying a column that doesn't exist, CQL will raise a `NoMethodError`
 
 ## Issue: Transaction not rolling back
 
-### Solution:
+## Solution:
 
 Ensure that any errors raised inside the transaction block are properly handled. If an error occurs, the transaction will be rolled back automatically.
