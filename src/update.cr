@@ -150,9 +150,17 @@ module CQL
     # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
     # ```
     def where(&)
-      tbl = @table.not_nil!.table
-      where_hash = {tbl.table_name => tbl}
-      builder = with Expression::FilterBuilder.new(where_hash) yield
+      tbl_expr = @table.not_nil!
+      tbl = tbl_expr.table
+      # FilterBuilder expects Hash(String, QueryTableInfo)
+      # QueryTableInfo = NamedTuple(table: Table, alias: String)
+      table_name_str = tbl.table_name.to_s
+      # Use table name as alias for Update context
+      query_table_info = {table: tbl, alias: table_name_str}
+      query_tables_hash = {table_name_str => query_table_info}
+
+      # Pass the correctly structured hash to FilterBuilder
+      builder = with Expression::FilterBuilder.new(query_tables_hash) yield
       @where = Expression::Where.new(builder.condition)
       self
     end
