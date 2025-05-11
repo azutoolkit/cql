@@ -1,6 +1,8 @@
 require "db"
 
+require "./dialects/dialect"
 require "./dialects/**"
+require "./base_column"
 require "./expression/expressions"
 require "./expression/visitor"
 require "./expression/aggregator_builder"

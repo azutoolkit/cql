@@ -109,10 +109,35 @@ module CQL
     # ```
     # delete = CQL::Delete.new(schema)
     #   .from(:users)
+    #   .where { users.name == 'John' }
     #   .back(:name, :age)
     # ```
     def where(&)
-      builder = with Expression::FilterBuilder.new(where_hash) yield
+      # Construct the QueryTableInfo hash expected by FilterBuilder
+      query_tables_hash = Hash(String, Query::QueryTableInfo).new
+
+      # Add the main table
+      main_tbl_expr = @table.not_nil!
+      main_tbl = main_tbl_expr.table
+      main_tbl_name_str = main_tbl.table_name.to_s
+      query_tables_hash[main_tbl_name_str] = {table: main_tbl, alias: main_tbl_name_str}
+
+      # Add the USING table if present
+      if using_expr = @using
+        using_tbl = using_expr.table
+        using_tbl_name_str = using_tbl.table_name.to_s
+        # Avoid overwriting if alias is same as main table name (unlikely but possible)
+        if query_tables_hash.has_key?(using_tbl_name_str)
+          # Handle potential alias clash if necessary, though default naming prevents this.
+          # For now, assume distinct table names or raise error.
+          raise "Alias conflict: USING table name '#{using_tbl_name_str}' is the same as the FROM table name." if using_tbl_name_str == main_tbl_name_str
+          # If alias is different, it's fine.
+        else
+          query_tables_hash[using_tbl_name_str] = {table: using_tbl, alias: using_tbl_name_str}
+        end
+      end
+
+      builder = with Expression::FilterBuilder.new(query_tables_hash) yield
       @where = Expression::Where.new(builder.condition)
       self
     end
