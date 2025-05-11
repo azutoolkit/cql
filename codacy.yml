@@ -6,3 +6,4 @@ exclude_paths:
   - "bin/**"
   - "lib/**"
   - "**/*.md"
+  - "*.md"

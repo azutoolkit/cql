@@ -12,8 +12,8 @@ In database systems, a transaction is a single unit of work. This unit comprises
 
 Imagine a simple task like transferring money between two bank accounts. This isn't just one database operation; it typically involves:
 
-1.  Debiting the sender's account.
-2.  Crediting the recipient's account.
+1. Debiting the sender's account.
+2. Crediting the recipient's account.
 
 If the debit succeeds but the credit fails (e.g., due to a network error or a constraint violation), the system would be in an inconsistent state – money is gone from one account but didn't appear in the other. Transactions prevent this by ensuring that both steps must succeed together. If the credit fails, the debit is automatically undone.
 
@@ -277,6 +277,208 @@ bob_account_audit_logs = AuditLog.query
 puts "\n--- Bob's Account Audit Logs ---"
 bob_account_audit_logs.each { |log| puts "- #{log.action}: #{log.data}" }
 ```
+
+## 4. Nested Transactions (Savepoints)
+
+While simpler, single-level transactions are often preferred for clarity and to reduce complexity, CQL also supports nested transactions through the use of database savepoints. This is useful when you have a larger operation that is already within a transaction, but you want to perform a sub-operation that can be independently rolled back without affecting the entire outer transaction.
+
+In CQL, when you have an existing transaction object (say, `outer_tx` from an outer `Model.transaction` block), you can create a nested transaction by calling `Model.transaction(outer_tx) do |inner_tx| ... end`. This is analogous to calling `outer_tx.transaction do |inner_tx| ... end` directly as shown in the Crystal standard library documentation for `DB::Transaction`.
+
+This nested call establishes a database SAVEPOINT. Let's explore various scenarios:
+
+### Scenario 1: Successful Inner and Outer Commit
+
+Both the nested (inner) operations and the main (outer) operations are committed.
+
+```crystal
+# Assumes BankAccount model includes CQL::ActiveRecord::Transactional
+BankAccount.transaction do |outer_tx|
+  puts "Outer transaction started."
+  account = BankAccount.create!(account_number: "ACC001", balance: 100.0)
+  puts "  - Outer: Created #{account.account_number}, balance: #{account.balance}"
+
+  BankAccount.transaction(outer_tx) do |inner_tx|
+    puts "    Inner transaction (SAVEPOINT) started."
+    account.balance += 50.0
+    account.save!
+    puts "      - Inner: Added 50.0 to #{account.account_number}, balance: #{account.balance}"
+    # Inner transaction completes successfully, changes are staged.
+  end
+  puts "    Inner transaction finished."
+
+  puts "  - Outer: Preparing to commit."
+  # Outer transaction completes successfully. Both outer and inner changes are committed.
+end
+puts "Outer transaction finished."
+
+# Verification:
+# final_account = BankAccount.query.where(account_number: "ACC001").first!
+# puts "Final balance for ACC001: #{final_account.balance}" # Expected: 150.0
+```
+
+### Scenario 2: Inner Rollback (Explicit `inner_tx.rollback`), Outer Commit
+
+Only the operations within the nested transaction are rolled back. The outer transaction's operations are committed.
+
+```crystal
+# Assumes BankAccount model includes CQL::ActiveRecord::Transactional
+BankAccount.transaction do |outer_tx|
+  puts "Outer transaction started."
+  account = BankAccount.create!(account_number: "ACC002", balance: 100.0)
+  puts "  - Outer: Created #{account.account_number}, balance: #{account.balance}"
+
+  BankAccount.transaction(outer_tx) do |inner_tx|
+    puts "    Inner transaction (SAVEPOINT) started."
+    initial_inner_balance = account.balance
+    account.balance += 50.0
+    account.save! # This change is part of the inner transaction
+    puts "      - Inner: Added 50.0 to #{account.account_number}, balance: #{account.balance}"
+
+    puts "      - Inner: Condition not met, rolling back inner transaction!"
+    inner_tx.rollback # Rolls back changes made within this inner block (the +50.0)
+    # Execution continues after rollback, but DB changes are undone to savepoint.
+  end
+  puts "    Inner transaction finished (was rolled back)."
+
+  # The account object in memory might still have account.balance = 150.0
+  # A `account.reload` would show the database state (100.0).
+  # For demonstration, let's check what the DB will commit for the outer part.
+  account.reload # Reflects state after inner rollback
+  puts "  - Outer: Account balance after inner rollback (before outer commit): #{account.balance}"
+
+  puts "  - Outer: Preparing to commit."
+  # Outer transaction completes successfully. Only outer changes (initial creation) are committed.
+end
+puts "Outer transaction finished."
+
+# Verification:
+# final_account = BankAccount.query.where(account_number: "ACC002").first!
+# puts "Final balance for ACC002: #{final_account.balance}" # Expected: 100.0
+```
+
+As highlighted in the Crystal documentation, after `inner_tx.rollback` is called, the `inner_tx` object is no longer usable for further database operations within that specific transaction context.
+
+### Scenario 3: Inner Rollback (using `raise DB::Rollback`), Outer Commit
+
+Raising `DB::Rollback` within the inner transaction also rolls back only the inner transaction. The exception is caught by the `DB::Transaction` machinery and does not propagate out of the `inner_tx.transaction` block, allowing the outer transaction to continue and commit.
+
+```crystal
+# Assumes BankAccount model includes CQL::ActiveRecord::Transactional
+BankAccount.transaction do |outer_tx|
+  puts "Outer transaction started."
+  account = BankAccount.create!(account_number: "ACC003", balance: 100.0)
+  puts "  - Outer: Created #{account.account_number}, balance: #{account.balance}"
+
+  begin
+    BankAccount.transaction(outer_tx) do |inner_tx|
+      puts "    Inner transaction (SAVEPOINT) started."
+      account.balance += 50.0
+      account.save!
+      puts "      - Inner: Added 50.0 to #{account.account_number}, balance: #{account.balance}"
+
+      puts "      - Inner: Simulating condition for DB::Rollback!"
+      raise DB::Rollback.new # Rolls back inner transaction; exception doesn't leave this block.
+    end
+    # This line is reached because DB::Rollback is handled internally by the inner transaction block.
+    puts "    Inner transaction finished (was rolled back via DB::Rollback)."
+  rescue ex # This rescue would catch other exceptions, but not DB::Rollback from inner.
+    puts "    Inner transaction block failed with unexpected error: #{ex}"
+  end
+
+  account.reload
+  puts "  - Outer: Account balance after inner DB::Rollback (before outer commit): #{account.balance}"
+  puts "  - Outer: Preparing to commit."
+end
+puts "Outer transaction finished."
+
+# Verification:
+# final_account = BankAccount.query.where(account_number: "ACC003").first!
+# puts "Final balance for ACC003: #{final_account.balance}" # Expected: 100.0
+```
+
+### Scenario 4: Inner Failure (Standard `Exception`), Entire Transaction Rolls Back
+
+If a standard (non-`DB::Rollback`) exception is raised within the inner transaction and not rescued within that _inner_ block, it will propagate outwards. This will cause the inner transaction to roll back, and then it will also cause the outer transaction to roll back.
+
+```crystal
+# Assumes BankAccount model includes CQL::ActiveRecord::Transactional
+begin
+  BankAccount.transaction do |outer_tx|
+    puts "Outer transaction started."
+    account = BankAccount.create!(account_number: "ACC004", balance: 100.0)
+    puts "  - Outer: Created #{account.account_number}, balance: #{account.balance}"
+
+    begin
+      BankAccount.transaction(outer_tx) do |inner_tx|
+        puts "    Inner transaction (SAVEPOINT) started."
+        account.balance += 50.0
+        account.save!
+        puts "      - Inner: Added 50.0 to #{account.account_number}, balance: #{account.balance}"
+        raise "Something went wrong in inner transaction!"
+      end
+    rescue ex_inner
+      puts "    Inner transaction block failed: #{ex_inner.message}" # Log the inner error
+      raise # Re-raise to ensure outer transaction also rolls back
+    end
+    puts "    Inner transaction finished."
+    puts "  - Outer: Preparing to commit."
+  end
+rescue ex_outer
+  puts "Outer transaction failed and was rolled back due to: #{ex_outer.message}"
+end
+puts "Transactions finished."
+
+# Verification:
+# account_exists = BankAccount.query.where(account_number: "ACC004").exists?
+# puts "ACC004 exists: #{account_exists}" # Expected: false
+```
+
+### Scenario 5: Outer Rollback After Inner Success
+
+If the inner transaction completes successfully (its changes are staged relative to its savepoint), but the outer transaction is subsequently rolled back (either explicitly or due to an exception in the outer scope _after_ the inner block), then all changes (including those from the successful inner transaction) are discarded.
+
+```crystal
+# Assumes BankAccount model includes CQL::ActiveRecord::Transactional
+begin
+  BankAccount.transaction do |outer_tx|
+    puts "Outer transaction started."
+    account = BankAccount.create!(account_number: "ACC005", balance: 100.0)
+    puts "  - Outer: Created #{account.account_number}, balance: #{account.balance}"
+
+    BankAccount.transaction(outer_tx) do |inner_tx|
+      puts "    Inner transaction (SAVEPOINT) started."
+      account.balance += 50.0
+      account.save!
+      puts "      - Inner: Added 50.0 to #{account.account_number}, balance: #{account.balance}"
+      # Inner transaction completes successfully.
+    end
+    puts "    Inner transaction finished successfully."
+
+    account.reload
+    puts "  - Outer: Balance after successful inner transaction: #{account.balance}"
+    raise "Something went wrong in outer transaction AFTER inner succeeded!"
+  end
+rescue ex_outer
+  puts "Outer transaction failed and was rolled back due to: #{ex_outer.message}"
+end
+puts "Transactions finished."
+
+# Verification:
+# account_exists = BankAccount.query.where(account_number: "ACC005").exists?
+# puts "ACC005 exists: #{account_exists}" # Expected: false
+```
+
+**Key Summary Points from Crystal Lang Documentation & CQL Usage:**
+
+- **Savepoints:** Nested transactions (`Model.transaction(outer_tx)`) rely on database `SAVEPOINT`s.
+- **`inner_tx.rollback`**: Rolls back only the inner transaction to its savepoint. The outer transaction can continue and commit its own changes (and any changes from other successful, non-rolled-back inner transactions).
+- **`raise DB::Rollback` in Inner**: Same effect as `inner_tx.rollback`. The `DB::Rollback` exception is handled by the inner transaction logic and does not propagate to make the outer transaction fail, allowing the outer transaction to proceed.
+- **Other Exceptions in Inner**: If any other exception is raised in the inner transaction and not caught there, it will roll back the inner transaction _and_ propagate to roll back the outer transaction as well.
+- **Outer Rollback**: If the outer transaction rolls back for any reason, all work, including successfully completed inner transactions, is undone.
+- **Commit**: Changes from an inner transaction are only made permanent if the _outermost_ transaction commits.
+- **Database Driver Dependency**: The exact behavior and support for savepoints can depend on the database system and the Crystal DB driver being used.
+
+Nested transactions are a powerful tool for fine-grained control over transactional parts of complex operations. However, they add complexity. Always consider if a simpler, single-level transaction can achieve the desired outcome. Use them judiciously when a sub-unit of work genuinely needs its own independent rollback scope within a larger atomic operation.
 
 ## 5. Best Practices
 

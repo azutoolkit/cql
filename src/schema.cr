@@ -250,6 +250,16 @@ module CQL
       Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
     end
 
+    def transaction(tx : DB::Transaction, &)
+      previous_connection = @active_connection
+      @active_connection = tx.connection
+      begin
+        yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
+      ensure
+        @active_connection = previous_connection
+      end
+    end
+
     # Creates a new migrator for the schema.
     # - **@return** [Migrator] the new migrator
     # **Example**
