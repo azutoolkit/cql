@@ -1,18 +1,4 @@
 module CQL
-  # Error class
-  # This class represents an error in the CQL library
-  # It provides a message describing the error
-  #
-  # **Example** Raising an error
-  #
-  # ```
-  # raise CQL::Error.new("Something went wrong")
-  # ```
-  class Error < Exception
-    def initialize(@message : String)
-    end
-  end
-
   # A column in a table
   # This class represents a column in a table
   # It provides methods for setting the column type, default value, and constraints
@@ -46,6 +32,8 @@ module CQL
     property length : Int32? = nil
     # :nodoc:
     property? index : Index? = nil
+    # :nodoc:
+    property? version_number : Bool = false
 
     # Create a new column instance
     # - **@param** : name (Symbol) - The name of the column
@@ -56,6 +44,7 @@ module CQL
     # - **@param** : unique (Bool) - Whether the column should have a unique constraint (default: false)
     # - **@param** : size (Int32, nil) - The size of the column (default: nil)
     # - **@param** : index (Index, nil) - The index for the column (default: nil)
+    # - **@param** : version_number (Bool) - Whether this column is used for optimistic locking (default: false)
     # - **@return** : Nil
     # - **@raise** : CQL::Error if the column type is not valid
     #
@@ -73,6 +62,7 @@ module CQL
       @unique : Bool = false,
       @size : Int32? = nil,
       @index : Index? = nil,
+      @version_number : Bool = false,
     )
     end
 
