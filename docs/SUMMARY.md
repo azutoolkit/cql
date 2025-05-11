@@ -28,6 +28,7 @@
     - [Validations](guides/active-record-with-cql/validations.md)
     - [Callbacks](guides/active-record-with-cql/callbacks.md)
     - [Transactions](guides/active-record-with-cql/transactions.md)
+    - [Optimistic Locking](guides/active-record-with-cql/optimistic-locking.md)
     - [Relations](guides/active-record-with-cql/relations/README.md)
       - [Belongs To](guides/active-record-with-cql/relations/belongsto.md)
       - [Has One](guides/active-record-with-cql/relations/hasone.md)

@@ -1,9 +1,9 @@
 require "./spec_helper"
 # Create a test schema with our test tables
 OPTIMISTIC_LOCKING_TEST_SCHEMA = CQL::Schema.define(
-    :optimistic_locking_test,
-    adapter: CQL::Adapter::SQLite,
-    uri: "sqlite3::memory:") do
+  :optimistic_locking_test,
+  adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3::memory:") do
   # Create a test table with a version column for optimistic locking
   table :products do
     primary :id, Int32, auto_increment: true
@@ -125,7 +125,7 @@ module CQL::ActiveRecord::OptimisticLockingSpec
       product = Product.create!(name: "Test Product", price: 10.0, stock: 5)
 
       # Sequential updates without conflict
-      3.times do |i|
+      3.times do |_|
         product.price += 5.0
         product.update!
       end

@@ -358,7 +358,6 @@ module CQL
       end
 
       # Add version check to WHERE clause
-      version_column_name = version_col.name
       if @where.nil?
         @where = Expression::Where.new(
           Expression::Compare.new(Expression::Column.new(version_col), "=", current_version.as(DB::Any))
@@ -374,7 +373,7 @@ module CQL
       end
 
       # Increment the version in the setters
-      @setters <<Expression::Setter.new(Expression::Column.new(version_col), (current_version + 1).as(DB::Any))
+      @setters << Expression::Setter.new(Expression::Column.new(version_col), (current_version + 1).as(DB::Any))
     end
   end
 end
