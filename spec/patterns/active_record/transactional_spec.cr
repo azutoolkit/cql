@@ -37,12 +37,11 @@ describe "CQL::ActiveRecord::Transactional" do
       TestUserTransactional.count.should eq(0)
     end
 
-
     context "ehen using nested transactions" do
       it "commits all operations with tx2.commit" do
         TestUserTransactional.transaction do |tx|
           TestUserTransactional.create!(name: "Eve Transactional")
-          TestUserTransactional.transaction(tx) do |tx2|
+          TestUserTransactional.transaction(tx) do |_|
             TestUserTransactional.create!(name: "Frank Transactional")
           end
         end
@@ -55,7 +54,7 @@ describe "CQL::ActiveRecord::Transactional" do
         TestUserTransactional.transaction do |tx|
           TestUserTransactional.create!(name: "Eve Transactional")
 
-          TestUserTransactional.transaction(tx) do |tx2|
+          TestUserTransactional.transaction(tx) do |_|
             TestUserTransactional.create!(name: "Frank Transactional") # This should not be created
             raise DB::Rollback.new("Intentional rollback")
           end
@@ -85,20 +84,18 @@ describe "CQL::ActiveRecord::Transactional" do
         begin
           TestUserTransactional.transaction do |tx|
             TestUserTransactional.create!(name: "Eve Transactional")
-            TestUserTransactional.transaction(tx) do |tx2|
+            TestUserTransactional.transaction(tx) do |_|
               TestUserTransactional.create!(name: "Frank Transactional")
               raise "Intentional rollback"
             end
           end
         rescue exception
-
         end
 
         TestUserTransactional.find_by_name("Eve Transactional").should be_nil
         TestUserTransactional.find_by_name("Frank Transactional").should be_nil
       end
     end
-
 
     it "rolls back operations if DB::Rollback is raised" do
       TestUserTransactional.transaction do |_|
