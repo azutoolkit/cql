@@ -502,6 +502,89 @@ module CQL
       col
     end
 
+    # Adds a lock_version column for optimistic locking.
+    # Lock version is used to prevent race conditions when multiple users are updating the same record.
+    # It is a counter that is incremented each time the record is updated.
+    # If the record is updated by another user, the lock version will be different and the update will fail.
+    # The user will then need to retry the operation.
+    #
+    # - **@param** name [Symbol] the name of the column to be added (default: :version)
+    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** null [Bool] whether the column allows null values (default: false)
+    # - **@param** default [DB::Any] the default value for the column (default: 1)
+    # - **@param** index [Bool] whether the column should be indexed (default: false)
+    # - **@return** [Column] the new version column
+    #
+    # **Example** Adding a version column for optimistic locking
+    #
+    # ```
+    # lock_version :version
+    # ```
+    def lock_version(name : Symbol = :version, as as_name : String? = nil, null : Bool = false, default : DB::Any = 1, index : Bool = false)
+      col = Column(Int32).new(name, Int32, as_name, null, default, false, nil, nil, true)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name]) : nil
+      col
+    end
+
+    # Returns all columns in the table that are marked as version columns
+    # - **@return** [Array(Column)] an array of version columns
+    def version_columns
+      @columns.values.select(&.version_number?)
+    end
+
+    # Adds a new column to the table.
+    # Interval is a column type that can be used to store a duration of time.
+    # It is a wrapper around the Time::Span type.
+    #
+    # - **@param** name [Symbol] the name of the column to be added
+    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** null [Bool] whether the column allows null values (default: false)
+    # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
+    # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
+    # - **@param** index [Bool] whether the column should be indexed (default: false)
+    # - **@return** [Column] the new column
+    #
+    # **Example** Adding a new interval column
+    #
+    # ```
+    # interval :duration
+    # interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
+    # ```
+    def interval(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
+      col = Column(Time::Span).new(name, Time::Span, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
+    end
+
+    # Adds a new column to the table.
+    # Blob is a column type that can be used to store binary data.
+    # It is a wrapper around the Slice(UInt8) type.
+    # - **@param** name [Symbol] the name of the column to be added
+    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** null [Bool] whether the column allows null values (default: false)
+    # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
+    # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
+    # - **@param** index [Bool] whether the column should be indexed (default: false)
+    # - **@return** [Column] the new column
+    #
+    # **Example** Adding a new column with default options
+    #
+    # ```
+    # blob :data
+    # blob :data, as: "binary_data", null: false, default: nil, unique: true, index: true
+    # ```
+    def blob(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
+      col = Column(Slice(UInt8)).new(name, Slice(UInt8), as_name, null, default, unique, size)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
+    end
+
     # Adds a new column to the table.
     #
     # **Example** Adding timestamps to the table

@@ -11,7 +11,7 @@ require "./identifyable"
 require "./relations"
 require "./scopes"
 require "./transactional"
-
+require "./optimistic_locking"
 module CQL
   module ActiveRecord
     # The Model module provides Active Record functionality for your models.

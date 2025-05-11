@@ -79,4 +79,7 @@ module CQL
       super("MySQL", feature, workaround)
     end
   end
+
+  # Optimistic Lock Error - Raised when a concurrent update has occurred
+  class OptimisticLockError < Error; end
 end
