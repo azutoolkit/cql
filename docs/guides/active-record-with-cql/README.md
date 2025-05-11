@@ -19,6 +19,7 @@ This central README provides a high-level introduction. For in-depth information
 - **[Defining Models](./defining-models.md)**: Learn how to define your Active Record models, map them to database tables, specify primary keys, and work with attributes.
 - **[CRUD Operations](./crud-operations.md)**: Detailed guide on creating, reading, updating, and deleting records using Active Record methods.
 - **[Querying](./querying.md)**: Explore the powerful query interface, including direct finders, chainable queries, aggregations, and scopes.
+- **[Transactions](./transactions.md)**: Ensure data integrity by using database transactions for multi-step operations.
 - **[Persistence Details](./persistence-details.md)**: Understand how to check if a record is persisted and how to reload its data from the database.
 - **[Validations](./validations.md)**: Ensure data integrity by defining and using model validations.
 - **[Callbacks](./callbacks.md)**: Hook into the lifecycle of your models to trigger logic at specific events (e.g., before save, after create).
@@ -112,6 +113,30 @@ Fetch records using direct finders or build complex queries with a chainable int
 
 _Dive into the [Querying Guide](./querying.md) for all query-building capabilities._
 
+### Transactions
+
+Maintain data integrity with ACID-compliant database transactions. CQL provides both model-level transaction support and a service objects pattern for complex operations.
+
+```crystal
+# Basic transaction usage
+BankAccount.transaction do |tx|
+  account = BankAccount.find(1)
+  account.balance -= 100
+  account.save!
+
+  Transaction.create!(
+    amount: 100,
+    transaction_type: "withdrawal",
+    from_account_id: account.id,
+    created_at: Time.utc
+  )
+
+  # All operations succeed or fail together
+end
+```
+
+_Learn more in the [Transactions Guide](./transactions.md) for maintaining data integrity across multiple operations._
+
 ### Validations
 
 Ensure data integrity with built-in or custom validation rules triggered before saving records.
@@ -144,7 +169,3 @@ _See the [Database Migrations Guide](./migrations.md) for how to write and run m
 Create reusable query shortcuts to keep your code clean and expressive.
 
 _Read the [Scopes Guide](./scopes.md) for defining and using scopes._
-
----
-
-This revised `README.md` now serves as a central hub, providing a brief overview and directing users to specialized guides for detailed information on each aspect of CQL Active Record.
