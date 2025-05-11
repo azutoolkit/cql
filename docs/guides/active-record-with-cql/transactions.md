@@ -1,895 +1,300 @@
-# Transactions in CQL
+# Transactions Guide: Ensuring Data Integrity with CQL
 
-This comprehensive guide demonstrates how to use transactions with CQL's Active Record pattern. We'll explore transactions through a practical banking application example, explaining each concept step by step.
+This guide explores how to leverage database transactions effectively within your Crystal applications using CQL's Active Record pattern. We will use a practical banking domain example throughout to illustrate key concepts and best practices.
 
-## What are Transactions?
+This documentation covers the functionality provided by the `@transactions.md` and `@transactional.cr` modules within the library.
 
-In database systems, a transaction represents a unit of work that should be processed reliably and independently of other transactions. Imagine you're transferring money between two bank accounts - you want to ensure that the money is both withdrawn from one account AND deposited to another. If either operation fails, both should be reversed to maintain data integrity.
+## 1. Introduction to Transactions in CQL
 
-Transactions provide four critical guarantees, known as ACID properties:
+### What are Transactions?
 
-- **Atomicity**: All operations within a transaction are treated as a single, indivisible unit. Either all operations succeed completely, or none of them take effect at all. There's no possibility of partial completion that could leave your database in an inconsistent state.
+In database systems, a transaction is a single unit of work. This unit comprises one or more operations that are treated as an indivisible sequence. The core principle is that either all operations within the transaction complete successfully (commit) or none of them do (rollback).
 
-- **Consistency**: A transaction transforms the database from one valid state to another valid state, maintaining all predefined rules, constraints, and data integrity. For example, the total amount of money in the banking system remains constant before and after a transfer.
+Imagine a simple task like transferring money between two bank accounts. This isn't just one database operation; it typically involves:
 
-- **Isolation**: Even when multiple transactions are executing concurrently, each transaction operates as if it were running alone. The intermediate states of a transaction are invisible to other transactions until the transaction completes.
+1.  Debiting the sender's account.
+2.  Crediting the recipient's account.
 
-- **Durability**: Once a transaction is committed (completed successfully), its changes are permanent and will survive system failures like power outages or crashes. The database guarantees that committed data won't be lost.
+If the debit succeeds but the credit fails (e.g., due to a network error or a constraint violation), the system would be in an inconsistent state – money is gone from one account but didn't appear in the other. Transactions prevent this by ensuring that both steps must succeed together. If the credit fails, the debit is automatically undone.
 
-## Understanding Transactions in CQL
+### Why are they important in domain modeling?
 
-CQL (Crystal Query Language) provides a clean, Ruby-like syntax for handling database transactions through its Active Record implementation. Let's start with a basic example:
+In application development, especially when dealing with complex business logic and multiple related data changes, transactions are crucial for:
 
-```crystal
-# Basic transaction pattern in CQL
-BankAccount.transaction do |tx|
-  # All database operations in this block form a single transaction
+- **Maintaining Data Consistency:** Ensuring that your database adheres to all predefined rules and constraints.
+- **Preventing Partial Updates:** Avoiding scenarios where only a portion of a multi-step operation completes, leaving data in an invalid state.
+- **Handling Concurrency:** Providing a mechanism to manage simultaneous access and modifications to data by multiple users or processes (though concurrency requires careful consideration of isolation levels and potential deadlocks).
+- **Simplifying Error Recovery:** If an error occurs within a transaction, you know the database will revert to its state before the transaction began, making error handling and recovery more predictable.
 
-  # 1. Retrieve data
-  account = BankAccount.find(1)
+Transactions provide the crucial ACID properties:
 
-  # 2. Modify data
-  account.balance += 100.0
+- **Atomicity:** The transaction is a single unit; either it completes entirely or has no effect.
+- **Consistency:** A transaction brings the database from one valid state to another.
+- **Isolation:** Concurrent transactions do not interfere with each other. Each sees the database as if it were running alone.
+- **Durability:** Once a transaction is committed, the changes are permanent and survive system failures.
 
-  # 3. Save changes
-  account.save!
+### Supported Features in the library
 
-  # Any unhandled exception will automatically roll back the entire transaction
-  # You can also use tx.rollback to manually roll back when needed
-end
-```
-
-When this code executes:
-1. CQL begins a transaction by sending a `BEGIN` command to the database
-2. All SQL operations inside the block are part of this transaction
-3. If all operations succeed and no exceptions occur, CQL automatically sends a `COMMIT` command
-4. If any exception occurs, CQL automatically sends a `ROLLBACK` command
-
-This behavior ensures that your database operations either all succeed or all fail together, maintaining data integrity.
-
-## Banking Application Example
-
-### 1. Schema Definition
+CQL's Active Record implementation simplifies transaction management in Crystal. By including the `CQL::ActiveRecord::Transactional` module in your model, you gain access to the `transaction` class method. This method provides a block-based interface for executing a series of database operations within a single transaction.
 
 ```crystal
-BANKING_DB = CQL::Schema.define(:banking_db, "postgresql://localhost/banking", CQL::Adapter::PostgreSQL) do
-  table :bank_accounts do
-    column :id, Int32, primary: true, auto: true
-    column :account_number, String
-    column :owner_name, String
-    column :balance, Float64
-    column :created_at, Time
-    column :updated_at, Time
-  end
-
-  table :transactions do
-    column :id, Int32, primary: true, auto: true
-    column :amount, Float64
-    column :transaction_type, String # "deposit", "withdrawal", "transfer"
-    column :from_account_id, Int32, null: true
-    column :to_account_id, Int32, null: true
-    column :status, String # "pending", "completed", "failed"
-    column :created_at, Time
-
-    foreign_key :from_account_id, references: :bank_accounts, on_delete: :cascade
-    foreign_key :to_account_id, references: :bank_accounts, on_delete: :cascade
-  end
-
-  table :audit_logs do
-    column :id, Int32, primary: true, auto: true
-    column :action, String
-    column :entity_type, String
-    column :entity_id, Int32
-    column :data, String # JSON data
-    column :created_at, Time
-  end
-end
-```
-
-### 2. Model Definitions
-
-```crystal
-struct BankAccount
+# Include this module in your model
+struct MyModel
   include CQL::ActiveRecord::Model(Int32)
-  include CQL::ActiveRecord::Transactional
+  include CQL::ActiveRecord::Transactional # <--- Gives access to .transaction
 
-  db_context BANKING_DB, :bank_accounts
+  db_context MY_DB, :my_models
 
-  property id : Int32?
-  property account_number : String
-  property owner_name : String
-  property balance : Float64
-  property created_at : Time
-  property updated_at : Time
-
-  # Methods that delegate to service objects
-  def withdraw(amount : Float64) : Bool
-    BankingServices::WithdrawalService.execute(self, amount)
-  end
-
-  def deposit(amount : Float64) : Bool
-    BankingServices::DepositService.execute(self, amount)
-  end
-
-  def transfer_to(recipient : BankAccount, amount : Float64) : Bool
-    BankingServices::TransferService.execute(self, recipient, amount)
-  end
+  # ... properties
 end
 
-struct Transaction
-  include CQL::ActiveRecord::Model(Int32)
-
-  db_context BANKING_DB, :transactions
-
-  property id : Int32?
-  property amount : Float64
-  property transaction_type : String
-  property from_account_id : Int32?
-  property to_account_id : Int32?
-  property status : String
-  property created_at : Time
-
-  belongs_to :from_account, BankAccount, foreign_key: :from_account_id
-  belongs_to :to_account, BankAccount, foreign_key: :to_account_id
-end
-
-struct AuditLog
-  include CQL::ActiveRecord::Model(Int32)
-
-  db_context BANKING_DB, :audit_logs
-
-  property id : Int32?
-  property action : String
-  property entity_type : String
-  property entity_id : Int32
-  property data : String
-  property created_at : Time
+# Use the transaction block
+MyModel.transaction do |tx|
+  # All database operations within this block form a single transaction
+  # If an unhandled exception occurs, the transaction is automatically rolled back
+  # You can also use tx.rollback to manually roll back
 end
 ```
 
-## Transaction Usage Patterns
+## Use Case: Bank Transfer
 
-### When Should You Use Transactions?
+To demonstrate transactions, we will use a simplified banking application.
 
-Transactions are essential when multiple database operations need to be treated as a single unit of work. Use transactions when:
+### Overview of the domain
 
-1. **Modifying related data across multiple tables** - For example, recording a sale might require updating inventory, creating an order record, and recording payment details.
+The core operation is transferring money between accounts. This operation must be atomic – the debit from one account and the credit to another must happen together. We also need to track these operations for auditing purposes.
 
-2. **Ensuring data consistency** - When one operation's validity depends on another (like ensuring an account has enough funds before withdrawing).
+### Entities Involved
 
-3. **Maintaining referential integrity** - When you need to ensure that related records across different tables remain consistent.
+- **BankAccount:** Stores account details and balance.
+- **Transaction:** Records deposits, withdrawals, and transfers.
+- **AuditLog:** Provides a detailed log of system activities.
 
-4. **Preventing race conditions** - When multiple users or processes might be updating the same data simultaneously.
+(Detailed schema and model definitions are omitted for brevity, but assume standard columns like `id`, `balance`, `amount`, `type`, `created_at`, etc., as introduced in the schema section of previous versions).
 
-In our banking application, transactions are vital for operations like money transfers, where partial completion (debiting one account without crediting another) would be catastrophic.
+## 3. Writing Transactional Logic with CQL
 
-### Two Ways to Use Transactions in CQL
+The core logic for banking operations like withdrawals, deposits, and transfers involves updating one or more `BankAccount` records, creating a `Transaction` record, and often creating an `AuditLog` record. These steps must be performed atomically. This is where the `BankAccount.transaction` block becomes essential.
 
-CQL provides two main approaches to working with transactions:
+### The `BankAccount.transaction` Block
 
-#### 1. Direct Transaction Blocks
+Any database operations performed using CQL Active Record methods _inside_ a `BankAccount.transaction do ... end` block are treated as a single unit by the database.
 
-```crystal
-# Direct transaction block on any model that includes CQL::ActiveRecord::Transactional
-BankAccount.transaction do |tx|
-  # Your operations here
+- When the block is entered, a database transaction is started (`BEGIN`).
+- When the block completes without raising an exception, the transaction is committed (`COMMIT`), making all changes permanent.
+- If any exception is raised _within_ the block, the transaction is automatically rolled back (`ROLLBACK`), discarding all changes made during the transaction.
+- You can also explicitly call `tx.rollback` on the yielded transaction object `tx` to manually roll back.
 
-  # Optional: Manually roll back when needed
-  if some_condition
-    tx.rollback
-    return
-  end
-end
-```
+This ensures that if any step of a multi-operation process fails, the entire set of operations is undone, maintaining data integrity.
 
-#### 2. Service Objects Pattern (Recommended)
+### Transaction Logic Examples
 
-For complex business logic, the service objects pattern provides a cleaner, more maintainable approach by:
-- Encapsulating related operations
-- Centralizing validation logic
-- Providing clear error handling
-- Simplifying testing
+Here are the core transaction blocks for our banking operations, demonstrating the use of CQL features within the atomic unit:
 
-Let's look at how this works with our WithdrawalService example:
+#### Withdrawal Transaction
+
+This transaction debits a `BankAccount` and records the event.
 
 ```crystal
-module BankingServices
-  class WithdrawalService
-    # Class method for convenient execution
-    def self.execute(account : BankAccount, amount : Float64) : Bool
-      new(account, amount).execute
-    end
+# Conceptual method demonstrating the core transaction logic for withdrawal
+def perform_withdrawal_transaction(account : BankAccount, amount : Float64)
+  # Assumes validation (amount > 0, sufficient funds) happened BEFORE this block
 
-    # Initialize with required data
-    def initialize(@account : BankAccount, @amount : Float64)
-    end
-
-    # Main execution method
-    def execute : Bool
-      # First validate before starting transaction
-      validate!
-
-      # Begin transaction
-      BankAccount.transaction do |tx|
-        # Step 1: Update account balance
-        @account.balance -= @amount
-        @account.updated_at = Time.utc
-        @account.save!
-
-        # Step 2: Create transaction record for audit trail
-        Transaction.create!(
-          amount: @amount,
-          transaction_type: "withdrawal",
-          from_account_id: @account.id,
-          status: "completed",
-          created_at: Time.utc
-        )
-
-        # Step 3: Log detailed audit information
-        AuditLog.create!(
-          action: "withdrawal",
-          entity_type: "bank_account",
-          entity_id: @account.id.not_nil!,
-          data: {
-            account: @account.account_number,
-            amount: @amount
-          }.to_json,
-          created_at: Time.utc
-        )
-
-        # Return success
-        true
-      end
-    rescue ex : Exception
-      # Handle any exceptions and log the error
-      Log.error { "Withdrawal failed: #{ex.message}" }
-      false
-    end
-
-    # Validation occurs before transaction begins
-    private def validate!
-      raise "Withdrawal amount must be positive" if @amount <= 0
-      raise "Insufficient funds" if @account.balance < @amount
-    end
-  end
-```
-
-### DepositService
-
-```crystal
-  class DepositService
-    def self.execute(account : BankAccount, amount : Float64) : Bool
-      new(account, amount).execute
-    end
-
-    def initialize(@account : BankAccount, @amount : Float64)
-    end
-
-    def execute : Bool
-      validate!
-
-      BankAccount.transaction do |tx|
-        # Update account balance
-        @account.balance += @amount
-        @account.updated_at = Time.utc
-        @account.save!
-
-        # Create transaction record
-        Transaction.create!(
-          amount: @amount,
-          transaction_type: "deposit",
-          to_account_id: @account.id,
-          status: "completed",
-          created_at: Time.utc
-        )
-
-        # Log the audit
-        AuditLog.create!(
-          action: "deposit",
-          entity_type: "bank_account",
-          entity_id: @account.id.not_nil!,
-          data: {
-            account: @account.account_number,
-            amount: @amount
-          }.to_json,
-          created_at: Time.utc
-        )
-
-        true
-      end
-    rescue ex : Exception
-      Log.error { "Deposit failed: #{ex.message}" }
-      false
-    end
-
-    private def validate!
-      raise "Deposit amount must be positive" if @amount <= 0
-    end
-  end
-```
-
-### TransferService
-
-```crystal
-  class TransferService
-    def self.execute(from_account : BankAccount, to_account : BankAccount, amount : Float64) : Bool
-      new(from_account, to_account, amount).execute
-    end
-
-    def initialize(@from_account : BankAccount, @to_account : BankAccount, @amount : Float64)
-    end
-
-    def execute : Bool
-      validate!
-
-      BankAccount.transaction do |tx|
-        # Update sender balance
-        @from_account.balance -= @amount
-        @from_account.updated_at = Time.utc
-        @from_account.save!
-
-        # Update recipient balance
-        @to_account.balance += @amount
-        @to_account.updated_at = Time.utc
-        @to_account.save!
-
-        # Create transaction record
-        Transaction.create!(
-          amount: @amount,
-          transaction_type: "transfer",
-          from_account_id: @from_account.id,
-          to_account_id: @to_account.id,
-          status: "completed",
-          created_at: Time.utc
-        )
-
-        # Log the audit
-        AuditLog.create!(
-          action: "money_transfer",
-          entity_type: "bank_account",
-          entity_id: @from_account.id.not_nil!,
-          data: {
-            from_account: @from_account.account_number,
-            to_account: @to_account.account_number,
-            amount: @amount
-          }.to_json,
-          created_at: Time.utc
-        )
-
-        true
-      end
-    rescue ex : Exception
-      Log.error { "Transfer failed: #{ex.message}" }
-      false
-    end
-
-    private def validate!
-      raise "Transfer amount must be positive" if @amount <= 0
-      raise "Cannot transfer to the same account" if @from_account.id == @to_account.id
-      raise "Insufficient funds" if @from_account.balance < @amount
-    end
-  end
-end
-```
-
-## Practical Transaction Examples
-
-Let's walk through complete, real-world examples of using transactions in our banking application. These examples will demonstrate how transactions ensure data integrity across multiple operations.
-
-### Creating Accounts
-
-First, let's create two accounts for our examples:
-
-```crystal
-# Create accounts outside a transaction since these are independent operations
-alice_account = BankAccount.create!(
-  account_number: "ACC-001",
-  owner_name: "Alice Smith",
-  balance: 1000.0,
-  created_at: Time.utc,
-  updated_at: Time.utc
-)
-
-bob_account = BankAccount.create!(
-  account_number: "ACC-002",
-  owner_name: "Bob Jones",
-  balance: 500.0,
-  created_at: Time.utc,
-  updated_at: Time.utc
-)
-
-puts "Alice's initial balance: $#{alice_account.balance}" # $1000.0
-puts "Bob's initial balance: $#{bob_account.balance}"     # $500.0
-```
-
-### Example 1: Simple Transfer Transaction
-
-Let's look at what happens in a successful money transfer:
-
-```crystal
-# Using the TransferService which internally uses a transaction
-success = BankingServices::TransferService.execute(
-  alice_account,     # from account
-  bob_account,       # to account
-  150.0              # amount to transfer
-)
-
-if success
-  # Reload accounts to see updated balances
-  alice_account = BankAccount.find(alice_account.id)
-  bob_account = BankAccount.find(bob_account.id)
-
-  puts "Transfer successful!"
-  puts "Alice's new balance: $#{alice_account.balance}" # $850.0
-  puts "Bob's new balance: $#{bob_account.balance}"     # $650.0
-else
-  puts "Transfer failed"
-end
-```
-
-Behind the scenes, here's what happened:
-1. The service started a database transaction
-2. It decreased Alice's balance by $150
-3. It increased Bob's balance by $150
-4. It created a transaction record for auditing
-5. It created an audit log entry
-6. All changes were committed as a single unit
-
-If any step failed, the entire operation would have been rolled back, and both balances would remain unchanged.
-
-### Example 2: Model Convenience Methods
-
-Our `BankAccount` model provides convenient methods that call the service objects internally:
-
-```crystal
-# These methods call the respective service objects, which use transactions
-alice_account.transfer_to(bob_account, 100.0)  # Transfer $100 from Alice to Bob
-bob_account.deposit(200.0)                     # Deposit $200 to Bob's account
-alice_account.withdraw(50.0)                   # Withdraw $50 from Alice's account
-
-# Check updated balances
-alice_account = BankAccount.find(alice_account.id)
-bob_account = BankAccount.find(bob_account.id)
-puts "Alice's balance after operations: $#{alice_account.balance}" # $700.0
-puts "Bob's balance after operations: $#{bob_account.balance}"     # $950.0
-```
-
-### Example 3: Error Handling and Automatic Rollback
-
-What happens when a transaction fails? Let's try to transfer more money than Alice has:
-
-```crystal
-# Attempt to transfer more money than available
-begin
-  # This should fail because Alice doesn't have $2000
-  result = alice_account.transfer_to(bob_account, 2000.0)
-
-  if !result
-    puts "Transfer failed due to business rule validation"
-
-    # Check that balances are unchanged
-    alice_account = BankAccount.find(alice_account.id)
-    bob_account = BankAccount.find(bob_account.id)
-    puts "Alice's balance remains: $#{alice_account.balance}" # Still $700.0
-    puts "Bob's balance remains: $#{bob_account.balance}"     # Still $950.0
-  end
-rescue ex
-  puts "Error: #{ex.message}" # "Insufficient funds"
-
-  # Balances remain unchanged due to automatic transaction rollback
-  alice_account = BankAccount.find(alice_account.id)
-  bob_account = BankAccount.find(bob_account.id)
-end
-```
-
-The transaction automatically rolled back when the validation check in `TransferService` raised an exception, so no money was transferred, and no records were created.
-
-### Example 4: Manual Transaction Control
-
-Sometimes you need more direct control over transactions. Here's how to manually start, commit, or roll back transactions:
-
-```crystal
-# Using a transaction block with manual rollback logic
-BankAccount.transaction do |tx|
-  # Find accounts
-  alice = BankAccount.find(alice_account.id)
-  bob = BankAccount.find(bob_account.id)
-
-  # Update balances
-  alice.balance -= 300.0
-  alice.save!
-
-  bob.balance += 300.0
-  bob.save!
-
-  # Create transaction record
-  transaction_record = Transaction.create!(
-    amount: 300.0,
-    transaction_type: "transfer",
-    from_account_id: alice.id,
-    to_account_id: bob.id,
-    status: "completed",
-    created_at: Time.utc
-  )
-
-  # Imagine some business rule that might cause us to roll back
-  if alice.balance < 300.0 # For example, minimum balance requirement
-    puts "Transaction would leave insufficient minimum balance"
-    tx.rollback # Explicitly roll back all changes
-    return false
-  end
-
-  # If we reach here, the transaction will be committed automatically
-  puts "Manual transaction completed successfully"
-end
-```
-
-This example shows that you can explicitly roll back a transaction when a specific condition is detected, giving you precise control over the transaction's outcome.
-
-## Querying Transaction History
-
-```crystal
-# Get all transfers from a specific account
-transfers_from = Transaction.query
-  .from(:transactions)
-  .where(from_account_id: alice_account.id)
-  .all(Transaction)
-
-# Get all money received by an account
-transfers_to = Transaction.query
-  .from(:transactions)
-  .where(to_account_id: bob_account.id)
-  .all(Transaction)
-
-# Get account balance history through audit logs
-account_history = AuditLog.query
-  .from(:audit_logs)
-  .where(entity_type: "bank_account", entity_id: alice_account.id)
-  .order(created_at: :desc)
-  .all(AuditLog)
-```
-
-## Best Practices for Transactions in CQL
-
-Working with database transactions requires careful attention to ensure your application remains reliable and performs well. Here are detailed best practices to follow:
-
-### 1. Keep transactions short and focused
-
-Long-running transactions can cause several problems:
-- They hold database locks longer, potentially blocking other operations
-- They increase the risk of deadlocks when multiple transactions are running
-- They're more likely to fail because they touch more data
-
-Consider this example of a good transaction scope:
-
-```crystal
-# Good: Focused transaction that only handles the critical operations
-def transfer_money(from_account, to_account, amount)
   BankAccount.transaction do |tx|
-    # Only the essential balance updates are in the transaction
+    # 1. Update the account balance using CQL Active Record save!
+    account.balance -= amount
+    account.updated_at = Time.utc
+    account.save! # Persists the balance change within the transaction
+
+    # 2. Create a transaction record using CQL Active Record create!
+    Transaction.create!( # Creates a new record within the transaction
+      amount: amount,
+      transaction_type: "withdrawal",
+      from_account_id: account.id,
+      status: "completed",
+      created_at: Time.utc
+    )
+
+    # 3. Create an audit log entry using CQL Active Record create!
+    AuditLog.create!( # Creates a new record within the transaction
+      action: "withdrawal",
+      entity_type: "bank_account",
+      entity_id: account.id.not_nil!,
+      data: { account: account.account_number, amount: amount }.to_json,
+      created_at: Time.utc
+    )
+
+    # If any of the above .save! or .create! calls fail (e.g., DB error),
+    # or if an exception is raised, the transaction will roll back automatically.
+  end
+end
+```
+
+**Why a Transaction is Useful Here:** While a withdrawal is simpler than a transfer, using a transaction ensures that the account balance update _and_ the recording of the transaction/audit log happen together. If the record-keeping fails, the balance change is undone.
+
+#### Deposit Transaction
+
+This transaction credits a `BankAccount` and records the event.
+
+```crystal
+# Conceptual method demonstrating the core transaction logic for deposit
+def perform_deposit_transaction(account : BankAccount, amount : Float64)
+  # Assumes validation (amount > 0) happened BEFORE this block
+
+  BankAccount.transaction do |tx|
+    # 1. Update the account balance
+    account.balance += amount
+    account.updated_at = Time.utc
+    account.save! # Persists the balance change within the transaction
+
+    # 2. Create a transaction record
+    Transaction.create!( # Creates a new record within the transaction
+      amount: amount,
+      transaction_type: "deposit",
+      to_account_id: account.id,
+      status: "completed",
+      created_at: Time.utc
+    )
+
+    # 3. Create an audit log entry
+    AuditLog.create!( # Creates a new record within the transaction
+      action: "deposit",
+      entity_type: "bank_account",
+      entity_id: account.id.not_nil!,
+      data: { account: account.account_number, amount: amount }.to_json,
+      created_at: Time.utc
+    )
+  end
+end
+```
+
+**Why a Transaction is Useful Here:** Similar to withdrawal, it guarantees that the balance update and the logging/recording of the deposit happen together.
+
+#### Transfer Transaction (Highlighting Atomicity)
+
+This is the prime example where transactions are critical. Money must be debited from one account _and_ credited to another _and_ records created, all or nothing.
+
+```crystal
+# Conceptual method demonstrating the core transaction logic for transfer
+def perform_transfer_transaction(from_account : BankAccount, to_account : BankAccount, amount : Float64)
+  # Assumes validation (amount > 0, different accounts, sufficient funds)
+  # happened BEFORE this block.
+  # Also assumes accounts are sorted by ID outside for deadlock prevention.
+
+  BankAccount.transaction do |tx|
+    # Operations within the transaction - ENSURING ATOMICITY
+
+    # 1. Reload accounts to get freshest data under current isolation level
+    # This is crucial for handling concurrent access. Use CQL Active Record reload.
+    from_account.reload
+    to_account.reload
+
+    # Re-validate insufficient funds after reloading
+    raise "Insufficient funds after reload" if from_account.balance < amount
+
+    # 2. Debit the sender's account using CQL Active Record save!
     from_account.balance -= amount
-    from_account.save!
+    from_account.updated_at = Time.utc
+    from_account.save! # Persists the debit within the transaction
 
+    # 3. Credit the recipient's account using CQL Active Record save!
     to_account.balance += amount
-    to_account.save!
-  end
+    to_account.updated_at = Time.utc
+    to_account.save! # Persists the credit within the transaction
 
-  # Non-critical operations happen outside the transaction
-  send_notification_email(from_account.owner_name, amount)
-  log_transfer_for_analytics(from_account.id, to_account.id, amount)
+    # 4. Create a transaction record using CQL Active Record create!
+    Transaction.create!( # Creates a new record within the transaction
+      amount: amount,
+      transaction_type: "transfer",
+      from_account_id: from_account.id,
+      to_account_id: to_account.id,
+      status: "completed",
+      created_at: Time.utc
+    )
+
+    # 5. Create an audit log entry using CQL Active Record create!
+    AuditLog.create!( # Creates a new record within the transaction
+      action: "money_transfer",
+      entity_type: "transfer",
+      entity_id: nil, # No single entity ID for the transfer action
+      data: { from: from_account.account_number, to: to_account.account_number, amount: amount }.to_json,
+      created_at: Time.utc
+    )
+
+    # If any of these steps (reloading, saving, creating records) fails,
+    # the entire transaction is rolled back, guaranteeing that no partial
+    # changes are saved to the database.
+  end
 end
 ```
 
-### 2. Validate data before entering transactions
+**Why a Transaction is Crucial Here:** This is the quintessential transaction use case. The debit and credit _must_ happen together. If the debit succeeds but the credit fails (or vice versa, or if the transaction/audit log creation fails), the transaction ensures that all changes are undone, preventing money from being lost or duplicated. It guarantees **Atomicity**.
 
-Perform input validation outside the transaction when possible to avoid starting transactions that will inevitably fail:
+### Handling Failures and Rollback
+
+As shown in the conceptual examples, any unhandled exception raised _within_ the `BankAccount.transaction do |tx| ... end` block will automatically trigger a database rollback. This is a key feature that ensures atomicity.
+
+You can also explicitly roll back the transaction using the transaction object yielded to the block:
 
 ```crystal
-# Good: Validate before starting the transaction
-def transfer_money(from_account, to_account, amount)
-  # Validate outside the transaction
-  raise "Amount must be positive" if amount <= 0
-  raise "Insufficient funds" if from_account.balance < amount
-  raise "Cannot transfer to same account" if from_account.id == to_account.id
+BankAccount.transaction do |tx|
+  # Perform some operations...
 
-  # Only start transaction after validation
-  BankAccount.transaction do |tx|
-    # Transaction code here...
+  if some_business_condition_is_not_met
+    puts "Condition not met, rolling back!"
+    tx.rollback # Explicitly roll back all changes made so far in this block
+    # Note: Raising an exception immediately after tx.rollback is common
+    # to stop execution and indicate failure.
+    raise "Manual rollback triggered"
   end
+
+  # If no rollback or exception occurs, the transaction is committed here
 end
 ```
 
-### 3. Handle exceptions properly
+When `tx.rollback` is called, the database driver is instructed to perform a rollback. Any subsequent operations within the block before it exits will also be part of the rolled-back transaction.
 
-Always handle exceptions that might occur during a transaction:
+### Querying Transaction History and Audit Logs using CQL DSL
+
+Use CQL's query builder (`.query`, `.where`, `.order`, `.all`, `.exists?`) to inspect the records created by successful transactions:
 
 ```crystal
-def transfer_money(from_account, to_account, amount)
-  BankAccount.transaction do |tx|
-    # Transaction code...
-  end
-rescue ex : DB::Error
-  # Handle database-specific errors
-  Log.error { "Database error during transfer: #{ex.message}" }
-  notify_admin("Database error occurred", ex.message)
-  false
-rescue ex : Exception
-  # Handle other exceptions
-  Log.error { "Error during transfer: #{ex.message}" }
-  false
-end
+# Get all transfers from Alice's account
+alice_transfer_history = Transaction.query
+  .where(from_account_id: alice_account.id)
+  .order(created_at: :desc)
+  .all(Transaction) # Fetch all matching records as Transaction objects
+
+puts "\n--- Alice's Transfer History ---"
+alice_transfer_history.each { |tx| puts "- $#{tx.amount} to Account ID: #{tx.to_account_id} (#{tx.status})" }
+
+# Get all audit logs related to Bob's account
+bob_account_audit_logs = AuditLog.query
+  .where(entity_type: "bank_account", entity_id: bob_account.id)
+  .order(created_at: :asc)
+  .all(AuditLog) # Fetch all matching records as AuditLog objects
+
+puts "\n--- Bob's Account Audit Logs ---"
+bob_account_audit_logs.each { |log| puts "- #{log.action}: #{log.data}" }
 ```
 
-### 4. Consider isolation levels when necessary
+## 5. Best Practices
 
-For advanced use cases, you might need to specify transaction isolation levels:
+Follow these best practices when working with transactions in CQL:
 
-```crystal
-# Example of setting isolation level (if supported by CQL)
-BankAccount.transaction(isolation_level: :serializable) do |tx|
-  # This transaction runs with serializable isolation
-  # ensuring the highest level of data integrity
-end
-```
+- **Keep transactions short and focused:** Minimize the amount of work inside a transaction block. Long-running transactions hold locks longer, increasing contention and deadlocks.
+- **Validate data before entering transactions:** Perform necessary validation _before_ starting the transaction to avoid unnecessary rollbacks.
+- **Encapsulate logic:** Wrap complex transactional logic in dedicated methods or Service Objects for organization and testability.
+- **Handle exceptions:** Catch exceptions outside the block for better logging and error handling, while relying on the automatic rollback inside.
+- **Ensure Consistent Resource Access Order:** Access multiple records within a transaction in a consistent order (e.g., by primary key ID) to reduce deadlocks.
+- **Consider Isolation Levels:** Understand and potentially configure isolation levels for advanced concurrency.
+- **Avoid Nested Transactions:** Rely on the single outer transaction.
 
-### 5. Avoid nested transactions when possible
+## 6. Troubleshooting and Gotchas
 
-While some databases support nested transactions, they can be confusing and may not work as expected:
+- **Deadlocks:** Caused by transactions waiting for each other's locks. Consistent resource ordering helps.
+- **Silent Transaction Failures:** Ensure errors inside transactions are handled and reported properly outside the block.
+- **Connection Issues:** Implement retry logic for transient database connection problems.
+- **Misunderstanding Rollback:** Rollback affects _all_ database operations within the transaction block.
 
-```crystal
-# Avoid this pattern
-BankAccount.transaction do |tx1|
-  # Some operations...
-
-  BankAccount.transaction do |tx2|
-    # More operations...
-
-    # Which transaction does this rollback affect?
-    tx2.rollback if some_condition
-  end
-end
-```
-
-Instead, refactor to use a single transaction or create separate methods with their own transactions.
-
-## Troubleshooting Common Transaction Issues
-
-When working with transactions, you might encounter these common issues:
-
-### 1. Deadlocks
-
-Deadlocks occur when multiple transactions are waiting for locks held by each other:
-
-```crystal
-# Transaction 1                 | # Transaction 2
-BankAccount.transaction do      | BankAccount.transaction do
-  account_a = BankAccount.find(1) |   account_b = BankAccount.find(2)
-  account_a.balance += 100      |   account_b.balance += 100
-  account_a.save!               |   account_b.save!
-                               |
-  account_b = BankAccount.find(2) |   account_a = BankAccount.find(1)
-  account_b.balance -= 100      |   account_a.balance -= 100
-  account_b.save!               |   account_a.save!
-end                            | end
-```
-
-**Solution**: Always access resources in the same order:
-
-```crystal
-# Both transactions should access accounts in ID order
-def transfer_between_accounts(account1, account2, amount)
-  # Sort accounts by ID to ensure consistent access order
-  first, second = [account1, account2].sort_by(&.id)
-
-  BankAccount.transaction do |tx|
-    # Now both transactions will access accounts in the same order,
-    # preventing deadlocks
-    first.reload  # Get fresh data
-    second.reload
-
-    # Perform operations...
-  end
-end
-```
-
-### 2. Silent Transaction Failures
-
-Sometimes transactions fail silently if exceptions are swallowed:
-
-```crystal
-# Problematic: Exception is caught but failure is ignored
-def transfer_money(from_account, to_account, amount)
-  begin
-    BankAccount.transaction do |tx|
-      # Transaction code...
-    end
-  rescue ex
-    # Bad: Just logging without returning failure status
-    Log.error { ex.message }
-  end
-
-  # This will always execute, even if the transaction failed!
-  send_success_notification
-end
-```
-
-**Solution**: Always propagate or properly handle transaction failures:
-
-```crystal
-# Better approach
-def transfer_money(from_account, to_account, amount)
-  begin
-    BankAccount.transaction do |tx|
-      # Transaction code...
-    end
-
-    # Only send notification if transaction succeeded
-    send_success_notification
-    return true
-  rescue ex
-    Log.error { ex.message }
-    send_failure_notification
-    return false
-  end
-end
-```
-
-### 3. Connection Issues
-
-Database connections can fail during transactions:
-
-**Solution**: Implement reconnection logic and retry mechanisms:
-
-```crystal
-def transfer_with_retry(from_account, to_account, amount, max_retries = 3)
-  retries = 0
-
-  begin
-    BankAccount.transaction do |tx|
-      # Transaction code...
-    end
-  rescue ex : DB::ConnectionError
-    retries += 1
-    if retries <= max_retries
-      Log.warn { "Connection failed, retrying (#{retries}/#{max_retries})" }
-      sleep(0.5 * retries)  # Exponential backoff
-      retry
-    else
-      Log.error { "Max retries reached for transaction" }
-      raise
-    end
-  end
-end
-```
-
-## The Service Objects Pattern: A Deep Dive
-
-The service objects pattern is particularly valuable for complex transaction logic. Here's why you should consider it:
-
-### 1. Single Responsibility Principle
-
-Each service handles one specific business operation, making your code easier to understand:
-
-```crystal
-# Each service has a clear, focused purpose
-module BankingServices
-  class DepositService
-    # Handles only deposits
-  end
-
-  class WithdrawalService
-    # Handles only withdrawals
-  end
-
-  class TransferService
-    # Handles only transfers
-  end
-end
-```
-
-### 2. Better Testability
-
-Services can be tested in isolation without complex setup:
-
-```crystal
-# Testing a service is straightforward
-def test_withdrawal_service
-  account = BankAccount.new(id: 1, balance: 1000.0, account_number: "TEST-001", owner_name: "Test User")
-
-  # Test successful withdrawal
-  result = BankingServices::WithdrawalService.execute(account, 500.0)
-  assert result == true
-  assert account.balance == 500.0
-
-  # Test insufficient funds
-  result = BankingServices::WithdrawalService.execute(account, 1000.0)
-  assert result == false
-  assert account.balance == 500.0  # Balance unchanged
-end
-```
-
-### 3. Code Organization
-
-Complex business logic is separated from your models, keeping them focused on data structure:
-
-```crystal
-# Model stays focused on structure, not behavior
-struct BankAccount
-  include CQL::ActiveRecord::Model(Int32)
-
-  property id : Int32?
-  property balance : Float64
-  # Other properties...
-
-  # Simple delegation to service objects
-  def withdraw(amount)
-    BankingServices::WithdrawalService.execute(self, amount)
-  end
-end
-```
-
-### 4. Reusable Business Logic
-
-Services can be called from different parts of your application:
-
-```crystal
-# In a controller
-post "/withdraw" do |env|
-  account_id = env.params.json["account_id"].as(Int32)
-  amount = env.params.json["amount"].as(Float64)
-
-  account = BankAccount.find(account_id)
-
-  # Use the service directly
-  result = BankingServices::WithdrawalService.execute(account, amount)
-
-  if result
-    {success: true, balance: account.balance}.to_json
-  else
-    {success: false, error: "Withdrawal failed"}.to_json
-  end
-end
-
-# In a background job
-def process_scheduled_payments
-  scheduled_payments.each do |payment|
-    # Reuse the same service
-    BankingServices::WithdrawalService.execute(payment.account, payment.amount)
-  end
-end
-```
-
-### 5. Clear Error Management
-
-Services provide a consistent way to handle and report errors:
-
-```crystal
-module BankingServices
-  class WithdrawalService
-    # ...
-
-    def execute
-      begin
-        validate!
-        perform_withdrawal
-        true
-      rescue ValidationError => e
-        # Business validation error
-        @errors << e.message
-        false
-      rescue DatabaseError => e
-        # Technical error
-        Log.error { "Database error: #{e.message}" }
-        @errors << "Technical error occurred"
-        false
-      end
-    end
-
-    def errors
-      @errors
-    end
-  end
-end
-```
-
-By implementing these best practices and understanding common issues, you'll be able to use transactions effectively in your CQL applications, ensuring data integrity while maintaining good performance and code quality.
+By diligently applying these principles and patterns, you can effectively use CQL's transaction capabilities to build robust and reliable applications that maintain data integrity even in the face of errors or concurrent access.
