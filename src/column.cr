@@ -1,18 +1,4 @@
 module CQL
-  # Error class
-  # This class represents an error in the CQL library
-  # It provides a message describing the error
-  #
-  # **Example** Raising an error
-  #
-  # ```
-  # raise CQL::Error.new("Something went wrong")
-  # ```
-  class Error < Exception
-    def initialize(@message : String)
-    end
-  end
-
   # A column in a table
   # This class represents a column in a table
   # It provides methods for setting the column type, default value, and constraints

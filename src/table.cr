@@ -42,8 +42,11 @@ module CQL
 
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
-    getter primary : BaseColumn = PrimaryKey(Int64).new(:id, Int64)
+    getter primary : BaseColumn = PrimaryKey(Int32).new(:id, Int32)
     getter as_name : String?
+    getter foreign_keys : Array(ForeignKey) = [] of ForeignKey
+    getter unique_constraints : Array(UniqueConstraint) = [] of UniqueConstraint
+    getter check_constraints : Array(CheckConstraint) = [] of CheckConstraint
 
     private getter schema : Schema
 
@@ -74,9 +77,101 @@ module CQL
       end
     end
 
+    # Adds a foreign key constraint to the table.
+    # - **@param** columns [Array(Symbol), Symbol] The column(s) in this table.
+    # - **@param** references_table [Symbol] The table the foreign key references.
+    # - **@param** references_columns [Array(Symbol), Symbol, nil] The column(s) in the referenced table. Defaults to the primary key of the referenced table if nil.
+    # - **@param** name [String, nil] Optional name for the constraint.
+    # - **@param** on_delete [Symbol] Action on delete (:cascade, :restrict, :set_null, :no_action). Default :no_action.
+    # - **@param** on_update [Symbol] Action on update (:cascade, :restrict, :set_null, :no_action). Default :no_action.
+    # - **@return** [ForeignKey] The created foreign key object.
+    #
+    # **Example**
+    #
+    # ```
+    # # Simple foreign key referencing the primary key of 'users'
+    # foreign_key :user_id, references: :users
+    #
+    # # Foreign key with explicit referenced column and ON DELETE CASCADE
+    # foreign_key :author_id, references: :authors, references_columns: :id, on_delete: :cascade
+    #
+    # # Composite foreign key
+    # foreign_key [:order_id, :product_id], references: :order_items, references_columns: [:o_id, :p_id]
+    # ```
+    def foreign_key(
+      columns local_columns : Array(Symbol),
+      references references_table : Symbol,
+      references_columns : Array(Symbol) | Symbol | Nil = nil,
+      name : String? = nil,
+      on_delete : Symbol = :no_action,
+      on_update : Symbol = :no_action,
+    )
+      ref_columns = case references_columns
+                    when Array(Symbol) then references_columns
+                    when Symbol        then [references_columns]
+                    when Nil
+                      # If nil, assume it references the primary key of the target table
+                      # We might need to fetch the target table schema definition here,
+                      # but for now, let's assume the primary key is always :id
+                      # A more robust solution would look up the primary key name.
+                      primary_key_columns(references_table) # Use helper to get PK
+                    end
+
+      # Validate column count match
+      ref_cols_nn = ref_columns.not_nil!            # Assert it's not nil
+      unless local_columns.size == ref_cols_nn.size # Use the non-nil variable
+        raise ArgumentError.new("Number of columns (#{local_columns.join(", ")}) must match number of referenced columns (#{ref_cols_nn.join(", ")})")
+      end
+
+      fk = ForeignKey.new(
+        table: self,
+        columns: local_columns,
+        references_table: references_table,
+        references_columns: ref_cols_nn, # Use the non-nil variable here too
+        name: name,
+        on_delete: on_delete,
+        on_update: on_update
+      )
+      @foreign_keys << fk
+      fk
+    end
+
+    # Overload to accept a single column symbol
+    def foreign_key(
+      column local_column : Symbol,
+      references references_table : Symbol,
+      references_columns : Array(Symbol) | Symbol | Nil = nil,
+      name : String? = nil,
+      on_delete : Symbol = :no_action,
+      on_update : Symbol = :no_action,
+    )
+      # Call the array version
+      foreign_key(
+        [local_column],
+        references: references_table,
+        references_columns: references_columns,
+        name: name,
+        on_delete: on_delete,
+        on_update: on_update
+      )
+    end
+
+    # Helper method to get primary key columns for a referenced table
+    # NOTE: This currently assumes the schema is already loaded or accessible.
+    # A more robust implementation might require passing the Schema object
+    # or having a way to look up table definitions globally.
+    private def primary_key_columns(table_name : Symbol) : Array(Symbol)
+      # TODO: Implement actual lookup of the referenced table's primary key(s)
+      # For now, default to [:id] as a placeholder.
+      # This requires access to the Schema or other table definitions.
+      # referenced_table = @schema.find_table(table_name) # Hypothetical
+      # return referenced_table.primary_keys.map(&.name) if referenced_table
+      [:id]
+    end
+
     # Adds a new primary key column to the table.
     # - **@param** name [Symbol] the name of the column to be added (default: :id)
-    # - **@param** type [T.class] the data type of the column (default: Int64)
+    # - **@param** type [T.class] the data type of the column (default: Int32)
     # - **@param** auto_increment [Bool] whether the column should auto increment (default: true)
     # - **@param** as_name [String, nil] an optional alias for the column
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: true)
@@ -85,12 +180,12 @@ module CQL
     # **Example** Adding a new primary key column
     #
     # ```
-    # primary :id, Int64
-    # primary :id, Int64, auto_increment: false
+    # primary :id, Int32
+    # primary :id, Int32, auto_increment: false
     # ```
     def primary(
       name : Symbol = :id,
-      type : T.class = Int64,
+      type : T.class = Int32,
       auto_increment : Bool = true,
     ) forall T
       primary = PrimaryKey(T).new(name: name, type: type, auto_increment: auto_increment)
@@ -327,8 +422,34 @@ module CQL
       col
     end
 
-    def json(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(JSON::Any).new(name, JSON::Any, as_name, null, default, unique)
+    # Adds a new JSON column to the table.
+    # - **@param** name [Symbol] the name of the column to be added
+    # - **@param** type [T.class] the Crystal type to map the JSON to (default: JSON::Any)
+    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** null [Bool] whether the column allows null values (default: false)
+    # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
+    # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
+    # - **@param** index [Bool] whether the column should be indexed (default: false)
+    # - **@return** [Column] the new column
+    #
+    # **Example** Adding a new column with default options
+    #
+    # ```
+    # # Defaults to JSON::Any
+    # json :metadata
+    #
+    # # Using a custom type
+    # class MySettings
+    #   include JSON::Serializable
+    #   property theme : String
+    # end
+    #
+    # json :settings, MySettings
+    #
+    # json :metadata, JSON::Any, as: "meta", null: false, default: nil, unique: true, index: true
+    # ```
+    def json(name : Symbol, type : T.class = JSON::Any, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false) forall T
+      col = Column(T).new(name, type, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -389,8 +510,10 @@ module CQL
     # timestamps
     # ```
     def timestamps
-      timestamp :created_at, default: "CURRENT_TIMESTAMP"
-      timestamp :updated_at, default: "CURRENT_TIMESTAMP"
+      # Get the dialect-specific timestamp function string from the schema
+      timestamp_default_value = @schema.dialect.current_timestamp
+      timestamp(name: :created_at, default: timestamp_default_value)
+      timestamp(name: :updated_at, default: timestamp_default_value)
     end
 
     # Adds a new column to the table.
@@ -411,20 +534,40 @@ module CQL
       index
     end
 
-    # Generates the SQL to create the table.
+    # Adds a UNIQUE constraint to the table.
+    # - **@param** columns [Array(Symbol)] The column(s) to include in the constraint.
+    # - **@param** name [String, nil] Optional name for the constraint.
+    # - **@return** [UniqueConstraint] The created unique constraint object.
     #
     # **Example**
+    # ```
+    # unique_constraint [:email]
+    # unique_constraint [:first_name, :last_name], name: "uk_person_name"
+    # ```
+    def unique_constraint(columns : Array(Symbol), name : String? = nil)
+      constraint = UniqueConstraint.new(columns, name)
+      @unique_constraints << constraint
+      constraint
+    end
+
+    # Adds a CHECK constraint to the table.
+    # - **@param** condition [String] The SQL condition for the check constraint.
+    # - **@param** name [String, nil] Optional name for the constraint.
+    # - **@return** [CheckConstraint] The created check constraint object.
     #
+    # **Example**
     # ```
-    # table = Table.new(:users, schema)
-    # table.column(:id, Int64, primary: true)
-    # table.column(:name, String)
-    # table.create_sql
+    # check_constraint "price > 0"
+    # check_constraint "email LIKE '%@%'", name: "chk_email_format"
     # ```
-    #
-    # ```
-    # => "CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);"
-    # ```
+    def check_constraint(condition : String, name : String? = nil)
+      constraint = CheckConstraint.new(condition, name)
+      @check_constraints << constraint
+      constraint
+    end
+
+    # Generates the SQL to create the table.
+    # Includes column definitions and foreign key constraints.
     def create_sql
       Expression::CreateTable.new(self).accept(schema.gen).to_s
     end
