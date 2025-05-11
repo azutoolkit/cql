@@ -1,0 +1,8 @@
+---
+exclude_paths:
+  - "docs/**"
+  - "spec/**"
+  - ".github/**"
+  - "bin/**"
+  - "lib/**"
+  - "**/*.md"
