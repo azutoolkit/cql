@@ -29,8 +29,32 @@ module CQL
     @setters : Array(Expression::Setter) = [] of Expression::Setter
     @where : Expression::Where? = nil
     @back : Set(Expression::Column) = Set(Expression::Column).new
+    @with_optimistic_locking : Bool = false
+    @version_value : Int32? = nil
+    @version_column : Symbol? = nil
 
     def initialize(@schema : Schema)
+    end
+
+    # Enables optimistic locking for this update.
+    # - **@param** version_value [Int32] the current version value to check against
+    # - **@param** version_column [Symbol] the name of the version column (default: inferred from table)
+    # - **@return** [self] the current instance
+    #
+    # **Example** Using optimistic locking
+    # ```
+    # update = CQL::Update.new(schema)
+    #   .table(:users)
+    #   .set(name: "John", age: 30)
+    #   .where(id: 1)
+    #   .with_optimistic_lock(version: 5)
+    #   .commit
+    # ```
+    def with_optimistic_lock(version : Int32, column : Symbol? = nil)
+      @with_optimistic_locking = true
+      @version_value = version
+      @version_column = column
+      self
     end
 
     # Executes the update query and returns the result.
@@ -47,10 +71,20 @@ module CQL
     # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
     # ```
     def commit
+      if @with_optimistic_locking
+        handle_optimistic_locking
+      end
+
       query, params = to_sql
-      @schema.exec_query do |conn|
+      result = @schema.exec_query do |conn|
         conn.exec(query, args: params)
       end
+
+      if @with_optimistic_locking && result.rows_affected == 0
+        raise CQL::OptimisticLockError.new("Record has been modified by another process")
+      end
+
+      result
     end
 
     # Generates the SQL query and parameters.
@@ -150,9 +184,17 @@ module CQL
     # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
     # ```
     def where(&)
-      tbl = @table.not_nil!.table
-      where_hash = {tbl.table_name => tbl}
-      builder = with Expression::FilterBuilder.new(where_hash) yield
+      tbl_expr = @table.not_nil!
+      tbl = tbl_expr.table
+      # FilterBuilder expects Hash(String, QueryTableInfo)
+      # QueryTableInfo = NamedTuple(table: Table, alias: String)
+      table_name_str = tbl.table_name.to_s
+      # Use table name as alias for Update context
+      query_table_info = {table: tbl, alias: table_name_str}
+      query_tables_hash = {table_name_str => query_table_info}
+
+      # Pass the correctly structured hash to FilterBuilder
+      builder = with Expression::FilterBuilder.new(query_tables_hash) yield
       @where = Expression::Where.new(builder.condition)
       self
     end
@@ -278,6 +320,60 @@ module CQL
 
     private def find_column(name : Symbol) : BaseColumn
       @table.not_nil!.table.columns[name] || raise "Column #{name} not found"
+    end
+
+    private def handle_optimistic_locking
+      return unless @with_optimistic_locking
+      return unless table = @table
+
+      # Get the table object
+      tbl = table.table
+
+      # Determine the version column
+      version_col = if col = @version_column
+                      if column = tbl.columns[col]?
+                        column.version_number = true unless column.version_number?
+                        column
+                      else
+                        raise CQL::Error.new("Specified version column '#{col}' not found in table '#{tbl.table_name}'")
+                      end
+                    else
+                      # Find the first version column or default to :version
+                      version_columns = tbl.version_columns
+                      if version_columns.empty?
+                        if column = tbl.columns[:version]?
+                          column.version_number = true
+                          column
+                        else
+                          raise CQL::Error.new("No version column found in table '#{tbl.table_name}', specify one with with_optimistic_lock(version, column)")
+                        end
+                      else
+                        version_columns.first
+                      end
+                    end
+
+      # Make sure we have the current version value
+      unless current_version = @version_value
+        raise CQL::Error.new("Current version value is required for optimistic locking")
+      end
+
+      # Add version check to WHERE clause
+      if @where.nil?
+        @where = Expression::Where.new(
+          Expression::Compare.new(Expression::Column.new(version_col), "=", current_version.as(DB::Any))
+        )
+      else
+        existing_condition = @where.not_nil!.condition
+        @where = Expression::Where.new(
+          Expression::And.new(
+            existing_condition,
+            Expression::Compare.new(Expression::Column.new(version_col), "=", current_version.as(DB::Any))
+          )
+        )
+      end
+
+      # Increment the version in the setters
+      @setters << Expression::Setter.new(Expression::Column.new(version_col), (current_version + 1).as(DB::Any))
     end
   end
 end
