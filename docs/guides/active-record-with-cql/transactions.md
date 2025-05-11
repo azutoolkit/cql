@@ -278,6 +278,76 @@ puts "\n--- Bob's Account Audit Logs ---"
 bob_account_audit_logs.each { |log| puts "- #{log.action}: #{log.data}" }
 ```
 
+### Explicit Commit and Rollback
+
+While CQL transactions automatically commit if the block finishes without an unhandled exception and automatically roll back if an exception occurs, you can also explicitly control the outcome using `tx.commit` and `tx.rollback` on the yielded transaction object.
+
+**Explicit Rollback:**
+
+You can manually trigger a rollback at any point within the transaction block. This is useful if business logic dictates that a transaction should not proceed, even if no technical error (exception) has occurred.
+
+```crystal
+BankAccount.transaction do |tx|
+  from_account = BankAccount.find_by(account_number: "ACC_SENDER")
+  to_account = BankAccount.find_by(account_number: "ACC_RECEIVER")
+  transfer_amount = 50.0
+
+  unless from_account && to_account
+    puts "Error: One or both accounts not found."
+    tx.rollback # Explicitly roll back
+    # Consider raising an exception or returning early after rollback
+    # to prevent further operations within this block.
+    raise "Account lookup failed, transaction rolled back."
+  end
+
+  if from_account.balance < transfer_amount
+    puts "Insufficient funds. Rolling back transaction."
+    tx.rollback # Explicitly roll back
+    raise "Insufficient funds, transaction rolled back."
+  end
+
+  # Proceed with operations if checks pass
+  from_account.balance -= transfer_amount
+  from_account.save!
+  to_account.balance += transfer_amount
+  to_account.save!
+
+  puts "Transfer appears successful before explicit decision."
+  # If we reach here, an implicit commit would happen at the end of the block.
+  # However, we could also make an explicit decision.
+end
+```
+
+**Explicit Commit:**
+
+Similarly, you can explicitly commit a transaction before the end of the block. This can be useful in more complex scenarios, though it's less common than explicit rollback or relying on the implicit commit.
+
+```crystal
+BankAccount.transaction do |tx|
+  account = BankAccount.create!(account_number: "ACC789", balance: 200.0)
+  puts "Account ACC789 created with balance #{account.balance}"
+
+  # Perform some critical updates
+  account.balance += 100.0
+  account.save!
+  puts "Balance updated to #{account.balance}"
+
+  # At this point, we decide to commit the changes immediately.
+  puts "Explicitly committing transaction."
+  tx.commit
+
+  # Further operations here would be outside the just-committed transaction.
+  # For example, trying to use `account.save!` again would likely start a new implicit transaction
+  # or operate outside any transaction if auto-commit is on for the connection.
+  # It is generally best practice to exit the block or not perform further DB
+  # operations relying on this specific transaction after an explicit commit/rollback.
+end
+```
+
+**Important Note:**
+
+As stated in the Crystal DB documentation: _After `commit` or `rollback` are used, the transaction is no longer usable. The connection is still open but any statement will be performed outside the context of the terminated transaction._ This means you should typically not perform further database operations relying on that specific `tx` object after calling `tx.commit` or `tx.rollback`.
+
 ## 4. Nested Transactions (Savepoints)
 
 CQL supports nested transactions using database savepoints. This is useful for sub-operations within a larger transaction that might need to be rolled back independently without affecting the outer transaction.
