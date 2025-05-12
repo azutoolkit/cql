@@ -59,8 +59,7 @@ Define the schema for your database tables:
 schema = CQL::Schema.define(
   :my_database,
   adapter: CQL::Adapter::Postgres,
-  db: DB.open("postgresql://user:password@localhost:5432/database_name")
-  ) do
+  db: "postgresql://user:password@localhost:5432/database_name") do
 
   table :users do
     primary :id
@@ -139,7 +138,7 @@ Work with your data using the Active Record pattern:
 AcmeDB = CQL::Schema.define(...) do ... end
 
 struct User
-  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::Model(Int64)
   db_context  schema: AcmeDB, table: :users
 
   # Crystal properties (no macros)
