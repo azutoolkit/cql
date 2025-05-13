@@ -44,6 +44,15 @@ module CQL::ActiveRecord::Relations
             .where{({{join_through.id}}.{{@type.name.underscore.id}}_id == @id.not_nil!)}
         )
       end
+
+      # Add association metadata for eager loading
+      CQL::ActiveRecord::Associations.add_association(
+        :{{name.id}},
+        {{klass.id}},
+        :{{@type.name.underscore.id}}_id,
+        :id,
+        :many_to_many
+      )
     end
   end
 end

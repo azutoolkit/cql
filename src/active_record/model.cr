@@ -12,6 +12,7 @@ require "./relations"
 require "./scopes"
 require "./transactional"
 require "./optimistic_locking"
+require "./relations/associations"
 
 module CQL
   module ActiveRecord
@@ -69,6 +70,8 @@ module CQL
         include CQL::ActiveRecord::Relations
         include CQL::ActiveRecord::Scopes
         include CQL::ActiveRecord::Transactional
+        include CQL::ActiveRecord::AssociationStorage
+        include CQL::ActiveRecord::Associations
       end
     end
   end

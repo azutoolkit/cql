@@ -25,6 +25,7 @@ module CQL::ActiveRecord::Relations
     @records : Array(Target) = [] of Target
     @target_table : Symbol
     @loaded : Bool = false
+    @eager_loaded_associations : Set(Symbol) = Set(Symbol).new
     forward_missing_to @records
 
     # Initialize the collection class for a one-to-many relationship
@@ -55,6 +56,54 @@ module CQL::ActiveRecord::Relations
       @target_table = Target.table
       @records = [] of Target
       reload if auto_load
+    end
+
+    # Sets the loaded records for the collection
+    # - **param** : records (Array(Target)) - The records to set
+    # - **return** : self
+    def set_loaded_records(records : Array(Target)) : self
+      @records = records
+      @loaded = true
+      self
+    end
+
+    # Preloads associations for all records in the collection
+    # - **param** : associations (Array(Symbol)) - The associations to preload
+    # - **return** : self
+    #
+    # **Example**
+    #
+    # ```
+    # user.posts.preload([:comments, :tags])
+    # ```
+    def preload(associations : Array(Symbol)) : self
+      load_records unless @loaded
+      EagerLoading.preload(@records, associations)
+      @eager_loaded_associations.concat(associations)
+      self
+    end
+
+    # Eager loads associations using JOIN queries
+    # - **param** : associations (Array(Symbol)) - The associations to include
+    # - **return** : self
+    #
+    # **Example**
+    #
+    # ```
+    # user.posts.includes([:comments, :tags])
+    # ```
+    def includes(associations : Array(Symbol)) : self
+      load_records unless @loaded
+      EagerLoading.includes(@records, associations)
+      @eager_loaded_associations.concat(associations)
+      self
+    end
+
+    # Checks if an association has been eager loaded
+    # - **param** : association (Symbol) - The association to check
+    # - **return** : Bool
+    def eager_loaded?(association : Symbol) : Bool
+      @eager_loaded_associations.includes?(association)
     end
 
     # Implements the each method for the Enumerable module

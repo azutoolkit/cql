@@ -22,6 +22,15 @@ module CQL::ActiveRecord::Relations
   # ```
   module HasMany
     macro has_many(name, type, foreign_key, cascade = false)
+      # Add association metadata
+      AssociationMetadata.add_association(
+        :{{name.id}},
+        {{type.id}},
+        :{{foreign_key.id}},
+        :id,
+        :has_many
+      )
+
       # Define an instance variable to memoize the collection
       @[DB::Field(ignore: true)]
       @_{{name.id}} : CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk)?
@@ -29,17 +38,32 @@ module CQL::ActiveRecord::Relations
       # Getter that memoizes the collection
       @[DB::Field(ignore: true)]
       def {{name.id}} : CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk)
-        @_{{name.id}} ||= CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
-          key: :{{foreign_key.id}},
-          id: @id.not_nil!,
-          cascade: {{cascade.id}},
-          query: {{type.id}}.query.where({{foreign_key.id}}: @id.not_nil!)
-        )
+        if association_loaded?(:{{name.id}})
+          # If the association is already loaded, create a collection with the loaded records
+          collection = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
+            key: :{{foreign_key.id}},
+            id: @id.not_nil!,
+            cascade: {{cascade.id}},
+            query: {{type.id}}.query.where({{foreign_key.id}}: @id.not_nil!),
+            auto_load: false
+          )
+          collection.set_loaded_records(get_loaded_association(:{{name.id}}).not_nil!)
+          collection
+        else
+          # Otherwise, create a new collection that will load records on demand
+          @_{{name.id}} ||= CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
+            key: :{{foreign_key.id}},
+            id: @id.not_nil!,
+            cascade: {{cascade.id}},
+            query: {{type.id}}.query.where({{foreign_key.id}}: @id.not_nil!)
+          )
+        end
       end
 
       # Method to reload the association and clear the memoized value
       def reload_{{name.id}} : CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk)
         @_{{name.id}} = nil
+        clear_loaded_associations
         {{name.id}}.reload
         {{name.id}}
       end

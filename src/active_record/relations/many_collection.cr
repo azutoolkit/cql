@@ -44,7 +44,8 @@ module CQL
     # ```
     class ManyCollection(Target, Through, Pk) < Collection(Target, Pk)
       @through_table : Symbol
-      @loaded : Bool = false # Added for lazy loading
+      @loaded : Bool = false
+      @eager_loaded_associations : Set(Symbol) = Set(Symbol).new
 
       # Initialize the many-to-many association collection class
       # - **param** : key (Symbol) - The key for the parent record
@@ -79,10 +80,97 @@ module CQL
         # Removed initial reload call
       end
 
+      # Checks if an association is eager loaded
+      # - **param** : name (Symbol) - The name of the association
+      # - **return** : Bool
+      def eager_loaded?(name : Symbol) : Bool
+        @eager_loaded_associations.includes?(name)
+      end
+
+      # Marks an association as eager loaded
+      # - **param** : name (Symbol) - The name of the association
+      # - **return** : Nil
+      def mark_eager_loaded(name : Symbol)
+        @eager_loaded_associations.add(name)
+      end
+
       # Loads records if they haven't been loaded yet
       # - **return** : Nil
       private def load_records
-        reload unless @loaded
+        return if @loaded
+        reload
+      end
+
+      # Preloads associations for all records in the collection
+      # - **param** : associations (Array(Symbol)) - The associations to preload
+      # - **return** : self
+      def preload(associations : Array(Symbol)) : self
+        return self if @records.empty?
+
+        associations.each do |association|
+          next unless Target.responds_to?(:association_metadata)
+          metadata = Target.association_metadata[association]?
+          next unless metadata
+
+          # Get all target IDs
+          target_ids = @records.map(&.id!)
+
+          # Load associated records
+          associated_records = metadata.target_class
+            .where({metadata.foreign_key => target_ids})
+            .all
+
+          # Group records by foreign key
+          grouped_records = associated_records.group_by { |record| record.attributes[metadata.foreign_key] }
+
+          # Set loaded associations for each record
+          @records.each do |record|
+            records = grouped_records[record.id!]? || [] of Target
+            record.set_loaded_association(association, records)
+          end
+
+          # Mark as eager loaded
+          mark_eager_loaded(association)
+        end
+
+        self
+      end
+
+      # Includes associations using JOIN queries
+      # - **param** : associations (Array(Symbol)) - The associations to include
+      # - **return** : self
+      def includes(associations : Array(Symbol)) : self
+        return self if @records.empty?
+
+        associations.each do |association|
+          next unless Target.responds_to?(:association_metadata)
+          metadata = Target.association_metadata[association]?
+          next unless metadata
+
+          # Build JOIN query
+          query = Target.query
+            .inner(metadata.target_class.table) { |t|
+              t[metadata.foreign_key] == Target.schema[association].expression.id
+            }
+            .where({Target.table => @records.map(&.id!)})
+
+          # Execute query and load records
+          associated_records = query.all(metadata.target_class)
+
+          # Group records by foreign key
+          grouped_records = associated_records.group_by { |record| record.attributes[metadata.foreign_key] }
+
+          # Set loaded associations for each record
+          @records.each do |record|
+            records = grouped_records[record.id!]? || [] of Target
+            record.set_loaded_association(association, records)
+          end
+
+          # Mark as eager loaded
+          mark_eager_loaded(association)
+        end
+
+        self
       end
 
       # Override each to use lazy loading
