@@ -46,7 +46,7 @@ module CQL::ActiveRecord::Relations
       end
 
       # Add association metadata for eager loading
-      CQL::ActiveRecord::Associations.add_association(
+      CQL::ActiveRecord::Relations::Associations.add_association(
         :{{name.id}},
         {{klass.id}},
         :{{@type.name.underscore.id}}_id,

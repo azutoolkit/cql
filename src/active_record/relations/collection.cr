@@ -78,7 +78,7 @@ module CQL::ActiveRecord::Relations
     # ```
     def preload(associations : Array(Symbol)) : self
       load_records unless @loaded
-      EagerLoading.preload(@records, associations)
+      EagerLoading(Target).preload(@records, associations)
       @eager_loaded_associations.concat(associations)
       self
     end
@@ -94,7 +94,7 @@ module CQL::ActiveRecord::Relations
     # ```
     def includes(associations : Array(Symbol)) : self
       load_records unless @loaded
-      EagerLoading.includes(@records, associations)
+      EagerLoading(Target).includes(@records, associations)
       @eager_loaded_associations.concat(associations)
       self
     end

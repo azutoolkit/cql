@@ -70,8 +70,8 @@ module CQL
         include CQL::ActiveRecord::Relations
         include CQL::ActiveRecord::Scopes
         include CQL::ActiveRecord::Transactional
-        include CQL::ActiveRecord::AssociationStorage
-        include CQL::ActiveRecord::Associations
+        include CQL::ActiveRecord::Relations::AssociationStorage
+        include CQL::ActiveRecord::Relations::Associations
       end
     end
   end

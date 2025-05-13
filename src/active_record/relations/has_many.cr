@@ -23,7 +23,7 @@ module CQL::ActiveRecord::Relations
   module HasMany
     macro has_many(name, type, foreign_key, cascade = false)
       # Add association metadata
-      AssociationMetadata.add_association(
+      CQL::ActiveRecord::Relations::Associations.add_association(
         :{{name.id}},
         {{type.id}},
         :{{foreign_key.id}},
