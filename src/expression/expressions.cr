@@ -326,7 +326,7 @@ module Expression
     getter column : Column
     getter values : Array(DB::Any)
 
-    def initialize(@column : Column, values : Array(T)) forall T
+    def initialize(@column : Column, values)
       @values = values.map { |v| v.as(DB::Any) }
     end
 

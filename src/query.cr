@@ -437,10 +437,9 @@ module CQL
     end
 
     # Accept Hash(Symbol, DB::Any) for backward compatibility
-    def where(hash : Hash(String | Symbol, DB::Any))
+    def where(hash : Hash(String | Symbol, DB::Any | Array(DB::Any)))
       # Convert Symbol keys to String
-      string_keyed_hash = hash.transform_keys(&.to_s)
-      new_condition = build_condition_from_hash(string_keyed_hash)
+      new_condition = build_condition_from_hash(hash)
       merge_where_condition(new_condition)
       self
     end
@@ -458,7 +457,7 @@ module CQL
     end
 
     def where(**fields)
-      new_condition = build_condition_from_hash(fields.to_h)
+      new_condition = build_condition_from_hash(fields)
       merge_where_condition(new_condition)
       self
     end
@@ -726,12 +725,24 @@ module CQL
     end
 
     # Expects hash with String keys now
-    private def build_condition_from_hash(hash : Hash(Symbol | String, DB::Any))
+    private def build_condition_from_hash(hash : Hash(Symbol | String, T | Array(T))) forall T
       condition = nil
       hash.each_with_index do |(k, v), index|
         # k is String (qualified or unqualified column name)
+        expr = get_expression(k, v.as(T)) # Handles String key
+        condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
+      end
+      condition.not_nil!
+    end
+
+    private def build_condition_from_hash(fields)
+      condition = nil
+      index = 0
+      fields.each do |k, v|
+        # k is String (qualified or unqualified column name)
         expr = get_expression(k, v) # Handles String key
         condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
+        index += 1
       end
       condition.not_nil!
     end
@@ -746,14 +757,40 @@ module CQL
     end
 
     # Handles String field (qualified or unqualified)
-    private def get_expression(field : Symbol | String, value)
+    private def get_expression(field : Symbol | String, value : T | Array(T)) forall T
+      # find_column handles String field, finds BaseColumn
+      column = find_column(field)
+      # find_alias_for_table returns String alias
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      column.validate!(value.as(T))
+
+      # Create Expression::Column with String alias
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+
+      # Handle array values for IN conditions
+      if value.is_a?(Array)
+        Expression::InCondition.new(col_expr, value)
+      else
+        Expression::Compare.new(col_expr, "=", value.as(DB::Any))
+      end
+    end
+
+    private def get_expression(field : Symbol | String, value : String | Array(String))
       # find_column handles String field, finds BaseColumn
       column = find_column(field)
       # find_alias_for_table returns String alias
       col_alias_str = find_alias_for_table(column.table.not_nil!)
       column.validate!(value)
+
       # Create Expression::Column with String alias
-      Expression::Compare.new(Expression::Column.new(column, alias_name: col_alias_str), "=", value)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+
+      # Handle array values for IN conditions
+      if value.is_a?(Array)
+        Expression::InCondition.new(col_expr, value)
+      else
+        Expression::Compare.new(col_expr, "=", value.as(DB::Any))
+      end
     end
 
     private def build_group_by

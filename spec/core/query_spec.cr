@@ -142,6 +142,34 @@ describe CQL::Query do
 
       select_query.should eq({output.strip, [1000]})
     end
+
+    it "handles array values in WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city)
+        .where(id: [1, 2, 3])
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city FROM customers WHERE customers.id IN (?, ?, ?)
+      SQL
+
+      select_query.should eq({output.strip, [1, 2, 3]})
+    end
+
+    it "handles multiple array conditions in WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city)
+        .where(id: [1, 2, 3], city: ["Rome", "Vienna"])
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city FROM customers WHERE (customers.id IN (?, ?, ?)) AND (customers.city IN (?, ?))
+      SQL
+
+      select_query.should eq({output.strip, [1, 2, 3, "Rome", "Vienna"]})
+    end
   end
 
   describe "ORDER BY, LIMIT, and other clauses" do
