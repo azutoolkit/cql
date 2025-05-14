@@ -1,3 +1,7 @@
+require "./base_column"
+require "db"
+require "./table"
+
 module CQL
   # A column in a table
   # This class represents a column in a table
@@ -19,7 +23,7 @@ module CQL
     # :nodoc:
     property name : Symbol
     # :nodoc:
-    property type : Any
+    property type : T.class | Array(T.class)
     # :nodoc:
     getter? null : Bool = false
     # :nodoc:
@@ -55,7 +59,7 @@ module CQL
     # ```
     def initialize(
       @name : Symbol,
-      @type : T.class,
+      @type : T.class | Array(T.class),
       @as_name : String? = nil,
       @null : Bool = false,
       @default : DB::Any = nil,
@@ -88,10 +92,10 @@ module CQL
     # column = CQL::Column.new(:name, String)
     # column.validate!("John")
     # ```
-    def validate!(value)
-      return if value.class == JSON::Any && value.is_a?(String)
-      return if value.class == type
-      raise Error.new "Expected column `#{name}` to be #{type}, but got #{value.class}"
+    def validate!(value : T | Array(T)) forall T
+      return if value.class == JSON::Any
+      return if value.class == T
+      raise Error.new "Expected column `#{name}` to be #{type} or Array(#{type}), but got #{value.class}"
     end
   end
 end
