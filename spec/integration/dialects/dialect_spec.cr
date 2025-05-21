@@ -48,7 +48,7 @@ module Expression
         sqlite = create_dialect(:sqlite)
 
         # Create a mock column
-        column = CQL::PrimaryKey(Int32).new(:id, Int32)
+        column = CQL::PrimaryKey(Int32).new(:id)
 
         # Test each dialect's implementation
         postgres_result = postgres.auto_increment_primary_key(column, "INTEGER")

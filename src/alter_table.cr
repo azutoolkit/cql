@@ -100,10 +100,10 @@ module CQL
     # ```
     # change_column(:age, "string")
     # ```
-    def change_column(name : Symbol, type : Any)
-      column = @table.columns[name]
-      @actions << Expression::ChangeColumn.new(column, type)
-      column.type = type
+    def change_column(name : Symbol, type : T) forall T
+      new_column = Column(T).new(name)
+      @actions << Expression::ChangeColumn.new(new_column, type)
+      @table.columns[name] = new_column
     end
 
     # Renames the table.

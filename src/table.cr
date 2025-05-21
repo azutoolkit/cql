@@ -42,7 +42,7 @@ module CQL
 
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
-    getter primary : BaseColumn = PrimaryKey(Int32).new(:id, Int32)
+    getter primary : BaseColumn = PrimaryKey(Int32).new(:id)
     getter as_name : String?
     getter foreign_keys : Array(ForeignKey) = [] of ForeignKey
     getter unique_constraints : Array(UniqueConstraint) = [] of UniqueConstraint
@@ -188,7 +188,7 @@ module CQL
       type : T.class = Int32,
       auto_increment : Bool = true,
     ) forall T
-      primary = PrimaryKey(T).new(name: name, type: type, auto_increment: auto_increment)
+      primary = PrimaryKey(T).new(name: name, auto_increment: auto_increment)
       primary.table = self
       @primary = primary
       @columns[name] = @primary
@@ -221,7 +221,7 @@ module CQL
       size : Int32? = nil,
       index : Bool = false,
     ) forall T
-      col = Column(T).new(name, T, as_name, null, default, unique, size)
+      col = Column(T).new(name, as_name, null, default, unique, size)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -244,7 +244,7 @@ module CQL
     # integer :age, as: "user_age", null: false, default: 18, unique: true, index: true
     # ```
     def integer(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Int32).new(name, Int32, as_name, null, default, unique)
+      col = Column(Int32).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -267,7 +267,7 @@ module CQL
     # bigint :age, as: "user_age", null: false, default: 18, unique: true, index: true
     # ```
     def bigint(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Int64).new(name, Int64, as_name, null, default, unique)
+      col = Column(Int64).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -290,7 +290,7 @@ module CQL
     # float :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
     # ```
     def float(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Float32).new(name, Float32, as_name, null, default, unique)
+      col = Column(Float32).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -313,7 +313,7 @@ module CQL
     # double :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
     # ```
     def double(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Float64).new(name, Float64, as_name, null, default, unique)
+      col = Column(Float64).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -336,7 +336,7 @@ module CQL
     # decimal :price, as: "product_price", null: false, default: 0.0, unique: true, index: true
     # ```
     def text(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
-      col = Column(String).new(name, String, as_name, null, default, unique, size)
+      col = Column(String).new(name, as_name, null, default, unique, size)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -346,7 +346,7 @@ module CQL
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
     def varchar(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = 1000, index : Bool = false)
-      col = Column(String).new(name, String, as_name, null, default, unique, size)
+      col = Column(String).new(name, as_name, null, default, unique, size)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -369,7 +369,7 @@ module CQL
     # boolean :active, as: "is_active", null: false, default: false, unique: true, index: true
     # ```
     def boolean(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Bool).new(name, Bool, as_name, null, default, unique)
+      col = Column(Bool).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -392,7 +392,7 @@ module CQL
     # timestamp :created_at, as: "created_at", null: false, default: Time.local, unique: true, index: true
     # ```
     def timestamp(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Time).new(name, Time, as_name, null, default, unique)
+      col = Column(Time).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -415,7 +415,7 @@ module CQL
     # date :birthday, as: "date_of_birth", null: false, default: Time.local, unique: true, index: true
     # ```
     def date(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Date).new(name, Date, as_name, null, default, unique)
+      col = Column(Date).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -448,8 +448,8 @@ module CQL
     #
     # json :metadata, JSON::Any, as: "meta", null: false, default: nil, unique: true, index: true
     # ```
-    def json(name : Symbol, type : T.class = JSON::Any, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false) forall T
-      col = Column(T).new(name, type, as_name, null, default, unique)
+    def json(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
+      col = Column(JSON::Any).new(name,  as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -472,7 +472,7 @@ module CQL
     # interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
     # ```
     def interval(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Time::Span).new(name, Time::Span, as_name, null, default, unique)
+      col = Column(Time::Span).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -495,7 +495,7 @@ module CQL
     # blob :data, as: "binary_data", null: false, default: nil, unique: true, index: true
     # ```
     def blob(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
-      col = Column(Slice(UInt8)).new(name, Slice(UInt8), as_name, null, default, unique, size)
+      col = Column(Slice(UInt8)).new(name, as_name, null, default, unique, size)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -521,7 +521,7 @@ module CQL
     # lock_version :version
     # ```
     def lock_version(name : Symbol = :version, as as_name : String? = nil, null : Bool = false, default : DB::Any = 1, index : Bool = false)
-      col = Column(Int32).new(name, Int32, as_name, null, default, false, nil, nil, true)
+      col = Column(Int32).new(name, as_name, null, default, false, nil, nil, true)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name]) : nil
@@ -553,7 +553,7 @@ module CQL
     # interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
     # ```
     def interval(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Time::Span).new(name, Time::Span, as_name, null, default, unique)
+      col = Column(Time::Span).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -578,7 +578,7 @@ module CQL
     # blob :data, as: "binary_data", null: false, default: nil, unique: true, index: true
     # ```
     def blob(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
-      col = Column(Slice(UInt8)).new(name, Slice(UInt8), as_name, null, default, unique, size)
+      col = Column(Slice(UInt8)).new(name, as_name, null, default, unique, size)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil

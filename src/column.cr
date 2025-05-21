@@ -23,8 +23,6 @@ module CQL
     # :nodoc:
     property name : Symbol
     # :nodoc:
-    property type : T.class | Array(T.class)
-    # :nodoc:
     getter? null : Bool = false
     # :nodoc:
     getter default : DB::Any = nil
@@ -59,7 +57,6 @@ module CQL
     # ```
     def initialize(
       @name : Symbol,
-      @type : T.class | Array(T.class),
       @as_name : String? = nil,
       @null : Bool = false,
       @default : DB::Any = nil,
@@ -68,6 +65,18 @@ module CQL
       @index : Index? = nil,
       @version_number : Bool = false,
     )
+    end
+
+    # The type of the column
+    # - **@return** [T.class] the type of the column
+    #
+    # **Example**
+    #
+    # ```
+    # column = CQL::Column(String).new(:name)
+    # column.type # => String
+    def type
+      T
     end
 
     # Expressions for this column
@@ -92,9 +101,9 @@ module CQL
     # column = CQL::Column.new(:name, String)
     # column.validate!("John")
     # ```
-    def validate!(value : T | Array(T)) forall T
+    def validate!(value : T) forall T
       return if value.class == JSON::Any
-      return if value.class == T
+      return if value == T || value == Array(T)
       raise Error.new "Expected column `#{name}` to be #{type} or Array(#{type}), but got #{value.class}"
     end
   end

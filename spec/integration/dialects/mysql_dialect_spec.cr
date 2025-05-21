@@ -25,13 +25,13 @@ module Expression
     describe "#auto_increment_primary_key" do
       it "generates MySQL-specific AUTO_INCREMENT syntax" do
         dialect = MySqlDialect.new
-        column = CQL::PrimaryKey(Int32).new(:id, Int32)
+        column = CQL::PrimaryKey(Int32).new(:id)
 
         result = dialect.auto_increment_primary_key(column, "INTEGER")
         result.should eq("id INTEGER PRIMARY KEY AUTO_INCREMENT")
 
         # Test without auto_increment
-        column = CQL::PrimaryKey(Int32).new(:id, Int32, auto_increment: false)
+        column = CQL::PrimaryKey(Int32).new(:id, auto_increment: false)
         result = dialect.auto_increment_primary_key(column, "INTEGER")
         result.should eq("id INTEGER PRIMARY KEY")
       end

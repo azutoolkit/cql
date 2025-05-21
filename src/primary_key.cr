@@ -16,7 +16,6 @@ module CQL
 
     def initialize(
       @name : Symbol = :id,
-      @type : PrimaryKeyType = Int64.class,
       @as_name : String? = nil,
       @auto_increment : Bool = true,
       @unique : Bool = true,

@@ -179,7 +179,7 @@ module CQL
         raise "Cannot COUNT(*) without a FROM clause" unless first_table_alias
         table_info = @query_tables[first_table_alias]
         # Use positional arguments for BaseColumn.new
-        star_col = Column(Int64).new(:*, Int64)
+        star_col = Column(Int64).new(:*)
         # Pass String alias
         Expression::Count.new(Expression::Column.new(star_col, alias_name: table_info[:alias]))
       else

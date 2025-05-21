@@ -24,13 +24,13 @@ module Expression
     describe "#auto_increment_primary_key" do
       it "generates SQLite-specific AUTOINCREMENT syntax for INTEGER primary keys" do
         dialect = SqliteDialect.new
-        column = CQL::PrimaryKey(Int32).new(:id, Int32, auto_increment: true)
+        column = CQL::PrimaryKey(Int32).new(:id, auto_increment: true)
 
         result = dialect.auto_increment_primary_key(column, "INTEGER")
         result.should eq("id INTEGER PRIMARY KEY AUTOINCREMENT")
 
         # Test with non-INTEGER type (doesn't support AUTOINCREMENT)
-        column = CQL::Column.new(:id, String)
+        column = CQL::Column(Int32).new(:id)
         result = dialect.auto_increment_primary_key(column, "TEXT")
         result.should eq("id TEXT PRIMARY KEY")
       end

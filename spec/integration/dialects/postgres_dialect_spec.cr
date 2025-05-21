@@ -28,13 +28,13 @@ module Expression
     describe "#auto_increment_primary_key" do
       it "generates PostgreSQL-specific IDENTITY syntax" do
         dialect = PostgresDialect.new
-        column = CQL::PrimaryKey(Int32).new(:id, Int32, auto_increment: true)
+        column = CQL::PrimaryKey(Int32).new(:id, auto_increment: true)
 
         result = dialect.auto_increment_primary_key(column, "INTEGER")
         result.should eq("id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY")
 
         # Test without auto_increment
-        column = CQL::PrimaryKey(Int32).new(:id, Int32, auto_increment: false)
+        column = CQL::PrimaryKey(Int32).new(:id, auto_increment: false)
         result = dialect.auto_increment_primary_key(column, "INTEGER")
         result.should eq("id INTEGER GENERATED AS IDENTITY PRIMARY KEY")
       end
