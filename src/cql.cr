@@ -37,18 +37,20 @@ module CQL
   alias PrimaryKeyType = Int32.class | Int64.class | UUID.class | ULID.class
 
   # :nodoc:
-  alias Any = Bool.class |
+  alias Any = Int32.class |
+              Int64.class |
+              UInt32.class |
+              UInt64.class |
               Float32.class |
               Float64.class |
-              Int32.class |
-              Int64.class |
-              Slice(UInt8).class |
               String.class |
+              Bool.class |
               Time.class |
+              Date.class |
               Time::Span.class |
-              UUID.class |
-              Nil.class |
+              Slice(UInt8).class |
               JSON::Any.class
+
 
   # :nodoc:
   DB_TYPE_MAPPING = {

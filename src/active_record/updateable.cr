@@ -14,6 +14,21 @@ module CQL
         def self.update!(id : Pk, attrs : Hash(Symbol, DB::Any))
           raise CQL::Error.new("No attributes to update") if attrs.empty?
 
+          table = {{@type.id}}.schema.tables[{{@type.id}}.table]
+          attrs.each do |key, value|
+            column = table.columns[key]?
+            raise CQL::Error.new("Unknown column: #{key}") unless column
+            expected_type = column.strict_type
+            is_nullable = column.null?
+            if value.nil?
+              unless is_nullable
+                raise CQL::Error.new("Column #{key} cannot be null")
+              end
+            elsif value.class != expected_type
+              raise CQL::Error.new("Invalid type for column #{key}: expected #{expected_type}, got #{value.class}")
+            end
+          end
+
           CQL::Update
             .new({{@type.id}}.schema)
             .table({{@type.id}}.table)
@@ -32,6 +47,22 @@ module CQL
         # ```
         def self.update!(id : Pk, **attrs)
           raise CQL::Error.new("No attributes to update") if attrs.empty?
+
+          table = {{@type.id}}.schema.tables[{{@type.id}}.table]
+          attrs.each do |key, value|
+            column = table.columns[key]?
+            raise CQL::Error.new("Unknown column: #{key}") unless column
+            expected_type = column.strict_type
+            is_nullable = column.null?
+            if value.nil?
+              unless is_nullable
+                raise CQL::Error.new("Column #{key} cannot be null")
+              end
+            elsif value.class != expected_type
+              raise CQL::Error.new("Invalid type for column #{key}: expected #{expected_type}, got #{value.class}")
+            end
+          end
+
           CQL::Update
             .new({{@type.id}}.schema)
             .table({{@type.id}}.table)

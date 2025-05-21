@@ -137,11 +137,11 @@ module CQL
     # user_repo.create(name: "Alice", email: " [email protected]")
     # ```
     def create(attrs : Hash(Symbol, DB::Any))
-      insert.values(attrs).last_insert_id
+      insert.values(attrs).last_insert_id(as: Pk)
     end
 
     def create(**fields)
-      insert.values(**fields).last_insert_id
+      insert.values(**fields).last_insert_id(as: Pk)
     end
 
     # Update a record by ID with given attributes
@@ -242,7 +242,7 @@ module CQL
     # user_repo.count
     # ```
     def count
-      query.count.first!(Int64)
+      query.count.first!(Pk)
     end
 
     # Check if records exist matching specific fields

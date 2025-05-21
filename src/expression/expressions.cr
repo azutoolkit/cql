@@ -44,6 +44,192 @@ module Expression
     def initialize(@column : CQL::BaseColumn, @alias_name : String? = nil)
     end
 
+    # Redefine comparison operators using method aliases
+    {% for operator, method_name in {
+      "==" => :eq,
+      "!=" => :neq,
+      "<=" => :lte,
+      "<"  => :lt,
+      ">"  => :gt,
+      ">=" => :gte,
+    } %}
+
+      {% optr = (operator == "==") ? "=" : operator %}
+
+      def {{operator.id}}(value : DB::Any) : ConditionBuilder
+        compare("{{optr.id}}", value)
+      end
+
+      def {{method_name.id}}(value : DB::Any) : ConditionBuilder
+        compare("{{optr.id}}", value)
+      end
+
+      def {{operator.id}}(value : Column) : ConditionBuilder
+        compare("{{optr.id}}", value)
+      end
+
+      def {{method_name.id}}(value : Column) : ConditionBuilder
+        compare("{{optr.id}}", value)
+      end
+    {% end %}
+
+    def in(items : Array(DB::Any)) : ConditionBuilder
+      ConditionBuilder.new(InCondition.new(self, items))
+    end
+
+    def in(sub_query : CQL::Query) : ConditionBuilder
+      ConditionBuilder.new(InSelect.new(self, sub_query.build))
+    end
+
+    def not_in(values : Array(DB::Any)) : ConditionBuilder
+      ConditionBuilder.new(Not.new(InCondition.new(self, values)))
+    end
+
+    def not_in(sub_query : CQL::Query) : ConditionBuilder
+      ConditionBuilder.new(Not.new(InSelect.new(self, sub_query.build)))
+    end
+
+    def like(pattern : String) : ConditionBuilder
+      ConditionBuilder.new(Like.new(self, pattern))
+    end
+
+    def not_like(pattern : String) : ConditionBuilder
+      ConditionBuilder.new(NotLike.new(self, pattern))
+    end
+
+    def null : ConditionBuilder
+      ConditionBuilder.new(IsNull.new(self))
+    end
+
+    def not_null : ConditionBuilder
+      ConditionBuilder.new(IsNotNull.new(self))
+    end
+
+    def between(min : DB::Any, max : DB::Any) : ConditionBuilder
+      ConditionBuilder.new(Between.new(self, min, max))
+    end
+
+    def not_between(min : DB::Any, max : DB::Any) : ConditionBuilder
+      ConditionBuilder.new(Not.new(Between.new(self, min, max)))
+    end
+
+    def exists? : ConditionBuilder
+      ConditionBuilder.new(Exists.new(self))
+    end
+
+    def not_exists? : ConditionBuilder
+      ConditionBuilder.new(Not.new(Exists.new(self)))
+    end
+
+    private def compare(operator : String, value : Column | ConditionBuilder)
+      ConditionBuilder.new(CompareCondition.new(self, operator, value))
+    end
+
+    private def compare(operator : String, value : DB::Any)
+      ConditionBuilder.new(Compare.new(self, operator, value))
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  class TypedColumn(T) < Column
+    getter column : CQL::BaseColumn
+    getter alias_name : String?
+
+    def initialize(@column : CQL::BaseColumn, @alias_name : String? = nil)
+    end
+
+    def type
+      @column.type
+    end
+
+    # Redefine comparison operators using method aliases
+    {% for operator, method_name in {
+      "==" => :eq,
+      "!=" => :neq,
+      "<=" => :lte,
+      "<"  => :lt,
+      ">"  => :gt,
+      ">=" => :gte,
+    } %}
+
+      {% optr = (operator == "==") ? "=" : operator %}
+
+      def {{operator.id}}(value : T) : ConditionBuilder
+        compare("{{optr.id}}", value)
+      end
+
+      def {{method_name.id}}(value : T) : ConditionBuilder
+        compare("{{optr.id}}", value)
+      end
+
+      def {{operator.id}}(value : TypedColumn(T)) : ConditionBuilder
+        compare("{{optr.id}}", value)
+      end
+
+      def {{method_name.id}}(value : TypedColumn(T)) : ConditionBuilder
+        compare("{{optr.id}}", value)
+      end
+    {% end %}
+
+    def in(items : Array(T)) : ConditionBuilder
+      ConditionBuilder.new(InCondition.new(self, items))
+    end
+
+    def in(sub_query : CQL::Query) : ConditionBuilder
+      ConditionBuilder.new(InSelect.new(self, sub_query.build))
+    end
+
+    def not_in(values : Array(T)) : ConditionBuilder
+      ConditionBuilder.new(Not.new(InCondition.new(self, values)))
+    end
+
+    def not_in(sub_query : CQL::Query) : ConditionBuilder
+      ConditionBuilder.new(Not.new(InSelect.new(self, sub_query.build)))
+    end
+
+    def like(pattern : String) : ConditionBuilder
+      ConditionBuilder.new(Like.new(self, pattern))
+    end
+
+    def not_like(pattern : String) : ConditionBuilder
+      ConditionBuilder.new(NotLike.new(self, pattern))
+    end
+
+    def null : ConditionBuilder
+      ConditionBuilder.new(IsNull.new(self))
+    end
+
+    def not_null : ConditionBuilder
+      ConditionBuilder.new(IsNotNull.new(self))
+    end
+
+    def between(min : T, max : T) : ConditionBuilder
+      ConditionBuilder.new(Between.new(self, min, max))
+    end
+
+    def not_between(min : T, max : T) : ConditionBuilder
+      ConditionBuilder.new(Not.new(Between.new(self, min, max)))
+    end
+
+    def exists? : ConditionBuilder
+      ConditionBuilder.new(Exists.new(self))
+    end
+
+    def not_exists? : ConditionBuilder
+      ConditionBuilder.new(Not.new(Exists.new(self)))
+    end
+
+    private def compare(operator : String, value : TypedColumn(T) | ConditionBuilder)
+      ConditionBuilder.new(CompareCondition.new(self, operator, value))
+    end
+
+    private def compare(operator : String, value : T)
+      ConditionBuilder.new(Compare.new(self, operator, value))
+    end
+
     def accept(visitor : Visitor)
       visitor.visit(self)
     end
@@ -359,7 +545,7 @@ module Expression
     end
 
     macro method_missing(call)
-      def {{call.name.id}} : ColumnBuilder
+      def {{call.name.id}} : Column
         @table.{{call.name.id}}.expression
       end
     end

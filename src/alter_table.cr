@@ -43,17 +43,19 @@ module CQL
     # ```
     def add_column(
       name : Symbol,
-      type : Any,
+      type : T.class,
       as as_name : String? = nil,
       null : Bool = true,
       default : DB::Any = nil,
       unique : Bool = false,
       size : Int32? = nil,
       index : Bool = false,
-    )
-      @table.column(name, type, as_name, null, default, unique, size)
-      col = @table.columns[name]
-      @actions << Expression::AddColumn.new(col)
+    ) forall T
+
+      new_column = Column(T).new(name, as_name, null, default, unique, size)
+      new_column.table = @table
+      @table.columns[name] = new_column
+      @actions << Expression::AddColumn.new(new_column)
     end
 
     # Drops a column from the table.
@@ -85,6 +87,7 @@ module CQL
     # ````
     def rename_column(old_name : Symbol, new_name : Symbol)
       column = @table.columns[old_name]
+      column.table = @table
       @actions << Expression::RenameColumn.new(column.dup, new_name.to_s)
       column.name = new_name
       @table.columns.delete(old_name)
@@ -100,8 +103,9 @@ module CQL
     # ```
     # change_column(:age, "string")
     # ```
-    def change_column(name : Symbol, type : T) forall T
+    def change_column(name : Symbol, type : T.class) forall T
       new_column = Column(T).new(name)
+      new_column.table = @table
       @actions << Expression::ChangeColumn.new(new_column, type)
       @table.columns[name] = new_column
     end

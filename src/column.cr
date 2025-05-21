@@ -18,10 +18,11 @@ module CQL
   #   end
   # end
   # ```
-  class Column(T) < BaseColumn
+  class Column(Type) < BaseColumn
     @as_name : String? = nil
     # :nodoc:
     property name : Symbol
+
     # :nodoc:
     getter? null : Bool = false
     # :nodoc:
@@ -67,18 +68,6 @@ module CQL
     )
     end
 
-    # The type of the column
-    # - **@return** [T.class] the type of the column
-    #
-    # **Example**
-    #
-    # ```
-    # column = CQL::Column(String).new(:name)
-    # column.type # => String
-    def type
-      T
-    end
-
     # Expressions for this column
     # - **@return** [Expression::ColumnBuilder] the column expression builder
     #
@@ -88,23 +77,16 @@ module CQL
     # column = CQL::Column.new(:name, String)
     # column.expression.eq("John")
     # ```
-    def expression
-      Expression::ColumnBuilder.new(Expression::Column.new(self))
+    def expression : Expression::Column
+      Expression::TypedColumn(Type).new(self, @as_name)
     end
 
-    # Validate the value
-    # - **@param** value [DB::Any] The value to validate
-    #
-    # **Example**
-    #
-    # ```
-    # column = CQL::Column.new(:name, String)
-    # column.validate!("John")
-    # ```
-    def validate!(value : T) forall T
-      return if value.class == JSON::Any
-      return if value == T || value == Array(T)
-      raise Error.new "Expected column `#{name}` to be #{type} or Array(#{type}), but got #{value.class}"
+    def strict_type
+      Type
+    end
+
+    def type
+      @table.not_nil!.schema.adapter.sql_type(Type)
     end
   end
 end

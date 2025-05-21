@@ -178,7 +178,7 @@ describe CQL::Schema do
     Data.clients.drop!
   end
 
-  it "throws exception adding foreign key to a table" do
+  it "throws exception adding foreign key to a table that doesn't exist" do
     Data.countries.drop!
     Data.countries.create!
 

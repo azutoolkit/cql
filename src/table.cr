@@ -48,7 +48,7 @@ module CQL
     getter unique_constraints : Array(UniqueConstraint) = [] of UniqueConstraint
     getter check_constraints : Array(CheckConstraint) = [] of CheckConstraint
 
-    private getter schema : Schema
+    getter schema : Schema
 
     # Creates a new table instance.
     # - **@param** table_name [Symbol] The name of the table

@@ -453,11 +453,11 @@ module Expression
         # Define columns
         columns_sql = node.table.columns.map do |_, column|
           if column.is_a?(CQL::PrimaryKey)
-            @dialect.auto_increment_primary_key(column, @adapter.sql_type(column.type))
+            @dialect.auto_increment_primary_key(column, column.type)
           else
             @dialect.define_column(
               column.name.to_s,
-              @adapter.sql_type(column.type),
+              column.type,
               column.default,
               column.null?,
               column.unique?,
@@ -513,7 +513,7 @@ module Expression
     def visit(node : AddColumn) : String
       @dialect.add_column(
         node.column.name.to_s,
-        @adapter.sql_type(node.column.type),
+        node.column.type,
         node.column.is_a?(CQL::PrimaryKey),
         node.column.null?,
         node.column.unique?
@@ -533,7 +533,7 @@ module Expression
         node.table_name,
         node.old_name,
         node.new_name,
-        @adapter.sql_type(node.column.type)
+       node.column.type,
       )
     end
 
@@ -545,7 +545,7 @@ module Expression
       @dialect.modify_column(
         node.table_name,
         node.column.name.to_s,
-        @adapter.sql_type(node.column.type)
+        node.column.type,
       )
     end
 

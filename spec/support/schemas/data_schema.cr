@@ -4,15 +4,15 @@ Data = CQL::Schema.define(
   uri: "sqlite3://spec/support/db/data.db") do
   table :customers do
     primary :id, Int32
-    column :name, String
-    column :email, String
-    column :city, String
-    column :balance, Int32
+    varchar :name
+    varchar :email
+    varchar :city
+    integer :balance
     timestamps
   end
 
   table :countries do
     primary :id, Int32
-    column :country, String
+    varchar :country
   end
 end

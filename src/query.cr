@@ -762,8 +762,6 @@ module CQL
       column = find_column(field)
       # find_alias_for_table returns String alias
       col_alias_str = find_alias_for_table(column.table.not_nil!)
-      column.validate!(value.as(T))
-
       # Create Expression::Column with String alias
       col_expr = Expression::Column.new(column, alias_name: col_alias_str)
 
@@ -780,8 +778,6 @@ module CQL
       column = find_column(field)
       # find_alias_for_table returns String alias
       col_alias_str = find_alias_for_table(column.table.not_nil!)
-      column.validate!(value)
-
       # Create Expression::Column with String alias
       col_expr = Expression::Column.new(column, alias_name: col_alias_str)
 
@@ -1132,7 +1128,6 @@ module CQL
                        # Create Expression::Column with String alias
                        Expression::Column.new(right_val_or_col_def, alias_name: right_alias_str)
                      when DB::Any
-                       left_col_def.validate!(right_val_or_col_def)
                        right_val_or_col_def # Keep as DB::Any
                      else
                        raise "Invalid type in join condition: #{right_val_or_col_def.class}"

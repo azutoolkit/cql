@@ -237,7 +237,6 @@ module CQL
 
       fields.each do |field, value|
         column = find_column(field)
-        column.validate!(value)
         keys << Expression::Column.new(column)
       end
 

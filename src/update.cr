@@ -298,7 +298,6 @@ module CQL
     private def build_setters(setters)
       setters.each do |k, v|
         column = find_column(k)
-        column.validate!(v)
         val = if v.is_a?(JSON::Any)
                 v.to_json.as(DB::Any)
               else
@@ -310,7 +309,6 @@ module CQL
 
     private def get_expression(field, value)
       column = find_column(field)
-      column.validate!(value)
       Expression::Compare.new(Expression::Column.new(column), "=", value)
     end
 

@@ -60,7 +60,7 @@ describe CQL::Query do
       select_query = Northwind.query
         .from(:customers)
         .select(:name, :city)
-        .where { (customers.name == "Tulum") & customers.city.eq("Kantenah") }
+        .where { (customers.name.==("Tulum")) & customers.city.eq("Kantenah") }
         .to_sql
 
       output = <<-SQL
