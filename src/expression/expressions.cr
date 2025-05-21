@@ -46,13 +46,13 @@ module Expression
 
     # Redefine comparison operators using method aliases
     {% for operator, method_name in {
-      "==" => :eq,
-      "!=" => :neq,
-      "<=" => :lte,
-      "<"  => :lt,
-      ">"  => :gt,
-      ">=" => :gte,
-    } %}
+                                      "==" => :eq,
+                                      "!=" => :neq,
+                                      "<=" => :lte,
+                                      "<"  => :lt,
+                                      ">"  => :gt,
+                                      ">=" => :gte,
+                                    } %}
 
       {% optr = (operator == "==") ? "=" : operator %}
 
@@ -147,13 +147,13 @@ module Expression
 
     # Redefine comparison operators using method aliases
     {% for operator, method_name in {
-      "==" => :eq,
-      "!=" => :neq,
-      "<=" => :lte,
-      "<"  => :lt,
-      ">"  => :gt,
-      ">=" => :gte,
-    } %}
+                                      "==" => :eq,
+                                      "!=" => :neq,
+                                      "<=" => :lte,
+                                      "<"  => :lt,
+                                      ">"  => :gt,
+                                      ">=" => :gte,
+                                    } %}
 
       {% optr = (operator == "==") ? "=" : operator %}
 

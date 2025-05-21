@@ -235,7 +235,7 @@ module CQL
     private def build_values(fields)
       keys = Set(Expression::Column).new
 
-      fields.each do |field, value|
+      fields.each do |field, _|
         column = find_column(field)
         keys << Expression::Column.new(column)
       end

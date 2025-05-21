@@ -51,7 +51,6 @@ module CQL
               Slice(UInt8).class |
               JSON::Any.class
 
-
   # :nodoc:
   DB_TYPE_MAPPING = {
     CQL::Adapter::SQLite => {

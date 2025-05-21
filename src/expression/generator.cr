@@ -533,7 +533,7 @@ module Expression
         node.table_name,
         node.old_name,
         node.new_name,
-       node.column.type,
+        node.column.type,
       )
     end
 

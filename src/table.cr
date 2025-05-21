@@ -449,7 +449,7 @@ module CQL
     # json :metadata, JSON::Any, as: "meta", null: false, default: nil, unique: true, index: true
     # ```
     def json(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(JSON::Any).new(name,  as_name, null, default, unique)
+      col = Column(JSON::Any).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil

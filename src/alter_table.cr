@@ -51,7 +51,6 @@ module CQL
       size : Int32? = nil,
       index : Bool = false,
     ) forall T
-
       new_column = Column(T).new(name, as_name, null, default, unique, size)
       new_column.table = @table
       @table.columns[name] = new_column
