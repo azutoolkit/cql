@@ -32,16 +32,19 @@ module CQL::ActiveRecord::Relations
     # end
     # ```
     macro many_to_many(name, klass, join_through, cascade = false)
+      # Register the association
+      register_association({{name}}, :many_to_many, {{klass}}, :{{@type.name.underscore.id}}_id, join_through: :{{join_through.stringify.underscore.id}}, cascade: {{cascade}})
+
       @[DB::Field(ignore: true)]
-      getter {{name.id}} : CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_through.camelcase.id}}, Pk) do
-        CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_through.camelcase.id}}, Pk).new(
+      getter {{name.id}} : CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_through.id}}, Pk) do
+        CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_through.id}}, Pk).new(
           key: :{{@type.name.underscore.id}}_id,
           id: @id.not_nil!,
           target_key: :{{klass.stringify.underscore.id}}_id,
           cascade: {{cascade.id}},
           query: {{klass.id}}.query
-            .inner(:{{join_through.id}}) { ({{join_through.id}}.{{klass.stringify.underscore.id}}_id == {{@type.id}}.schema.{{name.id}}.expression.id)}
-            .where{({{join_through.id}}.{{@type.name.underscore.id}}_id == @id.not_nil!)}
+            .inner(:{{join_through.stringify.underscore.id}}) { ({{join_through.stringify.underscore.id}}.{{klass.stringify.underscore.id}}_id == {{@type.id}}.schema.{{name.id}}.expression.id) }
+            .where { ({{join_through.stringify.underscore.id}}.{{@type.name.underscore.id}}_id == @id.not_nil!) }
         )
       end
     end

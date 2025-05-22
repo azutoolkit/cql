@@ -54,6 +54,10 @@ module CQL
         def id? : Pk?
           @id
         end
+
+        def primary_key : Pk
+          @id
+        end
       end
     end
   end

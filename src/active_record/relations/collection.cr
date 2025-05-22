@@ -65,6 +65,21 @@ module CQL::ActiveRecord::Relations
       @records.each(&block)
     end
 
+    # Map over the collection
+    # - **param** : block (Block(Target, U))
+    # - **return** : Array(U)
+    #
+    # **Example**
+    #
+    # ```
+    # user.posts.map(&.title)
+    # => ["Post 1", "Post 2"]
+    # ```
+    def map(&block : Target -> U) : Array(U) forall U
+      load_records unless @loaded
+      @records.map(&block)
+    end
+
     # Returns all associated records
     # - **return** : Array(Target)
     #

@@ -2,6 +2,9 @@ module CQL::ActiveRecord::Relations
   # Define the has_one association
   module HasOne
     macro has_one(name, kind)
+      # Register the association
+      register_association({{name}}, :has_one, {{kind}}, :{{@type.stringify.underscore.id}}_id)
+
       def {{name.id}} : {{kind.id}}?
         {{kind.id}}.find_by({{@type.stringify.underscore.id}}_id: @id)
       end

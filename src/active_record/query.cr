@@ -1,15 +1,172 @@
 module CQL
   module ActiveRecord
-    class Query(Target) < ::CQL::Query
+    class Query(Target) < CQL::Query
       @model_class : Target.class
+      @eager_loaded_associations : Array(Symbol) = [] of Symbol
 
       def initialize(schema : CQL::Schema)
         super(schema)
         @model_class = Target
+        @eager_loaded_associations = [] of Symbol
       end
 
       protected def spawn_with(new_query : ::CQL::Query)
-        self.class.new(self.schema).merge(new_query)
+        query = self.class.new(self.schema).merge(new_query)
+        @eager_loaded_associations = @eager_loaded_associations.dup
+        query
+      end
+
+      # Eager load associations to prevent N+1 queries
+      # - **@param** associations [Array(Symbol)] The associations to eager load
+      # - **@return** [Query(Target)] A new query with eager loading configured
+      #
+      # **Example**
+      # ```
+      # User.includes(:posts, :comments).all
+      # ```
+      def includes(*associations : Symbol)
+        spawn_with(self)
+        @eager_loaded_associations = @eager_loaded_associations + associations.to_a
+        self
+      end
+
+      # Override all to handle eager loading
+      def all
+        records = super(@model_class)
+        return records if @eager_loaded_associations.empty?
+
+        # Load associations for all records
+        @eager_loaded_associations.each do |association|
+          load_association(records, association)
+        end
+
+        records
+      end
+
+      macro create_scope_method(name_ident, scope_proc_code)
+        def {{name_ident.id}}(*args)
+          # `self` here is an instance of ::CQL::Query(CURRENT_MODEL_CLASS).
+          # `self.query` should be the current accumulated CQL::Query.
+          # `self.model_class` should be CURRENT_MODEL_CLASS.
+
+          # Execute the scope_proc_code. `self` inside the proc is CURRENT_MODEL_CLASS.
+          # This will typically return a Query(CURRENT_MODEL_CLASS) or a raw CQL::Query.
+          scope_logic_result = ({{scope_proc_code}}).call(*args)
+
+          cql_query_fragment_for_scope : ::CQL::Query
+          if scope_logic_result.is_a?(::CQL::Query)
+            cql_query_fragment_for_scope = scope_logic_result
+          elsif scope_logic_result.is_a?(Query({{@type.id}}))
+            # Assumes Query has a `query` getter for its underlying CQL::Query.
+            cql_query_fragment_for_scope = scope_logic_result.query
+          else
+            raise "Scope '{{name_ident.id}}' for model #{CURRENT_MODEL_CLASS}, when applied in a chain, " \
+                  "did not produce a compatible CQL::Query or Query(#{{{@type.id}}}). " \
+                  "Received: #{scope_logic_result.class}"
+          end
+
+          # Merge the new scope's CQL query fragment into the existing query of this Query instance.
+          # Assumes `self.query.merge(...)` returns a new, merged CQL::Query instance.
+          current_underlying_query = self.query # Assumes .query getter
+          new_underlying_query = current_underlying_query.merge(cql_query_fragment_for_scope)
+
+          # Return a new Query instance with the merged query, promoting immutability.
+          # Assumes Query(ModelType).new(cql_query) constructor.
+          Query({{@type.id}}).new(new_underlying_query)
+        end
+      end
+
+      private def load_association(records : Array(Target), association : Symbol)
+        return if records.empty?
+
+        # Get the association definition from the model
+        association_def = Target.association(association)
+        return unless association_def
+
+        case association_def.type
+        when :has_many, :has_and_belongs_to_many
+          load_has_many_association(records, association_def)
+        when :belongs_to
+          load_belongs_to_association(records, association_def)
+        when :has_one
+          load_has_one_association(records, association_def)
+        end
+      end
+
+      private def load_has_many_association(records : Array(Target), association_def)
+        # Get the foreign key and target model
+        foreign_key = association_def.foreign_key
+        target_model = association_def.target_model
+
+        # Get all IDs from the records
+        ids = records.map(&.id)
+
+        # Query the associated records
+        associated_records = target_model.query
+          .where { target_model.schema_table.columns[foreign_key] == ids }
+          .all
+
+        # Group associated records by foreign key
+        grouped_records = associated_records.group_by(foreign_key)
+
+        # Set the association on each record
+        records.each do |record|
+          # Use a macro to generate the setter method call
+          {% begin %}
+            record.{{association_def.name.id}} = grouped_records[record.id]? || [] of target_model
+          {% end %}
+        end
+      end
+
+      private def load_belongs_to_association(records : Array(Target), association_def)
+        # Get the foreign key and target model
+        foreign_key = association_def.foreign_key
+        target_model = association_def.target_model
+
+        # Get all foreign keys from the records
+        foreign_keys = records.map(&.send(foreign_key)).compact.uniq
+
+        return if foreign_keys.empty?
+
+        # Query the associated records
+        associated_records = target_model
+          .query
+          .where { target_model.schema_table.columns[:id] == foreign_keys }
+          .all
+          .index_by(&.id)
+
+        # Set the association on each record
+        records.each do |record|
+          if foreign_key_value = record.primary_key
+            # Use a macro to generate the setter method call
+            {% begin %}
+              record.{{association_def.name.id}} = associated_records[foreign_key_value]?
+            {% end %}
+          end
+        end
+      end
+
+      private def load_has_one_association(records : Array(Target), association_def)
+        # Get the foreign key and target model
+        foreign_key = association_def.foreign_key
+        target_model = association_def.target_model
+
+        # Get all IDs from the records
+        ids = records.map(&.id)
+
+        # Query the associated records
+        associated_records = target_model
+          .query
+          .where { target_model.schema_table.columns[foreign_key] == ids }
+          .all
+          .index_by(foreign_key)
+        # Set the association on each record
+        records.each do |record|
+          # Use a macro to generate the setter method call
+          {% begin %}
+            record.{{association_def.name.id}} = associated_records[record.primary_key]?
+          {% end %}
+        end
       end
 
       # Execute the query and return all matching records
@@ -36,76 +193,94 @@ module CQL
 
       # Add a where clause to the query
       def where(**fields)
-        spawn_with(super(**fields))
+        super(**fields)
+        spawn_with(self)
       end
 
       def where(&block)
-        spawn_with(super(&block))
+        super(&block)
+        spawn_with(self)
       end
 
       def order(**fields)
-        spawn_with(super(**fields))
+        super(**fields)
+        spawn_with(self)
       end
 
       def limit(limit : Int32)
-        spawn_with(super(limit))
+        super(limit)
+        spawn_with(self)
       end
 
       def offset(offset : Int32)
-        spawn_with(super(offset))
+        super(offset)
+        spawn_with(self)
       end
 
       def select(*fields)
-        spawn_with(super(*fields))
+        super(*fields)
+        spawn_with(self)
       end
 
       def group_by(*fields)
-        spawn_with(super(*fields))
+        super(*fields)
+        spawn_with(self)
       end
 
       def join(table : Symbol, on)
         on_hash = on.is_a?(Hash) ? on : on.to_h
-        spawn_with(super(table, on_hash))
+        super(table, on_hash)
+        spawn_with(self)
       end
 
       def minimum(field : Symbol)
-        self.min(field).first
+        super(field)
+        spawn_with(self)
       end
 
       def maximum(field : Symbol)
-        self.max(field).first
+        super(field)
+        spawn_with(self)
       end
 
       def sum(field : Symbol)
-        self.sum(field).first
+        super(field)
+        spawn_with(self)
       end
 
       def average(field : Symbol)
-        self.avg(field).first
+        super(field)
+        spawn_with(self)
       end
 
       def group(*fields)
-        spawn_with(super(*fields))
+        super(*fields)
+        spawn_with(self)
       end
 
       def having(condition : String, *args)
-        spawn_with(super(condition, *args))
+        super(condition, *args)
+        spawn_with(self)
       end
 
       def having(&block)
-        spawn_with(super(&block))
+        super(&block)
+        spawn_with(self)
       end
 
       def inner(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
-        spawn_with(super(table_or_alias, &block))
+        super(table_or_alias, &block)
+        spawn_with(self)
       end
 
       def left(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
-        spawn_with(super(table_or_alias, &block))
+        super(table_or_alias, &block)
+        spawn_with(self)
       end
 
       def right(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
-        spawn_with(super(table_or_alias, &block))
+        super(table_or_alias, &block)
+        spawn_with(self)
       end
 
       # Returns all primary keys as an array of Pk

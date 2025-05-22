@@ -22,6 +22,9 @@ module CQL::ActiveRecord::Relations
   # ```
   module HasMany
     macro has_many(name, type, foreign_key, cascade = false)
+      # Register the association
+      register_association({{name}}, :has_many, {{type}}, {{foreign_key}}, cascade: {{cascade}})
+
       # Define an instance variable to memoize the collection
       @[DB::Field(ignore: true)]
       @_{{name.id}} : CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk)?

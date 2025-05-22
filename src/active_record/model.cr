@@ -1,4 +1,5 @@
 require "./definition"
+require "./query"
 require "./queryable"
 require "./insertable"
 require "./updateable"

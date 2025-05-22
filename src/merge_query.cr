@@ -1,9 +1,11 @@
+require "./query"
+
 module CQL
   # The MergeQuery class is responsible for merging the properties of one Query object
   # into another. It encapsulates the logic previously found in Query#merge.
   class MergeQuery
-    @current_query : Query
-    @other_query : Query
+    @current_query : CQL::Query
+    @other_query : CQL::Query
 
     # Initializes a new MergeQuery instance.
     # - @param current_query The query to be modified.
@@ -61,22 +63,30 @@ module CQL
       current_w = @current_query.where
       other_w = @other_query.where
 
-      if current_w
-        if other_w
-          # Assuming Expression::And and Expression::Where are available in this scope
-          merged_condition = Expression::And.new(current_w.condition, other_w.condition)
-          # Uses the 'where=' setter on Query (to be added via 'property' macro)
+      if current_w && other_w
+        # Only merge if both are Expression::Where or Expression::Condition
+        if (current_w.is_a?(Expression::Where) || current_w.is_a?(Expression::Condition)) &&
+           (other_w.is_a?(Expression::Where) || other_w.is_a?(Expression::Condition))
+          current_condition = current_w.is_a?(Expression::Where) ? current_w.condition : current_w.as(Expression::Condition)
+          other_condition = other_w.is_a?(Expression::Where) ? other_w.condition : other_w.as(Expression::Condition)
+          merged_condition = Expression::And.new(current_condition, other_condition)
           @current_query.where = Expression::Where.new(merged_condition)
+        else
+          # If not mergeable, only assign if current_w is Expression::Where
+          @current_query.where = current_w.is_a?(Expression::Where) ? current_w : nil
         end
-      else
-        # Uses the 'where=' setter on Query
-        @current_query.where = other_w
+      elsif other_w
+        @current_query.where = other_w.is_a?(Expression::Where) ? other_w : nil
       end
     end
 
     private def merge_group_by
-      # Modifies the array obtained via getter. This is okay.
-      @current_query.group_by.concat(@other_query.group_by).uniq!(&.object_id)
+      # Only concat if both are Array(CQL::BaseColumn)
+      if gb1 = @current_query.group_by.as?(Array(CQL::BaseColumn))
+        if gb2 = @other_query.group_by.as?(Array(CQL::BaseColumn))
+          gb1.concat(gb2).uniq!(&.object_id)
+        end
+      end
     end
 
     private def merge_having_clause

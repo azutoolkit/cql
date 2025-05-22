@@ -5,7 +5,7 @@ class Actor
   property name : String
   property age : Int32
 
-  many_to_many :movies, Movie, join_through: :movies_actor
+  many_to_many :movies, Movie, join_through: MoviesActor
 
   def initialize(@name, @age)
   end

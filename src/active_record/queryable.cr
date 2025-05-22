@@ -47,7 +47,19 @@ module CQL
         # User.query.where(active: true).all(User)
         # ```
         def self.query
-          Query({{@type.id}}).new({{@type.id}}.schema).from({{@type.id}}.table)
+          CQL::ActiveRecord::Query({{@type.id}}).new({{@type.id}}.schema).from({{@type.id}}.table)
+        end
+
+        # Eager load associations to prevent N+1 queries
+        # - **@param** associations [Array(Symbol)] The associations to eager load
+        # - **@return** [Query({{@type.id}})] A new query with eager loading configured
+        #
+        # **Example**
+        # ```
+        # User.includes(:posts, :comments).all
+        # ```
+        def self.includes(*associations : Symbol)
+          query.includes(*associations)
         end
 
         # Fetch all records of type T
@@ -59,7 +71,7 @@ module CQL
         # User.all
         # ```
         def self.all
-          query.all
+          query.all({{@type.id}})
         end
 
         # Find a record by ID, return nil if not found
@@ -72,13 +84,13 @@ module CQL
         # User.find(1)
         # ```
         def self.find(id : Pk)
-          query.where(id: id).first
+          query.where(id: id).first({{@type.id}})
         rescue DB::NoResultsError
           nil
         end
 
         def self.find?(id : Pk)
-          query.where(id: id).first
+          query.where(id: id).first({{@type.id}})
         rescue DB::NoResultsError
           nil
         end
@@ -95,7 +107,7 @@ module CQL
         # User.find!(1)
         # ```
         def self.find!(id : Pk)
-          query.where(id: id).first!
+          query.where(id: id).first!({{@type.id}})
         rescue e : CQL::Schema::ConnectionError
           # Only convert to NoResultsError if the error message indicates no results
           # This maintains compatibility with existing tests while allowing real
@@ -117,7 +129,7 @@ module CQL
         # User.find_by(email: "alice@example.com")
         # ```
         def self.find_by(**fields)
-          query.where(**fields).limit(1).first
+          query.where(**fields).limit(1).first({{@type.id}})
         rescue DB::NoResultsError
           nil
         rescue e : CQL::Schema::ConnectionError
@@ -132,7 +144,7 @@ module CQL
         end
 
         def self.find_by(attributes : Hash(Symbol, DB::Any))
-          query.where(attributes).limit(1).first
+          query.where(attributes).limit(1).first({{@type.id}})
         rescue DB::NoResultsError
           nil
         rescue e : CQL::Schema::ConnectionError
@@ -147,7 +159,7 @@ module CQL
         end
 
         def self.find_by!(attributes : Hash(Symbol, DB::Any))
-          query.where(attributes).limit(1).first!
+          query.where(attributes).limit(1).first!({{@type.id}})
         rescue e : CQL::Schema::ConnectionError
           # Only convert to NoResultsError if the error message indicates no results
           # This maintains compatibility with existing tests while allowing real
@@ -170,7 +182,7 @@ module CQL
         # User.find_by!(email: "alice@example.com")
         # ```
         def self.find_by!(**fields)
-          query.where(**fields).limit(1).first!
+          query.where(**fields).limit(1).first!({{@type.id}})
         rescue e : CQL::Schema::ConnectionError
           # Only convert to NoResultsError if the error message indicates no results
           # This maintains compatibility with existing tests while allowing real
@@ -217,7 +229,7 @@ module CQL
         # User.exists?(email: "alice@example.com")
         # ```
         def self.exists?(**fields)
-          query.select.where(**fields).limit(1).first != nil
+          query.select.where(**fields).limit(1).first({{@type.id}}) != nil
         rescue DB::NoResultsError
           false
         end
@@ -231,7 +243,7 @@ module CQL
         # User.first
         # ```
         def self.first
-          query.order(id: :asc).limit(1).first
+          query.order(id: :asc).limit(1).first({{@type.id}})
         end
 
         # Fetch the last record in the table
@@ -243,7 +255,7 @@ module CQL
         # User.last
         # ```
         def self.last
-          query.order(id: :desc).limit(1).first
+          query.order(id: :desc).limit(1).first({{@type.id}})
         end
 
         # Start a chainable query with a where clause using a block
@@ -312,28 +324,11 @@ module CQL
         end
 
         # Start a chainable query with a group by clause
-        # - **@param** fields [Array(Symbol)] The fields to group by
-        # - **@return** [Query] The chainable query
-        #
-        # **Example** Building a query with group by
-        #
-        # ```
-        # User.group_by(:role).count
-        # ```
         def self.group_by(*fields)
           query.group_by(*fields)
         end
 
         # Start a chainable query with a join clause
-        # - **@param** table [Symbol] The table to join
-        # - **@param** on [Hash(Symbol, Symbol) | NamedTuple] The join condition
-        # - **@return** [Query] The chainable query
-        #
-        # **Example** Building a query with join
-        #
-        # ```
-        # User.join(:posts, {id: :user_id}).all
-        # ```
         def self.join(table : Symbol, on)
           on_hash = on.is_a?(Hash) ? on : on.to_h
           query.join(table, on_hash)
@@ -393,40 +388,67 @@ module CQL
         def self.from(table : Symbol)
           query.from(table)
         end
-      end
 
-      macro create_scope_method(name_ident, scope_proc_code)
-        def {{name_ident.id}}(*args)
-          # `self` here is an instance of ::CQL::Query(CURRENT_MODEL_CLASS).
-          # `self.query` should be the current accumulated CQL::Query.
-          # `self.model_class` should be CURRENT_MODEL_CLASS.
-
-          # Execute the scope_proc_code. `self` inside the proc is CURRENT_MODEL_CLASS.
-          # This will typically return a Query(CURRENT_MODEL_CLASS) or a raw CQL::Query.
-          scope_logic_result = ({{scope_proc_code}}).call(*args)
-
-          cql_query_fragment_for_scope : ::CQL::Query
-          if scope_logic_result.is_a?(::CQL::Query)
-            cql_query_fragment_for_scope = scope_logic_result
-          elsif scope_logic_result.is_a?(Query({{@type.id}}))
-            # Assumes Query has a `query` getter for its underlying CQL::Query.
-            cql_query_fragment_for_scope = scope_logic_result.query
-          else
-            raise "Scope '{{name_ident.id}}' for model #{CURRENT_MODEL_CLASS}, when applied in a chain, " \
-                  "did not produce a compatible CQL::Query or Query(#{{{@type.id}}}). " \
-                  "Received: #{scope_logic_result.class}"
-          end
-
-          # Merge the new scope's CQL query fragment into the existing query of this Query instance.
-          # Assumes `self.query.merge(...)` returns a new, merged CQL::Query instance.
-          current_underlying_query = self.query # Assumes .query getter
-          new_underlying_query = current_underlying_query.merge(cql_query_fragment_for_scope)
-
-          # Return a new Query instance with the merged query, promoting immutability.
-          # Assumes Query(ModelType).new(cql_query) constructor.
-          Query({{@type.id}}).new(new_underlying_query)
+        # Returns all primary keys as an array of Pk
+        def self.ids
+          query.ids
         end
-      end
-    end
-  end
-end
+
+        # Pluck one or more columns as an array
+        def self.pluck(*fields)
+          query.pluck(*fields)
+        end
+
+        # Pick the value(s) from the first row for the given columns
+        def self.pick(*fields)
+          query.pick(*fields)
+        end
+
+        # Take n records or the first record if n is nil
+        def self.take(n : Int32? = nil)
+          query.take(n)
+        end
+
+        # Take n records or the first record if n is nil, raise if not found
+        def self.take!(n : Int32? = nil)
+          query.take!(n)
+        end
+
+        # Alias for first (returns first record or nil)
+        def self.first?
+          query.first?
+        end
+
+        # Alias for last (returns last record or nil)
+        def self.last?
+          query.last?
+        end
+
+        # Inner join with a block
+        def self.inner(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
+          query.inner(table_or_alias, &block)
+        end
+
+        # Left join with a block
+        def self.left(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
+          query.left(table_or_alias, &block)
+        end
+
+        # Right join with a block
+        def self.right(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
+          query.right(table_or_alias, &block)
+        end
+
+        # Having clause with a block
+        def self.having(&block)
+          query.having(&block)
+        end
+
+        # Having clause with condition and args
+        def self.having(condition : String, *args)
+          query.having(condition, *args)
+        end
+      end # macro included
+    end # module Queryable
+  end # module ActiveRecord
+end # module CQL
