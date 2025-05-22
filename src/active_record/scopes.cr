@@ -17,11 +17,11 @@ module CQL
           scope_call_result = ({{scope_proc_code}}).call(*args)
 
           if scope_call_result.is_a?(CQL::Query)
-            # Proc directly returned a raw CQL::Query. Wrap it in ChainableQuery.
-            # Assumes ChainableQuery(ModelType).new(cql_query) constructor.
-            ChainableQuery({{@type.id}}).new(scope_call_result)
+            # Proc directly returned a raw CQL::Query. Wrap it in Query.
+            # Assumes Query(ModelType).new(cql_query) constructor.
+            Query({{@type.id}}).new(scope_call_result)
           else
-            # Assume scope_call_result is already a ChainableQuery(CURRENT_MODEL_CLASS) instance
+            # Assume scope_call_result is already a Query(CURRENT_MODEL_CLASS) instance
             # or a compatible type as per the original macro's logic.
             scope_call_result
           end

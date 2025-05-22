@@ -711,6 +711,46 @@ module CQL
       join_inferred(tables_array, Expression::JoinType::RIGHT)
     end
 
+    # Take one or more records without ordering
+    # - **@param** n [Int32?] Number of records to take (optional)
+    # - **@return** [Array(DB::Any), DB::Any?] The record(s) or nil
+    def take(n : Int32? = nil)
+      q = self
+      q = q.limit(n) if n
+      n ? q.all(DB::Any) : q.first(DB::Any)
+    rescue DB::NoResultsError
+      n ? [] of DB::Any : nil
+    end
+
+    # Take one or more records without ordering, raise if not found
+    # - **@param** n [Int32?] Number of records to take (optional)
+    # - **@return** [Array(DB::Any), DB::Any] The record(s) or raises if not found
+    def take!(n : Int32? = nil)
+      q = self
+      q = q.limit(n) if n
+      n ? q.all(DB::Any) : q.first!(DB::Any)
+    end
+
+    # Pluck one or more columns as an array
+    # - **@param** fields [Array(Symbol)] The fields to pluck
+    # - **@return** [Array(DB::Any)] The values
+    def pluck(*fields)
+      self.select(*fields).all(DB::Any)
+    end
+
+    # Pick the value(s) from the first row for the given columns
+    # - **@param** fields [Array(Symbol)] The fields to pick
+    # - **@return** [DB::Any, Tuple] The value(s) or nil
+    def pick(*fields)
+      self.select(*fields).first(DB::Any)
+    end
+
+    # Return all primary keys as an array
+    # - **@return** [Array(DB::Any)] The primary key values
+    def ids
+      self.select(:id).pluck(:id)
+    end
+
     # --- Private Methods --- #
 
     private def build_from

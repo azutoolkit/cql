@@ -47,7 +47,7 @@ module CQL
         # User.query.where(active: true).all(User)
         # ```
         def self.query
-          CQL::Query.new({{@type.id}}.schema).from({{@type.id}}.table)
+          Query({{@type.id}}).new({{@type.id}}.schema).from({{@type.id}}.table)
         end
 
         # Fetch all records of type T
@@ -59,7 +59,7 @@ module CQL
         # User.all
         # ```
         def self.all
-          query.all({{@type.id}})
+          query.all
         end
 
         # Find a record by ID, return nil if not found
@@ -72,16 +72,13 @@ module CQL
         # User.find(1)
         # ```
         def self.find(id : Pk)
-          query
-          .where(id: id)
-          .first(as: {{@type.id}})
+          query.where(id: id).first
         rescue DB::NoResultsError
           nil
         end
 
-
         def self.find?(id : Pk)
-          query.where(id: id).first(as: {{@type.id}})
+          query.where(id: id).first
         rescue DB::NoResultsError
           nil
         end
@@ -98,7 +95,7 @@ module CQL
         # User.find!(1)
         # ```
         def self.find!(id : Pk)
-          query.where(id: id).first!({{@type.id}})
+          query.where(id: id).first!
         rescue e : CQL::Schema::ConnectionError
           # Only convert to NoResultsError if the error message indicates no results
           # This maintains compatibility with existing tests while allowing real
@@ -120,7 +117,7 @@ module CQL
         # User.find_by(email: "alice@example.com")
         # ```
         def self.find_by(**fields)
-          query.where(**fields).limit(1).first({{@type.id}})
+          query.where(**fields).limit(1).first
         rescue DB::NoResultsError
           nil
         rescue e : CQL::Schema::ConnectionError
@@ -135,7 +132,7 @@ module CQL
         end
 
         def self.find_by(attributes : Hash(Symbol, DB::Any))
-          query.where(attributes).limit(1).first({{@type.id}})
+          query.where(attributes).limit(1).first
         rescue DB::NoResultsError
           nil
         rescue e : CQL::Schema::ConnectionError
@@ -150,7 +147,7 @@ module CQL
         end
 
         def self.find_by!(attributes : Hash(Symbol, DB::Any))
-          query.where(attributes).limit(1).first!({{@type.id}})
+          query.where(attributes).limit(1).first!
         rescue e : CQL::Schema::ConnectionError
           # Only convert to NoResultsError if the error message indicates no results
           # This maintains compatibility with existing tests while allowing real
@@ -173,7 +170,7 @@ module CQL
         # User.find_by!(email: "alice@example.com")
         # ```
         def self.find_by!(**fields)
-          query.where(**fields).limit(1).first!({{@type.id}})
+          query.where(**fields).limit(1).first!
         rescue e : CQL::Schema::ConnectionError
           # Only convert to NoResultsError if the error message indicates no results
           # This maintains compatibility with existing tests while allowing real
@@ -195,7 +192,7 @@ module CQL
         # User.find_all_by(active: true)
         # ```
         def self.find_all_by(**fields)
-          query.where(**fields).all({{@type.id}})
+          query.where(**fields).all
         end
 
         # Count all records in the table
@@ -207,7 +204,7 @@ module CQL
         # User.count
         # ```
         def self.count
-          query.count(:id).first!(Int64)
+          query.count
         end
 
         # Check if records exist matching specific fields
@@ -220,7 +217,7 @@ module CQL
         # User.exists?(email: "alice@example.com")
         # ```
         def self.exists?(**fields)
-          query.select.where(**fields).limit(1).first({{@type.id}}) != nil
+          query.select.where(**fields).limit(1).first != nil
         rescue DB::NoResultsError
           false
         end
@@ -234,7 +231,7 @@ module CQL
         # User.first
         # ```
         def self.first
-          query.order(id: :asc).limit(1).first({{@type.id}})
+          query.order(id: :asc).limit(1).first
         end
 
         # Fetch the last record in the table
@@ -246,25 +243,25 @@ module CQL
         # User.last
         # ```
         def self.last
-          query.order(id: :desc).limit(1).first({{@type.id}})
+          query.order(id: :desc).limit(1).first
         end
 
-        # Start a chainable query with a where clause
-        # - **@param** fields [Hash(Symbol, DB::Any)] The fields to match
-        # - **@return** [ChainableQuery] The chainable query
+        # Start a chainable query with a where clause using a block
+        # - **@yield** [FilterBuilder] The block to build the condition
+        # - **@return** [Query] The chainable query
         #
-        # **Example** Building a query with where condition
+        # **Example**
         #
         # ```
-        # User.where(active: true).order(created_at: :desc).limit(10).all
+        # User.where { |q| q.name == "Alice" & q.active == true }.all
         # ```
-        def self.where(**fields)
-          ChainableQuery({{@type.id}}).new(query.where(**fields))
+        def self.where(&block)
+          query.where(&block)
         end
 
         # Start a chainable query with an order clause
         # - **@param** fields [Hash(Symbol, Symbol)] The fields to order by
-        # - **@return** [ChainableQuery] The chainable query
+        # - **@return** [Query] The chainable query
         #
         # **Example** Building a query with order
         #
@@ -272,12 +269,12 @@ module CQL
         # User.order(name: :asc).all
         # ```
         def self.order(**fields)
-          ChainableQuery({{@type.id}}).new(query.order(**fields))
+          query.order(**fields)
         end
 
         # Start a chainable query with a limit
         # - **@param** limit [Int32] The maximum number of records to return
-        # - **@return** [ChainableQuery] The chainable query
+        # - **@return** [Query] The chainable query
         #
         # **Example** Building a query with limit
         #
@@ -285,12 +282,12 @@ module CQL
         # User.limit(10).all
         # ```
         def self.limit(limit : Int32)
-          ChainableQuery({{@type.id}}).new(query.limit(limit))
+          query.limit(limit)
         end
 
         # Start a chainable query with an offset
         # - **@param** offset [Int32] The number of records to skip
-        # - **@return** [ChainableQuery] The chainable query
+        # - **@return** [Query] The chainable query
         #
         # **Example** Building a query with offset
         #
@@ -298,12 +295,12 @@ module CQL
         # User.offset(10).all
         # ```
         def self.offset(offset : Int32)
-          ChainableQuery({{@type.id}}).new(query.offset(offset))
+          query.offset(offset)
         end
 
         # Start a chainable query with a select clause
         # - **@param** fields [Array(Symbol)] The fields to select
-        # - **@return** [ChainableQuery] The chainable query
+        # - **@return** [Query] The chainable query
         #
         # **Example** Building a query with select
         #
@@ -311,27 +308,26 @@ module CQL
         # User.select(:id, :name).all
         # ```
         def self.select(*fields)
-          ChainableQuery({{@type.id}}).new(query.select(*fields))
+          query.select(*fields)
         end
 
         # Start a chainable query with a group by clause
         # - **@param** fields [Array(Symbol)] The fields to group by
-        # - **@return** [ChainableQuery] The chainable query
+        # - **@return** [Query] The chainable query
         #
         # **Example** Building a query with group by
         #
         # ```
         # User.group_by(:role).count
         # ```
-
         def self.group_by(*fields)
-          ChainableQuery({{@type.id}}).new(query.group(*fields))
+          query.group_by(*fields)
         end
 
         # Start a chainable query with a join clause
         # - **@param** table [Symbol] The table to join
         # - **@param** on [Hash(Symbol, Symbol) | NamedTuple] The join condition
-        # - **@return** [ChainableQuery] The chainable query
+        # - **@return** [Query] The chainable query
         #
         # **Example** Building a query with join
         #
@@ -340,129 +336,95 @@ module CQL
         # ```
         def self.join(table : Symbol, on)
           on_hash = on.is_a?(Hash) ? on : on.to_h
-          ChainableQuery({{@type.id}}).new(query.join(table, on_hash))
+          query.join(table, on_hash)
+        end
+
+        # Minimum value for a column
+        def self.minimum(field : Symbol)
+          query.minimum(field)
+        end
+
+        # Maximum value for a column
+        def self.maximum(field : Symbol)
+          query.maximum(field)
+        end
+
+        # Sum for a column
+        def self.sum(field : Symbol)
+          query.sum(field)
+        end
+
+        # Average for a column
+        def self.average(field : Symbol)
+          query.average(field)
+        end
+
+        # Group by fields (alias for group_by)
+        def self.group(*fields)
+          query.group(*fields)
+        end
+
+        # Having clause
+        def self.having(condition : String, *args)
+          query.having(condition, *args)
+        end
+
+        # Distinct
+        def self.distinct
+          query.distinct
+        end
+
+        # None (returns an empty relation)
+        def self.none
+          query.none
+        end
+
+        # Readonly (no-op for now, for API compatibility)
+        def self.readonly
+          query.readonly
+        end
+
+        # Lock (for update)
+        def self.lock(lock_clause : String? = nil)
+          query.lock(lock_clause)
+        end
+
+        # From (change the table for the query)
+        def self.from(table : Symbol)
+          query.from(table)
         end
       end
 
       macro create_scope_method(name_ident, scope_proc_code)
         def {{name_ident.id}}(*args)
-          # `self` here is an instance of ::CQL::ChainableQuery(CURRENT_MODEL_CLASS).
+          # `self` here is an instance of ::CQL::Query(CURRENT_MODEL_CLASS).
           # `self.query` should be the current accumulated CQL::Query.
           # `self.model_class` should be CURRENT_MODEL_CLASS.
 
           # Execute the scope_proc_code. `self` inside the proc is CURRENT_MODEL_CLASS.
-          # This will typically return a ChainableQuery(CURRENT_MODEL_CLASS) or a raw CQL::Query.
+          # This will typically return a Query(CURRENT_MODEL_CLASS) or a raw CQL::Query.
           scope_logic_result = ({{scope_proc_code}}).call(*args)
 
           cql_query_fragment_for_scope : ::CQL::Query
           if scope_logic_result.is_a?(::CQL::Query)
             cql_query_fragment_for_scope = scope_logic_result
-          elsif scope_logic_result.is_a?(ChainableQuery({{@type.id}}))
-            # Assumes ChainableQuery has a `query` getter for its underlying CQL::Query.
+          elsif scope_logic_result.is_a?(Query({{@type.id}}))
+            # Assumes Query has a `query` getter for its underlying CQL::Query.
             cql_query_fragment_for_scope = scope_logic_result.query
           else
             raise "Scope '{{name_ident.id}}' for model #{CURRENT_MODEL_CLASS}, when applied in a chain, " \
-                  "did not produce a compatible CQL::Query or ChainableQuery(#{{{@type.id}}}). " \
+                  "did not produce a compatible CQL::Query or Query(#{{{@type.id}}}). " \
                   "Received: #{scope_logic_result.class}"
           end
 
-          # Merge the new scope's CQL query fragment into the existing query of this ChainableQuery instance.
+          # Merge the new scope's CQL query fragment into the existing query of this Query instance.
           # Assumes `self.query.merge(...)` returns a new, merged CQL::Query instance.
           current_underlying_query = self.query # Assumes .query getter
           new_underlying_query = current_underlying_query.merge(cql_query_fragment_for_scope)
 
-          # Return a new ChainableQuery instance with the merged query, promoting immutability.
-          # Assumes ChainableQuery(ModelType).new(cql_query) constructor.
-          ChainableQuery({{@type.id}}).new(new_underlying_query)
-        end
-      end
-
-      # A chainable query class that wraps a CQL::Query
-      # and knows about the model type it's querying
-      class ChainableQuery(Target)
-        @model_class : Target.class = Target
-
-        forward_missing_to Target
-
-        def initialize(@query : CQL::Query)
-        end
-
-        # Execute the query and return all matching records
-        # - **@return** [Array(T)] The matching records
-        def all
-          @query.all(@model_class)
-        end
-
-        # Execute the query and return the first matching record
-        # - **@return** [T?] The first matching record, or nil if none found
-        def first
-          @query.first(@model_class)
-        rescue DB::NoResultsError
-          nil
-        end
-
-        # Execute the query and return the first matching record, raising if none found
-        # - **@return** [T] The first matching record
-        # - **@raise** [DB::NoResultsError] If no records found
-        def first!
-          @query.first!(@model_class)
-        end
-
-        # Count the number of matching records
-        # - **@return** [Int64] The number of matching records
-        def count
-          @query.count(:id).first!(Int64)
-        end
-
-        # Add a where clause to the query
-        # - **@param** fields [Hash(Symbol, DB::Any)] The fields to match
-        # - **@return** [ChainableQuery] The chainable query
-        def where(**fields)
-          ChainableQuery(Target).new(@query.where(**fields))
-        end
-
-        # Add an order clause to the query
-        # - **@param** fields [Hash(Symbol, Symbol)] The fields to order by
-        # - **@return** [ChainableQuery] The chainable query
-        def order(**fields)
-          ChainableQuery(Target).new(@query.order(**fields))
-        end
-
-        # Add a limit clause to the query
-        # - **@param** limit [Int32] The maximum number of records to return
-        # - **@return** [ChainableQuery] The chainable query
-        def limit(limit : Int32)
-          ChainableQuery(Target).new(@query.limit(limit))
-        end
-
-        # Add an offset clause to the query
-        # - **@param** offset [Int32] The number of records to skip
-        # - **@return** [ChainableQuery] The chainable query
-        def offset(offset : Int32)
-          ChainableQuery(Target).new(@query.offset(offset))
-        end
-
-        # Add a select clause to the query
-        # - **@param** fields [Array(Symbol)] The fields to select
-        # - **@return** [ChainableQuery] The chainable query
-        def select(*fields)
-          ChainableQuery(Target).new(@query.select(*fields))
-        end
-
-        # Add a group by clause to the query
-        # - **@param** fields [Array(Symbol)] The fields to group by
-        # - **@return** [ChainableQuery] The chainable query
-        def group_by(*fields)
-          ChainableQuery(Target).new(@query.group(*fields))
-        end
-
-        # Add a join clause to the query
-        # - **@param** table [Symbol] The table to join
-        # - **@param** on [Hash(Symbol, Symbol) | NamedTuple] The join condition
-        # - **@return** [ChainableQuery] The chainable query
-        def join(table : Symbol, on)
-          on_hash = on.is_a?(Hash) ? on : on.to_h
-          ChainableQuery(Target).new(@query.join(table, on_hash))
+          # Return a new Query instance with the merged query, promoting immutability.
+          # Assumes Query(ModelType).new(cql_query) constructor.
+          Query({{@type.id}}).new(new_underlying_query)
         end
       end
     end
