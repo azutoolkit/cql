@@ -126,84 +126,84 @@ describe CQL::ActiveRecord::Queryable do
     describe ".where" do
       it "returns a chainable query" do
         query = TestUser.where(name: "Test User")
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
       it "can be chained with other query methods" do
         query = TestUser.where(name: "Test User").where(age: 30)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
     end
 
     describe ".order" do
       it "returns a chainable query" do
         query = TestUser.order(name: :asc)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
       it "can be chained with other query methods" do
         query = TestUser.where(name: "Test User").order(name: :asc)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
     end
 
     describe ".limit" do
       it "returns a chainable query" do
         query = TestUser.limit(10)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
       it "can be chained with other query methods" do
         query = TestUser.where(name: "Test User").limit(10)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
     end
 
     describe ".offset" do
       it "returns a chainable query" do
         query = TestUser.offset(10)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
       it "can be chained with other query methods" do
         query = TestUser.where(name: "Test User").offset(10)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
     end
 
     describe ".select" do
       it "returns a chainable query" do
         query = TestUser.select(:id, :name)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
       it "can be chained with other query methods" do
         query = TestUser.where(name: "Test User").select(:id, :name)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
     end
 
     describe ".group_by" do
       it "returns a chainable query" do
         query = TestUser.group_by(:name)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
       it "can be chained with other query methods" do
         query = TestUser.where(name: "Test User").group_by(:name)
-        query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
     end
 
     # describe ".join" do
     #   it "returns a chainable query" do
     #     query = TestUser.join(:posts, {id: :user_id})
-    #     query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+    #     query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     #   end
 
     #   it "can be chained with other query methods" do
     #     query = TestUser.where(name: "Test User").join(:posts, {id: :user_id})
-    #     query.should be_a(CQL::ActiveRecord::Queryable::ChainableQuery(TestUser))
+    #     query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     #   end
     # end
   end

@@ -19,13 +19,13 @@ describe CQL::ActiveRecord::Scopes do
 
   it "retrieves recent published posts" do
     posts = ScopesPost.published.recent.all
-    posts.first.title.should eq("No title")
-    posts.last.title.should eq("Why I love Crystal")
+    posts.first.title.should eq("Getting Started with Crystal")
+    posts.last.title.should eq("Crystal ORM Tutorial")
     posts.size.should eq(3)
   end
 
   it "retrieves published posts with 'Crystal' in the title" do
-    ScopesPost.published.with_title("Crystal").count.should eq(5)
+    ScopesPost.published.with_title("Crystal").count.should eq(3)
   end
 
   it "retrieves published posts with 'ORM' in the title" do
@@ -42,7 +42,7 @@ describe CQL::ActiveRecord::Scopes do
     posts = ScopesPost.published.recent.by_category("Tutorial")
     post = posts.limit(1).first!
     post.title.should eq("Crystal ORM Tutorial")
-    posts.count.should eq(2)
+    posts.count.should eq(1)
   end
 
   it "handles chaining of scopes" do

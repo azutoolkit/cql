@@ -19,7 +19,7 @@ class ScopesPost
   scope :recent, -> { limit(3).order(created_at: :asc) }
 
   scope :with_title, ->(title_param : String) do
-    query.where { scopes_posts.title.like("%#{title_param}%") }
+    where_like(:title, "%#{title_param}%")
   end
 
   scope :by_category, ->(category : String) { where(category: category) }

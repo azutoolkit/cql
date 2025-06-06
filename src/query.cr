@@ -462,6 +462,16 @@ module CQL
       self
     end
 
+    # Support for LIKE conditions
+    def where_like(field : Symbol | String, pattern : String)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      like_condition = Expression::Like.new(col_expr, pattern)
+      merge_where_condition(like_condition)
+      self
+    end
+
     # Adds an INNER JOIN to the query.
     # - **@param** table [Symbol | Hash(Symbol,Symbol)] Table name or alias mapping (e.g., :orders or {orders: :o})
     # - **@param** on [Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any)] The join condition using BaseColumn objects.
