@@ -13,12 +13,12 @@ class TestUserTransactional
   # Helper to find a record by name for assertions
   # This will raise DB::NoResultsError if no record is found because `first!` is used.
   def self.find_by_name!(name_val : String)
-    query.where(name: name_val).first!(as: self)
+    where(name: name_val).first!
   end
 
   # Helper that returns nil if not found
   def self.find_by_name(name_val : String)
-    query.where(name: name_val).first(as: self)
+    where(name: name_val).first
   rescue DB::NoResultsError
     nil
   end

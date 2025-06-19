@@ -1,10 +1,13 @@
+require "./base_relation"
+
 module CQL::ActiveRecord::Relations
-  # A collection of records for a one to many relationship
-  # This class is used to manage the relationship between two tables
-  # through a foreign key column in the target table
-  # and provide methods to manage the association between the two tables
-  # and query records in the associated table based on the foreign key value
-  # of the parent record.
+  # Enhanced collection class for one-to-many relationships with improved
+  # type safety, error handling, and performance optimizations.
+  #
+  # This class manages the relationship between two tables through a foreign key
+  # column in the target table and provides methods to manage the association
+  # between the two tables and query records in the associated table based on
+  # the foreign key value of the parent record.
   # - **param** : Target (CQL::Model) - The target model
   # - **param** : Pk (Int64) - The primary key type
   # - **return** : Nil
@@ -21,18 +24,21 @@ module CQL::ActiveRecord::Relations
   # ```
   class Collection(Target, Pk)
     include Enumerable(Target)
+    include BaseRelation
 
     @records : Array(Target) = [] of Target
     @target_table : Symbol
     @loaded : Bool = false
+    @dependent : Symbol = :nullify
     forward_missing_to @records
 
     # Initialize the collection class for a one-to-many relationship
     # - **param** : key (Symbol) - The foreign key in the target table (e.g., :user_id)
     # - **param** : id (Pk) - The id value for the parent record
-    # - **param** : cascade (Bool) - Whether to delete associated records when parent is deleted
+    # - **param** : cascade (Bool) - Whether to delete associated records when parent is deleted (deprecated, use dependent)
     # - **param** : query (CQL::Query) - Base query object for the relationship
     # - **param** : auto_load (Bool) - Whether to automatically load associated records
+    # - **param** : dependent (Symbol) - Dependency handling strategy
     # - **return** : Collection(Target, Pk)
     #
     # **Example**
@@ -48,12 +54,17 @@ module CQL::ActiveRecord::Relations
     def initialize(
       @key : Symbol,                                                          # foreign key (e.g., user_id)
       @id : Pk,                                                               # parent id value
-      @cascade : Bool = false,                                                # delete associated records
-      @query : CQL::Query = CQL::Query.new(Target.schema).from(Target.table), # query object
-      auto_load : Bool = true,                                                # automatically load records
+      @cascade : Bool = false,                                                # delete associated records (deprecated)
+      @query : CQL::Query = build_query(Target),                             # query object
+      auto_load : Bool = false,                                               # automatically load records
+      @dependent : Symbol = :nullify,                                         # dependency strategy
     )
       @target_table = Target.table
       @records = [] of Target
+
+      # Handle legacy cascade parameter
+      @dependent = :destroy if @cascade && @dependent == :nullify
+
       reload if auto_load
     end
 
@@ -89,9 +100,17 @@ module CQL::ActiveRecord::Relations
     # => [#<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">]
     # ```
     def reload
-      @records = @query.where({@key => @id}).all(Target)
+      @records = safe_db_operation do
+        @query.where({@key => @id}).all(Target)
+      end
       @loaded = true
       @records
+    end
+
+    # Check if the collection has been loaded
+    # - **return** : Bool
+    def loaded? : Bool
+      @loaded
     end
 
     # Loads records if they haven't been loaded yet
@@ -111,7 +130,7 @@ module CQL::ActiveRecord::Relations
     # ```
     def ids : Array(Pk)
       load_records unless @loaded
-      @records.map(&.id!)
+      @records.compact_map(&.id).map(&.as(Pk))
     end
 
     # Adds a record to the collection and saves it to the database
@@ -126,7 +145,8 @@ module CQL::ActiveRecord::Relations
     # ```
     def <<(record : Target)
       load_records unless @loaded
-      @records << create(record)
+      created_record = create(record)
+      @records << created_record unless @records.includes?(created_record)
       @records
     end
 
@@ -146,32 +166,47 @@ module CQL::ActiveRecord::Relations
     # Checks if any records exist with the given attributes
     # - **param** : attributes (NamedTuple)
     # - **return** : Bool
-    #
-    # **Example**
-    #
-    # ```
-    # user.posts.exists?(title: "Hello World")
-    # => true
-    # ```
     def exists?(**attributes)
-      # Directly check for existence without creating a hash
-      @query.where(**attributes).where({@key => @id}).limit(1).first(Target) != nil
-    rescue DB::NoResultsError | CQL::Schema::ConnectionError
-      false
+      safe_db_operation do
+        begin
+          @query.where(**attributes).where({@key => @id}).limit(1).first(Target)
+          true
+        rescue DB::NoResultsError
+          false
+        end
+      end
     end
 
     # Returns the first record in the collection
     # - **return** : Target?
-    #
-    # **Example**
-    #
-    # ```
-    # user.posts.first
-    # => #<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">
-    # ```
-    def first
+    def first?
       load_records unless @loaded
-      @records.first
+      @records.first?
+    end
+
+    # Returns the first record in the collection, raises if none found
+    # - **return** : Target
+    # - **raise** : AssociationNotFound if no records exist
+    def first
+      result = first?
+      raise AssociationNotFound.new("No records found in collection") if result.nil?
+      result
+    end
+
+    # Returns the last record in the collection
+    # - **return** : Target?
+    def last?
+      load_records unless @loaded
+      @records.last?
+    end
+
+    # Returns the last record in the collection, raises if none found
+    # - **return** : Target
+    # - **raise** : AssociationNotFound if no records exist
+    def last
+      result = last?
+      raise AssociationNotFound.new("No records found in collection") if result.nil?
+      result
     end
 
     # Returns the number of associated records
@@ -188,6 +223,16 @@ module CQL::ActiveRecord::Relations
       @records.size
     end
 
+    # Count records directly from database without loading
+    # - **return** : Int64
+    def count : Int64
+      return @records.size.to_i64 if @loaded
+
+      safe_db_operation do
+        @query.where({@key => @id}).count
+      end
+    end
+
     # Find associated records matching the given attributes
     # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
     # - **return** : Array(Target)
@@ -199,23 +244,22 @@ module CQL::ActiveRecord::Relations
     # => [#<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">]
     # ```
     def find(**attributes)
-      @query.where({@key => @id}).where(**attributes).all(Target)
+      safe_db_operation do
+        @query.where({@key => @id}).where(**attributes).all(Target)
+      end
     end
 
     # Finds a single record by attributes
     # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
     # - **return** : Target?
-    #
-    # **Example**
-    #
-    # ```
-    # user.posts.find_by(title: "Hello World")
-    # => #<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">
-    # ```
     def find_by(**attributes)
-      @query.where({@key => @id}).where(**attributes).first(Target)
-    rescue DB::NoResultsError
-      nil
+      safe_db_operation do
+        begin
+          @query.where({@key => @id}).where(**attributes).first(Target)
+        rescue DB::NoResultsError
+          nil
+        end
+      end
     end
 
     # Creates a new, unsaved record with the parent association set
@@ -229,15 +273,17 @@ module CQL::ActiveRecord::Relations
     # post.save! # => true
     # ```
     def build(**attributes)
-      record = Target.build(**attributes)
-      record.attributes({@key => @id})
-      record
+      safe_db_operation do
+        record = Target.new(**attributes)
+        record.attributes({@key => @id})
+        record
+      end
     end
 
     # Creates a new record with the given attributes and saves it
     # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
     # - **return** : Target
-    # - **raise** : CQL::Error
+    # - **raise** : RelationError
     #
     # **Example**
     #
@@ -247,27 +293,24 @@ module CQL::ActiveRecord::Relations
     # ```
     def create(**attributes)
       record = build(**attributes)
-      @records << Target.create!(record)
-      record
+      safe_db_operation do
+        record.create!
+        # Add to internal array if loaded
+        @records << record if @loaded
+        record
+      end
     end
 
-    # Create a new record and associate it with the parent record
-    # - **param** : attributes (Hash(Symbol, String | Int64))
-    # - **return** : Array(Target)
-    # - **raise** : CQL::Error
-    #
-    # **Example**
-    #
-    # ```
-    # movie.actors.create!(name: "Hugo Weaving")
-    # movie.actors.reload
-    # movie.actors.all
-    # => [#<Actor:0x00007f8b3b1b3f00 @id=1, @name="Hugo Weaving">]
-    # ```
+    # Create and associate an existing record with the parent record
+    # - **param** : record (Target)
+    # - **return** : Target
+    # - **raise** : RelationError
     def create(record : Target)
       record.attributes({@key => @id})
-      @records << Target.create!(record)
-      record
+      safe_db_operation do
+        Target.create!(record)
+        record
+      end
     end
 
     # Delete the associated record from the parent record if it exists
@@ -288,7 +331,8 @@ module CQL::ActiveRecord::Relations
     # => [] of Actor
     # ```
     def delete(record : Target)
-      delete(record.id!)
+      record_id = safe_id(record, Pk)
+      delete(record_id)
     end
 
     # Delete the associated record from the parent record if it exists
@@ -306,13 +350,59 @@ module CQL::ActiveRecord::Relations
     # movie.actors.all => []
     # ```
     def delete(id : Pk)
-      CQL::Delete
-        .new(Target.schema)
-        .from(Target.table)
-        .where({:id => id, @key => @id})
-        .commit
-      reload
-      true
+      result = safe_db_operation do
+        CQL::Delete
+          .new(Target.schema)
+          .from(Target.table)
+          .where({:id => id, @key => @id})
+          .commit
+          .rows_affected > 0
+      end
+
+      if result && @loaded
+        @records.reject! { |record| record.id == id }
+      end
+
+      result
+    end
+
+    # Delete all associated records
+    # - **return** : Int64 - Number of records deleted
+    def delete_all : Int64
+      result = safe_db_operation do
+        CQL::Delete
+          .new(Target.schema)
+          .from(Target.table)
+          .where({@key => @id})
+          .commit
+          .rows_affected
+      end
+
+      if @loaded
+        @records.clear
+      end
+
+      result
+    end
+
+    # Set all foreign keys to nil (nullify association)
+    # - **return** : Int64 - Number of records updated
+    def nullify_all : Int64
+      result = safe_db_operation do
+        CQL::Update
+          .new(Target.schema)
+          .table(Target.table)
+          .set({@key => nil})
+          .where({@key => @id})
+          .commit
+          .rows_affected
+      end
+
+      if @loaded
+        @records.each { |record| record.attributes({@key => nil}) }
+      end
+
+      result
     end
 
     # Associates the parent record with the records that match the primary keys provided
@@ -330,13 +420,17 @@ module CQL::ActiveRecord::Relations
     #   #<Actor:0x00007f8b3b1b3f00 @id=3, @name="Laurence Fishburne">]
     # ```
     def ids=(ids : Array(Pk))
-      # Then, create new associations
-      ids.each do |id|
-        Target.update_by(
-          where_attrs: {:id => id}, update_attrs: {@key => @id})
-      end
+      safe_db_operation do
+        # Update records to associate with parent
+        ids.each do |id|
+          Target.update_by(
+            where_attrs: {:id => id},
+            update_attrs: {@key => @id}
+          )
+        end
 
-      reload
+        reload
+      end
     end
 
     # Returns a new query for chaining where conditions
@@ -353,8 +447,30 @@ module CQL::ActiveRecord::Relations
       @query.where({@key => @id}).where(**conditions)
     end
 
+    # Apply a limit to the query
+    # - **param** : limit_count (Int32)
+    # - **return** : CQL::Query
+    def limit(limit_count : Int32)
+      @query.where({@key => @id}).limit(limit_count)
+    end
+
+    # Apply an offset to the query
+    # - **param** : offset_count (Int32)
+    # - **return** : CQL::Query
+    def offset(offset_count : Int32)
+      @query.where({@key => @id}).offset(offset_count)
+    end
+
+    # Order the query results
+    # - **param** : column (Symbol)
+    # - **param** : direction (Symbol) - :asc or :desc
+    # - **return** : CQL::Query
+    def order(column : Symbol, direction : Symbol = :asc)
+      @query.where({@key => @id}).order(column, direction)
+    end
+
     # Clears all associated records from the parent record
-    # - **return** : Int64 - Number of records deleted
+    # - **return** : Int64 - Number of records affected
     #
     # **Example**
     # ```
@@ -366,37 +482,70 @@ module CQL::ActiveRecord::Relations
     # user.posts.size => 0
     # ```
     def clear
-      records_deleted = 0
+      records_affected = 0
 
-      if @cascade
-        # Get target IDs before deleting associations
+      case @dependent
+      when :destroy
+        # Call destroy on each record (triggers callbacks)
         load_records unless @loaded
-        target_ids = @records.map(&.id!)
-
-        # Delete associations
-        records_deleted = CQL::Delete
-          .new(Target.schema)
-          .from(Target.table)
-          .where({@key => @id})
-          .commit
-          .rows_affected
-
-        # Delete target records
-        target_ids.each do |id|
-          Target.delete!(id)
+        @records.each do |record|
+          safe_db_operation { record.delete! }
+          records_affected += 1
         end
+      when :delete_all
+        # Delete records without callbacks (more efficient)
+        records_affected = delete_all
+      when :nullify
+        # Set foreign keys to nil
+        records_affected = nullify_all
       else
-        # Just delete associations
-        records_deleted = CQL::Delete
-          .new(Target.schema)
-          .from(Target.table)
-          .where({@key => @id})
-          .commit
-          .rows_affected
+        # Default to nullify for backward compatibility
+        records_affected = nullify_all
       end
 
-      reload
-      records_deleted
+      reload if @loaded
+      records_affected
+    end
+
+    # Check if the collection includes a specific record
+    # - **param** : record (Target)
+    # - **return** : Bool
+    def includes?(record : Target) : Bool
+      load_records unless @loaded
+      @records.any? { |r| r.id == record.id }
+    end
+
+    # Add multiple records to the collection
+    # - **param** : records (Array(Target))
+    # - **return** : Array(Target)
+    def concat(records : Array(Target)) : Array(Target)
+      load_records unless @loaded
+
+      records.each do |record|
+        next if includes?(record)
+        record.attributes({@key => @id})
+        safe_db_operation { record.save! }
+        @records << record
+      end
+
+      @records
+    end
+
+    # Remove records from the collection without deleting them
+    # - **param** : records (Array(Target))
+    # - **return** : Array(Target)
+    def remove(records : Array(Target)) : Array(Target)
+      load_records unless @loaded
+
+      records.each do |record|
+        if includes?(record)
+          record.attributes({@key => nil})
+          safe_db_operation { record.save! }
+          @records.reject! { |r| r.id == record.id }
+        end
+      end
+
+      @records
     end
   end
 end

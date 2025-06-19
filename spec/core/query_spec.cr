@@ -323,16 +323,18 @@ describe CQL::Query do
     end
 
     it "build joins with block" do
-      select_query = Northwind.query.from(:users)
-        .inner(:address) do
-          users.id.eq(address.user_id) & (users.name.eq("John") | users.id.eq(1))
+      select_query = Northwind
+        .query
+        .from(:users)
+        .inner(:address) do |builder|
+          builder.users.id.eq(builder.address.user_id) & (builder.users.name.eq("John") | builder.users.id.eq(1))
         end
         .select(users: [:name, :email], address: [:street, :city])
         .to_sql
 
       output = <<-SQL.gsub(/\n/, " ").strip
         SELECT users.name, users.email, address.street, address.city FROM users INNER JOIN address ON (users.id = address.user_id) AND ((users.name = ?) OR (users.id = ?))
-        SQL
+      SQL
 
       select_query.should eq({output, ["John", 1]})
     end
@@ -340,15 +342,31 @@ describe CQL::Query do
     it "combines join with where clause" do
       select_query = Northwind.query.from(:users)
         .from(:users)
-        .inner(:address) { users.id.eq(address.user_id) }
+        .inner(:address) { |builder| builder.users.id.eq(builder.address.user_id) }
         .select(users: [:name, :email], address: [:street, :city])
         .where { users.name.eq("John") | users.id.eq(1) }.to_sql
 
       output = <<-SQL.gsub(/\n/, " ").strip
         SELECT users.name, users.email, address.street, address.city FROM users INNER JOIN address ON users.id = address.user_id WHERE (users.name = ?) OR (users.id = ?)
-        SQL
+      SQL
 
       select_query.should eq({output, ["John", 1]})
+    end
+
+    # Test with chained explicit joins using blocks
+    it "supports chaining multiple joins with blocks" do
+      select_query = Northwind.query
+        .from(:orders)
+        .inner(:customers) { |builder| builder.orders.customer_id.eq(builder.customers.id) }
+        .inner(:users) { |builder| builder.customers.user_id.eq(builder.users.id) }
+        .select(orders: [:id], customers: [:name], users: [:email])
+        .to_sql
+
+      output = <<-SQL.gsub(/\n/, " ").strip
+        SELECT orders.id, customers.name, users.email FROM orders INNER JOIN customers ON orders.customer_id = customers.id INNER JOIN users ON customers.user_id = users.id
+      SQL
+
+      select_query.should eq({output, [] of DB::Any})
     end
   end
 
@@ -445,8 +463,8 @@ describe CQL::Query do
     it "supports chaining multiple joins with blocks" do
       select_query = Northwind.query
         .from(:orders)
-        .inner(:customers) { orders.customer_id.eq(customers.id) }
-        .inner(:users) { customers.user_id.eq(users.id) }
+        .inner(:customers) { |inner| inner.orders.customer_id.eq(inner.customers.id) }
+        .inner(:users) { |inner| inner.customers.user_id.eq(inner.users.id) }
         .select(orders: [:id], customers: [:name], users: [:email])
         .to_sql
 
@@ -563,8 +581,8 @@ describe CQL::Query do
     end
 
     it "merges joins correctly, combining tables and join conditions" do
-      query1 = Northwind.query.from(:users).select("users.name").inner(:address) { users.id.eq(address.user_id) }
-      query2 = Northwind.query.from(:customers).select("customers.name").inner(:orders) { customers.id.eq(orders.customer_id) }
+      query1 = Northwind.query.from(:users).select("users.name").inner(:address) { |builder| builder.users.id.eq(builder.address.user_id) }
+      query2 = Northwind.query.from(:customers).select("customers.name").inner(:orders) { |builder| builder.customers.id.eq(builder.orders.customer_id) }
 
       query1.merge(query2)
       sql, _ = query1.to_sql

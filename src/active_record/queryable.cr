@@ -94,7 +94,7 @@ module CQL
         end
       end
 
-      # Active Record Query Builder - handles all query building logic
+      # Active Record Query Builder - delegates to CQL::Query while adding model-specific functionality
       class QueryBuilder(T)
         getter model_class : T.class = T
         getter query : CQL::Query
@@ -108,6 +108,8 @@ module CQL
           query = CQL::Query.new(model_class.schema).from(model_class.table)
           new(query)
         end
+
+        # === Terminal Operations - Execute queries and return results ===
 
         # Execute query and return all records
         def all : Array(T)
@@ -149,156 +151,191 @@ module CQL
         # Check if records exist
         def exists? : Bool
           result = ErrorHandler.handle_query_errors do
-            @query.select(:id).limit(1).first(@model_class)
+            @query.count(:id).limit(1).first(Int64)
           end
-          result != nil
+          (result || 0) > 0
         end
 
-        # Chainable query methods
-        def where(**fields) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.where(**fields), @cache_enabled)
+        # === Chainable Query Methods - Create new QueryBuilder with updated query ===
+
+        # Helper method to create a new QueryBuilder with the same query (for chaining)
+        private def chain_query : QueryBuilder(T)
+          QueryBuilder(T).new(@query, @cache_enabled)
         end
 
-        def where(conditions : Hash(Symbol, DB::Any)) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.where(conditions), @cache_enabled)
+        # Methods that can work with or without blocks
+        def where(*args, **kwargs)
+          cloned_query = @query.dup
+          cloned_query.where(*args, **kwargs)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
-        # Support for block-based where clauses
-        def where(& : -> _) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.where { yield }, @cache_enabled)
+        def where(*args, **kwargs, &block)
+          cloned_query = @query.dup
+          cloned_query.where(*args, **kwargs, &block)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
-        # Support for LIKE conditions
-        def where_like(field : Symbol | String, pattern : String) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.where_like(field, pattern), @cache_enabled)
+        def having(*args, **kwargs)
+          cloned_query = @query.dup
+          cloned_query.having(*args, **kwargs)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
-        def order(**fields) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.order(**fields), @cache_enabled)
+        def having(*args, **kwargs, &block)
+          cloned_query = @query.dup
+          cloned_query.having(*args, **kwargs, &block)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
-        def limit(limit : Int32) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.limit(limit), @cache_enabled)
-        end
-
-        def offset(offset : Int32) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.offset(offset), @cache_enabled)
-        end
-
-        def select(*fields) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.select(*fields), @cache_enabled)
-        end
-
-        def group_by(*fields) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.group(*fields), @cache_enabled)
-        end
-
-        def join(table : Symbol, on) : QueryBuilder(T)
-          on_hash = normalize_join_condition(on)
-          QueryBuilder(T).new(@query.join(table, on_hash), @cache_enabled)
-        end
-
-        # Support for inner join with block syntax
-        def inner(table : Symbol, &) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.inner(table) { yield }, @cache_enabled)
-        end
-
-        # Support for inner join with hash condition
-        def inner(table : Symbol, on) : QueryBuilder(T)
-          on_hash = normalize_join_condition(on)
-          QueryBuilder(T).new(@query.inner(table, on_hash), @cache_enabled)
-        end
-
-        # Disable caching for this query chain
-        def no_cache : QueryBuilder(T)
-          QueryBuilder(T).new(@query, false)
-        end
-
-        # Helper method to normalize join conditions to Hash
-        private def normalize_join_condition(on)
-          case on
-          when Hash
-            on
-          when NamedTuple
-            on.to_h
-          else
-            # This should handle any other case that can be converted to Hash
-            on.responds_to?(:to_h) ? on.to_h : on.as(Hash)
+        # Methods that don't typically use blocks
+        {% for method in %w[where_like order limit offset select distinct] %}
+          def {{method.id}}(*args, **kwargs)
+            cloned_query = @query.dup
+            cloned_query.{{method.id}}(*args, **kwargs)
+            QueryBuilder(T).new(cloned_query, @cache_enabled)
           end
+        {% end %}
+
+        # Special case for group_by (maps to group method in CQL::Query)
+        def group_by(*args, **kwargs)
+          cloned_query = @query.dup
+          cloned_query.group(*args, **kwargs)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
-        # Aggregate functions - return computed values, not model instances
-        def sum(column : Symbol)
-          ErrorHandler.handle_query_errors do
-            @query.sum(column).first(Float64)
+        # === Join Methods - Create new QueryBuilder with updated query ===
+
+        # Basic join methods that exist in CQL::Query
+        {% for join_method in %w[join inner left right] %}
+          def {{join_method.id}}(*args, **kwargs)
+            cloned_query = @query.dup
+            cloned_query.{{join_method.id}}(*args, **kwargs)
+            QueryBuilder(T).new(cloned_query, @cache_enabled)
           end
-        end
 
-        def avg(column : Symbol)
-          ErrorHandler.handle_query_errors do
-            @query.avg(column).first(Float64)
+          def {{join_method.id}}(*args, **kwargs, &block)
+            cloned_query = @query.dup
+            cloned_query.{{join_method.id}}(*args, **kwargs, &block)
+            QueryBuilder(T).new(cloned_query, @cache_enabled)
           end
+        {% end %}
+
+        # Alias methods for more explicit naming
+        def inner_join(*args, **kwargs, &block : Expression::FilterBuilder -> _)
+          cloned_query = @query.dup
+          cloned_query.inner(*args, **kwargs, &block)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
+        def left_join(*args, **kwargs, &block : Expression::FilterBuilder -> _)
+          cloned_query = @query.dup
+          cloned_query.left(*args, **kwargs, &block)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
+        end
+
+        def right_join(*args, **kwargs, &block : Expression::FilterBuilder -> _)
+          cloned_query = @query.dup
+          cloned_query.right(*args, **kwargs, &block)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
+        end
+
+        # === Aggregate Functions - Create query with aggregates ===
+
+        # Basic aggregate methods that exist in CQL::Query
+        {% for agg_method in %w[sum avg min max] %}
+          def {{agg_method.id}}(column : Symbol)
+            ErrorHandler.handle_query_errors do
+              cloned_query = @query.dup
+              cloned_query.{{agg_method.id}}(column).first(DB::Any)
+            end
+          end
+        {% end %}
+
+        # Alias methods for more explicit naming
         def minimum(column : Symbol)
-          ErrorHandler.handle_query_errors do
-            @query.min(column).first(DB::Any)
-          end
+          min(column)
         end
 
         def maximum(column : Symbol)
+          max(column)
+        end
+
+        # Get average value of column
+        def average(column : Symbol)
+          avg(column)
+        end
+
+        # === Column Extraction Methods ===
+
+        # Extract specific column values as an array
+        def pluck(column : Symbol) : Array(DB::Any)
           ErrorHandler.handle_query_errors do
-            @query.max(column).first(DB::Any)
+            cloned_query = @query.dup
+            cloned_query.select(column).all(DB::Any)
           end
         end
 
-        # Aliases for minimum/maximum
-        def min(column : Symbol)
-          minimum(column)
+        # Extract multiple column values as array of tuples
+        def pluck(*columns : Symbol) : Array(Array(DB::Any))
+          ErrorHandler.handle_query_errors do
+            cloned_query = @query.dup
+            cloned_query.select(*columns).all(Array(DB::Any))
+          end
         end
 
-        def max(column : Symbol)
-          maximum(column)
+        # Pick single value from first record
+        def pick(column : Symbol) : DB::Any?
+          ErrorHandler.handle_query_errors do
+            cloned_query = @query.dup
+            cloned_query.select(column).limit(1).first(DB::Any)
+          end
         end
 
-        # Query modifiers that return new QueryBuilder instances
-        def distinct : QueryBuilder(T)
-          QueryBuilder(T).new(@query.distinct, @cache_enabled)
+        # Get array of primary keys
+        def ids : Array(Pk)
+          ErrorHandler.handle_query_errors do
+            cloned_query = @query.dup
+            cloned_query.select(:id).all(Pk)
+          end
         end
 
-        def having(&block) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.having(&block), @cache_enabled)
+        # Get distinct values for a column
+        def distinct(column : Symbol) : Array(DB::Any)
+          ErrorHandler.handle_query_errors do
+            cloned_query = @query.dup
+            cloned_query.select(column).distinct.all(DB::Any)
+          end
         end
 
-        # Different join types
-        def inner_join(table : Symbol, on) : QueryBuilder(T)
-          on_hash = normalize_join_condition(on)
-          QueryBuilder(T).new(@query.inner(table, on_hash), @cache_enabled)
+        # === Query Modification Methods ===
+
+        # Replace existing order clause
+        def reorder(*args, **kwargs) : QueryBuilder(T)
+          cloned_query = @query.dup
+          # Clear existing order and set new one
+          cloned_query.order(*args, **kwargs)
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
-        def inner_join(table : Symbol, &) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.inner(table) { yield }, @cache_enabled)
+        # Reverse existing order
+        def reverse_order : QueryBuilder(T)
+          cloned_query = @query.dup
+          # This would need to be implemented in CQL::Query to reverse the order
+          # For now, we'll create a new query without order and let the user set it
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
-        def left_join(table : Symbol, on) : QueryBuilder(T)
-          on_hash = normalize_join_condition(on)
-          QueryBuilder(T).new(@query.left(table, on_hash), @cache_enabled)
+        # Remove specific query conditions
+        def unscope(*conditions : Symbol) : QueryBuilder(T)
+          cloned_query = @query.dup
+          # This would need to be implemented in CQL::Query to remove specific conditions
+          # For now, we'll return the current query
+          QueryBuilder(T).new(cloned_query, @cache_enabled)
         end
 
-        def left_join(table : Symbol, &) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.left(table) { yield }, @cache_enabled)
-        end
+        # === Collection Check Methods ===
 
-        def right_join(table : Symbol, on) : QueryBuilder(T)
-          on_hash = normalize_join_condition(on)
-          QueryBuilder(T).new(@query.right(table, on_hash), @cache_enabled)
-        end
-
-        def right_join(table : Symbol, &) : QueryBuilder(T)
-          QueryBuilder(T).new(@query.right(table) { yield }, @cache_enabled)
-        end
-
-        # Collection check methods
         def empty? : Bool
           count == 0
         end
@@ -318,10 +355,16 @@ module CQL
         # None - returns empty relation
         def none : QueryBuilder(T)
           # Create a query that will never return results by using an impossible condition
-          QueryBuilder(T).new(@query.where("1 = 0").limit(0), @cache_enabled)
+          QueryBuilder(T).new(@query.limit(0), @cache_enabled)
         end
 
-        # Batch processing
+        # Disable caching for this query chain
+        def no_cache : QueryBuilder(T)
+          QueryBuilder(T).new(@query, false)
+        end
+
+        # === Batch Processing ===
+
         def find_each(batch_size : Int32 = 1000, &block : T -> Nil) : Nil
           offset_value = 0
           loop do
@@ -346,6 +389,14 @@ module CQL
           end
         end
 
+        # === SQL Generation ===
+
+        def to_sql
+          @query.to_sql
+        end
+
+        # === Private Helper Methods ===
+
         private def execute_single_record_query(method : String, &block : CQL::Query -> T)
           cache_key = generate_cache_key(method)
           if @cache_enabled && (cached_query = QueryCache.get(cache_key))
@@ -367,19 +418,26 @@ module CQL
       end
 
       macro included
-        # Return a new query builder for the current table
-        def self.query : QueryBuilder({{@type.id}})
+        # Return a raw CQL::Query for the current table
+        def self.query : CQL::Query
+          CQL::Query.new({{@type.id}}.schema).from({{@type.id}}.table)
+        end
+
+        # Return a new query builder for the current table (internal method)
+        def self.query_builder : QueryBuilder({{@type.id}})
           QueryBuilder({{@type.id}}).from_model({{@type.id}})
         end
 
+        # === Terminal Operations ===
+
         # Fetch all records of type T
         def self.all : Array({{@type.id}})
-          query.all
+          query_builder.all
         end
 
         # Find a record by ID, return nil if not found
         def self.find(id : Pk) : {{@type.id}}?
-          query.where(id: id).first
+          query_builder.where(id: id).first
         end
 
         def self.find?(id : Pk) : {{@type.id}}?
@@ -388,115 +446,85 @@ module CQL
 
         # Find a record by ID, raise an error if not found
         def self.find!(id : Pk) : {{@type.id}}
-          query.where(id: id).first!
+          query_builder.where(id: id).first!
         end
 
         # Find a record by specific fields
         def self.find_by(**fields) : {{@type.id}}?
-          query.where(**fields).limit(1).first
+          query_builder.where(**fields).limit(1).first
         end
 
         def self.find_by(attributes : Hash(Symbol, DB::Any)) : {{@type.id}}?
-          query.where(attributes).limit(1).first
+          query_builder.where(attributes).limit(1).first
         end
 
         def self.find_by!(attributes : Hash(Symbol, DB::Any)) : {{@type.id}}
-          query.where(attributes).limit(1).first!
+          query_builder.where(attributes).limit(1).first!
         end
 
         # Find a record by specific fields, raise an error if not found
         def self.find_by!(**fields) : {{@type.id}}
-          query.where(**fields).limit(1).first!
+          query_builder.where(**fields).limit(1).first!
         end
 
         # Find all records matching specific fields
         def self.find_all_by(**fields) : Array({{@type.id}})
-          query.where(**fields).all
+          query_builder.where(**fields).all
         end
 
         # Count all records in the table
         def self.count : Int64
-          query.count
+          query_builder.count
         end
 
         # Check if records exist matching specific fields
         def self.exists?(**fields) : Bool
-          query.where(**fields).exists?
+          query_builder.where(**fields).exists?
         end
 
         # Fetch the first record in the table
         def self.first : {{@type.id}}?
-          query.order(id: :asc).limit(1).first
+          query_builder.order(id: :asc).limit(1).first
         end
 
         # Fetch the last record in the table
         def self.last : {{@type.id}}?
-          query.order(id: :desc).limit(1).first
+          query_builder.order(id: :desc).limit(1).first
         end
 
-        # Start a chainable query with a where clause
-        def self.where(**fields) : QueryBuilder({{@type.id}})
-          query.where(**fields)
-        end
+        # === Chainable Query Starters ===
 
-        # Start a chainable query with a LIKE clause
-        def self.where_like(field : Symbol | String, pattern : String) : QueryBuilder({{@type.id}})
-          query.where_like(field, pattern)
-        end
+        # Methods that can work with or without blocks
+        {% for method in %w[where having] %}
+          def self.{{method.id}}(*args, **kwargs) : QueryBuilder({{@type.id}})
+            query_builder.{{method.id}}(*args, **kwargs)
+          end
 
-        # Start a chainable query with an order clause
-        def self.order(**fields) : QueryBuilder({{@type.id}})
-          query.order(**fields)
-        end
+          def self.{{method.id}}(*args, **kwargs, &block) : QueryBuilder({{@type.id}})
+            query_builder.{{method.id}}(*args, **kwargs, &block)
+          end
+        {% end %}
 
-        # Start a chainable query with a limit
-        def self.limit(limit : Int32) : QueryBuilder({{@type.id}})
-          query.limit(limit)
-        end
+        # Join methods that can work with or without blocks
+        {% for method in %w[join inner left right inner_join left_join right_join] %}
+          def self.{{method.id}}(*args, **kwargs) : QueryBuilder({{@type.id}})
+            query_builder.{{method.id}}(*args, **kwargs)
+          end
 
-        # Start a chainable query with an offset
-        def self.offset(offset : Int32) : QueryBuilder({{@type.id}})
-          query.offset(offset)
-        end
+          def self.{{method.id}}(*args, **kwargs, &block : Expression::FilterBuilder -> _) : QueryBuilder({{@type.id}})
+            query_builder.{{method.id}}(*args, **kwargs, &block)
+          end
+        {% end %}
 
-        # Start a chainable query with a select clause
-        def self.select(*fields) : QueryBuilder({{@type.id}})
-          query.select(*fields)
-        end
+        # Methods that don't typically use blocks
+        {% for method in %w[where_like order limit offset select group_by distinct none] %}
+          def self.{{method.id}}(*args, **kwargs) : QueryBuilder({{@type.id}})
+            query_builder.{{method.id}}(*args, **kwargs)
+          end
+        {% end %}
 
-        # Start a chainable query with a group by clause
-        def self.group_by(*fields) : QueryBuilder({{@type.id}})
-          query.group_by(*fields)
-        end
+        # === Collection Check Methods ===
 
-        # Start a chainable query with a join clause
-        def self.join(table : Symbol, on) : QueryBuilder({{@type.id}})
-          query.join(table, on)
-        end
-
-        # Different join types
-        def self.inner_join(table : Symbol, on) : QueryBuilder({{@type.id}})
-          query.inner_join(table, on)
-        end
-
-        def self.left_join(table : Symbol, on) : QueryBuilder({{@type.id}})
-          query.left_join(table, on)
-        end
-
-        def self.right_join(table : Symbol, on) : QueryBuilder({{@type.id}})
-          query.right_join(table, on)
-        end
-
-        # Query modifiers
-        def self.distinct : QueryBuilder({{@type.id}})
-          query.distinct
-        end
-
-        def self.none : QueryBuilder({{@type.id}})
-          query.none
-        end
-
-        # Collection check methods
         def self.empty? : Bool
           count == 0
         end
@@ -513,39 +541,69 @@ module CQL
           count
         end
 
-        # Aggregate functions
-        def self.sum(column : Symbol)
-          query.sum(column)
+        # === Aggregate Functions ===
+
+        {% for agg_method in %w[sum avg minimum maximum min max average] %}
+          def self.{{agg_method.id}}(column : Symbol)
+            query_builder.{{agg_method.id}}(column)
+          end
+        {% end %}
+
+        # === Column Extraction Methods ===
+
+        # Extract specific column values as an array
+        def self.pluck(column : Symbol) : Array(DB::Any)
+          query_builder.pluck(column)
         end
 
-        def self.avg(column : Symbol)
-          query.avg(column)
+        # Extract multiple column values as array of tuples
+        def self.pluck(*columns : Symbol) : Array(Array(DB::Any))
+          query_builder.pluck(*columns)
         end
 
-        def self.minimum(column : Symbol)
-          query.minimum(column)
+        # Pick single value from first record
+        def self.pick(column : Symbol) : DB::Any?
+          query_builder.pick(column)
         end
 
-        def self.maximum(column : Symbol)
-          query.maximum(column)
+        # Get array of primary keys
+        def self.ids : Array(Pk)
+          query_builder.ids
         end
 
-        def self.min(column : Symbol)
-          query.min(column)
+        # Get distinct values for a column
+        def self.distinct(column : Symbol) : Array(DB::Any)
+          query_builder.distinct(column)
         end
 
-        def self.max(column : Symbol)
-          query.max(column)
+        # === Query Modification Methods ===
+
+        # Replace existing order clause
+        def self.reorder(*args, **kwargs) : QueryBuilder({{@type.id}})
+          query_builder.reorder(*args, **kwargs)
         end
 
-        # Batch processing
+        # Reverse existing order
+        def self.reverse_order : QueryBuilder({{@type.id}})
+          query_builder.reverse_order
+        end
+
+        # Remove specific query conditions
+        def self.unscope(*conditions : Symbol) : QueryBuilder({{@type.id}})
+          query_builder.unscope(*conditions)
+        end
+
+        # === Batch Processing ===
+
         def self.find_each(batch_size : Int32 = 1000, &block : {{@type.id}} -> Nil) : Nil
-          query.find_each(batch_size, &block)
+          query_builder.find_each(batch_size, &block)
         end
 
         def self.find_in_batches(batch_size : Int32 = 1000, &block : Array({{@type.id}}) -> Nil) : Nil
-          query.find_in_batches(batch_size, &block)
+          query_builder.find_in_batches(batch_size, &block)
         end
+
+        # === Cache Management ===
 
         # Get query cache statistics
         def self.cache_stats : NamedTuple(size: Int32)

@@ -14,10 +14,29 @@ module Expression
       ConditionBuilder.new(Exists.new(sub_query.build))
     end
 
-    # Generate methods for each column
+    # Helper method for debugging - let's see what tables are available
+    def debug_tables
+      @tables.keys
+    end
+
+    # Direct table access method
+    def table(name : String)
+      @tables[name]? || raise "Table '#{name}' not found in filter context. Available tables: #{@tables.keys.join(", ")}"
+    end
+
+    def table(name : Symbol)
+      table(name.to_s)
+    end
+
+    # Generate methods for each table using method_missing
     macro method_missing(call)
       def {{call.name.id}}
-        @tables[{{call.name.stringify}}]
+        table_name = {{call.name.stringify}}
+        table = @tables[table_name]?
+        unless table
+          raise "Table '#{table_name}' not found in filter context. Available tables: #{@tables.keys.join(", ")}"
+        end
+        table
       end
     end
   end

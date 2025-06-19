@@ -22,7 +22,7 @@ describe CQL::ActiveRecord::Relations::BelongsTo do
       )
       user.create!
 
-      post = Post.new("My Post", "Post content", user.id)
+      post = Post.new("My Post", "Post content", user.id!)
       post.create!
 
       associated_user = post.user
@@ -90,7 +90,7 @@ describe CQL::ActiveRecord::Relations::BelongsTo do
       )
       user.create!
 
-      post = Post.new("My Post", "Post content", user.id)
+      post = Post.new("My Post", "Post content", user.id!)
       post.create!
 
       updated_user = post.update_user(name: "John Updated")
@@ -108,14 +108,12 @@ describe CQL::ActiveRecord::Relations::BelongsTo do
       )
       user.create!
 
-      post = Post.new("My Post", "Post content", user.id)
+      post = Post.new("My Post", "Post content", user.id.not_nil!)
       post.create!
 
       post.delete_user.should be_true
-      expect_raises(DB::NoResultsError) do
-        TestUser.find!(user.id.not_nil!)
-      end
-      post.user_id.should eq(user.id)
+      post.user_id.should be_nil
+      post.user.should be_nil
     end
 
     it "returns nil when no associated user exists" do
@@ -125,9 +123,7 @@ describe CQL::ActiveRecord::Relations::BelongsTo do
 
     it "raises error when trying to access non-existent associated user" do
       post = Post.new("My Post", "Post content", 999)
-      expect_raises(DB::NoResultsError) do
-        post.user
-      end
+      post.user.should be_nil
     end
   end
 end

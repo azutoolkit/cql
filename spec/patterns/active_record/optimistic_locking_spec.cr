@@ -23,12 +23,16 @@ class Product
   db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :products
 
   property id : Int32?
-  property name : String = ""
-  property price : Float64 = 0.0
-  property stock : Int32 = 0
-  property version : Int32 = 1
-  property created_at : Time = Time.utc
-  property updated_at : Time = Time.utc
+  property name : String
+  property price : Float64
+  property stock : Int32
+  property version : Int32
+  property created_at : Time
+  property updated_at : Time
+
+  # Initialize method for creating new instances
+  def initialize(@name = "", @price = 0.0, @stock = 0, @version = 1, @created_at = Time.utc, @updated_at = Time.utc)
+  end
 
   # Use optimistic locking on the version column
   optimistic_locking version_column: :version

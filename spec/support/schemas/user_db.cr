@@ -16,14 +16,14 @@ UserDB = CQL::Schema.define(
     primary :id, Int32
     column :title, String
     column :body, String
-    column :user_id, Int32
+    column :user_id, Int32, null: true
   end
 
   table :profiles do
     primary :id, Int32
     column :bio, String
     column :avatar_url, String
-    column :profile_owner_id, Int32
+    column :profile_owner_id, Int32, null: true
   end
 
   table :profile_owners do

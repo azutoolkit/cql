@@ -1,29 +1,23 @@
+require "./base_relation"
 require "./collection"
 
 module CQL
   module ActiveRecord::Relations
-    # A collection of records for a many to many relationship
-    # This class is used to manage the relationship between two tables
-    # through a join table (through)
+    # Enhanced collection class for many-to-many relationships with improved
+    # type safety, error handling, and performance optimizations.
     #
     # A many-to-many association occurs when multiple records of one
     # model can be associated with multiple records of another model,
-    # and vice versa. Typically, it requires a join table (or a junction table)
+    # and vice versa. This requires a join table (or junction table)
     # to store the relationships between the records of the two models.
     #
-    # Here's how a many-to-many association is commonly implemented
-    # in CQL using Crystal.
-    #
     # **Example**
-    #
     # ```
     # class Movie
     #   include CQL::Model(Movie, Int64)
-    #
     #   property id : Int64
     #   property title : String
-    #
-    #   many_to_many :actors, Actor, join_through: :movies_actors
+    #   many_to_many :actors, Actor, join_through: MoviesActors
     # end
     #
     # class Actor
@@ -44,384 +38,374 @@ module CQL
     # ```
     class ManyCollection(Target, Through, Pk) < Collection(Target, Pk)
       @through_table : Symbol
-      @loaded : Bool = false # Added for lazy loading
+      @dependent : Symbol = :nullify
+      @validate : Bool = true
+      @autosave : Bool = false
 
       # Initialize the many-to-many association collection class
       # - **param** : key (Symbol) - The key for the parent record
       # - **param** : id (Pk) - The id value for the parent record
       # - **param** : target_key (Symbol) - The key for the associated record
-      # - **param** : cascade (Bool) - Delete associated records
+      # - **param** : cascade (Bool) - Delete associated records (deprecated, use dependent)
       # - **param** : query (CQL::Query) - Query object
+      # - **param** : dependent (Symbol) - Dependency handling strategy
+      # - **param** : validate (Bool) - Whether to validate records
+      # - **param** : autosave (Bool) - Whether to automatically save records
       # - **return** : ManyCollection
-      #
-      # **Example**
-      #
-      # ```
-      # ManyCollection.new(
-      #   :movie_id,
-      #   1,
-      #   :actor_id,
-      #   false,
-      #   CQL::Query.new(Actor.schema).from(Actor.table)
-      # )
-      # ```
       def initialize(
         @key : Symbol,                                                          # movie_id
-        @id : Pk,                                                               # moive id value
+        @id : Pk,                                                               # movie id value
         @target_key : Symbol,                                                   # actor_id
-        @cascade : Bool = false,                                                # delete associated records
-        @query : CQL::Query = CQL::Query.new(Target.schema).from(Target.table), # query object
+        @cascade : Bool = false,                                                # delete associated records (deprecated)
+        @query : CQL::Query = build_query(Target),                             # query object
+        @dependent : Symbol = :nullify,                                         # dependency strategy
+        @validate : Bool = true,                                                # validate records
+        @autosave : Bool = false,                                               # autosave records
       )
-        # Pass auto_load: false to prevent loading in base initializer
-        super(@key, @id, @cascade, @query, auto_load: false)
+        # Initialize parent with auto_load: false to prevent loading in base initializer
+        super(@key, @id, @cascade, @query, auto_load: false, dependent: @dependent)
         @through_table = Through.table
-        @records = [] of Target # Initialize records array
-        # Removed initial reload call
+        @records = [] of Target
+
+        # Handle legacy cascade parameter
+        @dependent = :destroy if @cascade && @dependent == :nullify
       end
 
-      # Loads records if they haven't been loaded yet
-      # - **return** : Nil
-      private def load_records
-        reload unless @loaded
-      end
-
-      # Override each to use lazy loading
-      def each(&block : Target ->)
-        load_records
-        @records.each(&block)
-      end
-
-      # Override all to use lazy loading
-      def all : Array(Target)
-        load_records
-        @records
-      end
-
-      # Reload the association records from the database and return them
-      # This now performs the correct JOIN query.
+      # Override reload to perform the correct JOIN query for many-to-many
       # - **return** : Array(Target)
-      #
-      # **Example**
-      #
-      # ```
-      # movie.actors.reload
-      # => [#<Actor:0x00007f8b3b1b3f00 @id=1, @name="Carrie-Anne Moss">]
-      # ```
       def reload
-        @records = @query.all(Target) # Execute and map to Target instances
+        @records = safe_db_operation do
+          @query.all(Target)
+        end
         @loaded = true
         @records
       end
 
       # Adds an existing record to the association.
-      # Saves the association to the join table.
+      # Creates the association in the join table.
       # Raises an error if the target record is not persisted.
       # - **param** : record (Target)
       # - **return** : self
-      #
-      # **Example**
-      # ```
-      # movie = Movie.find(1)
-      # actor = Actor.create(name: "Laurence Fishburne")
-      # movie.actors << actor
-      # movie.actors.reload.size # => 3 (assuming 2 existed before)
-      # ```
       def <<(record : Target)
-        raise ArgumentError.new("Cannot associate an unsaved record") unless record.persisted?
-        target_id = record.id!
+        ensure_persisted(record)
+        target_id = safe_id(record, Pk)
 
-        # Use find_or_create_by for the join table to avoid duplicates
-        # Assuming Through model has appropriate find_or_create_by
-        Through.find_or_create_by({@key => @id, @target_key => target_id})
+        # Create join table record to establish association
+        safe_db_operation do
+          Through.find_or_create_by({@key => @id, @target_key => target_id})
+        end
 
         # Add to internal array only if already loaded and not already present
-        @records << record if @loaded && !@records.any? { |_record| _record.id == target_id } # Use any? with block
+        if @loaded && !includes?(record)
+          @records << record
+        end
 
-        self # Return self to allow chaining
+        self
       end
 
-      # Create a new target record with given attributes, creates the association
-      # in the join table, and adds the record to the collection if loaded.
-      # Wraps the creation process in a transaction.
-      # - **param** : attributes (Hash(Symbol, String | Int64) | NamedTuple)
+      # Create a new target record with given attributes and associate it
+      # - **param** : attributes (Hash | NamedTuple)
       # - **return** : Target
-      # - **raise** : CQL::Error on creation failure
-      #
-      # **Example**
-      #
-      # ```
-      # movie.actors.create(name: "Carrie-Anne Moss")
-      # => #<Actor:0x... @id=..., @name="Carrie-Anne Moss">
-      # movie.actors.all # includes the new actor if loaded
-      # ```
+      # - **raise** : RelationError on creation failure
       def create(**attributes)
-        # Note: build might not set association keys automatically depending on Model impl.
-        record = Target.build(**attributes)
-        create(record) # Delegate to the other create method
+        record = build(**attributes)
+        create(record)
       end
 
       # Associates an existing or new target record with the parent record.
       # Creates the association in the join table. If the target record is new,
-      # it's created first. Wraps the process in a transaction.
-      # Adds the record to the collection if loaded.
+      # it's created first.
       # - **param** : record (Target) - The record to associate (can be new or persisted)
       # - **return** : Target - The associated (and possibly created) record
-      # - **raise** : CQL::Error on creation failure
-      #
-      # **Example**
-      #
-      # ```
-      # actor = Actor.new(name: "Hugo Weaving")
-      # movie.actors.create(actor)
-      # => #<Actor:0x... @id=..., @name="Hugo Weaving">
-      # movie.actors.all # includes the new actor if loaded
-      # ```
+      # - **raise** : RelationError on creation failure
       def create(record : Target)
         # Save the target record if it's not persisted
         unless record.persisted?
-          record.attributes({@key => @id})
-          record.create!
+          safe_db_operation { record.create! }
         end
 
-        target_id = record.id!
+        target_id = safe_id(record, Pk)
 
-        # Create the association in the join table, avoid duplicates
-        Through.find_or_create_by({@key => @id, @target_key => target_id})
+        # Create the association in the join table
+        safe_db_operation do
+          Through.find_or_create_by({@key => @id, @target_key => target_id})
+        end
 
         # Add to internal array only if already loaded and not already present
-        if @loaded && !@records.any? { |_record| _record.id == target_id }
+        if @loaded && !includes?(record)
           @records << record
         end
-        record # Return the created/associated record
+
+        record
       end
 
       # Deletes the association for the given record.
       # If cascade is true, also deletes the target record itself.
-      # Removes the record from the collection if loaded.
       # - **param** : record (Target)
-      # - **return** : Target? - The deleted target record (if found and cascade=true), or nil
-      #
-      # **Example**
-      #
-      # ```
-      # actor = movie.actors.find_by(name: \"Carrie-Anne Moss\")
-      # movie.actors.delete(actor)
-      # movie.actors.all # \"Carrie-Anne Moss\" is gone
-      # Actor.find_by(name: \"Carrie-Anne Moss\") # => nil if cascade was true
-      # ```
+      # - **return** : Target? - The deleted target record (if cascade=true), or nil
       def delete(record : Target) : Target?
-        delete(record.id!) # Delegate to delete by ID
+        record_id = safe_id(record, Pk)
+        delete(record_id)
       end
 
       # Deletes the association for the record with the given ID.
-      # If cascade is true, also deletes the target record itself.
-      # Removes the record from the collection if loaded.
-      # Wraps target deletion in a transaction if cascade is true.
+      # Handles cascading based on the dependent strategy.
       # - **param** : id (Pk)
-      # - **return** : Target? - The target record if cascade was true and deletion occurred, otherwise nil.
-      #
-      # **Example**
-      #
-      # ```
-      # movie.actors.delete(1) # Assuming actor with ID 1 exists
-      # movie.actors.reload    # Actor 1 is gone
-      # Actor.find?(1)         # => nil if cascade was true
-      # ```
+      # - **return** : Target? - The target record if it was deleted, otherwise nil
       def delete(id : Pk) : Target?
         deleted_target_record = nil
-        record_to_remove_from_loaded = @records.find { |_record| _record.id == id } if @loaded
+        record_to_remove = @records.find { |r| r.id == id } if @loaded
 
         # Delete the association record from the join table
-        rows_affected = CQL::Delete
-          .new(Through.schema)
-          .from(@through_table)
-          .where({@key => @id, @target_key => id})
-          .commit
-          .rows_affected
+        rows_affected = safe_db_operation do
+          CQL::Delete
+            .new(Through.schema)
+            .from(@through_table)
+            .where({@key => @id, @target_key => id})
+            .commit
+            .rows_affected
+        end
 
-        # If association existed and cascade is enabled, delete the target record
-        if rows_affected > 0 && @cascade
-          # Fetch the record before deleting if cascading, to return it
-          deleted_target_record = Target.find?(id)
-          if deleted_target_record
-            # Use transaction for atomicity if needed (though Target.delete might be atomic)
-            # Target.schema.transaction do
-            Target.delete!(id) # Use delete, handles if record doesn't exist
-            # end
+        # Handle target record based on dependent strategy
+        if rows_affected > 0
+          case @dependent
+          when :destroy
+            # Destroy the target record (with callbacks)
+            deleted_target_record = Target.find?(id)
+            if deleted_target_record
+              safe_db_operation { deleted_target_record.delete! }
+            end
+          when :delete_all
+            # Delete the target record (without callbacks)
+            deleted_target_record = Target.find?(id)
+            if deleted_target_record
+              safe_db_operation { Target.delete!(id) }
+            end
+          # :nullify doesn't apply to many-to-many relationships
+          end
+
+          # Remove from internal array if it was loaded
+          if @loaded && record_to_remove
+            @records.delete(record_to_remove)
           end
         end
 
-        # Remove from internal array if it was loaded and the association was actually deleted
-        if @loaded && record_to_remove_from_loaded && rows_affected > 0
-          @records.delete(record_to_remove_from_loaded)
-        end
-
-        # Return the target record only if it was deleted due to cascade=true
         deleted_target_record
       end
 
       # Clears all associated records from the parent record.
-      # Removes associations from the join table.
-      # If cascade is true, also deletes the target records themselves.
-      # Clears the internal collection. Wraps the operation in a transaction.
+      # Removes associations from the join table and handles target records
+      # based on the dependent strategy.
       # - **return** : self
-      #
-      # **Example**
-      # ```
-      # movie.actors.create(name: \"Carrie-Anne Moss\")
-      # movie.actors.clear
-      # movie.actors.size # => 0
-      # Actor.exists?(name: \"Carrie-Anne Moss\") # => false if cascade was true
-      # ```
       def clear
-        target_ids_to_delete = [] of Pk
-
-        if @cascade
-          # Get target IDs associated through the join table before deleting associations
-          # Assumes Through model has standard query capabilities
-          target_ids_to_delete = CQL::Query
-            .new(Through.schema)
-            .from(Through.table)
-            .where({@key => @id})
-            .all(Through)
-            .map(&.id!)
-        end
-
-        # Delete all associations from the join table
-        CQL::Delete
-          .new(Through.schema)
-          .from(Through.table)
-          .where({@key => @id})
-          .commit
-
-        # If cascading, delete the target records
-        if @cascade && !target_ids_to_delete.empty?
-          # Assumes Target.delete accepts an array of IDs
-          target_ids_to_delete.each do |id|
-            Target.delete!(id)
-          end
+        case @dependent
+        when :destroy
+          clear_with_destroy
+        when :delete_all
+          clear_with_delete
+        else
+          clear_join_records
         end
 
         # Clear internal state
-        @records.clear
-        @loaded = true # Collection is now loaded and known to be empty
-
-        self # Return self
+        @records.clear if @loaded
+        self
       end
 
-      # Build a new target record associated with this parent, but don\'t save it.
-      # The association is only truly formed when saved via `create` or `<<`.
-      # - **param** : attributes (Hash | NamedTuple) - Attributes for the new target record.
-      # - **return** : Target - The newly built target record.
-      #
-      # **Example**
-      #
-      # ```
-      # new_actor = movie.actors.build(name: \"Agent Smith\")
-      # new_actor.persisted? # => false
-      # new_actor.save # Creates Actor and the MoviesActors record via appropriate callbacks/methods if defined
-      # ```
+      # Clear associations and destroy target records
+      def clear_with_destroy
+        if @dependent == :destroy
+          # Get target records before clearing associations
+          target_records = @loaded ? @records.dup : all
+
+          # Clear join table associations
+          clear_join_records
+
+          # Destroy the target records as well (cascade)
+          target_records.each do |record|
+            safe_db_operation { record.delete! }
+          end
+        else
+          clear_join_records
+        end
+      end
+
+      # Clear associations and delete target records (without callbacks)
+      def clear_with_delete
+        if @dependent == :delete_all
+          # Get target IDs before clearing associations
+          target_ids = @loaded ? @records.compact_map(&.id) : ids
+
+          # Clear join table associations
+          clear_join_records
+
+          # Delete target records without callbacks
+          target_ids.each do |id|
+            safe_db_operation { Target.delete!(id) }
+          end
+        else
+          clear_join_records
+        end
+      end
+
+      # Clear only the join table records (preserve target records)
+      def clear_join_records
+        safe_db_operation do
+          CQL::Delete
+            .new(Through.schema)
+            .from(@through_table)
+            .where({@key => @id})
+            .commit
+        end
+      end
+
+      # Build a new target record but don't save it or create association
+      # - **param** : attributes (Hash | NamedTuple)
+      # - **return** : Target
       def build(**attributes) : Target
-        Target.new(**attributes)
-        # Note: The built record isn\'t added to @records until saved & collection reloaded/accessed.
+        safe_db_operation do
+          Target.new(**attributes)
+        end
       end
 
-      # --- Query Methods Overrides ---
+      # Override exists? to check via join table
+      def exists?(**attributes) : Bool
+        safe_db_operation do
+          begin
+            @query.where(**attributes).limit(1).first(Target)
+            true
+          rescue DB::NoResultsError
+            false
+          end
+        end
+      end
 
-      # Find associated records matching the given attributes.
-      # Queries the database directly using a JOIN.
+      # Check if the collection includes a specific record
+      def includes?(record : Target) : Bool
+        if @loaded
+          @records.any? { |r| r.id == record.id }
+        else
+          record_id = safe_id(record, Pk)
+          safe_db_operation do
+            begin
+              CQL::Query
+                .new(Through.schema)
+                .from(@through_table)
+                .where({@key => @id, @target_key => record_id})
+                .limit(1)
+                .first(Through)
+              true
+            rescue DB::NoResultsError
+              false
+            end
+          end
+        end
+      end
+
+      # Set the associated record IDs (replaces current associations)
+      def ids=(ids : Array(Pk))
+        # Clear existing associations
+        clear_join_records
+
+        # Create new associations
+        if ids.any?
+          safe_db_operation do
+            values = ids.map { |id| {@key => @id, @target_key => id} }
+            CQL::Insert
+              .new(Through.schema)
+              .into(@through_table)
+              .values(values)
+              .commit
+          end
+        end
+
+        # Reload if already loaded
+        reload if @loaded
+      end
+
+             # Get associated record IDs
+       def ids : Array(Pk)
+         if @loaded
+           @records.compact_map(&.id).map(&.as(Pk))
+         else
+           safe_db_operation do
+             through_records = CQL::Query
+               .new(Through.schema)
+               .from(@through_table)
+               .where({@key => @id})
+               .all(Through)
+
+             through_records.compact_map do |record|
+               record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
+             end.compact
+           end
+         end
+       end
+
+      # Add multiple records to the association
+      def concat(records : Array(Target)) : Array(Target)
+        records.each { |record| self << record }
+        @loaded ? @records : all
+      end
+
+      # Remove multiple records from the association
+      def remove(records : Array(Target)) : Array(Target)
+        records.each { |record| delete(record) }
+        @loaded ? @records : all
+      end
+
+      # Override find to properly handle many-to-many relationships via join table
       # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
       # - **return** : Array(Target)
-      #
-      # **Example**
-      # ```
-      # movie.actors.find(name: \"Keanu Reeves\")
-      # => [#<Actor...>]
-      # ```
-      def find(**attributes) : Array(Target)
-        @query.where(**attributes).all(Target)
+      def find(**attributes)
+        safe_db_operation do
+          # Get IDs from join table
+          through_records = CQL::Query
+            .new(Through.schema)
+            .from(@through_table)
+            .where({@key => @id})
+            .all(Through)
+
+          target_ids = through_records.compact_map do |record|
+            record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
+          end.compact
+
+          return [] of Target if target_ids.empty?
+
+          # Query target records with the given attributes and IDs
+          Target.where(**attributes)
+            .where(id: target_ids)
+            .all
+        end
       end
 
-      # Find the first associated record matching the given attributes.
-      # Queries the database directly using a JOIN.
+      # Override find_by to properly handle many-to-many relationships via join table
       # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
       # - **return** : Target?
-      #
-      # **Example**
-      # ```
-      # movie.actors.find_by(name: \"Keanu Reeves\")
-      # => #<Actor...>
-      # ```
-      def find_by(**attributes) : Target?
-        @query.where(**attributes).first(Target)
-      end
+      def find_by(**attributes)
+        safe_db_operation do
+          # Get IDs from join table
+          through_records = CQL::Query
+            .new(Through.schema)
+            .from(@through_table)
+            .where({@key => @id})
+            .all(Through)
 
-      # Returns a query scope for associated records, filtered by attributes.
-      # Allows chaining further query methods (e.g., .limit, .order).
-      # Queries the database directly using a JOIN.
-      # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
-      # - **return** : CQL::Query
-      #
-      # **Example**
-      # ```
-      # movie.actors.where(name: \"Keanu Reeves\").limit(1).first
-      # ```
-      def where(**attributes) : CQL::Query
-        @query.where(**attributes)
-      end
+          target_ids = through_records.compact_map do |record|
+            record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
+          end.compact
 
-      # Checks if any associated records exist matching the given attributes.
-      # Queries the database directly using a JOIN.
-      # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
-      # - **return** : Bool
-      #
-      # **Example**
-      # ```
-      # movie.actors.exists?(name: \"Keanu Reeves\") # => true
-      # ```
-      def exists?(**attributes) : Bool
-        # Use first? for efficiency, only needs to know if at least one exists
-        @query.where(**attributes).limit(1).first?(Target)
-      end
+          return nil if target_ids.empty?
 
-      # Find associated records based on the attributes provided for the parent record
-      # - **param** : attributes (Hash(Symbol, String | Int64))
-      # - **return** : Array(Target)
-      #
-      # **Example**
-      #
-      # ```
-      # movie.actors.find(name: "Keanu Reeves")
-      # => [#<Actor:0x00007f8b3b1b3f00 @id=1, @name="Keanu Reeves">]
-      # ```
-      def find(**attributes)
-        @query.where(**attributes).all(Target)
-      end
-
-      # Check if the association exists or not based on the attributes provided
-      # - **param** : attributes (Hash(Symbol, String | Int64))
-      # - **return** : Bool
-      #
-      # **Example**
-      #
-      # ```
-      # movie.actors.exists?(name: "Keanu Reeves")
-      # => true
-      # ```
-      def exists?(**attributes)
-        @query.where(**attributes)
-          .limit(1).first(Target) != nil
-      rescue DB::NoResultsError | CQL::Schema::ConnectionError
-        false
-      end
-
-      def ids=(ids : Array(Pk))
-        Insert
-          .new(Through.schema)
-          .into(Through.table)
-          .values(ids.map { |id| {@key => @id, @target_key => id} })
-          .commit
-          .rows_affected
+          # Query target records with the given attributes and IDs
+          begin
+            Target.where(**attributes)
+              .where(id: target_ids)
+              .first
+          rescue DB::NoResultsError
+            nil
+          end
+        end
       end
     end
   end

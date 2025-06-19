@@ -23,7 +23,7 @@ module Joinable
   # end
   def inner(table_or_alias : Symbol | Hash(Symbol, Symbol), &)
     join_explicitly(table_or_alias, Expression::JoinType::INNER) do |builder|
-      with builder yield
+      yield builder
     end
   end
 
@@ -46,10 +46,9 @@ module Joinable
   # query.left(users) do |builder|
   #   builder.on(users.id == posts.user_id)
   # end
-  # ```
   def left(table_or_alias : Symbol | Hash(Symbol, Symbol), &)
     join_explicitly(table_or_alias, Expression::JoinType::LEFT) do |builder|
-      yield builder # Capture the value returned by the block
+      yield builder
     end
   end
 
@@ -74,7 +73,7 @@ module Joinable
   # end
   def right(table_or_alias : Symbol | Hash(Symbol, Symbol), &)
     join_explicitly(table_or_alias, Expression::JoinType::RIGHT) do |builder|
-      with builder yield
+      yield builder
     end
   end
 

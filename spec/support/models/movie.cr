@@ -5,7 +5,7 @@ class Movie
   property title : String
   property release_year : Int32
 
-  many_to_many :actors, Actor, join_through: :movies_actor, cascade: true
+  many_to_many :actors, Actor, join_through: :movies_actor, dependent: :destroy
 
   def initialize(@title, @release_year)
   end

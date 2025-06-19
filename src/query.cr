@@ -497,14 +497,12 @@ module CQL
     # **Example**
     #
     # ```
-    # query.from(:users).inner(:orders) { |join| join.on { |cond| cond.users.id == cond.orders.user_id } }
+    # query.from(:users).inner(:orders) { on { |cond| cond.users.id == cond.orders.user_id } }
     # # OR with alias
-    # query.from(users: :u).inner({orders: :o}) { |join| join.on { |cond| cond.u.id == cond.o.user_id } }
+    # query.from(users: :u).inner({orders: :o}) { on { |cond| cond.u.id == cond.o.user_id } }
     # ```
-    def inner(table_or_alias : Symbol | Hash(Symbol, Symbol), &)
-      join_explicitly(table_or_alias, Expression::JoinType::INNER) do |builder| # join_explicitly handles conversion
-        with builder yield
-      end
+    def inner(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
+      join_explicitly(table_or_alias, Expression::JoinType::INNER, &block)
     end
 
     # Adds a LEFT JOIN to the query.
@@ -515,11 +513,8 @@ module CQL
 
     # Adds a LEFT JOIN to the query using a block.
     # (Parameters and examples similar to `inner` block version but using `left`)
-    def left(table_or_alias : Symbol | Hash(Symbol, Symbol), &)
-      join_explicitly(table_or_alias, Expression::JoinType::LEFT) do |builder|
-        # Capture the value returned by the block
-        yield builder
-      end
+    def left(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
+      join_explicitly(table_or_alias, Expression::JoinType::LEFT, &block)
     end
 
     # Adds a RIGHT JOIN to the query.
@@ -530,10 +525,8 @@ module CQL
 
     # Adds a RIGHT JOIN to the query using a block.
     # (Parameters and examples similar to `inner` block version but using `right`)
-    def right(table_or_alias : Symbol | Hash(Symbol, Symbol), &)
-      join_explicitly(table_or_alias, Expression::JoinType::RIGHT) do |builder| # join_explicitly handles conversion
-        with builder yield
-      end
+    def right(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
+      join_explicitly(table_or_alias, Expression::JoinType::RIGHT, &block)
     end
 
     # Specifies the columns to order by.
@@ -575,9 +568,17 @@ module CQL
     # The block uses a HavingBuilder which needs alias awareness.
     # - **@yield** [HavingBuilder] Block to build the condition.
     # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.from(:users).group(:age).having { count(:id) > 5 }
+    # => "SELECT * FROM users GROUP BY age HAVING count(id) > 5"
+    # ```
     def having(&)
       # Pass String-keyed query_tables to HavingBuilder
       builder = Expression::HavingBuilder.new(@query_tables)
+      puts "builder: #{builder}"
       having_builder = with builder yield
       @having = Expression::Having.new(having_builder.condition)
       self
@@ -1076,7 +1077,7 @@ module CQL
     # --- Helper methods for explicit joins (Using String aliases internally) --- #
 
     # Handles Symbol | Hash input, converts to String alias internally
-    private def join_explicitly(table_or_alias : Symbol | Hash(Symbol, Symbol), type : Expression::JoinType, &)
+    private def join_explicitly(table_or_alias : Symbol | Hash(Symbol, Symbol), type : Expression::JoinType, &block : Expression::FilterBuilder -> _)
       target_table_name_sym, target_alias_sym = parse_table_or_alias(table_or_alias) # Returns {Symbol, Symbol?}
       join_table_obj = find_schema_table(target_table_name_sym)
       final_alias_str = determine_alias(target_table_name_sym, target_alias_sym) # Returns String
@@ -1088,8 +1089,8 @@ module CQL
       # FilterBuilder expects String-keyed hash
       builder = Expression::FilterBuilder.new(@query_tables)
 
-      # Capture the ConditionBuilder returned by the block
-      condition_builder = yield builder
+      # Call the block with the builder as parameter
+      condition_builder = block.call(builder)
 
       # Get the condition from the returned builder
       condition = condition_builder.as(Expression::ConditionBuilder).condition

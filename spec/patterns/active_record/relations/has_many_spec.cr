@@ -25,14 +25,14 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post1 = Post.new(
         title: "First Post",
         body: "This is the first post",
-        user_id: user.id
+        user_id: user.id!
       )
       post1.create!
 
       post2 = Post.new(
         title: "Second Post",
         body: "This is the second post",
-        user_id: user.id
+        user_id: user.id!
       )
       post2.create!
 
@@ -117,14 +117,14 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post1 = Post.new(
         title: "First Post",
         body: "This is the first post",
-        user_id: user.id
+        user_id: user.id!
       )
       post1.create!
 
       post2 = Post.new(
         title: "Second Post",
         body: "This is the second post",
-        user_id: user.id
+        user_id: user.id!
       )
       post2.create!
 
@@ -145,14 +145,14 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post1 = Post.new(
         title: "First Post",
         body: "This is the first post",
-        user_id: user.id
+        user_id: user.id!
       )
       post1.create!
 
       post2 = Post.new(
         title: "Second Post",
         body: "This is the second post",
-        user_id: user.id
+        user_id: user.id!
       )
       post2.create!
 
@@ -172,14 +172,14 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post1 = Post.new(
         title: "First Post",
         body: "This is the first post",
-        user_id: user.id
+        user_id: user.id!
       )
       post1.create!
 
       post2 = Post.new(
         title: "Second Post",
         body: "This is the second post",
-        user_id: user.id
+        user_id: user.id!
       )
       post2.create!
 
@@ -201,7 +201,7 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post = Post.new(
         title: "Test Post",
         body: "This is a test post",
-        user_id: user.id
+        user_id: user.id!
       )
       post.create!
 
@@ -222,7 +222,7 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post = Post.new(
         title: "Test Post",
         body: "This is a test post",
-        user_id: user.id
+        user_id: user.id!
       )
       post.create!
 
@@ -243,7 +243,7 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post = Post.new(
         title: "Test Post",
         body: "This is a test post",
-        user_id: user.id
+        user_id: user.id!
       )
       post.create!
 
@@ -264,14 +264,14 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post1 = Post.new(
         title: "First Post",
         body: "This is the first post",
-        user_id: user.id
+        user_id: user.id!
       )
       post1.create!
 
       post2 = Post.new(
         title: "Second Post",
         body: "This is the second post",
-        user_id: user.id
+        user_id: user.id!
       )
       post2.create!
 
@@ -293,7 +293,7 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post = Post.new(
         title: "Test Post",
         body: "This is a test post",
-        user_id: user.id
+        user_id: user.id!
       )
       post.create!
 
@@ -318,14 +318,14 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post1 = Post.new(
         title: "First Post",
         body: "This is the first post",
-        user_id: user.id
+        user_id: user.id!
       )
       post1.create!
 
       post2 = Post.new(
         title: "Second Post",
         body: "This is the second post",
-        user_id: user.id
+        user_id: user.id!
       )
       post2.create!
 
@@ -370,17 +370,17 @@ describe CQL::ActiveRecord::Relations::HasMany do
       post = Post.new(
         title: "New Post",
         body: "This is a new post",
-        user_id: user.id
+        user_id: user.id!
       )
       post.create!
 
-      # The collection should not see the new post yet
-      user.posts.size.should eq(0)
+      # Standard ORM: the collection should see the new post immediately
+      user.posts.size.should eq(1)
 
       # Reload the association
       reloaded_collection = user.reload_posts
 
-      # The collection should now include the new post
+      # The collection should still include the new post
       reloaded_collection.size.should eq(1)
       reloaded_collection.first.title.should eq("New Post")
 

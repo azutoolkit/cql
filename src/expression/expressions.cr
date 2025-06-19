@@ -1,3 +1,6 @@
+require "db"
+require "../cql"
+
 module Expression
   abstract class Node
     abstract def accept(visitor : Visitor)

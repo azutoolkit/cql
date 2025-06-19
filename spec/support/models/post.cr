@@ -7,8 +7,8 @@ class Post
   property body : String
   property user_id : Int32?
 
-  belongs_to :user, TestUser, :user_id
+  belongs_to :user, TestUser, :user_id, optional: true, cache: true
 
-  def initialize(@title, @body, @user_id = nil)
+  def initialize(@title, @body, @user_id = 0)
   end
 end
