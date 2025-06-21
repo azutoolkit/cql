@@ -197,12 +197,17 @@ describe CQL::ActiveRecord::Queryable do
 
     describe ".join/.left/.right" do
       it "returns a chainable query for join(*tables : Symbol)" do
+        query = TestUser.join(:posts) { |j| j.posts.id.eq(j.users.id) }
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      end
+
+      it "returns a chainable query for join(*tables : Symbol)" do
         query = TestUser.join(:posts)
         query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
       it "returns a chainable query for join(table_or_alias : Symbol | Hash(Symbol, Symbol))" do
-        query = TestUser.join({:posts => :p})
+        query = TestUser.join(posts: :p)
         query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
@@ -213,13 +218,11 @@ describe CQL::ActiveRecord::Queryable do
 
       it "returns a chainable query for left join variants" do
         TestUser.left(:posts).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
-        TestUser.left({:posts => :p}).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
         TestUser.left(posts: :p).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
       it "returns a chainable query for right join variants" do
         TestUser.right(:posts).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
-        TestUser.right({:posts => :p}).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
         TestUser.right(posts: :p).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
@@ -239,7 +242,7 @@ describe CQL::ActiveRecord::Queryable do
         TestUser.new(name: "Bob", email: "bob@example.com", age: 30, password: "pass2", password_confirmation: "pass2"),
         TestUser.new(name: "Charlie", email: "charlie@example.com", age: 35, password: "pass3", password_confirmation: "pass3"),
         TestUser.new(name: "David", email: "david@example.com", age: 40, password: "pass4", password_confirmation: "pass4"),
-        TestUser.new(name: "Eve", email: "eve@example.com", age: 45, password: "pass5", password_confirmation: "pass5")
+        TestUser.new(name: "Eve", email: "eve@example.com", age: 45, password: "pass5", password_confirmation: "pass5"),
       ]
       users.each(&.create!)
     end

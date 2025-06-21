@@ -484,30 +484,22 @@ module CQL
     # Adds a JOIN to the query with automatic relationship detection.
     # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
     # - **@return** [Query] The query object
-    def join(table_or_alias : Symbol | Hash(Symbol, Symbol))
+    def join(table_or_alias : Symbol)
       join_table(table_or_alias, Expression::JoinType::INNER)
-    end
-
-    # Adds multiple JOINs to the query with automatic relationship detection.
-    # - **@param** tables [Symbol*] Table names to join
-    # - **@return** [Query] The query object
-    def join(*tables : Symbol)
-      tables.each { |table| join_table(table, Expression::JoinType::INNER) }
-      self
     end
 
     # Adds a JOIN to the query using a block for the condition.
     # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
     # - **@yield** [FilterBuilder] The block to build the ON condition
     # - **@return** [Query] The query object
-    def join(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
+    def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
       join_table_block(table_or_alias, Expression::JoinType::INNER, &block)
     end
 
     # Adds a LEFT JOIN to the query with automatic relationship detection.
     # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
     # - **@return** [Query] The query object
-    def left(table_or_alias : Symbol | Hash(Symbol, Symbol))
+    def left(table_or_alias : Symbol)
       join_table(table_or_alias, Expression::JoinType::LEFT)
     end
 
@@ -515,14 +507,14 @@ module CQL
     # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
     # - **@yield** [FilterBuilder] The block to build the ON condition
     # - **@return** [Query] The query object
-    def left(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
+    def left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
       join_table_block(table_or_alias, Expression::JoinType::LEFT, &block)
     end
 
     # Adds a RIGHT JOIN to the query with automatic relationship detection.
     # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
     # - **@return** [Query] The query object
-    def right(table_or_alias : Symbol | Hash(Symbol, Symbol))
+    def right(table_or_alias : Symbol)
       join_table(table_or_alias, Expression::JoinType::RIGHT)
     end
 
@@ -530,7 +522,7 @@ module CQL
     # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
     # - **@yield** [FilterBuilder] The block to build the ON condition
     # - **@return** [Query] The query object
-    def right(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
+    def right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
       join_table_block(table_or_alias, Expression::JoinType::RIGHT, &block)
     end
 
@@ -557,42 +549,6 @@ module CQL
     def right(**tables_with_aliases)
       pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
       join_inferred(pairs, Expression::JoinType::RIGHT)
-    end
-
-    # Adds JOINs to the query using named arguments and a block for the ON condition.
-    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-    # - **@yield** [FilterBuilder] The block to build the ON condition
-    # - **@return** [Query] The query object
-    def join(**tables_with_aliases, &block : Expression::FilterBuilder -> _)
-      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
-      pairs.each do |table_name, alias_name|
-        join_table_block({table_name, alias_name}, Expression::JoinType::INNER, &block)
-      end
-      self
-    end
-
-    # Adds LEFT JOINs to the query using named arguments and a block for the ON condition.
-    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-    # - **@yield** [FilterBuilder] The block to build the ON condition
-    # - **@return** [Query] The query object
-    def left(**tables_with_aliases, &block : Expression::FilterBuilder -> _)
-      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
-      pairs.each do |table_name, alias_name|
-        join_table_block({table_name, alias_name}, Expression::JoinType::LEFT, &block)
-      end
-      self
-    end
-
-    # Adds RIGHT JOINs to the query using named arguments and a block for the ON condition.
-    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-    # - **@yield** [FilterBuilder] The block to build the ON condition
-    # - **@return** [Query] The query object
-    def right(**tables_with_aliases, &block : Expression::FilterBuilder -> _)
-      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
-      pairs.each do |table_name, alias_name|
-        join_table_block({table_name, alias_name}, Expression::JoinType::RIGHT, &block)
-      end
-      self
     end
 
     # Specifies the columns to order by.
@@ -726,8 +682,7 @@ module CQL
     # ```
     def reverse_order
       @order_by.each do |column, direction|
-        @order_by[column] = direction == Expression::OrderDirection::ASC ?
-          Expression::OrderDirection::DESC : Expression::OrderDirection::ASC
+        @order_by[column] = direction == Expression::OrderDirection::ASC ? Expression::OrderDirection::DESC : Expression::OrderDirection::ASC
       end
       self
     end
@@ -820,7 +775,6 @@ module CQL
         aggr_exprs # Aggregate expressions contain String aliases
       )
     end
-
 
     # --- Private Methods --- #
 

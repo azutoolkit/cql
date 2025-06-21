@@ -217,7 +217,7 @@ describe "ActiveRecord::QueryBuilder" do
     end
 
     it "can clear cache" do
-      TestUser.where(age: 25).all  # This should cache something
+      TestUser.where(age: 25).all # This should cache something
       # Note: The current implementation may not cache as expected
       # This test verifies the API works, even if caching is not implemented
       TestUser.cache_stats[:size].should be_a(Int32)

@@ -5,8 +5,11 @@ module CQL::ActiveRecord::Relations
   module BaseRelation
     # Common exception types for relation operations
     class RelationError < Exception; end
+
     class AssociationNotFound < RelationError; end
+
     class InvalidAssociation < RelationError; end
+
     class UnsavedRecord < RelationError; end
 
     # Safely retrieves the primary key, raising appropriate error if nil

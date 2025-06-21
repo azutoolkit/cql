@@ -149,47 +149,40 @@ module CQL
           query.distinct
         end
 
-        # Create a QueryBuilder and execute joins on it
-        # - **@param** tables [Symbol*] The tables to join
-        # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.join(*tables : Symbol)
-          query.join(*tables)
-        end
-
         # Execute automatic inner join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.join(table_or_alias : Symbol | Hash(Symbol, Symbol))
+        def self.join(table_or_alias : Symbol)
           query.join(table_or_alias)
-        end
-
-        # Execute inner join with block conditions
-        # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
-        # - **@yield** [FilterBuilder] The block to build join conditions
-        # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.join(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
-          query.join(table_or_alias, &block)
         end
 
         # Execute automatic left join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.left(table_or_alias : Symbol | Hash(Symbol, Symbol))
+        def self.left(table_or_alias : Symbol)
           query.left(table_or_alias)
         end
 
         # Execute automatic right join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.right(table_or_alias : Symbol | Hash(Symbol, Symbol))
+        def self.right(table_or_alias : Symbol)
           query.right(table_or_alias)
+        end
+
+        # Execute inner join with block conditions
+        # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
+        # - **@yield** [FilterBuilder] The block to build join conditions
+        # - **@return** [QueryBuilder(T)] The query builder instance
+        def self.join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
+          query.join(table_or_alias, &block)
         end
 
         # Execute left join with block conditions
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.left(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
+        def self.left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
           query.left(table_or_alias, &block)
         end
 
@@ -197,7 +190,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.right(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
+        def self.right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
           query.right(table_or_alias, &block)
         end
 
@@ -220,30 +213,6 @@ module CQL
         # - **@return** [QueryBuilder(T)] The query builder instance
         def self.right(**tables_with_aliases)
           query.right(**tables_with_aliases)
-        end
-
-        # Execute inner join using named arguments with block for ON condition
-        # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-        # - **@yield** [FilterBuilder] The block to build the ON condition
-        # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.join(**tables_with_aliases, &block)
-          query.join(**tables_with_aliases, &block)
-        end
-
-        # Execute left join using named arguments with block for ON condition
-        # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-        # - **@yield** [FilterBuilder] The block to build the ON condition
-        # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.left(**tables_with_aliases, &block)
-          query.left(**tables_with_aliases, &block)
-        end
-
-        # Execute right join using named arguments with block for ON condition
-        # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-        # - **@yield** [FilterBuilder] The block to build the ON condition
-        # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.right(**tables_with_aliases, &block)
-          query.right(**tables_with_aliases, &block)
         end
 
         # Execute count aggregate
@@ -835,17 +804,10 @@ module CQL
           clone_builder.tap { |builder| builder.query.distinct }
         end
 
-        # Execute automatic inner join with multiple tables
-        # - **@param** tables [Symbol*] The tables to join
-        # - **@return** [QueryBuilder(T)] Self for chaining
-        def join(*tables : Symbol)
-          clone_builder.tap { |builder| builder.query.join(*tables) }
-        end
-
         # Execute automatic inner join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def join(table_or_alias : Symbol | Hash(Symbol, Symbol))
+        def join(table_or_alias : Symbol)
           clone_builder.tap { |builder| builder.query.join(table_or_alias) }
         end
 
@@ -853,21 +815,21 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def join(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
+        def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
           clone_builder.tap { |builder| builder.query.join(table_or_alias, &block) }
         end
 
         # Execute automatic left join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def left(table_or_alias : Symbol | Hash(Symbol, Symbol))
+        def left(table_or_alias : Symbol)
           clone_builder.tap { |builder| builder.query.left(table_or_alias) }
         end
 
         # Execute automatic right join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def right(table_or_alias : Symbol | Hash(Symbol, Symbol))
+        def right(table_or_alias : Symbol)
           clone_builder.tap { |builder| builder.query.right(table_or_alias) }
         end
 
@@ -875,7 +837,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def left(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
+        def left(table_or_alias : Symbol, &block : Expression::FilterBuilder ->)
           clone_builder.tap { |builder| builder.query.left(table_or_alias, &block) }
         end
 
@@ -883,7 +845,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def right(table_or_alias : Symbol | Hash(Symbol, Symbol), &block)
+        def right(table_or_alias : Symbol, &block : Expression::FilterBuilder ->)
           clone_builder.tap { |builder| builder.query.right(table_or_alias, &block) }
         end
 
@@ -906,30 +868,6 @@ module CQL
         # - **@return** [QueryBuilder(T)] Self for chaining
         def right(**tables_with_aliases)
           clone_builder.tap { |builder| builder.query.right(**tables_with_aliases) }
-        end
-
-        # Execute inner join using named arguments with block for ON condition
-        # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-        # - **@yield** [FilterBuilder] The block to build the ON condition
-        # - **@return** [QueryBuilder(T)] Self for chaining
-        def join(**tables_with_aliases, &block)
-          clone_builder.tap { |builder| builder.query.join(**tables_with_aliases, &block) }
-        end
-
-        # Execute left join using named arguments with block for ON condition
-        # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-        # - **@yield** [FilterBuilder] The block to build the ON condition
-        # - **@return** [QueryBuilder(T)] Self for chaining
-        def left(**tables_with_aliases, &block)
-          clone_builder.tap { |builder| builder.query.left(**tables_with_aliases, &block) }
-        end
-
-        # Execute right join using named arguments with block for ON condition
-        # - **@param** tables_with_aliases [NamedTuple] Table name => alias
-        # - **@yield** [FilterBuilder] The block to build the ON condition
-        # - **@return** [QueryBuilder(T)] Self for chaining
-        def right(**tables_with_aliases, &block)
-          clone_builder.tap { |builder| builder.query.right(**tables_with_aliases, &block) }
         end
 
         # Add count aggregate

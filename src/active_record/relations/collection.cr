@@ -52,12 +52,12 @@ module CQL::ActiveRecord::Relations
     # )
     # ```
     def initialize(
-      @key : Symbol,                                                          # foreign key (e.g., user_id)
-      @id : Pk,                                                               # parent id value
-      @cascade : Bool = false,                                                # delete associated records (deprecated)
-      @query : CQL::Query = build_query(Target),                             # query object
-      auto_load : Bool = false,                                               # automatically load records
-      @dependent : Symbol = :nullify,                                         # dependency strategy
+      @key : Symbol,                             # foreign key (e.g., user_id)
+      @id : Pk,                                  # parent id value
+      @cascade : Bool = false,                   # delete associated records (deprecated)
+      @query : CQL::Query = build_query(Target), # query object
+      auto_load : Bool = false,                  # automatically load records
+      @dependent : Symbol = :nullify,            # dependency strategy
     )
       @target_table = Target.table
       @records = [] of Target

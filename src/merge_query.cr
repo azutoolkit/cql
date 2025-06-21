@@ -57,7 +57,7 @@ module CQL
       end
     end
 
-        private def merge_where_clause
+    private def merge_where_clause
       current_w = @current_query.where
       other_w = @other_query.where
 

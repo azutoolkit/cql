@@ -53,14 +53,14 @@ module CQL
       # - **param** : autosave (Bool) - Whether to automatically save records
       # - **return** : ManyCollection
       def initialize(
-        @key : Symbol,                                                          # movie_id
-        @id : Pk,                                                               # movie id value
-        @target_key : Symbol,                                                   # actor_id
-        @cascade : Bool = false,                                                # delete associated records (deprecated)
-        @query : CQL::Query = build_query(Target),                             # query object
-        @dependent : Symbol = :nullify,                                         # dependency strategy
-        @validate : Bool = true,                                                # validate records
-        @autosave : Bool = false,                                               # autosave records
+        @key : Symbol,                             # movie_id
+        @id : Pk,                                  # movie id value
+        @target_key : Symbol,                      # actor_id
+        @cascade : Bool = false,                   # delete associated records (deprecated)
+        @query : CQL::Query = build_query(Target), # query object
+        @dependent : Symbol = :nullify,            # dependency strategy
+        @validate : Bool = true,                   # validate records
+        @autosave : Bool = false,                  # autosave records
       )
         # Initialize parent with auto_load: false to prevent loading in base initializer
         super(@key, @id, @cascade, @query, auto_load: false, dependent: @dependent)
@@ -181,7 +181,7 @@ module CQL
             if deleted_target_record
               safe_db_operation { Target.delete!(id) }
             end
-          # :nullify doesn't apply to many-to-many relationships
+            # :nullify doesn't apply to many-to-many relationships
           end
 
           # Remove from internal array if it was loaded
@@ -335,24 +335,24 @@ module CQL
         reload if @loaded
       end
 
-             # Get associated record IDs
-       def ids : Array(Pk)
-         if @loaded
-           @records.compact_map(&.id).map(&.as(Pk))
-         else
-           safe_db_operation do
-             through_records = CQL::Query
-               .new(Through.schema)
-               .from(@through_table)
-               .where({@key => @id})
-               .all(Through)
+      # Get associated record IDs
+      def ids : Array(Pk)
+        if @loaded
+          @records.compact_map(&.id).map(&.as(Pk))
+        else
+          safe_db_operation do
+            through_records = CQL::Query
+              .new(Through.schema)
+              .from(@through_table)
+              .where({@key => @id})
+              .all(Through)
 
-             through_records.compact_map do |record|
-               record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
-             end.compact
-           end
-         end
-       end
+            through_records.compact_map do |record|
+              record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
+            end.compact
+          end
+        end
+      end
 
       # Add multiple records to the association
       def concat(records : Array(Target)) : Array(Target)

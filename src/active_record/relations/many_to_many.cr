@@ -31,8 +31,8 @@ module CQL::ActiveRecord::Relations
     #   property id : Int64
     #   property title : String
     #   many_to_many :actors, Actor, join_through: MoviesActors,
-    #                foreign_key: :movie_id, association_foreign_key: :actor_id,
-    #                dependent: :destroy
+    #     foreign_key: :movie_id, association_foreign_key: :actor_id,
+    #     dependent: :destroy
     # end
     #
     # class Actor
@@ -40,7 +40,7 @@ module CQL::ActiveRecord::Relations
     #   property id : Int64
     #   property name : String
     #   many_to_many :movies, Movie, join_through: MoviesActors,
-    #                foreign_key: :actor_id, association_foreign_key: :movie_id
+    #     foreign_key: :actor_id, association_foreign_key: :movie_id
     # end
     #
     # class MoviesActors
