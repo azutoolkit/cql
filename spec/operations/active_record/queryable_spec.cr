@@ -195,17 +195,39 @@ describe CQL::ActiveRecord::Queryable do
       end
     end
 
-    # describe ".join" do
-    #   it "returns a chainable query" do
-    #     query = TestUser.join(:posts, {id: :user_id})
-    #     query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
-    #   end
+    describe ".join/.left/.right" do
+      it "returns a chainable query for join(*tables : Symbol)" do
+        query = TestUser.join(:posts)
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      end
 
-    #   it "can be chained with other query methods" do
-    #     query = TestUser.where(name: "Test User").join(:posts, {id: :user_id})
-    #     query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
-    #   end
-    # end
+      it "returns a chainable query for join(table_or_alias : Symbol | Hash(Symbol, Symbol))" do
+        query = TestUser.join({:posts => :p})
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      end
+
+      it "returns a chainable query for join(**tables_with_aliases)" do
+        query = TestUser.join(posts: :p)
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      end
+
+      it "returns a chainable query for left join variants" do
+        TestUser.left(:posts).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+        TestUser.left({:posts => :p}).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+        TestUser.left(posts: :p).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      end
+
+      it "returns a chainable query for right join variants" do
+        TestUser.right(:posts).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+        TestUser.right({:posts => :p}).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+        TestUser.right(posts: :p).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      end
+
+      it "can be chained with other query methods" do
+        query = TestUser.where(name: "Test User").join(:posts).order(name: :asc).limit(1)
+        query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      end
+    end
   end
 
   # Test new query methods

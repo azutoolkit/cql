@@ -17,6 +17,7 @@ UserDB = CQL::Schema.define(
     column :title, String
     column :body, String
     column :user_id, Int32, null: true
+    foreign_key [:user_id], references: :users, references_columns: [:id]
   end
 
   table :profiles do
@@ -24,6 +25,7 @@ UserDB = CQL::Schema.define(
     column :bio, String
     column :avatar_url, String
     column :profile_owner_id, Int32, null: true
+    foreign_key [:profile_owner_id], references: :users, references_columns: [:id]
   end
 
   table :profile_owners do
@@ -52,5 +54,7 @@ UserDB = CQL::Schema.define(
     primary :id, Int32
     column :movie_id, Int32
     column :actor_id, Int32
+    foreign_key [:movie_id], references: :movies, references_columns: [:id]
+    foreign_key [:actor_id], references: :actors, references_columns: [:id]
   end
 end

@@ -481,61 +481,118 @@ module CQL
       self
     end
 
-    # Adds an INNER JOIN to the query.
-    # - **@param** table [Symbol | Hash(Symbol,Symbol)] Table name or alias mapping (e.g., :orders or {orders: :o})
-    # - **@param** on [Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any)] The join condition using BaseColumn objects.
+    # Adds a JOIN to the query with automatic relationship detection.
+    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
     # - **@return** [Query] The query object
-    #
-    # **Example**
-    #
-    # ```
-    # query.from(:users).inner(:orders, on: { users.id => orders.user_id })
-    # # OR with alias
-    # query.from(users: :u).inner({orders: :o}, on: { u.id => o.user_id })
-    # => "SELECT * FROM users AS u INNER JOIN orders AS o ON u.id = o.user_id"
-    # ```
-    def inner(table_or_alias : Symbol | Hash(Symbol, Symbol), on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
-      join_explicitly(table_or_alias, on, Expression::JoinType::INNER) # join_explicitly handles conversion
+    def join(table_or_alias : Symbol | Hash(Symbol, Symbol))
+      join_table(table_or_alias, Expression::JoinType::INNER)
     end
 
-    # Adds an INNER JOIN to the query using a block for the condition.
-    # - **@param** table [Symbol | Hash(Symbol,Symbol)] Table name or alias mapping.
-    # - **@yield** [FilterBuilder] The block to build the ON condition.
+    # Adds multiple JOINs to the query with automatic relationship detection.
+    # - **@param** tables [Symbol*] Table names to join
     # - **@return** [Query] The query object
-    #
-    # **Example**
-    #
-    # ```
-    # query.from(:users).inner(:orders) { on { |cond| cond.users.id == cond.orders.user_id } }
-    # # OR with alias
-    # query.from(users: :u).inner({orders: :o}) { on { |cond| cond.u.id == cond.o.user_id } }
-    # ```
-    def inner(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
-      join_explicitly(table_or_alias, Expression::JoinType::INNER, &block)
+    def join(*tables : Symbol)
+      tables.each { |table| join_table(table, Expression::JoinType::INNER) }
+      self
     end
 
-    # Adds a LEFT JOIN to the query.
-    # (Parameters and examples similar to `inner` but using `left` and LEFT JOIN)
-    def left(table_or_alias : Symbol | Hash(Symbol, Symbol), on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
-      join_explicitly(table_or_alias, on, Expression::JoinType::LEFT) # join_explicitly handles conversion
+    # Adds a JOIN to the query using a block for the condition.
+    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@yield** [FilterBuilder] The block to build the ON condition
+    # - **@return** [Query] The query object
+    def join(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
+      join_table_block(table_or_alias, Expression::JoinType::INNER, &block)
     end
 
-    # Adds a LEFT JOIN to the query using a block.
-    # (Parameters and examples similar to `inner` block version but using `left`)
+    # Adds a LEFT JOIN to the query with automatic relationship detection.
+    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@return** [Query] The query object
+    def left(table_or_alias : Symbol | Hash(Symbol, Symbol))
+      join_table(table_or_alias, Expression::JoinType::LEFT)
+    end
+
+    # Adds a LEFT JOIN to the query using a block for the condition.
+    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@yield** [FilterBuilder] The block to build the ON condition
+    # - **@return** [Query] The query object
     def left(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
-      join_explicitly(table_or_alias, Expression::JoinType::LEFT, &block)
+      join_table_block(table_or_alias, Expression::JoinType::LEFT, &block)
     end
 
-    # Adds a RIGHT JOIN to the query.
-    # (Parameters and examples similar to `inner` but using `right` and RIGHT JOIN)
-    def right(table_or_alias : Symbol | Hash(Symbol, Symbol), on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
-      join_explicitly(table_or_alias, on, Expression::JoinType::RIGHT) # join_explicitly handles conversion
+    # Adds a RIGHT JOIN to the query with automatic relationship detection.
+    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@return** [Query] The query object
+    def right(table_or_alias : Symbol | Hash(Symbol, Symbol))
+      join_table(table_or_alias, Expression::JoinType::RIGHT)
     end
 
-    # Adds a RIGHT JOIN to the query using a block.
-    # (Parameters and examples similar to `inner` block version but using `right`)
+    # Adds a RIGHT JOIN to the query using a block for the condition.
+    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@yield** [FilterBuilder] The block to build the ON condition
+    # - **@return** [Query] The query object
     def right(table_or_alias : Symbol | Hash(Symbol, Symbol), &block : Expression::FilterBuilder -> _)
-      join_explicitly(table_or_alias, Expression::JoinType::RIGHT, &block)
+      join_table_block(table_or_alias, Expression::JoinType::RIGHT, &block)
+    end
+
+    # Adds JOINs to the query using named arguments for table aliasing.
+    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
+    # - **@return** [Query] The query object
+    def join(**tables_with_aliases)
+      # Convert NamedTuple to {Symbol, Symbol} pairs
+      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
+      join_inferred(pairs, Expression::JoinType::INNER)
+    end
+
+    # Adds LEFT JOINs to the query using named arguments for table aliasing.
+    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
+    # - **@return** [Query] The query object
+    def left(**tables_with_aliases)
+      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
+      join_inferred(pairs, Expression::JoinType::LEFT)
+    end
+
+    # Adds RIGHT JOINs to the query using named arguments for table aliasing.
+    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
+    # - **@return** [Query] The query object
+    def right(**tables_with_aliases)
+      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
+      join_inferred(pairs, Expression::JoinType::RIGHT)
+    end
+
+    # Adds JOINs to the query using named arguments and a block for the ON condition.
+    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
+    # - **@yield** [FilterBuilder] The block to build the ON condition
+    # - **@return** [Query] The query object
+    def join(**tables_with_aliases, &block : Expression::FilterBuilder -> _)
+      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
+      pairs.each do |table_name, alias_name|
+        join_table_block({table_name, alias_name}, Expression::JoinType::INNER, &block)
+      end
+      self
+    end
+
+    # Adds LEFT JOINs to the query using named arguments and a block for the ON condition.
+    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
+    # - **@yield** [FilterBuilder] The block to build the ON condition
+    # - **@return** [Query] The query object
+    def left(**tables_with_aliases, &block : Expression::FilterBuilder -> _)
+      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
+      pairs.each do |table_name, alias_name|
+        join_table_block({table_name, alias_name}, Expression::JoinType::LEFT, &block)
+      end
+      self
+    end
+
+    # Adds RIGHT JOINs to the query using named arguments and a block for the ON condition.
+    # - **@param** tables_with_aliases [NamedTuple] Table name => alias
+    # - **@yield** [FilterBuilder] The block to build the ON condition
+    # - **@return** [Query] The query object
+    def right(**tables_with_aliases, &block : Expression::FilterBuilder -> _)
+      pairs = tables_with_aliases.map { |table_name, alias_name| {table_name, alias_name} }
+      pairs.each do |table_name, alias_name|
+        join_table_block({table_name, alias_name}, Expression::JoinType::RIGHT, &block)
+      end
+      self
     end
 
     # Specifies the columns to order by.
@@ -587,7 +644,6 @@ module CQL
     def having(&)
       # Pass String-keyed query_tables to HavingBuilder
       builder = Expression::HavingBuilder.new(@query_tables)
-      puts "builder: #{builder}"
       having_builder = with builder yield
       @having = Expression::Having.new(having_builder.condition)
       self
@@ -765,47 +821,6 @@ module CQL
       )
     end
 
-    # Accept keyword arguments for table/alias pairs
-    def joins(**tables_to_join)
-      # Convert NamedTuple to Array(Tuple(Symbol, Symbol))
-      tables_array = tables_to_join.map { |key, value| {key, value} }
-      join_inferred(tables_array, Expression::JoinType::INNER)
-    end
-
-    # Accept single splat for table names (no explicit alias)
-    def joins(*tables_to_join : Symbol)
-      # Convert Array(Symbol) to Array(Tuple(Symbol, Symbol))
-      tables_array = tables_to_join.map { |name| {name, name} }
-      join_inferred(tables_array, Expression::JoinType::INNER)
-    end
-
-    # Accept keyword arguments for table/alias pairs
-    def left_joins(**tables_to_join)
-      # Convert NamedTuple to Array(Tuple(Symbol, Symbol))
-      tables_array = tables_to_join.map { |key, value| {key, value} }
-      join_inferred(tables_array, Expression::JoinType::LEFT)
-    end
-
-    # Accept single splat for table names (no explicit alias)
-    def left_joins(*tables_to_join : Symbol)
-      # Convert Array(Symbol) to Array(Tuple(Symbol, Symbol))
-      tables_array = tables_to_join.map { |name| {name, name} }
-      join_inferred(tables_array, Expression::JoinType::LEFT)
-    end
-
-    # Accept keyword arguments for table/alias pairs
-    def right_joins(**tables_to_join)
-      # Convert NamedTuple to Array(Tuple(Symbol, Symbol))
-      tables_array = tables_to_join.map { |key, value| {key, value} }
-      join_inferred(tables_array, Expression::JoinType::RIGHT)
-    end
-
-    # Accept single splat for table names (no explicit alias)
-    def right_joins(*tables_to_join : Symbol)
-      # Convert Array(Symbol) to Array(Tuple(Symbol, Symbol))
-      tables_array = tables_to_join.map { |name| {name, name} }
-      join_inferred(tables_array, Expression::JoinType::RIGHT)
-    end
 
     # --- Private Methods --- #
 
@@ -818,6 +833,50 @@ module CQL
       # Create Expression::Table with String alias
       from_table_expressions = from_tables_info.map { |info| Expression::Table.new(info[:table], info[:alias]) }
       Expression::From.new(from_table_expressions)
+    end
+
+    # --- Simplified Join Methods --- #
+
+    # Handles automatic join using foreign key relationships
+    private def join_table(table_or_alias : Symbol | Hash(Symbol, Symbol), type : Expression::JoinType)
+      target_table_name_sym, target_alias_sym = parse_table_or_alias(table_or_alias)
+      target_table = find_schema_table(target_table_name_sym)
+      final_alias_str = determine_alias(target_table_name_sym, target_alias_sym)
+      ensure_alias_available(final_alias_str)
+
+      # Add table to query_tables for relationship inference
+      @query_tables[final_alias_str] = {table: target_table, alias: final_alias_str}
+
+      # Find foreign key relationship
+      found_fk = find_foreign_key_link(target_table)
+      left_alias_str, left_columns_sym, right_alias_str, right_columns_sym = determine_join_sides(found_fk, final_alias_str)
+      on_condition = build_join_condition(left_alias_str, left_columns_sym, right_alias_str, right_columns_sym)
+
+      add_join_expression(target_table, final_alias_str, type, on_condition)
+      self
+    end
+
+    # Handles join with block conditions
+    private def join_table_block(table_or_alias : Symbol | Hash(Symbol, Symbol), type : Expression::JoinType, &block : Expression::FilterBuilder -> _)
+      target_table_name_sym, target_alias_sym = parse_table_or_alias(table_or_alias)
+      join_table_obj = find_schema_table(target_table_name_sym)
+      final_alias_str = determine_alias(target_table_name_sym, target_alias_sym)
+      ensure_alias_available(final_alias_str)
+
+      # Add table to query_tables for block access
+      @query_tables[final_alias_str] = {table: join_table_obj, alias: final_alias_str}
+
+      # FilterBuilder expects String-keyed hash
+      builder = Expression::FilterBuilder.new(@query_tables)
+
+      # Call the block with the builder as parameter
+      condition_builder = yield(builder)
+
+      # Get the condition from the returned builder
+      condition = condition_builder.as(Expression::ConditionBuilder).condition
+
+      add_join_expression(join_table_obj, final_alias_str, type, condition)
+      self
     end
 
     # Expects hash with String keys now
@@ -1151,89 +1210,6 @@ module CQL
           Expression::Column.new(left_base_col, alias_name: left_alias_str),
           "=",
           Expression::Column.new(right_base_col, alias_name: right_alias_str)
-        )
-      end
-
-      conditions.reduce do |acc, cond|
-        acc ? Expression::And.new(acc, cond) : cond
-      end.not_nil!
-    end
-
-    # --- Helper methods for explicit joins (Using String aliases internally) --- #
-
-    # Handles Symbol | Hash input, converts to String alias internally
-    private def join_explicitly(table_or_alias : Symbol | Hash(Symbol, Symbol), type : Expression::JoinType, &block : Expression::FilterBuilder -> _)
-      target_table_name_sym, target_alias_sym = parse_table_or_alias(table_or_alias) # Returns {Symbol, Symbol?}
-      join_table_obj = find_schema_table(target_table_name_sym)
-      final_alias_str = determine_alias(target_table_name_sym, target_alias_sym) # Returns String
-      ensure_alias_available(final_alias_str)                                    # Expects String
-
-      # Add table to query_tables - IMPORTANT: Keep it there for subsequent operations like SELECT
-      @query_tables[final_alias_str] = {table: join_table_obj, alias: final_alias_str}
-
-      # FilterBuilder expects String-keyed hash
-      builder = Expression::FilterBuilder.new(@query_tables)
-
-      # Call the block with the builder as parameter
-      condition_builder = block.call(builder)
-
-      # Get the condition from the returned builder
-      condition = condition_builder.as(Expression::ConditionBuilder).condition
-
-      # add_join_expression expects String alias
-      add_join_expression(join_table_obj, final_alias_str, type, condition)
-
-      # No cleanup needed - we want to keep the joined table in query_tables
-      # so it can be referenced by select, where, etc.
-
-      self
-    end
-
-    # Handles Symbol | Hash input, converts to String alias internally
-    private def join_explicitly(table_or_alias : Symbol | Hash(Symbol, Symbol), on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any), type : Expression::JoinType)
-      target_table_name_sym, target_alias_sym = parse_table_or_alias(table_or_alias) # Returns {Symbol, Symbol?}
-      join_table_obj = find_schema_table(target_table_name_sym)
-      final_alias_str = determine_alias(target_table_name_sym, target_alias_sym) # Returns String
-      ensure_alias_available(final_alias_str)                                    # Expects String
-
-      # Add table temporarily with String alias for condition building
-      @query_tables[final_alias_str] = {table: join_table_obj, alias: final_alias_str}
-
-      # Build condition using String aliases
-      condition = build_explicit_join_condition(on) # Returns Condition with String aliases
-
-      # add_join_expression expects String alias
-      add_join_expression(join_table_obj, final_alias_str, type, condition)
-      self
-    ensure
-      # Clean up temporary table entry if hash condition building fails
-      unless @joins.any? { |j| j.table.alias_name == final_alias_str }
-        @query_tables.delete(final_alias_str) if !final_alias_str.nil? # Use defined? maybe?
-      end
-    end
-
-    # Builds condition using String aliases
-    private def build_explicit_join_condition(on : Hash(CQL::BaseColumn, CQL::BaseColumn | DB::Any))
-      conditions = on.map do |left_col_def, right_val_or_col_def|
-        # find_alias_for_table returns String alias
-        left_alias_str = find_alias_for_table(left_col_def.table.not_nil!)
-        right_expr = case right_val_or_col_def
-                     when CQL::BaseColumn
-                       # find_alias_for_table returns String alias
-                       right_alias_str = find_alias_for_table(right_val_or_col_def.table.not_nil!)
-                       # Create Expression::Column with String alias
-                       Expression::Column.new(right_val_or_col_def, alias_name: right_alias_str)
-                     when DB::Any
-                       right_val_or_col_def # Keep as DB::Any
-                     else
-                       raise "Invalid type in join condition: #{right_val_or_col_def.class}"
-                     end
-
-        # Create Expression::Column with String alias for left side
-        Expression::CompareCondition.new(
-          Expression::Column.new(left_col_def, alias_name: left_alias_str),
-          "=",
-          right_expr
         )
       end
 
