@@ -262,7 +262,7 @@ describe CQL::Query do
         .select(:name, :city, :balance)
         .where {
           customers.id.in([1, 2, 3]) &
-          (customers.city.in(["Rome", "Vienna"]) | customers.balance.gt(500))
+            (customers.city.in(["Rome", "Vienna"]) | customers.balance.gt(500))
         }
         .to_sql
 
