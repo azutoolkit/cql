@@ -717,35 +717,35 @@ module CQL
         # - **@param** columns [Symbol*] The columns to select
         # - **@return** [QueryBuilder(T)] Self for chaining
         def select(*columns : Symbol | String)
-          clone_builder.tap { |builder| builder.query.select(*columns) }
+          clone_builder.tap(&.query.select(*columns))
         end
 
         # Add columns to select with hash syntax
         # - **@param** fields [Hash] The fields to select using hash syntax
         # - **@return** [QueryBuilder(T)] Self for chaining
         def select(**fields)
-          clone_builder.tap { |builder| builder.query.select(**fields) }
+          clone_builder.tap(&.query.select(**fields))
         end
 
         # Add where conditions
         # - **@param** conditions [Hash] The conditions to filter by
         # - **@return** [QueryBuilder(T)] Self for chaining
         def where(conditions : Hash(String | Symbol, DB::Any | Array(DB::Any)))
-          clone_builder.tap { |builder| builder.query.where(conditions) }
+          clone_builder.tap(&.query.where(conditions))
         end
 
         # Add where conditions with hash syntax
         # - **@param** fields [Hash] The conditions using hash syntax
         # - **@return** [QueryBuilder(T)] Self for chaining
         def where(**fields)
-          clone_builder.tap { |builder| builder.query.where(**fields) }
+          clone_builder.tap(&.query.where(**fields))
         end
 
         # Add where conditions with block
         # - **@yield** [FilterBuilder] The block to build conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def where(&block)
-          clone_builder.tap { |builder| builder.query.where(&block) }
+          clone_builder.tap(&.query.where)
         end
 
         # Add LIKE conditions
@@ -753,62 +753,62 @@ module CQL
         # - **@param** pattern [String] The LIKE pattern
         # - **@return** [QueryBuilder(T)] Self for chaining
         def where_like(field : Symbol | String, pattern : String)
-          clone_builder.tap { |builder| builder.query.where_like(field, pattern) }
+          clone_builder.tap(&.query.where_like(field, pattern))
         end
 
         # Add order by clauses
         # - **@param** fields [Symbol*] The fields to order by
         # - **@return** [QueryBuilder(T)] Self for chaining
         def order(*fields : Symbol | String)
-          clone_builder.tap { |builder| builder.query.order(*fields) }
+          clone_builder.tap(&.query.order(*fields))
         end
 
         # Add order by clauses with hash syntax
         # - **@param** fields [Hash] The fields and directions to order by
         # - **@return** [QueryBuilder(T)] Self for chaining
         def order(**fields)
-          clone_builder.tap { |builder| builder.query.order(**fields) }
+          clone_builder.tap(&.query.order(**fields))
         end
 
         # Set limit for the query
         # - **@param** value [Int32] The limit value
         # - **@return** [QueryBuilder(T)] Self for chaining
         def limit(value : Int32)
-          clone_builder.tap { |builder| builder.query.limit(value) }
+          clone_builder.tap(&.query.limit(value))
         end
 
         # Set offset for the query
         # - **@param** value [Int32] The offset value
         # - **@return** [QueryBuilder(T)] Self for chaining
         def offset(value : Int32)
-          clone_builder.tap { |builder| builder.query.offset(value) }
+          clone_builder.tap(&.query.offset(value))
         end
 
         # Add group by clauses
         # - **@param** columns [Symbol*] The columns to group by
         # - **@return** [QueryBuilder(T)] Self for chaining
         def group(*columns : Symbol | String)
-          clone_builder.tap { |builder| builder.query.group(*columns) }
+          clone_builder.tap(&.query.group(*columns))
         end
 
         # Add having conditions
         # - **@yield** [HavingBuilder] The block to build having conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def having(&block)
-          clone_builder.tap { |builder| builder.query.having(&block) }
+          clone_builder.tap(&.query.having)
         end
 
         # Set distinct flag
         # - **@return** [QueryBuilder(T)] Self for chaining
         def distinct
-          clone_builder.tap { |builder| builder.query.distinct }
+          clone_builder.tap(&.query.distinct)
         end
 
         # Execute automatic inner join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] Self for chaining
         def join(table_or_alias : Symbol)
-          clone_builder.tap { |builder| builder.query.join(table_or_alias) }
+          clone_builder.tap(&.query.join(table_or_alias))
         end
 
         # Execute inner join with block conditions
@@ -816,21 +816,21 @@ module CQL
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
-          clone_builder.tap { |builder| builder.query.join(table_or_alias, &block) }
+          clone_builder.tap(&.query.join(table_or_alias))
         end
 
         # Execute automatic left join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] Self for chaining
         def left(table_or_alias : Symbol)
-          clone_builder.tap { |builder| builder.query.left(table_or_alias) }
+          clone_builder.tap(&.query.left(table_or_alias))
         end
 
         # Execute automatic right join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] Self for chaining
         def right(table_or_alias : Symbol)
-          clone_builder.tap { |builder| builder.query.right(table_or_alias) }
+          clone_builder.tap(&.query.right(table_or_alias))
         end
 
         # Execute left join with block conditions
@@ -838,7 +838,7 @@ module CQL
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def left(table_or_alias : Symbol, &block : Expression::FilterBuilder ->)
-          clone_builder.tap { |builder| builder.query.left(table_or_alias, &block) }
+          clone_builder.tap(&.query.left(table_or_alias))
         end
 
         # Execute right join with block conditions
@@ -846,28 +846,28 @@ module CQL
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def right(table_or_alias : Symbol, &block : Expression::FilterBuilder ->)
-          clone_builder.tap { |builder| builder.query.right(table_or_alias, &block) }
+          clone_builder.tap(&.query.right(table_or_alias))
         end
 
         # Execute automatic inner join using named arguments for table aliasing
         # - **@param** tables_with_aliases [NamedTuple] Table name => alias
         # - **@return** [QueryBuilder(T)] Self for chaining
         def join(**tables_with_aliases)
-          clone_builder.tap { |builder| builder.query.join(**tables_with_aliases) }
+          clone_builder.tap(&.query.join(**tables_with_aliases))
         end
 
         # Execute automatic left join using named arguments for table aliasing
         # - **@param** tables_with_aliases [NamedTuple] Table name => alias
         # - **@return** [QueryBuilder(T)] Self for chaining
         def left(**tables_with_aliases)
-          clone_builder.tap { |builder| builder.query.left(**tables_with_aliases) }
+          clone_builder.tap(&.query.left(**tables_with_aliases))
         end
 
         # Execute automatic right join using named arguments for table aliasing
         # - **@param** tables_with_aliases [NamedTuple] Table name => alias
         # - **@return** [QueryBuilder(T)] Self for chaining
         def right(**tables_with_aliases)
-          clone_builder.tap { |builder| builder.query.right(**tables_with_aliases) }
+          clone_builder.tap(&.query.right(**tables_with_aliases))
         end
 
         # Add count aggregate

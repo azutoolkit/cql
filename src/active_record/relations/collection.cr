@@ -402,7 +402,7 @@ module CQL::ActiveRecord::Relations
       end
 
       if @loaded
-        @records.each { |record| record.attributes({@key => nil}) }
+        @records.each(&.attributes({@key => nil}))
       end
 
       result
@@ -515,7 +515,7 @@ module CQL::ActiveRecord::Relations
     # - **return** : Bool
     def includes?(record : Target) : Bool
       load_records unless @loaded
-      @records.any? { |r| r.id == record.id }
+      @records.any? { |local_record| local_record.id == record.id }
     end
 
     # Add multiple records to the collection
@@ -544,7 +544,7 @@ module CQL::ActiveRecord::Relations
         if includes?(record)
           record.attributes({@key => nil})
           safe_db_operation { record.save! }
-          @records.reject! { |r| r.id == record.id }
+          @records.reject! { |local_record| local_record.id == record.id }
         end
       end
 

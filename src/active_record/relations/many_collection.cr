@@ -154,7 +154,7 @@ module CQL
       # - **return** : Target? - The target record if it was deleted, otherwise nil
       def delete(id : Pk) : Target?
         deleted_target_record = nil
-        record_to_remove = @records.find { |r| r.id == id } if @loaded
+        record_to_remove = @records.find { |record| record.id == id } if @loaded
 
         # Delete the association record from the join table
         rows_affected = safe_db_operation do
@@ -295,7 +295,7 @@ module CQL
       # Check if the collection includes a specific record
       def includes?(record : Target) : Bool
         if @loaded
-          @records.any? { |r| r.id == record.id }
+          @records.any? { |local_record| local_record.id == record.id }
         else
           record_id = safe_id(record, Pk)
           safe_db_operation do

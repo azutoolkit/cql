@@ -3,3 +3,6 @@ Documentation/DocumentationAdmonition:
 
 Lint/NotNil:
   Enabled: false
+
+Performance/AnyInsteadOfEmpty:
+  Enabled: false

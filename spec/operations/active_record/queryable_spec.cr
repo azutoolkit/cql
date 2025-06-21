@@ -441,7 +441,7 @@ describe CQL::ActiveRecord::Queryable do
         ids = TestUser.ids
         ids.should be_a(Array(Int64))
         ids.size.should eq(5)
-        ids.all? { |id| id.is_a?(Int64) }.should be_true
+        ids.all?(Int64).should be_true
       end
 
       it "works with where conditions" do

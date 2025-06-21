@@ -811,7 +811,7 @@ module CQL
     end
 
     # Handles join with block conditions
-    private def join_table_block(table_or_alias : Symbol | Hash(Symbol, Symbol), type : Expression::JoinType, &block : Expression::FilterBuilder -> _)
+    private def join_table_block(table_or_alias : Symbol | Hash(Symbol, Symbol), type : Expression::JoinType, & : Expression::FilterBuilder -> _)
       target_table_name_sym, target_alias_sym = parse_table_or_alias(table_or_alias)
       join_table_obj = find_schema_table(target_table_name_sym)
       final_alias_str = determine_alias(target_table_name_sym, target_alias_sym)

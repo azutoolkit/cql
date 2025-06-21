@@ -152,10 +152,10 @@ describe "ActiveRecord::QueryBuilder" do
       CQL::ActiveRecord::Queryable::QueryCache.clear
 
       # Execute the same query twice - should use caching
-      result1 = builder.all
+      builder.all
       cache_size_after_first = CQL::ActiveRecord::Queryable::QueryCache.size
 
-      result2 = builder.all
+      builder.all
       cache_size_after_second = CQL::ActiveRecord::Queryable::QueryCache.size
 
       # Note: The current implementation may not cache as expected
@@ -257,8 +257,7 @@ describe "ActiveRecord::QueryBuilder" do
     end
 
     it "respects no_cache directive" do
-      initial_size = TestUser.cache_stats[:size]
-
+      TestUser.cache_stats[:size]
       TestUser.query.no_cache.all
 
       # Note: The current implementation may not cache as expected
@@ -331,7 +330,7 @@ describe "ActiveRecord::QueryBuilder" do
     describe "Batch processing" do
       it "provides find_each method" do
         count = 0
-        TestUser.query.find_each(batch_size: 10) do |test_user|
+        TestUser.query.find_each(batch_size: 10) do |_|
           count += 1
         end
         count.should be >= 0

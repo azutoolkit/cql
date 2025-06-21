@@ -36,13 +36,13 @@ puts "movie.actors.exists?(name: \"Non-existent Actor\"): #{movie.actors.exists?
 # Let's also check what's in the database
 puts "\nChecking database contents:"
 puts "Actors in database:"
-Actor.all.each do |a|
-  puts "  - ID: #{a.id}, Name: #{a.name}"
+Actor.all.each do |actor_record|
+  puts "  - ID: #{actor_record.id}, Name: #{actor_record.name}"
 end
 
 puts "\nMoviesActor associations:"
-MoviesActor.all.each do |ma|
-  puts "  - Movie ID: #{ma.movie_id}, Actor ID: #{ma.actor_id}"
+MoviesActor.all.each do |movie_actor|
+  puts "  - Movie ID: #{movie_actor.movie_id}, Actor ID: #{movie_actor.actor_id}"
 end
 
 # Cleanup
