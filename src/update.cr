@@ -1,3 +1,5 @@
+require "./expression/expressions"
+
 module CQL
   #
   # The `CQL::Update` class represents an SQL UPDATE statement.
@@ -309,7 +311,12 @@ module CQL
 
     private def get_expression(field, value)
       column = find_column(field)
-      Expression::Compare.new(Expression::Column.new(column), "=", value)
+      # Handle array values for IN conditions
+      if value.is_a?(Array)
+        Expression::InCondition.new(Expression::Column.new(column), value)
+      else
+        Expression::Compare.new(Expression::Column.new(column), "=", value)
+      end
     end
 
     private def find_table(name : Symbol) : Table

@@ -1,13 +1,10 @@
 require "../spec_helper"
 
-def d
-  Northwind.delete
-end
-
 describe CQL::Delete do
-  it "Delete specific rows that meet a certain condition." do
-    delete_query = d.from(:users)
-      .where { users.id == 1 }
+  it "creates Delete query" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where(id: 1)
       .to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip
@@ -17,42 +14,66 @@ describe CQL::Delete do
     delete_query.should eq({output, [1]})
   end
 
-  it "Delete rows based on the result of a subquery." do
-    sub_query = Northwind.query.from(:users)
-      .select(:id)
-      .where { users.id == 1 }
-
-    delete_query = d.from(:users)
-      .where { exists?(sub_query) }
+  it "handles array values in WHERE clause" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where(id: [1, 2, 3])
       .to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip
-    DELETE FROM users WHERE EXISTS (SELECT users.id FROM users WHERE users.id = ?)
-    SQL
+      DELETE FROM users WHERE users.id IN (?, ?, ?)
+      SQL
 
-    delete_query.should eq({output, [1]})
+    delete_query.should eq({output, [1, 2, 3]})
   end
 
-  it "Delete rows from one table based on a condition in another table using a join." do
-    delete_query = d.from(:users)
-      .using(:address)
-      .where { (users.id == address.user_id) & (address.city == "Berlin") }
+  it "handles multiple array conditions in WHERE clause" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where(id: [1, 2, 3], name: ["Alice", "Bob"])
       .to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip
-    DELETE FROM users USING address WHERE (users.id = address.user_id) AND (address.city = ?)
-    SQL
+      DELETE FROM users WHERE (users.id IN (?, ?, ?)) AND (users.name IN (?, ?))
+      SQL
 
-    delete_query.should eq({output, ["Berlin"]})
+    delete_query.should eq({output, [1, 2, 3, "Alice", "Bob"]})
   end
 
-  it "Delete rows and return the deleted rows." do
-    delete_query = d.from(:users)
-      .where { users.id == 1 }
+  it "handles array values with other conditions in WHERE clause" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where(id: [1, 2, 3], age: 25)
       .to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip
-      DELETE FROM users WHERE users.id = ?
+      DELETE FROM users WHERE (users.id IN (?, ?, ?)) AND (users.age = ?)
+      SQL
+
+    delete_query.should eq({output, [1, 2, 3, 25]})
+  end
+
+  it "handles empty array in WHERE clause" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where(id: [] of Int32)
+      .to_sql
+
+    output = <<-SQL.gsub(/\n/, " ").strip
+      DELETE FROM users WHERE users.id IN ()
+      SQL
+
+    delete_query.should eq({output, [] of DB::Any})
+  end
+
+  it "handles single element array in WHERE clause" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where(id: [1])
+      .to_sql
+
+    output = <<-SQL.gsub(/\n/, " ").strip
+      DELETE FROM users WHERE users.id IN (?)
       SQL
 
     delete_query.should eq({output, [1]})

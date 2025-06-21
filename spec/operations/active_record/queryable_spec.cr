@@ -133,6 +133,84 @@ describe CQL::ActiveRecord::Queryable do
         query = TestUser.where(name: "Test User").where(age: 30)
         query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
+
+      it "handles array values in WHERE clause" do
+        # Create test users with different ages
+        TestUser.create!(name: "Alice", email: "alice@example.com", age: 25, password: "pass1")
+        TestUser.create!(name: "Bob", email: "bob@example.com", age: 30, password: "pass2")
+        TestUser.create!(name: "Charlie", email: "charlie@example.com", age: 35, password: "pass3")
+
+        users = TestUser.where(age: [25, 35]).all
+        users.size.should eq(2)
+        users.map(&.name).should contain("Alice")
+        users.map(&.name).should contain("Charlie")
+      end
+
+      it "handles multiple array conditions in WHERE clause" do
+        # Create test users
+        TestUser.create!(name: "Alice", email: "alice@example.com", age: 25, password: "pass1")
+        TestUser.create!(name: "Bob", email: "bob@example.com", age: 30, password: "pass2")
+        TestUser.create!(name: "Charlie", email: "charlie@example.com", age: 35, password: "pass3")
+
+        users = TestUser.where(age: [25, 30], name: ["Alice", "Bob"]).all
+        users.size.should eq(2)
+        users.map(&.name).should contain("Alice")
+        users.map(&.name).should contain("Bob")
+      end
+
+      it "handles empty array in WHERE clause" do
+        users = TestUser.where(age: [] of Int32).all
+        users.size.should eq(0)
+      end
+
+      it "handles single element array in WHERE clause" do
+        TestUser.create!(name: "Alice", email: "alice@example.com", age: 25, password: "pass1")
+
+        users = TestUser.where(age: [25]).all
+        users.size.should eq(1)
+        users.first.name.should eq("Alice")
+      end
+
+      it "handles array values with other conditions" do
+        TestUser.create!(name: "Alice", email: "alice@example.com", age: 25, password: "pass1")
+        TestUser.create!(name: "Bob", email: "bob@example.com", age: 30, password: "pass2")
+        TestUser.create!(name: "Charlie", email: "charlie@example.com", age: 35, password: "pass3")
+
+        users = TestUser.where(age: [25, 30], name: "Alice").all
+        users.size.should eq(1)
+        users.first.name.should eq("Alice")
+      end
+
+      it "handles array values in chained WHERE clauses" do
+        TestUser.create!(name: "Alice", email: "alice@example.com", age: 25, password: "pass1")
+        TestUser.create!(name: "Bob", email: "bob@example.com", age: 30, password: "pass2")
+        TestUser.create!(name: "Charlie", email: "charlie@example.com", age: 35, password: "pass3")
+
+        users = TestUser.where(age: [25, 30]).where(name: ["Alice", "Bob"]).all
+        users.size.should eq(2)
+        users.map(&.name).should contain("Alice")
+        users.map(&.name).should contain("Bob")
+      end
+
+      it "handles array values in find_by method" do
+        TestUser.create!(name: "Alice", email: "alice@example.com", age: 25, password: "pass1")
+        TestUser.create!(name: "Bob", email: "bob@example.com", age: 30, password: "pass2")
+
+        user = TestUser.find_by(age: [25, 30], name: "Alice")
+        user.should_not be_nil
+        user.not_nil!.name.should eq("Alice")
+      end
+
+      it "handles array values in exists? method" do
+        TestUser.create!(name: "Alice", email: "alice@example.com", age: 25, password: "pass1")
+        TestUser.create!(name: "Bob", email: "bob@example.com", age: 30, password: "pass2")
+
+        exists = TestUser.exists?(age: [25, 30])
+        exists.should be_true
+
+        exists = TestUser.exists?(age: [99, 100])
+        exists.should be_false
+      end
     end
 
     describe ".order" do

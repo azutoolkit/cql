@@ -170,6 +170,108 @@ describe CQL::Query do
 
       select_query.should eq({output.strip, [1, 2, 3, "Rome", "Vienna"]})
     end
+
+    it "handles empty array in WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city)
+        .where(id: [] of Int32)
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city FROM customers WHERE customers.id IN ()
+      SQL
+
+      select_query.should eq({output.strip, [] of DB::Any})
+    end
+
+    it "handles single element array in WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city)
+        .where(id: [1])
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city FROM customers WHERE customers.id IN (?)
+      SQL
+
+      select_query.should eq({output.strip, [1]})
+    end
+
+    it "handles mixed data types in array WHERE clause" do
+      select_query = Northwind.query
+        .from(:orders)
+        .select(:id, :status)
+        .where(id: [1, 2, 3], status: ["pending", "completed"])
+        .to_sql
+
+      output = <<-SQL
+        SELECT orders.id, orders.status FROM orders WHERE (orders.id IN (?, ?, ?)) AND (orders.status IN (?, ?))
+      SQL
+
+      select_query.should eq({output.strip, [1, 2, 3, "pending", "completed"]})
+    end
+
+    it "handles array values with other conditions in WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city, :balance)
+        .where(id: [1, 2, 3], balance: 1000)
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city, customers.balance FROM customers WHERE (customers.id IN (?, ?, ?)) AND (customers.balance = ?)
+      SQL
+
+      select_query.should eq({output.strip, [1, 2, 3, 1000]})
+    end
+
+    it "handles array values in chained WHERE clauses" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city)
+        .where(id: [1, 2, 3])
+        .where(city: ["Rome", "Vienna"])
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city FROM customers WHERE (customers.id IN (?, ?, ?)) AND (customers.city IN (?, ?))
+      SQL
+
+      select_query.should eq({output.strip, [1, 2, 3, "Rome", "Vienna"]})
+    end
+
+    it "handles array values with block WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city)
+        .where { customers.id.in([1, 2, 3]) & customers.city.in(["Rome", "Vienna"]) }
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city FROM customers WHERE (customers.id IN (?, ?, ?)) AND (customers.city IN (?, ?))
+      SQL
+
+      select_query.should eq({output.strip, [1, 2, 3, "Rome", "Vienna"]})
+    end
+
+    it "handles array values with complex block WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city, :balance)
+        .where {
+          customers.id.in([1, 2, 3]) &
+          (customers.city.in(["Rome", "Vienna"]) | customers.balance.gt(500))
+        }
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city, customers.balance FROM customers WHERE (customers.id IN (?, ?, ?)) AND ((customers.city IN (?, ?)) OR (customers.balance > ?))
+      SQL
+
+      select_query.should eq({output.strip, [1, 2, 3, "Rome", "Vienna", 500]})
+    end
   end
 
   describe "ORDER BY, LIMIT, and other clauses" do
