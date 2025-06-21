@@ -14,16 +14,11 @@ This guide covers advanced querying techniques with CQL Query Builder, including
 CQL provides a powerful block-based interface for building complex conditions:
 
 ```crystal
-# Complex AND/OR logic
+# Complex AND/OR logic using table references
 query.from(:users).where do
-  active.eq(:, true) &
-        .group do |g|
-          g.gt(:age, 18)
-            .or
-            .eq(:admin, true)
-        end
-        .and
-        .not_eq(:status, "banned")
+  users.active.eq(true) &
+  (users.age.gt(18) | users.admin.eq(true)) &
+  users.status.not_eq("banned")
 end.all(User)
 ```
 
@@ -31,18 +26,10 @@ end.all(User)
 
 ```crystal
 # Deeply nested conditions
-query.from(:posts).where do |filter|
-  filter.eq(:published, true)
-        .and
-        .group do |g|
-          g.eq(:category, "tech")
-            .or
-            .group do |sub|
-              sub.eq(:category, "science")
-                  .and
-                  .gt(:views, 1000)
-            end
-        end
+query.from(:posts).where do
+  posts.published.eq(true) &
+  (posts.category.eq("tech") |
+   (posts.category.eq("science") & posts.views.gt(1000)))
 end.all(Post)
 ```
 
@@ -50,30 +37,19 @@ end.all(Post)
 
 ```crystal
 # All available comparison operators
-query.from(:users).where do |filter|
-  filter.eq(:status, "active")           # Equal
-        .and
-        .not_eq(:role, "guest")          # Not equal
-        .and
-        .gt(:age, 18)                    # Greater than
-        .and
-        .gte(:score, 100)                # Greater than or equal
-        .and
-        .lt(:age, 65)                    # Less than
-        .and
-        .lte(:balance, 1000)             # Less than or equal
-        .and
-        .like(:email, "%@company.com")   # LIKE pattern
-        .and
-        .not_like(:name, "%test%")       # NOT LIKE pattern
-        .and
-        .in(:role, ["admin", "moderator"]) # IN array
-        .and
-        .not_in(:status, ["banned"])     # NOT IN array
-        .and
-        .is_null(:deleted_at)            # IS NULL
-        .and
-        .is_not_null(:email)             # IS NOT NULL
+query.from(:users).where do
+  users.status.eq("active") &           # Equal
+  users.role.not_eq("guest") &          # Not equal
+  users.age.gt(18) &                    # Greater than
+  users.score.gte(100) &                # Greater than or equal
+  users.age.lt(65) &                    # Less than
+  users.balance.lte(1000) &             # Less than or equal
+  users.email.like("%@company.com") &   # LIKE pattern
+  users.name.not_like("%test%") &       # NOT LIKE pattern
+  users.role.in(["admin", "moderator"]) & # IN array
+  users.status.not_in(["banned"]) &     # NOT IN array
+  users.deleted_at.null &               # IS NULL
+  users.email.not_null                  # IS NOT NULL
 end.all(User)
 ```
 
@@ -81,15 +57,47 @@ end.all(User)
 
 ```crystal
 # Range conditions
-query.from(:users).where do |filter|
-  filter.between(:age, 18, 65)
-        .and
-        .between(:created_at, 1.month.ago, Time.utc)
+query.from(:users).where do
+  users.age.between(18, 65) &
+  users.created_at.between(1.month.ago, Time.utc)
 end.all(User)
 
 # Not between
-query.from(:users).where do |filter|
-  filter.not_between(:score, 0, 100)
+query.from(:users).where do
+  users.score.not_between(0, 100)
+end.all(User)
+```
+
+## Array Conditions
+
+CQL supports array values in WHERE clauses for IN conditions:
+
+```crystal
+# Single array condition
+query.from(:users).where(role: ["admin", "moderator"]).all(User)
+
+# Multiple array conditions
+query.from(:users).where(
+  age: [25, 30, 35],
+  status: ["active", "pending"]
+).all(User)
+
+# Array conditions with other conditions
+query.from(:users).where(
+  age: [25, 30, 35],
+  active: true
+).all(User)
+
+# Chained array conditions
+query.from(:users)
+     .where(age: [25, 30, 35])
+     .where(status: ["active", "pending"])
+     .all(User)
+
+# Array conditions in block syntax
+query.from(:users).where do
+  users.age.in([25, 30, 35]) &
+  users.status.in(["active", "pending"])
 end.all(User)
 ```
 
@@ -99,49 +107,34 @@ end.all(User)
 
 ```crystal
 # Find users who have posts
-query.from(:users).where do |filter|
-  filter.exists do |subquery|
-    subquery.from(:posts)
-            .where(posts: {user_id: users: :id})
-  end
-end.all(User)
+subquery = query.from(:posts).where { posts.user_id.eq(users.id) }
+query.from(:users).where { users.id.exists?(subquery) }.all(User)
 
 # Find users with no posts
-query.from(:users).where do |filter|
-  filter.not_exists do |subquery|
-    subquery.from(:posts)
-            .where(posts: {user_id: users: :id})
-  end
-end.all(User)
+subquery = query.from(:posts).where { posts.user_id.eq(users.id) }
+query.from(:users).where { users.id.not_exists?(subquery) }.all(User)
 ```
 
 ### IN Subqueries
 
 ```crystal
 # Find posts by users with high scores
-query.from(:posts).where do |filter|
-  filter.in(:user_id) do |subquery|
-    subquery.from(:users)
-            .select(:id)
-            .where(users: {score: 100..})
-  end
-end.all(Post)
+subquery = query.from(:users)
+                .select(:id)
+                .where { users.score.gte(100) }
+query.from(:posts).where { posts.user_id.in(subquery) }.all(Post)
 ```
 
 ### Scalar Subqueries
 
 ```crystal
 # Select with subquery in column
-query.select(
-  :title,
-  :body,
-  subquery: {
-    query.from(:comments)
-         .select(:count)
-         .where(comments: {post_id: posts: :id})
-         .get(Int64)
-  }
-).from(:posts).all(Post)
+subquery = query.from(:comments)
+                .select(:count)
+                .where { comments.post_id.eq(posts.id) }
+query.from(:posts)
+     .select(:title, :body, subquery.as(:comment_count))
+     .all(Post)
 ```
 
 ## Dynamic Query Building
@@ -155,9 +148,7 @@ def build_user_query(active: Bool? = nil, role: String? = nil, min_age: Int32? =
   # Add conditions only if parameters are provided
   base_query = base_query.where(active: active) if active
   base_query = base_query.where(role: role) if role
-  base_query = base_query.where do |filter|
-    filter.gte(:age, min_age)
-  end if min_age
+  base_query = base_query.where { users.age.gte(min_age) } if min_age
 
   base_query
 end
@@ -240,7 +231,7 @@ def admin_users_query
 end
 
 def recent_users_query
-  base_user_query.where(created_at: 1.month.ago..Time.utc)
+  base_user_query.where { users.created_at.gte(1.month.ago) }
 end
 
 # Usage
@@ -262,7 +253,7 @@ class QueryFactory
 
   def self.recent_content(days : Int32)
     query.from(:posts)
-         .where(created_at: days.days.ago..Time.utc)
+         .where { posts.created_at.gte(days.days.ago) }
          .order(:created_at, :desc)
   end
 end
@@ -279,14 +270,10 @@ recent_posts = QueryFactory.recent_content(7).all(Post)
 
 ```crystal
 def search_users(term : String)
-  query.from(:users).where do |filter|
-    filter.group do |g|
-      g.like(:name, "%#{term}%")
-        .or
-        .like(:email, "%#{term}%")
-        .or
-        .like(:bio, "%#{term}%")
-    end
+  query.from(:users).where do
+    users.name.like("%#{term}%") |
+    users.email.like("%#{term}%") |
+    users.bio.like("%#{term}%")
   end
 end
 
@@ -301,15 +288,11 @@ def filter_by_date_range(start_date : Time?, end_date : Time?)
   base_query = query.from(:posts)
 
   if start_date && end_date
-    base_query = base_query.where(created_at: start_date..end_date)
+    base_query = base_query.where { posts.created_at.between(start_date, end_date) }
   elsif start_date
-    base_query = base_query.where do |filter|
-      filter.gte(:created_at, start_date)
-    end
+    base_query = base_query.where { posts.created_at.gte(start_date) }
   elsif end_date
-    base_query = base_query.where do |filter|
-      filter.lte(:created_at, end_date)
-    end
+    base_query = base_query.where { posts.created_at.lte(end_date) }
   end
 
   base_query
@@ -320,14 +303,82 @@ end
 
 ```crystal
 # Find users with more than 5 posts
-query.from(:users).where do |filter|
-  filter.gt do |subquery|
-    subquery.from(:posts)
-            .select(:count)
-            .where(posts: {user_id: users: :id})
-            .get(Int64)
-  end, 5
-end.all(User)
+subquery = query.from(:posts)
+                .select(:count)
+                .where { posts.user_id.eq(users.id) }
+query.from(:users).where { users.id.exists?(subquery) }.all(User)
+```
+
+## Active Record Advanced Methods
+
+### Batch Processing
+
+```crystal
+# Process users one at a time
+User.find_each(batch_size: 1000) do |user|
+  # Process each user
+  process_user(user)
+end
+
+# Process users in batches
+User.find_in_batches(batch_size: 1000) do |users|
+  # Process batch of users
+  process_users(users)
+end
+```
+
+### Data Extraction
+
+```crystal
+# Extract single column values
+names = User.pluck(:name, as: String)
+ages = User.where(active: true).pluck(:age, as: Int32)
+
+# Extract multiple column values
+results = User.pluck(:name, :age, as: {String, Int32})
+
+# Pick single value from first record
+name = User.pick(:name)
+age = User.where(active: true).pick(:age)
+
+# Get array of primary keys
+user_ids = User.ids
+active_user_ids = User.where(active: true).ids
+```
+
+### Aggregations
+
+```crystal
+# Basic aggregations
+total_users = User.count
+total_age = User.sum(:age)
+avg_age = User.average(:age)
+min_age = User.minimum(:age)
+max_age = User.maximum(:age)
+
+# With conditions
+active_count = User.where(active: true).count
+active_avg_age = User.where(active: true).average(:age)
+
+# Alias methods
+User.min(:age)    # Same as minimum
+User.max(:age)    # Same as maximum
+User.avg(:age)    # Same as average
+```
+
+### Query Modifiers
+
+```crystal
+# Replace existing order
+query = User.order(:name, :asc)
+query = query.reorder(:age, :desc)  # Replaces name order with age
+
+# Reverse order
+query = User.order(:name, :asc).reverse_order
+
+# Remove specific scopes
+query = User.where(active: true).order(:name)
+query = query.unscope(:where)  # Removes where condition
 ```
 
 ## Performance Optimization
@@ -349,17 +400,13 @@ puts "Parameters: #{params}"
 
 ```crystal
 # Enable query caching
-query.cache(true)
+User.query.cache(true)
 
 # Build and execute query
-users = query.from(:users)
-             .where(active: true)
-             .all(User)
+users = User.where(active: true).all
 
 # Subsequent identical queries will use cache
-cached_users = query.from(:users)
-                    .where(active: true)
-                    .all(User)
+cached_users = User.where(active: true).all
 ```
 
 ### Batch Processing
@@ -370,11 +417,11 @@ def process_all_users(batch_size : Int32 = 1000)
   offset = 0
 
   loop do
-    users = query.from(:users)
-                 .order(:id)
-                 .limit(batch_size)
-                 .offset(offset)
-                 .all(User)
+    users = User.query
+                .order(:id)
+                .limit(batch_size)
+                .offset(offset)
+                .all
 
     break if users.empty?
 
@@ -395,14 +442,8 @@ end
 ```crystal
 def safe_query_execution
   begin
-    # Validate query before execution
-    if query.valid?
-      users = query.all(User)
-      return users
-    else
-      puts "Invalid query configuration"
-      return [] of User
-    end
+    users = User.where(active: true).all
+    return users
   rescue ex : CQL::Error
     puts "Query error: #{ex.message}"
     return [] of User
@@ -421,9 +462,9 @@ def log_query(query : CQL::Query)
 end
 
 # Usage
-user_query = query.from(:users).where(active: true)
+user_query = User.where(active: true).query
 log_query(user_query)
-users = user_query.all(User)
+users = user_query.all
 ```
 
 ### Performance Monitoring
@@ -432,7 +473,7 @@ users = user_query.all(User)
 def timed_query_execution
   start_time = Time.monotonic
 
-  users = query.from(:users).all(User)
+  users = User.all
 
   end_time = Time.monotonic
   duration = end_time - start_time
@@ -450,15 +491,12 @@ end
 # Organize complex queries into methods
 class UserRepository
   def self.active_admins_with_posts
-    query.from(:users).where do |filter|
-      filter.eq(:active, true)
-            .and
-            .eq(:role, "admin")
-            .and
-            .exists do |subquery|
-              subquery.from(:posts)
-                      .where(posts: {user_id: users: :id})
-            end
+    query.from(:users).where do
+      users.active.eq(true) &
+      users.role.eq("admin") &
+      users.id.exists? do |subquery|
+        subquery.from(:posts).where { posts.user_id.eq(users.id) }
+      end
     end
   end
 
@@ -477,23 +515,23 @@ end
 # Create reusable query components
 module QueryComponents
   def self.active_filter
-    ->(filter : Expression::FilterBuilder) {
-      filter.eq(:active, true)
+    ->(query : CQL::Query) {
+      query.where(active: true)
     }
   end
 
   def self.recent_filter(days : Int32)
-    ->(filter : Expression::FilterBuilder) {
-      filter.gte(:created_at, days.days.ago)
+    ->(query : CQL::Query) {
+      query.where { users.created_at.gte(days.days.ago) }
     }
   end
 end
 
 # Usage
-query.from(:users).where do |filter|
-  QueryComponents.active_filter.call(filter)
-  QueryComponents.recent_filter(30).call(filter)
-end.all(User)
+query = query.from(:users)
+QueryComponents.active_filter.call(query)
+QueryComponents.recent_filter(30).call(query)
+users = query.all(User)
 ```
 
 ### Type Safety
@@ -509,7 +547,7 @@ def find_users_by_criteria(
 
   base_query = base_query.where(active: active) if active
   base_query = base_query.where(role: role) if role
-  base_query = base_query.where(age: age_range) if age_range
+  base_query = base_query.where { users.age.between(age_range.begin, age_range.end) } if age_range
 
   base_query
 end
