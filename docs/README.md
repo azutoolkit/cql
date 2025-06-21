@@ -42,14 +42,6 @@ Welcome to the CQL (Crystal Query Language) documentation! This documentation pr
 - [Query Execution](guides/cql-query-builder/query-execution.md)
 - [Query Optimization](guides/cql-query-builder/query-optimization.md)
 
-## API Reference (Expanded)
-
-- [Active Record API](api-reference/active-record-api.md)
-- [Query Builder API](api-reference/query-builder-api.md)
-- [Validation API](api-reference/validation-api.md)
-- [Callback API](api-reference/callback-api.md)
-- [Relation API](api-reference/relation-api.md)
-
 ## Additional Resources
 
 - [Handling Migrations](guides/handling-migrations.md)
