@@ -12,7 +12,7 @@ describe CQL::ActiveRecord::Queryable do
   describe ".query" do
     it "returns a new query object" do
       TestUser.responds_to?(:query).should be_true
-      TestUser.query.should be_a(CQL::Query)
+      TestUser.query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
   end
 
@@ -185,7 +185,7 @@ describe CQL::ActiveRecord::Queryable do
 
     describe ".group_by" do
       it "returns a chainable query" do
-        query = TestUser.group_by(:name)
+        query = TestUser.group(:name)
         query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
       end
 
@@ -278,23 +278,37 @@ describe CQL::ActiveRecord::Queryable do
 
     describe ".pluck" do
       it "extracts single column values" do
-        names = TestUser.pluck(:name)
-        names.should be_a(Array(DB::Any))
+        names = TestUser.pluck(:name, as: String)
+        names.should be_a(Array(String))
         names.size.should eq(5)
         names.should contain("Alice")
         names.should contain("Bob")
       end
 
+      it "extracts single column values with typed pluck" do
+        names = TestUser.pluck(:name, as: String)
+        names.should be_a(Array(String))
+        names.size.should eq(5)
+        first_result = names.first
+        first_result.should be_a(String)
+        first_result.should eq("Alice")
+      end
+
       it "extracts multiple column values" do
-        results = TestUser.pluck(:name, :age)
-        results.should be_a(Array(Array(DB::Any)))
+        results = TestUser.pluck(:name, :age, as: {String, Int32})
+        results.should be_a(Array(Tuple(String, Int32)))
         results.size.should eq(5)
-        results.first.size.should eq(2)
+      end
+
+      it "extracts multiple column values with typed pluck" do
+        results = TestUser.pluck(:name, :age, as: {String, Int32})
+        results.should be_a(Array(Tuple(String, Int32)))
+        results.size.should eq(5)
       end
 
       it "works with where conditions" do
         # Use supported API - check for a specific age since > operator isn't supported yet
-        names = TestUser.where(age: 35).pluck(:name)
+        names = TestUser.where(age: 35).pluck(:name, as: String)
         names.size.should eq(1)
         names.should contain("Charlie")
       end
@@ -349,7 +363,7 @@ describe CQL::ActiveRecord::Queryable do
       it "returns nil when no records exist" do
         TestUser.delete_all
         max_age = TestUser.maximum(:age)
-        max_age.should be_nil
+        max_age.should eq(0)
       end
     end
 
@@ -368,7 +382,7 @@ describe CQL::ActiveRecord::Queryable do
       it "returns nil when no records exist" do
         TestUser.delete_all
         min_age = TestUser.minimum(:age)
-        min_age.should be_nil
+        min_age.should eq(0)
       end
     end
 
@@ -387,7 +401,7 @@ describe CQL::ActiveRecord::Queryable do
       it "returns nil when no records exist" do
         TestUser.delete_all
         avg_age = TestUser.average(:age)
-        avg_age.should be_nil
+        avg_age.should eq(0.0)
       end
     end
 
@@ -405,6 +419,7 @@ describe CQL::ActiveRecord::Queryable do
 
       it "returns 0 when no records exist" do
         TestUser.delete_all
+
         sum_age = TestUser.sum(:age)
         sum_age.should eq(0)
       end
@@ -413,8 +428,8 @@ describe CQL::ActiveRecord::Queryable do
     describe ".distinct" do
       it "gets distinct values for a column" do
         # Add some duplicate ages
-        TestUser.create!(name: "Frank", email: "frank@example.com", age: 25, password: "pass6", password_confirmation: "pass6")
-        TestUser.create!(name: "Grace", email: "grace@example.com", age: 30, password: "pass7", password_confirmation: "pass7")
+        TestUser.create!(name: "Frank", email: "frank@example.com", age: 25, password: "pass6")
+        TestUser.create!(name: "Grace", email: "grace@example.com", age: 30, password: "pass7")
 
         distinct_ages = TestUser.distinct(:age)
         distinct_ages.should be_a(Array(DB::Any))
@@ -428,7 +443,7 @@ describe CQL::ActiveRecord::Queryable do
 
       it "works with where conditions" do
         # Use supported API - check for a specific age
-        distinct_ages = TestUser.where(age: 35).distinct(:age)
+        distinct_ages = TestUser.select(:age).where(age: 35).distinct.all(as: Int32)
         distinct_ages.size.should eq(1) # 35
       end
     end

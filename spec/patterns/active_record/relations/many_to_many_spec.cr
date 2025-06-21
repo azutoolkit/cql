@@ -350,8 +350,8 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
 
     movie.actors.reload
 
-    Actor.count.should eq(0)
-    MoviesActor.count.should eq(0)
+    Actor.count.as(Int64).should eq(0)
+    MoviesActor.count.as(Int64).should eq(0)
     movie.actors.size.should eq(0)
   end
 end

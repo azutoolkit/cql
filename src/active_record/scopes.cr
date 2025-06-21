@@ -168,7 +168,7 @@ module CQL
             # Merge the scope query with the current query
             # This is where we'd need to implement query merging logic
             # For now, we'll create a new QueryBuilder that combines both queries
-            merged_query = merge_queries(self.as(CQL::Query), scope_query_builder.query)
+            merged_query = merge_queries(self.query, scope_query_builder.query)
             QueryBuilder(T).new(merged_query, @cache_enabled)
           end
 

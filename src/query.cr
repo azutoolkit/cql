@@ -1,3 +1,12 @@
+require "./base_column"
+require "./table"
+require "./schema"
+require "./expression"
+require "./insert"
+require "./update"
+require "./delete"
+require "./merge_query"
+
 module CQL
   # The `Query` class is responsible for building SQL queries in a structured manner.
   # It holds various components like selected columns, tables, conditions, and more.
@@ -69,9 +78,8 @@ module CQL
     # ```
     def all(as as_kind)
       query, params = to_sql
-
       @schema.exec_query do |conn|
-        as_kind.from_rs(conn.query(query, args: params))
+        conn.query_all(query, args: params, as: as_kind)
       end
     end
 
@@ -105,9 +113,10 @@ module CQL
     # => <User:0x00007f8b1b0b3b00 @name="John", @age=30>
     # ```
     def first(as as_kind)
+      limit(1)
       query, params = to_sql
       @schema.exec_query do |conn|
-        conn.query_one(query, args: params, as: as_kind)
+        conn.query_one?(query, args: params, as: as_kind)
       end
     end
 
@@ -141,7 +150,7 @@ module CQL
     def get(as as_kind)
       query, params = to_sql
       @schema.exec_query do |conn|
-        conn.scalar(query, args: params, as: as_kind)
+        conn.query_one?(query, args: params, as: as_kind)
       end
     end
 
@@ -624,6 +633,82 @@ module CQL
     # ```
     def distinct
       @distinct = true
+      self
+    end
+
+    # Replaces the existing order clause with new ordering.
+    # - **@param** fields [Symbol*] The fields to order by
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.order(:name).reorder(:age)
+    # => "SELECT * FROM users ORDER BY age"
+    # ```
+    def reorder(*fields : Symbol | String)
+      @order_by.clear
+      order(*fields)
+    end
+
+    # Replaces the existing order clause with new ordering using hash syntax.
+    # - **@param** fields [Hash] The fields and directions to order by
+    # - **@return** [Query] The query object
+    def reorder(**fields)
+      @order_by.clear
+      order(**fields)
+    end
+
+    # Reverses the order of the query.
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.order(:name).reverse_order
+    # => "SELECT * FROM users ORDER BY name DESC"
+    # ```
+    def reverse_order
+      @order_by.each do |column, direction|
+        @order_by[column] = direction == Expression::OrderDirection::ASC ?
+          Expression::OrderDirection::DESC : Expression::OrderDirection::ASC
+      end
+      self
+    end
+
+    # Removes specific scopes from the query.
+    # - **@param** scopes [Symbol*] The scopes to remove
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.where(active: true).unscope(:where)
+    # => "SELECT * FROM users"
+    # ```
+    def unscope(*scopes : Symbol)
+      scopes.each do |scope|
+        case scope
+        when :where
+          @where = nil
+        when :order
+          @order_by.clear
+        when :limit
+          @limit = nil
+        when :offset
+          @offset = nil
+        when :select
+          @columns.clear
+        when :group
+          @group_by.clear
+        when :having
+          @having = nil
+        when :joins
+          @joins.clear
+        when :distinct
+          @distinct = false
+        end
+      end
       self
     end
 

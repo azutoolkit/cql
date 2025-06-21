@@ -271,12 +271,24 @@ module CQL
       # Override exists? to check via join table
       def exists?(**attributes) : Bool
         safe_db_operation do
-          begin
-            @query.where(**attributes).limit(1).first(Target)
-            true
-          rescue DB::NoResultsError
-            false
-          end
+          # Get IDs from join table
+          through_records = CQL::Query
+            .new(Through.schema)
+            .from(@through_table)
+            .where({@key => @id})
+            .all(Through)
+
+          target_ids = through_records.compact_map do |record|
+            record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
+          end.compact
+
+          return false if target_ids.empty?
+
+          # Check if any target records with the given attributes exist in the associated IDs
+          results = Target.where(**attributes)
+            .where(id: target_ids)
+            .all
+          !results.empty?
         end
       end
 

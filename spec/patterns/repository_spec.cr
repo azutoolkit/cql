@@ -71,7 +71,7 @@ describe CQL::Repository(User, Int32) do
   it "fetches the first user" do
     Users.create(name: "John Doe", email: "john@example.com")
     Users.create(name: "Jane Doe", email: "jane@example.com")
-    first_user = Users.first
+    first_user = Users.first.not_nil!
 
     first_user.should be_a(User)
     first_user.name.should eq("John Doe")

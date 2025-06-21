@@ -168,12 +168,15 @@ module CQL::ActiveRecord::Relations
     # - **return** : Bool
     def exists?(**attributes)
       safe_db_operation do
-        begin
-          @query.where(**attributes).where({@key => @id}).limit(1).first(Target)
-          true
-        rescue DB::NoResultsError
-          false
-        end
+        # Get IDs of associated records
+        associated_ids = ids
+        return false if associated_ids.empty?
+
+        # Check if any associated records match the given attributes
+        results = Target.where(**attributes)
+          .where(id: associated_ids)
+          .all
+        !results.empty?
       end
     end
 
