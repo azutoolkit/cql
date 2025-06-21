@@ -168,23 +168,14 @@ module CQL
             # Merge the scope query with the current query
             # This is where we'd need to implement query merging logic
             # For now, we'll create a new QueryBuilder that combines both queries
-            merged_query = merge_queries(@query, scope_query_builder.query)
+            merged_query = merge_queries(self.as(CQL::Query), scope_query_builder.query)
             QueryBuilder(T).new(merged_query, @cache_enabled)
           end
 
           # Helper method to merge two CQL::Query objects
           private def merge_queries(base_query : CQL::Query, scope_query : CQL::Query) : CQL::Query
-            # This is a simplified merge - in a real implementation,
-            # you'd need to properly merge WHERE clauses, ORDER BY, etc.
-            # For now, we'll assume the scope query can be applied on top of the base
-
-            # Start with base query and apply scope modifications
-            merged = base_query
-
-            # Apply scope query conditions
-            # This would need to be implemented based on your CQL::Query API
-            # For now, we'll return the scope query as it likely contains the full logic
-            scope_query
+            # Use the actual merge functionality from CQL::Query
+            base_query.merge(scope_query)
           end
         end
       end
