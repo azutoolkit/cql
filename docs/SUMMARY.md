@@ -39,6 +39,7 @@
     - [Pagination](guides/active-record-with-cql/pagination.md)
   - [CQL Query Builder](guides/cql-query-builder/README.md)
     - [Basic Querying](guides/cql-query-builder/basic-querying.md)
+    - [Advanced Querying](guides/cql-query-builder/advanced-querying.md)
     - [Joins and Relations](guides/cql-query-builder/joins-and-relations.md)
     - [Aggregations](guides/cql-query-builder/aggregations.md)
     - [Query Execution](guides/cql-query-builder/query-execution.md)

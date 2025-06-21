@@ -1,210 +1,63 @@
----
-title: CQL
-icon: database
----
+# CQL Documentation
 
-# CQL
-
-CQL is a powerful library designed to simplify and enhance the management and execution of SQL queries in the Crystal programming language. It provides utilities for building, validating, and executing SQL statements, ensuring better performance and code maintainability.
-
-<figure><img src=".gitbook/assets/cql-banner.png" alt=""><figcaption></figcaption></figure>
-
-## Features
-
-- **Query Builder**: Programmatically create complex SQL queries.
-- **Insert, Update, Delete Operations**: Perform CRUD operations with ease.
-- **Repository Pattern**: Manage your data more effectively using `CQL::Repository(T)`.
-- **Active Record Pattern**: Work with your data models using `CQL::Record(T)`.
-
-## Installation
-
-Add this to your application's `shard.yml`:
-
-```yaml
-dependencies:
-  cql:
-    github: azutoolkit/cql
-```
-
-Then, run the following command to install the dependencies:
-
-```bash
-shards install
-```
+Welcome to the CQL (Crystal Query Language) documentation! This documentation provides a comprehensive guide to using CQL for type-safe, high-performance ORM and query building in Crystal applications.
 
 ## Getting Started
 
-### 1. Define a Schema
+- [Introduction](introduction.md)
+- [Installation](installation.md)
+- [Getting Started Guide](guides/getting-started.md)
 
-Define the schema for your database tables:
+## Core Concepts
 
-```crystal
-AcmeDB2 = CQL::Schema.build(
-  :acme_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]) do
-  table :movies do
-    primary :id, Int64, auto_increment: true
-    text :title
-  end
+- [Schema Definition](core-concepts/schemas.md)
+- [Initializing the Database](core-concepts/initializing-the-database.md)
+- [Altering the Schema](core-concepts/altering-the-schema.md)
+- [Migrations](core-concepts/migrations.md)
+- [CRUD Operations](core-concepts/crud-operations/README.md)
+- [Design Patterns](core-concepts/patterns/README.md)
 
-  table :screenplays do
-    primary :id, Int64, auto_increment: true
-    bigint :movie_id
-    text :content
-  end
+## Active Record with CQL
 
-  table :actors do
-    primary :id, Int64, auto_increment: true
-    text :name
-  end
+- [Defining Models](guides/active-record-with-cql/defining-models.md)
+- [CRUD Operations](guides/active-record-with-cql/crud-operations.md)
+- [Querying](guides/active-record-with-cql/queryable.md)
+- [Complex Queries](guides/active-record-with-cql/complex-queries.md)
+- [Persistence Details](guides/active-record-with-cql/persistence-details.md)
+- [Validations](guides/active-record-with-cql/validations.md)
+- [Callbacks](guides/active-record-with-cql/callbacks.md)
+- [Transactions](guides/active-record-with-cql/transactions.md)
+- [Optimistic Locking](guides/active-record-with-cql/optimistic-locking.md)
+- [Relations](guides/active-record-with-cql/relations/README.md)
+- [Database Migrations](guides/active-record-with-cql/migrations.md)
+- [Scopes](guides/active-record-with-cql/scopes.md)
+- [Pagination](guides/active-record-with-cql/pagination.md)
 
-  table :directors do
-    primary :id, Int64, auto_increment: true
-    bigint :movie_id
-    text :name
-  end
+## CQL Query Builder (New!)
 
-  table :movies_actors do
-    primary :id, Int64, auto_increment: true
-    bigint :movie_id
-    bigint :actor_id
-  end
-end
-```
+- [Basic Querying](guides/cql-query-builder/basic-querying.md)
+- [Advanced Querying](guides/cql-query-builder/advanced-querying.md)
+- [Joins and Relations](guides/cql-query-builder/joins-and-relations.md)
+- [Aggregations](guides/cql-query-builder/aggregations.md)
+- [Query Execution](guides/cql-query-builder/query-execution.md)
+- [Query Optimization](guides/cql-query-builder/query-optimization.md)
 
-### 2. Executing Queries
+## API Reference (Expanded)
 
-With the schema in place, you can start executing queries:
+- [Active Record API](api-reference/active-record-api.md)
+- [Query Builder API](api-reference/query-builder-api.md)
+- [Validation API](api-reference/validation-api.md)
+- [Callback API](api-reference/callback-api.md)
+- [Relation API](api-reference/relation-api.md)
 
-```crystal
-q = AcmeDB.query
-user = q.from(:users).where(id: 1).first!(as: User)
-puts user.name
-```
+## Additional Resources
 
-### 3. Inserting Data
+- [Handling Migrations](guides/handling-migrations.md)
+- [Troubleshooting](troubleshooting.md)
+- [FAQs](faqs.md)
 
-Insert new records into the database:
+---
 
-```crystal
-q = CQL::Query.new(schema)
-q.insert
-  .into(:users)
-  .values(name: "Jane Doe", email: "jane@example.com")
-  .last_insert_id
-```
+For a full table of contents, see [SUMMARY.md](SUMMARY.md).
 
-### 4. Updating Data
-
-Update existing records:
-
-```crystal
-u = AcmeDB.update
-u.table(:users)
-  .set(name: "Jane Smith")
-  .where(id: 1)
-  .commit
-```
-
-### 5. Deleting Data
-
-Delete records from the database:
-
-```crystal
-d = AcmeDB.delete
-d.from(:users).where(id: 1).commit
-```
-
-### 6. Using the Repository Pattern
-
-Utilize the repository pattern for organized data management:
-
-```crystal
-user_repository = CQL::Repository(User, Int64).new(schema, :users)
-
-# Create a new user
-user_repository.create(name: "Jane Doe", email: "jane@example.com")
-
-# Fetch all users
-users = user_repository.all
-users.each { |user| puts user.name }
-
-# Find a user by ID
-user = user_repository.find!(1)
-puts user.name
-
-# Update a user by ID
-user_repository.update(1, name: "Jane Smith")
-```
-
-### 7. Active Record Pattern
-
-Work with your data using the Active Record pattern:
-
-```crystal
-struct Actor < CQL::Record(Int64)
-
-  db_context AcmeDB2, :actors
-
-  getter id : Int64?
-  getter name : String
-
-  def initialize(@name : String)
-  end
-end
-
-struct Movie < CQL::Record(Int64)
-
-  db_context AcmeDB2, :movies
-
-  has_one :screenplay, Screenplay
-  many_to_many :actors, Actor, join_through: :movies_actors
-  has_many :directors, Director, foreign_key: :movie_id
-
-  getter id : Int64?
-  getter title : String
-
-  def initialize(@title : String)
-  end
-end
-
-struct Director < CQL::Record(Int64)
-
-  db_context AcmeDB2, :directors
-
-  getter id : Int64?
-  getter name : String
-  belongs_to :movie, foreign_key: :movie_id
-
-  def initialize(@name : String)
-  end
-end
-
-struct Screenplay < CQL::Record(Int64)
-
-  db_context AcmeDB2, :screenplays
-
-  belongs_to :movie, foreign_key: :movie_id
-
-  getter id : Int64?
-  getter content : String
-
-  def initialize(@movie_id : Int64, @content : String)
-  end
-end
-
-struct MoviesActors < CQL::Record(Int64)
-
-  db_context AcmeDB2, :movies_actors
-
-  getter id : Int64?
-  getter movie_id : Int64
-  getter actor_id : Int64
-
-  has_many :actors, Actor, :actor_id
-
-  def initialize(@movie_id : Int64, @actor_id : Int64)
-  end
-end
-```
+If you are new to CQL, start with the [Getting Started Guide](guides/getting-started.md) or the [Introduction](introduction.md). For advanced usage, explore the CQL Query Builder and API Reference sections.
