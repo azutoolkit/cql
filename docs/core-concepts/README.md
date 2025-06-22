@@ -4,9 +4,36 @@ icon: lightbulb
 
 # Core Concepts
 
-CQL’s core concepts revolve around providing developers with tools to efficiently interact with databases through well-structured APIs. These concepts are fundamental to building and manipulating data models, performing queries, and managing transactions. Here's a high-level overview:
+This section covers the fundamental concepts and building blocks of CQL (Crystal Query Language). Understanding these core concepts is essential for effectively using CQL in your Crystal applications.
 
-* **Schemas:** Define the structure of the database, including tables, columns, and data types.
-* **CRUD Operations:** Simplify creating, reading, updating, and deleting records in the database.
-* **Query Builder:** Enables constructing SQL queries using Crystal code with features like joins and subqueries.
-* **Transactions:** Ensure safe and atomic execution of multiple database operations.
+## What You'll Learn
+
+- **Schema Definition**: How to define your database schema using CQL's DSL
+- **Database Initialization**: Setting up and connecting to your database
+- **Schema Alterations**: Modifying your database structure over time
+- **Migrations**: Managing database schema changes systematically
+- **CRUD Operations**: Creating, reading, updating, and deleting records
+- **Design Patterns**: Different approaches to organizing your data access layer
+- **Cache Statistics**: Monitoring and analyzing query cache performance
+
+## Key Concepts
+
+### Schema Definition
+
+Learn how to define your database schema using CQL's intuitive DSL. Define tables, columns, relationships, and constraints in a type-safe manner.
+
+### Database Operations
+
+Understand how to initialize your database, execute queries, and manage connections efficiently.
+
+### Query Building
+
+Master CQL's query builder for constructing complex SQL queries using Crystal's type system.
+
+### Performance Monitoring
+
+Monitor query cache performance and analyze execution statistics to optimize your application.
+
+---
+
+Start with [Schema Definition](schemas.md) to learn how to define your database structure, then explore the other concepts to build a complete understanding of CQL's capabilities.

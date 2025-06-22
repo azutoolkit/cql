@@ -14,7 +14,7 @@ Migrations allow you to:
 
 ### Real-World Example: Creating and Applying Migrations
 
-Let’s start with a simple example. Suppose we need to add a `users` table to our database with two columns: `name` and `age`.
+Let's start with a simple example. Suppose we need to add a `users` table to our database with two columns: `name` and `age`.
 
 ```crystal
 class CreateUsersTable < CQL::Migration(1)
@@ -149,11 +149,92 @@ puts last_migration
 
 This gives you details about the last migration that was successfully applied.
 
+**Getting Applied Migrations List**
+
+You can get a list of all applied migrations:
+
+```crystal
+applied_migrations = migrator.applied_migrations
+applied_migrations.each do |migration|
+  puts "Applied: #{migration.version}"
+end
+```
+
+**Getting Pending Migrations List**
+
+You can get a list of all pending migrations:
+
+```crystal
+pending_migrations = migrator.pending_migrations
+pending_migrations.each do |migration|
+  puts "Pending: #{migration.version}"
+end
+```
+
+---
+
+#### Advanced Migration Operations
+
+**Rollback to Specific Version**
+
+Rollback all migrations down to a specific version:
+
+```crystal
+# Rollback to version 1
+migrator.down_to(CreateUsersMigration.version)
+
+# Check the last applied migration
+migrator.last.try(&.version).should eq(CreateUsersMigration.version)
+migrator.applied_migrations.map(&.version).should eq([CreateUsersMigration.version])
+```
+
+**Up to Specific Version**
+
+Apply migrations up to a specific version:
+
+```crystal
+# Apply up to version 2
+migrator.up_to(AlterUsersMigration.version)
+
+# Check the last applied migration
+migrator.last.try(&.version).should eq(AlterUsersMigration.version)
+migrator.applied_migrations.map(&.version).should eq([CreateUsersMigration.version, AlterUsersMigration.version])
+```
+
+**Complete Rollback**
+
+Rollback all migrations:
+
+```crystal
+migrator.down
+
+# Verify no migrations are applied
+migrator.last.should eq(nil)
+migrator.applied_migrations.size.should eq(0)
+migrator.applied_migrations.map(&.version).should eq([] of Int32)
+```
+
+**Redo Last Migration**
+
+Redo the last applied migration:
+
+```crystal
+# First apply migrations
+migrator.up
+
+# Then redo the last migration
+migrator.redo
+
+# The migration should still be applied
+migrator.last.try(&.version).should eq(AlterUsersMigration.version)
+migrator.applied_migrations.map(&.version).should eq([CreateUsersMigration.version, AlterUsersMigration.version])
+```
+
 ---
 
 #### Advanced Example: Managing Multiple Migrations
 
-Here’s an example where we define multiple migrations and apply them sequentially:
+Here's an example where we define multiple migrations and apply them sequentially:
 
 ```crystal
 class CreateMoviesTable < CQL::Migration(2)
@@ -194,6 +275,22 @@ migrator.up
 
 - **Versioning** ensures that migrations are applied in the correct order.
 - Each migration can be applied and rolled back independently, offering flexibility in managing your database schema.
+
+---
+
+#### Migration Best Practices
+
+1. **Always include both `up` and `down` methods**: This ensures you can rollback changes if needed.
+
+2. **Use descriptive migration names**: Names should clearly indicate what the migration does.
+
+3. **Test migrations in development**: Always test your migrations in a development environment before applying them to production.
+
+4. **Keep migrations small and focused**: Each migration should make a single, logical change to your schema.
+
+5. **Use version numbers consistently**: Ensure version numbers are sequential and don't conflict.
+
+6. **Backup before major migrations**: Always backup your database before applying major schema changes.
 
 ---
 

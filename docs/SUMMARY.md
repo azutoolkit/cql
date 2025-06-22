@@ -8,6 +8,7 @@
   - [Initializing Schema](core-concepts/initializing-the-database.md)
   - [Altering Schema](core-concepts/altering-the-schema.md)
   - [Migrations](core-concepts/migrations.md)
+  - [Cache Statistics](core-concepts/cache-statistics.md)
   - [CRUD Operations](core-concepts/crud-operations/README.md)
     - [Creating Records](core-concepts/crud-operations/creating-records.md)
     - [Reading Records](core-concepts/crud-operations/reading-records.md)
