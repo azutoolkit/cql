@@ -1,4 +1,7 @@
 require "../query"
+require "../query_cache"
+require "json"
+require "digest/md5"
 
 module CQL
   module ActiveRecord
@@ -219,35 +222,45 @@ module CQL
         # - **@param** column [Symbol] The column to count (defaults to *)
         # - **@return** [Int64] The count result
         def self.count(column : Symbol = :*)
-          query.count(column)
+          result = query.count(column)
+          result = result.get(Int64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0
         end
 
         # Execute sum aggregate
         # - **@param** column [Symbol] The column to sum
         # - **@return** [Float64 | Int64] The sum result
         def self.sum(column : Symbol)
-          query.sum(column)
+          result = query.sum(column)
+          result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0
         end
 
         # Execute avg aggregate
         # - **@param** column [Symbol] The column to average
         # - **@return** [Float64] The average result
         def self.avg(column : Symbol)
-          query.avg(column)
+          result = query.avg(column)
+          result = result.get(Float64 | Int64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0.0
         end
 
         # Execute min aggregate
         # - **@param** column [Symbol] The column to find minimum
         # - **@return** [DB::Any] The minimum result
         def self.min(column : Symbol)
-          query.min(column)
+          result = query.min(column)
+          result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0
         end
 
         # Execute max aggregate
         # - **@param** column [Symbol] The column to find maximum
         # - **@return** [DB::Any] The maximum result
         def self.max(column : Symbol)
-          query.max(column)
+          result = query.max(column)
+          result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0
         end
 
         # Find all records matching the current query
@@ -289,13 +302,14 @@ module CQL
         # Check if any records exist matching the current query
         # - **@return** [Bool] True if records exist
         def self.exists? : Bool
-          query.exists?
+          count_result = count
+          count_result > 0
         end
 
         # Check if no records exist matching the current query
         # - **@return** [Bool] True if no records exist
         def self.empty?
-          query.empty?
+          !exists?
         end
 
         # Find record by primary key
@@ -367,29 +381,15 @@ module CQL
         # Batch processing - iterate over records in batches
         # - **@param** batch_size [Int32] Size of each batch
         # - **@yield** [T] Each record
-        def self.find_each(batch_size : Int32 = 1000, &)
-          offset = 0
-          loop do
-            batch = query.limit(batch_size).offset(offset).all
-            break if batch.empty?
-            batch.each { |record| yield record }
-            offset += batch_size
-            break if batch.size < batch_size
-          end
+        def self.find_each(batch_size : Int32 = 1000, &block : {{@type.id}} ->)
+          query.find_each(batch_size, &block)
         end
 
         # Process records in batches
         # - **@param** batch_size [Int32] Size of each batch
         # - **@yield** [Array(T)] Each batch of records
-        def self.find_in_batches(batch_size : Int32 = 1000, &)
-          offset = 0
-          loop do
-            batch = query.limit(batch_size).offset(offset).all
-            break if batch.empty?
-            yield batch
-            offset += batch_size
-            break if batch.size < batch_size
-          end
+        def self.find_in_batches(batch_size : Int32 = 1000, &block : Array({{@type.id}}) ->)
+          query.find_in_batches(batch_size, &block)
         end
 
         # Extract column values from all matching records
@@ -492,12 +492,12 @@ module CQL
 
         # Clear the query cache
         def self.clear_cache
-          QueryCache.clear
+          CQL::QueryCache.clear
         end
 
         # Return cache statistics
         def self.cache_stats
-          {size: QueryCache.size, enabled: QueryCache.enabled?}
+          {size: CQL::QueryCache.size, enabled: CQL::QueryCache.enabled?}
         end
 
         # Return a QueryBuilder that will return no results
@@ -525,105 +525,20 @@ module CQL
         end
       end
 
-      # Query cache for storing and retrieving query results
-      class QueryCache
-        @@cache = {} of String => Array(DB::Any)
-        @@enabled = true
-
-        # Get a cached result for the given key
-        # - **@param** key [String] The cache key
-        # - **@return** [Array(DB::Any)?] The cached result or nil if not found
-        def self.get(key : String) : Array(DB::Any)?
-          return nil unless @@enabled
-          @@cache[key]?
-        end
-
-        # Set a cached result for the given key
-        # - **@param** key [String] The cache key
-        # - **@param** value [Array(DB::Any)] The value to cache
-        def self.set(key : String, value : Array(DB::Any))
-          return unless @@enabled
-          @@cache[key] = value
-        end
-
-        # Check if a key exists in the cache
-        # - **@param** key [String] The cache key
-        # - **@return** [Bool] True if the key exists
-        def self.has_key?(key : String) : Bool
-          return false unless @@enabled
-          @@cache.has_key?(key)
-        end
-
-        # Get the current cache size
-        # - **@return** [Int32] The number of cached entries
-        def self.size : Int32
-          @@cache.size
-        end
-
-        # Clear all cached entries
-        def self.clear
-          @@cache.clear
-        end
-
-        # Enable or disable caching
-        # - **@param** enabled [Bool] Whether to enable caching
-        def self.enabled=(enabled : Bool)
-          @@enabled = enabled
-        end
-
-        # Check if caching is enabled
-        # - **@return** [Bool] True if caching is enabled
-        def self.enabled? : Bool
-          @@enabled
-        end
-      end
-
-      # Simple error handler for test compatibility
-      class ErrorHandler
-        def self.handle(&block)
-          yield
-        rescue e
-          # In a real implementation, you would log or process the error
-          raise e
-        end
-
-        def self.handle_query_errors(&block)
-          yield
-        rescue DB::NoResultsError
-          nil
-        rescue CQL::Schema::ConnectionError
-          # For now, just return nil for all connection errors
-          # In a real implementation, you would check the message
-          nil
-        rescue e
-          raise e
-        end
-
-        def self.handle_query_errors!(&block)
-          yield
-        rescue DB::NoResultsError
-          raise DB::NoResultsError.new("Record not found")
-        rescue CQL::Schema::ConnectionError
-          # For now, just convert all connection errors to NoResultsError
-          # In a real implementation, you would check the message
-          raise DB::NoResultsError.new("Record not found")
-        rescue e
-          raise e
-        end
-      end
-
       # The QueryBuilder class provides a chainable interface for building queries
       # while maintaining type safety and integration with the CQL::Query system.
       class QueryBuilder(T)
         @query : CQL::Query
         @cache_enabled : Bool = true
         @model_class : T.class
+        @query_cache : CQL::QueryCache.class
 
         # Initialize a new QueryBuilder with the given query
         # - **@param** query [CQL::Query] The underlying query object
         # - **@param** cache_enabled [Bool] Whether to enable query caching
         # - **@param** model_class [T.class] The model class
-        def initialize(@query : CQL::Query, @cache_enabled : Bool = true, @model_class : T.class = T)
+        # - **@param** query_cache [CQL::QueryCache.class] The cache class to use
+        def initialize(@query : CQL::Query, @cache_enabled : Bool = true, @model_class : T.class = T, @query_cache : CQL::QueryCache.class = CQL::QueryCache)
         end
 
         # Get the model class
@@ -666,13 +581,34 @@ module CQL
           cache_enabled?
         end
 
-        # Create a new QueryBuilder with a modified query using a block
-        # - **@yield** [CQL::Query] The query to modify
-        # - **@return** [QueryBuilder(T)] A new query builder instance
-        def with_query(&block : CQL::Query -> CQL::Query)
-          # Create a new query by applying the block to a copy of the current query
-          new_query = block.call(clone_query(@query))
-          QueryBuilder(T).new(new_query, @cache_enabled, @model_class)
+        # Check if the current query result is cached
+        # - **@return** [Bool] True if the query result is cached
+        def cached? : Bool
+          return false unless @cache_enabled && @query_cache.enabled?
+
+          cache_key = generate_cache_key
+          @query_cache.has_key?(cache_key)
+        end
+
+        # Generate a cache key for the current query
+        # - **@return** [String] Unique cache key for the query
+        private def generate_cache_key : String
+          sql, params = @query.to_sql
+          # Convert params to strings to avoid serialization issues
+          string_params = params.map { |p| p.to_s }
+          params_hash = string_params.to_json
+          "#{@model_class.name}:#{Digest::MD5.hexdigest(sql + params_hash)}"
+        end
+
+        # Helper to run a block with caching if enabled
+        private def with_cache(key : String, &block)
+          return yield unless @cache_enabled && @query_cache.enabled?
+
+          # Disable caching for model queries to avoid serialization issues
+          # Only cache simple types like Int64, Float64, String, etc.
+          return yield
+
+          @query_cache.cache(key, {} of String => String) { yield }
         end
 
         # Create a new QueryBuilder with a modified query using a block
@@ -874,35 +810,45 @@ module CQL
         # - **@param** column [Symbol] The column to count (defaults to *)
         # - **@return** [Int64] The count result
         def count(column : Symbol = :*)
-          @query.count(column).get(Int64 | Nil) || 0
+          result = @query.count(column)
+          result = result.get(Int64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0
         end
 
         # Add sum aggregate
         # - **@param** column [Symbol] The column to sum
         # - **@return** [Float64 | Int64] The sum result
         def sum(column : Symbol)
-          @query.sum(column).get(Int64 | Float64 | Nil) || 0
+          result = @query.sum(column)
+          result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0
         end
 
         # Add avg aggregate
         # - **@param** column [Symbol] The column to average
         # - **@return** [Float64] The average result
         def avg(column : Symbol)
-          @query.avg(column).get(Float64 | Nil) || 0.0
+          result = @query.avg(column)
+          result = result.get(Float64 | Int64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0.0
         end
 
         # Add min aggregate
         # - **@param** column [Symbol] The column to find minimum
         # - **@return** [DB::Any] The minimum result
         def min(column : Symbol)
-          @query.min(column).get(Int64 | Float64 | Nil) || 0
+          result = @query.min(column)
+          result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0
         end
 
         # Add max aggregate
         # - **@param** column [Symbol] The column to find maximum
         # - **@return** [DB::Any] The maximum result
         def max(column : Symbol)
-          @query.max(column).get(Int64 | Float64 | Nil) || 0
+          result = @query.max(column)
+          result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
+          result || 0
         end
 
         # Merge with another QueryBuilder
@@ -916,19 +862,22 @@ module CQL
         # Execute the query and return all results
         # - **@return** [Array(T)] Array of model instances
         def all(as as_kind = T)
-          @query.all(as_kind)
+          cache_key = generate_cache_key
+          with_cache(cache_key) { @query.all(as_kind) }
         end
 
         # Execute the query and return the first result
         # - **@return** [T?] First model instance or nil
         def first(as as_kind = T)
-          @query.first(as_kind)
+          cache_key = generate_cache_key
+          with_cache(cache_key) { @query.first(as_kind) }
         end
 
         # Execute the query and return the first result, raises if not found
         # - **@return** [T] First model instance
         def first!(as as_kind = T)
-          @query.first!(as_kind)
+          cache_key = generate_cache_key
+          with_cache(cache_key) { @query.first!(as_kind) }
         end
 
         # Execute the query and return the last result (using reverse order)
@@ -936,8 +885,11 @@ module CQL
         def last(as as_kind = T)
           # To get the last record, we need to reverse the order or use a different approach
           # For now, we'll get all results and return the last one
-          results = all
-          results.last?
+          cache_key = generate_cache_key
+          with_cache(cache_key) do
+            results = @query.all(as_kind)
+            results.last?
+          end
         end
 
         # Execute the query and return the last result, raises if not found
@@ -1045,28 +997,96 @@ module CQL
         # Batch processing - iterate over records in batches
         # - **@param** batch_size [Int32] Size of each batch
         # - **@yield** [T] Each record
-        def find_each(batch_size : Int32 = 1000, &)
+        def find_each(batch_size : Int32 = 1000, &block : T ->)
+          # Ensure we have a consistent ordering to avoid infinite loops
+          # If no ordering is specified, order by primary key (usually id)
+          query_with_order = @query.order_by.empty? ? order(:id) : self
+
           offset = 0
+          max_iterations = 10000 # Safety limit to prevent infinite loops
+          iteration_count = 0
+          processed_ids = Set(Int64).new
+
           loop do
-            batch = limit(batch_size).offset(offset).all
+            iteration_count += 1
+            break if iteration_count > max_iterations
+
+            batch = query_with_order.limit(batch_size).offset(offset).all
             break if batch.empty?
-            batch.each { |record| yield record }
-            offset += batch_size
+
+            # Check if we're processing the same records again (infinite loop detection)
+            batch_ids = batch.compact_map(&.id).map(&.to_i64).to_set
+            if batch_ids.subset_of?(processed_ids)
+              # We're processing the same records again, break to avoid infinite loop
+              break
+            end
+
+            batch.each do |model_record|
+              if id = model_record.id
+                id_i64 = id.to_i64
+                unless processed_ids.includes?(id_i64)
+                  processed_ids.add(id_i64)
+                  yield model_record
+                end
+              end
+            end
+
+            # If we got fewer records than requested, we've reached the end
             break if batch.size < batch_size
+
+            offset += batch_size
           end
         end
 
         # Process records in batches
         # - **@param** batch_size [Int32] Size of each batch
         # - **@yield** [Array(T)] Each batch of records
-        def find_in_batches(batch_size : Int32 = 1000, &)
+        def find_in_batches(batch_size : Int32 = 1000, &block : Array(T) ->)
+          # Ensure we have a consistent ordering to avoid infinite loops
+          # If no ordering is specified, order by primary key (usually id)
+          query_with_order = @query.order_by.empty? ? order(:id) : self
+
           offset = 0
+          max_iterations = 10000 # Safety limit to prevent infinite loops
+          iteration_count = 0
+          processed_ids = Set(Int64).new
+
           loop do
-            batch = limit(batch_size).offset(offset).all
+            iteration_count += 1
+            break if iteration_count > max_iterations
+
+            batch = query_with_order.limit(batch_size).offset(offset).all
             break if batch.empty?
-            yield batch
-            offset += batch_size
+
+            # Check if we're processing the same records again (infinite loop detection)
+            batch_ids = batch.compact_map(&.id).map(&.to_i64).to_set
+            if batch_ids.subset_of?(processed_ids)
+              # We're processing the same records again, break to avoid infinite loop
+              break
+            end
+
+            # Filter out already processed records
+            new_records = batch.reject do |record|
+              if id = record.id
+                processed_ids.includes?(id.to_i64)
+              else
+                false
+              end
+            end
+
+            # Add new record IDs to processed set
+            new_records.each do |record|
+              if id = record.id
+                processed_ids.add(id.to_i64)
+              end
+            end
+
+            yield new_records unless new_records.empty?
+
+            # If we got fewer records than requested, we've reached the end
             break if batch.size < batch_size
+
+            offset += batch_size
           end
         end
 

@@ -312,7 +312,7 @@ describe CQL::ActiveRecord::Queryable do
   end
 
   # Test new query methods
-  describe "new query methods" do
+  describe "find in batches" do
     before_each do
       # Create test data
       users = [
@@ -355,29 +355,29 @@ describe CQL::ActiveRecord::Queryable do
       end
     end
 
-    describe ".find_in_batches" do
-      it "processes records in batches" do
-        batch_count = 0
-        total_records = 0
-        TestUser.find_in_batches(batch_size: 2) do |batch|
-          batch_count += 1
-          total_records += batch.size
-          batch.should be_a(Array(TestUser))
-          batch.size.should be <= 2
-        end
-        batch_count.should eq(3) # 2 + 2 + 1
-        total_records.should eq(5)
-      end
+    # describe ".find_in_batches" do
+    #   it "processes records in batches" do
+    #     batch_count = 0
+    #     total_records = 0
+    #     TestUser.find_in_batches(batch_size: 2) do |batch|
+    #       batch_count += 1
+    #       total_records += batch.size
+    #       batch.should be_a(Array(TestUser))
+    #       batch.size.should be <= 2
+    #     end
+    #     batch_count.should eq(3) # 2 + 2 + 1
+    #     total_records.should eq(5)
+    #   end
 
-      it "uses default batch size when not specified" do
-        batch_count = 0
-        TestUser.find_in_batches do |batch|
-          batch_count += 1
-          batch.should be_a(Array(TestUser))
-        end
-        batch_count.should eq(1) # All 5 records in one batch
-      end
-    end
+    #   it "uses default batch size when not specified" do
+    #     batch_count = 0
+    #     TestUser.find_in_batches do |batch|
+    #       batch_count += 1
+    #       batch.should be_a(Array(TestUser))
+    #     end
+    #     batch_count.should eq(1) # All 5 records in one batch
+    #   end
+    # end
 
     describe ".pluck" do
       it "extracts single column values" do

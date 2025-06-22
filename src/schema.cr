@@ -132,11 +132,6 @@ module CQL
       raise InvalidURIError.new("Invalid URI format")
     end
 
-    # Ensures the database connection is closed when the schema is garbage collected
-    def finalize
-      @db.close
-    end
-
     # Builds the schema. This method creates the tables in the schema.
     #
     # **Example**

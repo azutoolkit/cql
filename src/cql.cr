@@ -10,7 +10,6 @@ require "tallboy"
 
 require "./expression"
 require "./exceptions"
-require "./error_handler"
 require "./converters/*"
 require "./alter_table"
 require "./insert"

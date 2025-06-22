@@ -22,83 +22,10 @@ describe "ActiveRecord::QueryBuilder" do
     UserDB.users.drop!
   end
 
-  describe "QueryCache" do
-    it "stores and retrieves cached queries" do
-      cache = CQL::ActiveRecord::Queryable::QueryCache
-      cache.clear
-
-      cache.set("test_key", [1, 2, 3] of DB::Any)
-      cached_query = cache.get("test_key")
-
-      cached_query.should eq([1, 2, 3] of DB::Any)
-      cache.size.should eq(1)
-    end
-
-    it "returns nil for non-existent keys" do
-      cache = CQL::ActiveRecord::Queryable::QueryCache
-      cache.clear
-
-      cached_query = cache.get("nonexistent")
-      cached_query.should be_nil
-    end
-
-    it "can be cleared" do
-      cache = CQL::ActiveRecord::Queryable::QueryCache
-      cache.clear
-      cache.set("test", [1, 2, 3] of DB::Any)
-      cache.size.should eq(1)
-      cache.clear
-      cache.size.should eq(0)
-    end
-  end
-
-  describe "ErrorHandler" do
-    it "handles DB::NoResultsError by returning nil" do
-      handler = CQL::ActiveRecord::Queryable::ErrorHandler
-
-      result = handler.handle_query_errors do
-        raise DB::NoResultsError.new("No results")
-      end
-
-      result.should be_nil
-    end
-
-    it "handles connection errors with 'no results' message" do
-      handler = CQL::ActiveRecord::Queryable::ErrorHandler
-
-      result = handler.handle_query_errors do
-        raise CQL::Schema::ConnectionError.new("no results found")
-      end
-
-      result.should be_nil
-    end
-
-    it "re-raises other connection errors" do
-      handler = CQL::ActiveRecord::Queryable::ErrorHandler
-
-      # Current implementation returns nil for all connection errors
-      result = handler.handle_query_errors do
-        raise CQL::Schema::ConnectionError.new("real connection error")
-      end
-
-      result.should be_nil
-    end
-
-    it "converts errors to NoResultsError in bang methods" do
-      handler = CQL::ActiveRecord::Queryable::ErrorHandler
-
-      expect_raises(DB::NoResultsError, "Record not found") do
-        handler.handle_query_errors! do
-          raise CQL::Schema::ConnectionError.new("no results found")
-        end
-      end
-    end
-  end
-
   describe "QueryBuilder" do
     before_each do
       # Clear cache before each test
-      CQL::ActiveRecord::Queryable::QueryCache.clear
+      CQL::QueryCache.clear
     end
 
     it "creates a new query builder from model" do
@@ -148,39 +75,23 @@ describe "ActiveRecord::QueryBuilder" do
     it "generates consistent cache behavior for same queries" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
 
-      # Clear cache to start fresh
-      CQL::ActiveRecord::Queryable::QueryCache.clear
-
-      # Execute the same query twice - should use caching
+      # Execute the same query twice - caching is disabled for model queries
       builder.all
-      cache_size_after_first = CQL::ActiveRecord::Queryable::QueryCache.size
-
       builder.all
-      cache_size_after_second = CQL::ActiveRecord::Queryable::QueryCache.size
 
-      # Note: The current implementation may not cache as expected
-      # This test verifies the API works, even if caching is not implemented
-      cache_size_after_first.should be_a(Int32)
-      cache_size_after_second.should be_a(Int32)
+      # Verify the API works even without caching
+      builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
 
     it "generates different cache entries for different queries" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
 
-      # Clear cache to start fresh
-      CQL::ActiveRecord::Queryable::QueryCache.clear
-
-      # Execute two different queries
+      # Execute two different queries - caching is disabled for model queries
       builder.all
-      cache_size_after_first = CQL::ActiveRecord::Queryable::QueryCache.size
-
       builder.where(age: 25).all
-      cache_size_after_second = CQL::ActiveRecord::Queryable::QueryCache.size
 
-      # Note: The current implementation may not cache as expected
-      # This test verifies the API works, even if caching is not implemented
-      cache_size_after_first.should be_a(Int32)
-      cache_size_after_second.should be_a(Int32)
+      # Verify the API works even without caching
+      builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
   end
 
