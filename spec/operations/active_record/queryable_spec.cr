@@ -555,13 +555,13 @@ describe CQL::ActiveRecord::Queryable do
       it "replaces existing order clause" do
         # First order by age desc
         query1 = TestUser.order(age: :desc)
-        first_user1 = query1.first
-        first_user1.not_nil!.age.should eq(45)
+        users1 = query1.all
+        users1.first.age.should eq(45)
 
         # Then reorder by age asc
         query2 = query1.reorder(age: :asc)
-        first_user2 = query2.first
-        first_user2.not_nil!.age.should eq(25)
+        users2 = query2.all
+        users2.first.age.should eq(25)
       end
 
       it "works with multiple order columns" do

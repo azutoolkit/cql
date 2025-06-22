@@ -169,7 +169,7 @@ module CQL
             # This is where we'd need to implement query merging logic
             # For now, we'll create a new QueryBuilder that combines both queries
             merged_query = merge_queries(self.query, scope_query_builder.query)
-            QueryBuilder(T).new(merged_query, @cache_enabled)
+            QueryBuilder(T).new(merged_query, model_class)
           end
 
           # Helper method to merge two CQL::Query objects

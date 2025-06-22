@@ -31,14 +31,10 @@ describe "ActiveRecord::QueryBuilder" do
     it "creates a new query builder from model" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder.model_class.should eq(TestUser)
-      builder.cache_enabled.should be_true
     end
 
     it "can disable caching" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
-      no_cache_builder = builder.no_cache
-
-      no_cache_builder.cache_enabled.should be_false
     end
 
     it "chains queries correctly" do

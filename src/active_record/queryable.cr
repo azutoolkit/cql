@@ -402,8 +402,8 @@ module CQL
         # Extract a single column value from the first matching record
         # - **@param** column [Symbol] The column to extract
         # - **@return** [DB::Any?] The value or nil if no records
-        def self.pick(column : Symbol)
-          query.pick(column)
+        def self.pick(column : Symbol, as as_kind = DB::Any)
+          query.pick(column, as: as_kind)
         end
 
         # Get array of primary key values
@@ -495,11 +495,6 @@ module CQL
           CQL::QueryCache.clear
         end
 
-        # Return cache statistics
-        def self.cache_stats
-          {size: CQL::QueryCache.size, enabled: CQL::QueryCache.enabled?}
-        end
-
         # Return a QueryBuilder that will return no results
         # - **@return** [QueryBuilder(T)] A query builder that returns no results
         def self.none
@@ -523,22 +518,25 @@ module CQL
         def self.size
           query.size
         end
+
+        # Return cache statistics
+        # - **@return** [NamedTuple] Cache statistics including size and enabled status
+        def self.cache_stats : NamedTuple(size: Int32, enabled: Bool)
+          stats = CQL::QueryCache.statistics
+          {size: stats["cache_size"].as(Int32), enabled: stats["enabled"].as(Bool)}
+        end
       end
 
       # The QueryBuilder class provides a chainable interface for building queries
       # while maintaining type safety and integration with the CQL::Query system.
       class QueryBuilder(T)
         @query : CQL::Query
-        @cache_enabled : Bool = true
         @model_class : T.class
-        @query_cache : CQL::QueryCache.class
 
         # Initialize a new QueryBuilder with the given query
         # - **@param** query [CQL::Query] The underlying query object
-        # - **@param** cache_enabled [Bool] Whether to enable query caching
         # - **@param** model_class [T.class] The model class
-        # - **@param** query_cache [CQL::QueryCache.class] The cache class to use
-        def initialize(@query : CQL::Query, @cache_enabled : Bool = true, @model_class : T.class = T, @query_cache : CQL::QueryCache.class = CQL::QueryCache)
+        def initialize(@query : CQL::Query, @model_class : T.class = T)
         end
 
         # Get the model class
@@ -553,7 +551,7 @@ module CQL
           schema = model_class.schema
           table = model_class.table
           query = CQL::Query.new(schema).from(table)
-          new(query, true, model_class)
+          new(query, model_class)
         end
 
         # Get the underlying CQL::Query object
@@ -562,68 +560,19 @@ module CQL
           @query
         end
 
-        # Enable or disable query caching
-        # - **@param** enabled [Bool] Whether to enable caching
-        # - **@return** [QueryBuilder(T)] Self for chaining
-        def cache(enabled : Bool = true)
-          @cache_enabled = enabled
-          self
-        end
-
-        # Check if query caching is enabled
-        # - **@return** [Bool] True if caching is enabled
-        def cache_enabled?
-          @cache_enabled
-        end
-
-        # Alias for test compatibility
-        def cache_enabled
-          cache_enabled?
-        end
-
-        # Check if the current query result is cached
-        # - **@return** [Bool] True if the query result is cached
-        def cached? : Bool
-          return false unless @cache_enabled && @query_cache.enabled?
-
-          cache_key = generate_cache_key
-          @query_cache.has_key?(cache_key)
-        end
-
-        # Generate a cache key for the current query
-        # - **@return** [String] Unique cache key for the query
-        private def generate_cache_key : String
-          sql, params = @query.to_sql
-          # Convert params to strings to avoid serialization issues
-          string_params = params.map { |p| p.to_s }
-          params_hash = string_params.to_json
-          "#{@model_class.name}:#{Digest::MD5.hexdigest(sql + params_hash)}"
-        end
-
-        # Helper to run a block with caching if enabled
-        private def with_cache(key : String, &block)
-          return yield unless @cache_enabled && @query_cache.enabled?
-
-          # Disable caching for model queries to avoid serialization issues
-          # Only cache simple types like Int64, Float64, String, etc.
-          return yield
-
-          @query_cache.cache(key, {} of String => String) { yield }
-        end
-
         # Create a new QueryBuilder with a modified query using a block
         # - **@yield** [CQL::Query] The query to modify
         # - **@return** [QueryBuilder(T)] A new query builder instance
         def with_query(&block)
           # Create a new query by applying the block to a copy of the current query
           new_query = block.call(clone_query(@query))
-          QueryBuilder(T).new(new_query, @cache_enabled, @model_class)
+          QueryBuilder(T).new(new_query, @model_class)
         end
 
         # Clone the current QueryBuilder and apply modifications
         # - **@return** [QueryBuilder(T)] A new query builder instance
         private def clone_builder : QueryBuilder(T)
-          QueryBuilder(T).new(clone_query(@query), @cache_enabled, @model_class)
+          QueryBuilder(T).new(clone_query(@query), @model_class)
         end
 
         # Clone a CQL::Query object since it doesn't have a built-in clone method
@@ -856,40 +805,32 @@ module CQL
         # - **@return** [QueryBuilder(T)] A new merged query builder
         def merge(other : QueryBuilder(T))
           merged_query = @query.merge(other.query)
-          QueryBuilder(T).new(merged_query, @cache_enabled)
+          QueryBuilder(T).new(merged_query, @model_class)
         end
 
         # Execute the query and return all results
         # - **@return** [Array(T)] Array of model instances
         def all(as as_kind = T)
-          cache_key = generate_cache_key
-          with_cache(cache_key) { @query.all(as_kind) }
+          @query.all(as_kind)
         end
 
         # Execute the query and return the first result
         # - **@return** [T?] First model instance or nil
         def first(as as_kind = T)
-          cache_key = generate_cache_key
-          with_cache(cache_key) { @query.first(as_kind) }
+          @query.first(as_kind)
         end
 
         # Execute the query and return the first result, raises if not found
         # - **@return** [T] First model instance
         def first!(as as_kind = T)
-          cache_key = generate_cache_key
-          with_cache(cache_key) { @query.first!(as_kind) }
+          @query.first!(as_kind)
         end
 
         # Execute the query and return the last result (using reverse order)
         # - **@return** [T?] Last model instance or nil
         def last(as as_kind = T)
-          # To get the last record, we need to reverse the order or use a different approach
-          # For now, we'll get all results and return the last one
-          cache_key = generate_cache_key
-          with_cache(cache_key) do
-            results = @query.all(as_kind)
-            results.last?
-          end
+          results = @query.all(as_kind)
+          results.last?
         end
 
         # Execute the query and return the last result, raises if not found
@@ -1105,7 +1046,7 @@ module CQL
         # - **@param** column [Symbol] The column to extract
         # - **@return** [DB::Any?] The value or nil if no records
         def pick(column : Symbol, as as_kind = DB::Any)
-          @query.select(column).limit(1).get(as_kind)
+          @query.select(column).limit(1).first(as_kind)
         end
 
         # Get array of primary key values
@@ -1200,7 +1141,9 @@ module CQL
         # Disable query caching and return a new QueryBuilder
         # - **@return** [QueryBuilder(T)] A new query builder with caching disabled
         def no_cache
-          QueryBuilder(T).new(@query, false, @model_class)
+          new_query = clone_query(@query)
+          new_query.schema.cache_enabled = false
+          QueryBuilder(T).new(new_query, @model_class)
         end
 
         # Return a QueryBuilder that will return no results
@@ -1208,7 +1151,7 @@ module CQL
         def none
           # Create a query with an impossible condition
           none_query = CQL::Query.new(@query.schema)
-          QueryBuilder(T).new(none_query, @cache_enabled, @model_class)
+          QueryBuilder(T).new(none_query, @model_class)
         end
 
         # Check if any records exist

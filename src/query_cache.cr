@@ -1,6 +1,7 @@
 require "json"
 require "digest/md5"
 require "db"
+require "./cache_stats"
 
 module CQL
   # Query cache for storing and retrieving query results
@@ -9,16 +10,27 @@ module CQL
     @@enabled = true
     @@default_ttl = 1.hour
 
+    # Cache statistics
+    @@stats = CacheStats.new
+
     # Cache entry with TTL support
     class CacheEntry
       property value : String # JSON serialized value
       property expires_at : Int64 # Unix timestamp
+      property created_at : Int64 # Unix timestamp
+      property access_count : Int32 # Number of times accessed
 
       def initialize(@value : String, @expires_at : Int64)
+        @created_at = Time.utc.to_unix
+        @access_count = 0
       end
 
       def expired?
         Time.utc.to_unix > @expires_at
+      end
+
+      def increment_access_count
+        @access_count += 1
       end
     end
 
@@ -31,19 +43,33 @@ module CQL
     def self.cache(cache_name : String, params : Hash, ttl : Time::Span = @@default_ttl, &block)
       return yield unless @@enabled
 
+      start_time = Time.monotonic
+      @@stats.total_requests += 1
+
       cache_key = generate_cache_key(cache_name, params)
 
       # Check if cached and not expired
       if cached_entry = @@cache[cache_key]?
         unless cached_entry.expired?
+          cached_entry.increment_access_count
+          @@stats.hits += 1
+          @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
           return JSON.parse(cached_entry.value)
         else
           @@cache.delete(cache_key)
         end
       end
 
-      # Execute block and cache result
+      # Cache miss - execute block and cache result
+      @@stats.misses += 1
+      cache_time = Time.monotonic - start_time
+      @@stats.total_cache_time += cache_time.total_seconds
+
+      execution_start = Time.monotonic
       result = yield
+      execution_time = Time.monotonic - execution_start
+      @@stats.total_execution_time += execution_time.total_seconds
+
       cache_value = serialize_for_cache(result)
       expires_at = Time.utc.to_unix + ttl.total_seconds.to_i64
       @@cache[cache_key] = CacheEntry.new(cache_value, expires_at)
@@ -87,13 +113,22 @@ module CQL
     def self.get(key : String) : Array(DB::Any)?
       return nil unless @@enabled
 
+      start_time = Time.monotonic
+      @@stats.total_requests += 1
+
       if cached_entry = @@cache[key]?
         unless cached_entry.expired?
+          cached_entry.increment_access_count
+          @@stats.hits += 1
+          @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
           return JSON.parse(cached_entry.value).as_a
         else
           @@cache.delete(key)
         end
       end
+
+      @@stats.misses += 1
+      @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
       nil
     end
 
@@ -164,6 +199,80 @@ module CQL
     # - **@return** [Time::Span] Default time to live
     def self.default_ttl : Time::Span
       @@default_ttl
+    end
+
+    # Get cache statistics
+    # - **@return** [CacheStats] Current cache statistics
+    def self.stats : CacheStats
+      @@stats
+    end
+
+    # Get detailed cache statistics as a hash
+    # - **@return** [Hash] Detailed statistics
+    def self.statistics : Hash
+      cleanup_expired_entries
+
+      # Calculate memory usage estimate (rough calculation)
+      memory_usage = @@cache.values.sum { |entry| entry.value.bytesize }
+
+      # Get most accessed entries
+      most_accessed = @@cache.values
+        .sort_by { |entry| entry.access_count }
+        .reverse
+        .first(5)
+        .map { |entry| {access_count: entry.access_count, age: Time.utc.to_unix - entry.created_at} }
+
+      {
+        "enabled" => @@enabled,
+        "total_requests" => @@stats.total_requests,
+        "hits" => @@stats.hits,
+        "misses" => @@stats.misses,
+        "hit_rate" => @@stats.hit_rate.round(2),
+        "miss_rate" => @@stats.miss_rate.round(2),
+        "average_cache_time_ms" => (@@stats.average_cache_time * 1000).round(2),
+        "average_execution_time_ms" => (@@stats.average_execution_time * 1000).round(2),
+        "total_cache_time_ms" => (@@stats.total_cache_time * 1000).round(2),
+        "total_execution_time_ms" => (@@stats.total_execution_time * 1000).round(2),
+        "uptime_seconds" => @@stats.uptime.total_seconds.to_i,
+        "cache_size" => @@cache.size,
+        "memory_usage_bytes" => memory_usage,
+        "most_accessed_entries" => most_accessed,
+        "default_ttl_seconds" => @@default_ttl.total_seconds.to_i
+      }
+    end
+
+    # Reset cache statistics
+    def self.reset_stats
+      @@stats.reset
+    end
+
+    # Get cache performance summary as a formatted string
+    # - **@return** [String] Formatted performance summary
+    def self.performance_summary : String
+      stats = statistics
+
+      String.build do |io|
+        io << "=== CQL Query Cache Performance Summary ===\n"
+        io << "Status: #{stats["enabled"] ? "Enabled" : "Disabled"}\n"
+        io << "Uptime: #{stats["uptime_seconds"]} seconds\n"
+        io << "Total Requests: #{stats["total_requests"]}\n"
+        io << "Cache Hits: #{stats["hits"]} (#{stats["hit_rate"]}%)\n"
+        io << "Cache Misses: #{stats["misses"]} (#{stats["miss_rate"]}%)\n"
+        io << "Cache Size: #{stats["cache_size"]} entries\n"
+        io << "Memory Usage: #{stats["memory_usage_bytes"]} bytes\n"
+        io << "Average Cache Time: #{stats["average_cache_time_ms"]} ms\n"
+        io << "Average Execution Time: #{stats["average_execution_time_ms"]} ms\n"
+        io << "Total Cache Time: #{stats["total_cache_time_ms"]} ms\n"
+        io << "Total Execution Time: #{stats["total_execution_time_ms"]} ms\n"
+        io << "Default TTL: #{stats["default_ttl_seconds"]} seconds\n"
+
+        if most_accessed = stats["most_accessed_entries"].as(Array)
+          io << "\nMost Accessed Entries:\n"
+          most_accessed.each_with_index do |entry, index|
+            io << "  #{index + 1}. Access Count: #{entry["access_count"]}, Age: #{entry["age"]} seconds\n"
+          end
+        end
+      end
     end
   end
 end

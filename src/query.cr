@@ -78,8 +78,11 @@ module CQL
     # ```
     def all(as as_kind)
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.query_all(query, args: params, as: as_kind)
+      cache_key = @schema.generate_cache_key(query, params)
+      @schema.with_cache(cache_key) do
+        @schema.exec_query do |conn|
+          conn.query_all(query, args: params, as: as_kind)
+        end
       end
     end
 
@@ -113,10 +116,13 @@ module CQL
     # => <User:0x00007f8b1b0b3b00 @name="John", @age=30>
     # ```
     def first(as as_kind)
-      limit(1)
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.query_one?(query, args: params, as: as_kind)
+      cache_key = @schema.generate_cache_key(query, params)
+      @schema.with_cache(cache_key) do
+        limit(1)
+        @schema.exec_query do |conn|
+          conn.query_one?(query, args: params, as: as_kind)
+        end
       end
     end
 
@@ -149,8 +155,11 @@ module CQL
     # ```
     def get(as as_kind)
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.query_one?(query, args: params, as: as_kind)
+      cache_key = @schema.generate_cache_key(query, params)
+      @schema.with_cache(cache_key) do
+        @schema.exec_query do |conn|
+          conn.query_one?(query, args: params, as: as_kind)
+        end
       end
     end
 
@@ -165,111 +174,14 @@ module CQL
     # ```
     def each(as as_kind, &)
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.query_each(query, args: params) do |result|
-          yield as_kind.from_rs(result)
+      cache_key = @schema.generate_cache_key(query, params)
+      @schema.with_cache(cache_key) do
+        @schema.exec_query do |conn|
+          conn.query_each(query, args: params) do |result|
+            yield as_kind.from_rs(result)
+          end
         end
       end
-    end
-
-    # Adds a COUNT aggregate function to the query.
-    # - **@param** column [Symbol] The column to count
-    # - **@return** [Query] The query object
-    #
-    # **Example**
-    #
-    # ```
-    # query.count(:id)
-    # => "SELECT COUNT(id) FROM users"
-    # ```
-    def count(column : Symbol = :*)
-      @aggr_columns << if column == :*
-        first_table_alias = @query_tables.first_key? # Use String key
-        raise "Cannot COUNT(*) without a FROM clause" unless first_table_alias
-        table_info = @query_tables[first_table_alias]
-        # Use positional arguments for BaseColumn.new
-        star_col = Column(Int64).new(:*)
-        # Pass String alias
-        Expression::Count.new(Expression::Column.new(star_col, alias_name: table_info[:alias]))
-      else
-        base_col = find_column(column)                            # find_column now handles aliases correctly
-        col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
-        # Pass String alias
-        Expression::Count.new(Expression::Column.new(base_col, alias_name: col_alias))
-      end
-      self
-    end
-
-    # Adds a MAX aggregate function to the query.
-    # - **@param** column [Symbol] The column to find the maximum value of
-    # - **@return** [Query] The query object
-    #
-    # **Example**
-    #
-    # ```
-    # query.from(:users).max(:price)
-    # => "SELECT MAX(price) FROM users"
-    # ```
-    def max(column : Symbol)
-      base_col = find_column(column)
-      col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
-      # Pass String alias
-      @aggr_columns << Expression::Max.new(Expression::Column.new(base_col, alias_name: col_alias))
-      self
-    end
-
-    # Adds a MIN aggregate function to the query.
-    # - **@param** column [Symbol] The column to find the minimum value of
-    # - **@return** [Query] The query object
-    #
-    # **Example**
-    #
-    # ```
-    # query.min(:price)
-    # => "SELECT MIN(price) FROM users"
-    # ```
-    def min(column : Symbol)
-      base_col = find_column(column)
-      col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
-      # Pass String alias
-      @aggr_columns << Expression::Min.new(Expression::Column.new(base_col, alias_name: col_alias))
-      self
-    end
-
-    # Adds a SUM aggregate function to the query.
-    # - **@param** column [Symbol] The column to sum
-    # - **@return** [Query] The query object
-    #
-    # **Example**
-    #
-    # ```
-    # query.sum(:total_amount)
-    # => "SELECT SUM(total_amount) FROM users"
-    # ```
-    def sum(column : Symbol)
-      base_col = find_column(column)
-      col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
-      # Pass String alias
-      @aggr_columns << Expression::Sum.new(Expression::Column.new(base_col, alias_name: col_alias))
-      self
-    end
-
-    # Adds an AVG aggregate function to the query.
-    # - **@param** column [Symbol] The column to average
-    # - **@return** [Query] The query object
-    #
-    # **Example**
-    #
-    # ```
-    # query.avg(:rating)
-    # => "SELECT AVG(rating) FROM users"
-    # ```
-    def avg(column : Symbol)
-      base_col = find_column(column)
-      col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
-      # Pass String alias
-      @aggr_columns << Expression::Avg.new(Expression::Column.new(base_col, alias_name: col_alias))
-      self
     end
 
     # Converts the query into an SQL string and its corresponding parameters.
@@ -774,6 +686,106 @@ module CQL
         distinct?,
         aggr_exprs # Aggregate expressions contain String aliases
       )
+    end
+
+    # Adds a COUNT aggregate function to the query.
+    # - **@param** column [Symbol] The column to count
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.count(:id)
+    # => "SELECT COUNT(id) FROM users"
+    # ```
+    def count(column : Symbol = :*)
+      @aggr_columns << if column == :*
+        first_table_alias = @query_tables.first_key? # Use String key
+        raise "Cannot COUNT(*) without a FROM clause" unless first_table_alias
+        table_info = @query_tables[first_table_alias]
+        # Use positional arguments for BaseColumn.new
+        star_col = Column(Int64).new(:*)
+        # Pass String alias
+        Expression::Count.new(Expression::Column.new(star_col, alias_name: table_info[:alias]))
+      else
+        base_col = find_column(column)                            # find_column now handles aliases correctly
+        col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
+        # Pass String alias
+        Expression::Count.new(Expression::Column.new(base_col, alias_name: col_alias))
+      end
+      self
+    end
+
+    # Adds a MAX aggregate function to the query.
+    # - **@param** column [Symbol] The column to find the maximum value of
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.from(:users).max(:price)
+    # => "SELECT MAX(price) FROM users"
+    # ```
+    def max(column : Symbol)
+      base_col = find_column(column)
+      col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
+      # Pass String alias
+      @aggr_columns << Expression::Max.new(Expression::Column.new(base_col, alias_name: col_alias))
+      self
+    end
+
+    # Adds a MIN aggregate function to the query.
+    # - **@param** column [Symbol] The column to find the minimum value of
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.min(:price)
+    # => "SELECT MIN(price) FROM users"
+    # ```
+    def min(column : Symbol)
+      base_col = find_column(column)
+      col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
+      # Pass String alias
+      @aggr_columns << Expression::Min.new(Expression::Column.new(base_col, alias_name: col_alias))
+      self
+    end
+
+    # Adds a SUM aggregate function to the query.
+    # - **@param** column [Symbol] The column to sum
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.sum(:total_amount)
+    # => "SELECT SUM(total_amount) FROM users"
+    # ```
+    def sum(column : Symbol)
+      base_col = find_column(column)
+      col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
+      # Pass String alias
+      @aggr_columns << Expression::Sum.new(Expression::Column.new(base_col, alias_name: col_alias))
+      self
+    end
+
+    # Adds an AVG aggregate function to the query.
+    # - **@param** column [Symbol] The column to average
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    #
+    # ```
+    # query.avg(:rating)
+    # => "SELECT AVG(rating) FROM users"
+    # ```
+    def avg(column : Symbol)
+      base_col = find_column(column)
+      col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
+      # Pass String alias
+      @aggr_columns << Expression::Avg.new(Expression::Column.new(base_col, alias_name: col_alias))
+      self
     end
 
     # --- Private Methods --- #
