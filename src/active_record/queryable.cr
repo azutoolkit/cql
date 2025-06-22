@@ -1,5 +1,4 @@
 require "../query"
-require "../query_cache"
 require "json"
 require "digest/md5"
 
@@ -492,7 +491,7 @@ module CQL
 
         # Clear the query cache
         def self.clear_cache
-          CQL::QueryCache.clear
+          CQL::Cache::Cache.clear
         end
 
         # Return a QueryBuilder that will return no results
@@ -522,7 +521,7 @@ module CQL
         # Return cache statistics
         # - **@return** [NamedTuple] Cache statistics including size and enabled status
         def self.cache_stats : NamedTuple(size: Int32, enabled: Bool)
-          stats = CQL::QueryCache.statistics
+          stats = CQL::Cache::Cache.statistics
           {size: stats["cache_size"].as(Int32), enabled: stats["enabled"].as(Bool)}
         end
       end
@@ -1142,7 +1141,8 @@ module CQL
         # - **@return** [QueryBuilder(T)] A new query builder with caching disabled
         def no_cache
           new_query = clone_query(@query)
-          new_query.schema.cache_enabled = false
+          # Note: Caching is now handled globally via CQL::Cache::Cache.enabled=
+          # Individual queries cannot disable caching separately
           QueryBuilder(T).new(new_query, @model_class)
         end
 

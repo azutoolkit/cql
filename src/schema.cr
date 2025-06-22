@@ -4,11 +4,9 @@ require "uri"
 require "log"
 require "file_utils" # For Dir.mkdir_p
 require "json"
-require "digest/md5"
 
 # Internal CQL Entry Point
 require "./cql"
-require "./query_cache"
 
 module CQL
   # The `Schema` class represents a database schema.
@@ -72,9 +70,7 @@ module CQL
     # Holds the active connection if currently inside a transaction block
     private getter? active_connection : DB::Connection? = nil
 
-    # Cache-related properties
-    property? cache_enabled : Bool = true
-    property cache_name : String? = nil
+
 
     # Builds a new schema.
     #
@@ -122,61 +118,7 @@ module CQL
       @adapter.dialect
     end
 
-    # Enable or disable query caching
-    # - **@param** enabled [Bool] Whether to enable caching
-    # - **@return** [Schema] Self for chaining
-    def cache(enabled : Bool = true)
-      @cache_enabled = enabled
-      self
-    end
 
-    # Check if query caching is enabled
-    # - **@return** [Bool] True if caching is enabled
-    def cache_enabled?
-      @cache_enabled
-    end
-
-    # Set a custom cache name for this schema
-    # - **@param** name [String] The cache name to use
-    # - **@return** [Schema] Self for chaining
-    def cache_name(name : String)
-      @cache_name = name
-      self
-    end
-
-    # Check if the current query result is cached
-    # - **@return** [Bool] True if the query result is cached
-    def cached?(cache_key) : Bool
-      return false unless @cache_enabled && CQL::QueryCache.enabled?
-      CQL::QueryCache.has_key?(cache_key)
-    end
-
-    # Return cache statistics
-    # - **@return** [NamedTuple] Cache statistics including size and enabled status
-    def cache_stats
-      CQL::QueryCache.statistics
-    end
-
-    # Generate a cache key for the current query
-    # - **@return** [String] Unique cache key for the query
-    def generate_cache_key(sql, params) : String
-      # Convert params to strings to avoid serialization issues
-      string_params = params.map(&.to_s)
-      params_hash = string_params.to_json
-      name = @cache_name || "schema"
-      "#{name}:#{Digest::MD5.hexdigest(sql + params_hash)}"
-    end
-
-    # Helper to run a block with caching if enabled
-    def with_cache(key : String, &)
-      return yield unless @cache_enabled && CQL::QueryCache.enabled?
-
-      # Disable caching for complex objects to avoid serialization issues
-      # Only cache simple types like Int64, Float64, String, etc.
-      return yield
-
-      CQL::QueryCache.cache(key, {} of String => String) { yield }
-    end
 
     # Validates the database URI format
     private def validate_uri!

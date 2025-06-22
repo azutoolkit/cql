@@ -25,7 +25,7 @@ describe "ActiveRecord::QueryBuilder" do
   describe "QueryBuilder" do
     before_each do
       # Clear cache before each test
-      CQL::QueryCache.clear
+      CQL::Cache::Cache.clear
     end
 
     it "creates a new query builder from model" do
