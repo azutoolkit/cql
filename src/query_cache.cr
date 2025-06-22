@@ -15,9 +15,9 @@ module CQL
 
     # Cache entry with TTL support
     class CacheEntry
-      property value : String # JSON serialized value
-      property expires_at : Int64 # Unix timestamp
-      property created_at : Int64 # Unix timestamp
+      property value : String       # JSON serialized value
+      property expires_at : Int64   # Unix timestamp
+      property created_at : Int64   # Unix timestamp
       property access_count : Int32 # Number of times accessed
 
       def initialize(@value : String, @expires_at : Int64)
@@ -40,7 +40,7 @@ module CQL
     # - **@param** ttl [Time::Span] Time to live (default: 1 hour)
     # - **@yield** [Void] Block to execute if cache miss
     # - **@return** [T] The cached or computed result
-    def self.cache(cache_name : String, params : Hash, ttl : Time::Span = @@default_ttl, &block)
+    def self.cache(cache_name : String, params : Hash, ttl : Time::Span = @@default_ttl, &)
       return yield unless @@enabled
 
       start_time = Time.monotonic
@@ -50,13 +50,13 @@ module CQL
 
       # Check if cached and not expired
       if cached_entry = @@cache[cache_key]?
-        unless cached_entry.expired?
+        if cached_entry.expired?
+          @@cache.delete(cache_key)
+        else
           cached_entry.increment_access_count
           @@stats.hits += 1
           @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
           return JSON.parse(cached_entry.value)
-        else
-          @@cache.delete(cache_key)
         end
       end
 
@@ -102,7 +102,7 @@ module CQL
     # - **@return** [String] Unique cache key
     private def self.generate_cache_key(name : String, params : Hash) : String
       # Convert all values to strings to avoid serialization issues
-      string_params = params.transform_values { |v| v.to_s }
+      string_params = params.transform_values(&.to_s)
       params_hash = string_params.to_json
       "#{name}:#{Digest::MD5.hexdigest(params_hash)}"
     end
@@ -117,13 +117,13 @@ module CQL
       @@stats.total_requests += 1
 
       if cached_entry = @@cache[key]?
-        unless cached_entry.expired?
+        if cached_entry.expired?
+          @@cache.delete(key)
+        else
           cached_entry.increment_access_count
           @@stats.hits += 1
           @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
           return JSON.parse(cached_entry.value).as_a
-        else
-          @@cache.delete(key)
         end
       end
 
@@ -150,10 +150,10 @@ module CQL
       return false unless @@enabled
 
       if cached_entry = @@cache[key]?
-        unless cached_entry.expired?
-          return true
-        else
+        if cached_entry.expired?
           @@cache.delete(key)
+        else
+          return true
         end
       end
       false
@@ -173,7 +173,7 @@ module CQL
 
     # Clean up expired cache entries
     def self.cleanup_expired_entries
-      expired_keys = @@cache.select { |key, entry| entry.expired? }.keys
+      expired_keys = @@cache.select { |_, entry| entry.expired? }.keys
       expired_keys.each { |key| @@cache.delete(key) }
     end
 
@@ -213,31 +213,31 @@ module CQL
       cleanup_expired_entries
 
       # Calculate memory usage estimate (rough calculation)
-      memory_usage = @@cache.values.sum { |entry| entry.value.bytesize }
+      memory_usage = @@cache.values.sum(&.value.bytesize)
 
       # Get most accessed entries
       most_accessed = @@cache.values
-        .sort_by { |entry| entry.access_count }
-        .reverse
+        .sort_by!(&.access_count)
+        .reverse!
         .first(5)
         .map { |entry| {access_count: entry.access_count, age: Time.utc.to_unix - entry.created_at} }
 
       {
-        "enabled" => @@enabled,
-        "total_requests" => @@stats.total_requests,
-        "hits" => @@stats.hits,
-        "misses" => @@stats.misses,
-        "hit_rate" => @@stats.hit_rate.round(2),
-        "miss_rate" => @@stats.miss_rate.round(2),
-        "average_cache_time_ms" => (@@stats.average_cache_time * 1000).round(2),
+        "enabled"                   => @@enabled,
+        "total_requests"            => @@stats.total_requests,
+        "hits"                      => @@stats.hits,
+        "misses"                    => @@stats.misses,
+        "hit_rate"                  => @@stats.hit_rate.round(2),
+        "miss_rate"                 => @@stats.miss_rate.round(2),
+        "average_cache_time_ms"     => (@@stats.average_cache_time * 1000).round(2),
         "average_execution_time_ms" => (@@stats.average_execution_time * 1000).round(2),
-        "total_cache_time_ms" => (@@stats.total_cache_time * 1000).round(2),
-        "total_execution_time_ms" => (@@stats.total_execution_time * 1000).round(2),
-        "uptime_seconds" => @@stats.uptime.total_seconds.to_i,
-        "cache_size" => @@cache.size,
-        "memory_usage_bytes" => memory_usage,
-        "most_accessed_entries" => most_accessed,
-        "default_ttl_seconds" => @@default_ttl.total_seconds.to_i
+        "total_cache_time_ms"       => (@@stats.total_cache_time * 1000).round(2),
+        "total_execution_time_ms"   => (@@stats.total_execution_time * 1000).round(2),
+        "uptime_seconds"            => @@stats.uptime.total_seconds.to_i,
+        "cache_size"                => @@cache.size,
+        "memory_usage_bytes"        => memory_usage,
+        "most_accessed_entries"     => most_accessed,
+        "default_ttl_seconds"       => @@default_ttl.total_seconds.to_i,
       }
     end
 

@@ -73,7 +73,7 @@ module CQL
     private getter? active_connection : DB::Connection? = nil
 
     # Cache-related properties
-    property cache_enabled : Bool = true
+    property? cache_enabled : Bool = true
     property cache_name : String? = nil
 
     # Builds a new schema.
@@ -161,14 +161,14 @@ module CQL
     # - **@return** [String] Unique cache key for the query
     def generate_cache_key(sql, params) : String
       # Convert params to strings to avoid serialization issues
-      string_params = params.map { |param| param.to_s }
+      string_params = params.map(&.to_s)
       params_hash = string_params.to_json
       name = @cache_name || "schema"
       "#{name}:#{Digest::MD5.hexdigest(sql + params_hash)}"
     end
 
     # Helper to run a block with caching if enabled
-    def with_cache(key : String, &block)
+    def with_cache(key : String, &)
       return yield unless @cache_enabled && CQL::QueryCache.enabled?
 
       # Disable caching for complex objects to avoid serialization issues

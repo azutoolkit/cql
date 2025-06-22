@@ -4,7 +4,7 @@ module CQL
     property hits : Int64
     property misses : Int64
     property total_requests : Int64
-    property total_cache_time : Float64 # Total time spent on cache operations in seconds
+    property total_cache_time : Float64     # Total time spent on cache operations in seconds
     property total_execution_time : Float64 # Total time spent on block execution in seconds
     property start_time : Int64
 

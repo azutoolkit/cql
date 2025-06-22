@@ -33,10 +33,6 @@ describe "ActiveRecord::QueryBuilder" do
       builder.model_class.should eq(TestUser)
     end
 
-    it "can disable caching" do
-      builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
-    end
-
     it "chains queries correctly" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
 
