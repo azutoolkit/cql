@@ -30,7 +30,6 @@ This central README provides a high-level introduction. For in-depth information
   - [`many_to_many`](./relations/manytomany.md) (covers `has_and_belongs_to_many`)
 - **[Database Migrations](./migrations.md)**: Manage your database schema changes over time.
 - **[Scopes](./scopes.md)**: Define reusable query constraints for cleaner and more readable code.
-- **[Pagination](./pagination.md)**: Easily paginate query results.
 
 ---
 

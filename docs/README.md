@@ -2,6 +2,8 @@
 
 Welcome to the CQL (Crystal Query Language) documentation! This documentation provides a comprehensive guide to using CQL for type-safe, high-performance ORM and query building in Crystal applications.
 
+**Note**: This documentation only covers features that have been fully tested in the CQL test suite. All examples and functionality described here are verified to work correctly.
+
 ## Getting Started
 
 - [Introduction](introduction.md)
@@ -31,16 +33,10 @@ Welcome to the CQL (Crystal Query Language) documentation! This documentation pr
 - [Relations](guides/active-record-with-cql/relations/README.md)
 - [Database Migrations](guides/active-record-with-cql/migrations.md)
 - [Scopes](guides/active-record-with-cql/scopes.md)
-- [Pagination](guides/active-record-with-cql/pagination.md)
 
-## CQL Query Builder (New!)
+## Repository Pattern
 
-- [Basic Querying](guides/cql-query-builder/basic-querying.md)
-- [Advanced Querying](guides/cql-query-builder/advanced-querying.md)
-- [Joins and Relations](guides/cql-query-builder/joins-and-relations.md)
-- [Aggregations](guides/cql-query-builder/aggregations.md)
-- [Query Execution](guides/cql-query-builder/query-execution.md)
-- [Query Optimization](guides/cql-query-builder/query-optimization.md)
+- [Repository Pattern](core-concepts/patterns/repository.md)
 
 ## Additional Resources
 
@@ -52,4 +48,4 @@ Welcome to the CQL (Crystal Query Language) documentation! This documentation pr
 
 For a full table of contents, see [SUMMARY.md](SUMMARY.md).
 
-If you are new to CQL, start with the [Getting Started Guide](guides/getting-started.md) or the [Introduction](introduction.md). For advanced usage, explore the CQL Query Builder and API Reference sections.
+If you are new to CQL, start with the [Getting Started Guide](guides/getting-started.md) or the [Introduction](introduction.md). For advanced usage, explore the Active Record patterns and Repository pattern sections.

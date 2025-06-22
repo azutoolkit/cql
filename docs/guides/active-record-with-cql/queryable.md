@@ -76,11 +76,6 @@ User.limit(10)
 
 # Skip first 20 records and get next 10
 User.offset(20).limit(10)
-
-# Common pagination pattern
-page = 2
-per_page = 10
-User.offset((page - 1) * per_page).limit(per_page)
 ```
 
 ### `select`
@@ -356,31 +351,6 @@ User.join(Post) { users.id == posts.user_id }
               count(posts.id).as("post_count"),
               average(posts.view_count).as("avg_views")] }
     .having { count(posts.id) >= 3 }
-```
-
-### Pagination with Complex Queries
-
-Combine pagination with other query methods.
-
-```crystal
-# Paginated search with sorting
-def search_users(query, page = 1, per_page = 20)
-  User.where { (name.like("%#{query}%")) |
-              (email.like("%#{query}%")) }
-      .order(:name)
-      .offset((page - 1) * per_page)
-      .limit(per_page)
-end
-
-# Paginated join with conditions
-def recent_user_posts(user_id, page = 1, per_page = 10)
-  User.join(Post) { users.id == posts.user_id }
-      .where(users.id: user_id)
-      .where { posts.created_at > 1.month.ago }
-      .order { posts.created_at.desc }
-      .offset((page - 1) * per_page)
-      .limit(per_page)
-end
 ```
 
 ### Subqueries

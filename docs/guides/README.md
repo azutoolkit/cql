@@ -12,7 +12,7 @@ Welcome to the CQL Guides section! Here you'll find practical, focused documenta
 - **Querying**: Explore the powerful query interface, including chainable queries, aggregations, and advanced filtering.
 - **Migrations**: Manage your database schema changes over time with CQL's migration system.
 - **Relationships**: Understand and implement associations like `belongs_to`, `has_one`, `has_many`, and `many_to_many`.
-- **Other Topics**: Find guides on pagination, scopes, callbacks, validations, and more.
+- **Other Topics**: Find guides on scopes, callbacks, validations, and more.
 
 Each guide is organized to be self-contained and practical, with code examples and explanations tailored for Crystal developers.
 

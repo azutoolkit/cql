@@ -118,23 +118,6 @@ User.query.with(:user_stats) {
 
 ---
 
-## Pagination with Complex Queries
-
-Combine pagination with other query methods:
-
-```crystal
-# Paginated search with sorting
-page = 2
-per_page = 20
-users = User.query.where { name.like("%search%") }
-                .order(:name)
-                .offset((page - 1) * per_page)
-                .limit(per_page)
-                .all(User)
-```
-
----
-
 ## Best Practices for Complex Queries
 
 - Use table aliases for clarity in multi-join queries.
