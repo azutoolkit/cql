@@ -80,9 +80,7 @@ struct User
   end
 
   private def record_login_time
-    # Hypothetical: this callback might be triggered indirectly
-    # if an update operation is intended to signify a login.
-    # More commonly, you'd set this explicitly.
+    # This callback runs before updating an existing user
     self.last_logged_in_at = Time.utc
     true
   end
@@ -157,7 +155,11 @@ else
 end
 ```
 
-`after_*` callbacks do not have the power to halt the chain, as the primary action has already completed.
+**Important Notes:**
+
+- `after_*` callbacks do not have the power to halt the chain, as the primary action has already completed.
+- Only explicit `false` return values halt the chain. `nil` and other falsy values do not halt execution.
+- Multiple `before_*` callbacks can be registered, and any of them can halt the chain.
 
 ---
 
@@ -165,7 +167,7 @@ end
 
 When multiple callbacks are registered for the same event, they are executed in the order they were defined in the model.
 
-CQL aims to follow a similar callback order to other popular ORMs like Rails Active Record during the `save` process:
+CQL follows a specific callback order during the `save` process:
 
 1. `before_validation`
 2. Validations are run (`validate` method)
@@ -184,13 +186,204 @@ For `destroy`:
 2. Database operation (DELETE)
 3. `after_destroy`
 
+**Example showing the complete callback order:**
+
+```crystal
+struct TestUser
+  include CQL::ActiveRecord::Model(Int32)
+  db_context UserDB, :users
+
+  property name : String
+  property email : String
+
+  # Register callbacks in the order they should execute
+  before_validation :log_before_validation
+  after_validation :log_after_validation
+  before_save :log_before_save
+  before_create :log_before_create
+  after_create :log_after_create
+  before_update :log_before_update
+  after_update :log_after_update
+  after_save :log_after_save
+  before_destroy :log_before_destroy
+  after_destroy :log_after_destroy
+
+  def initialize(@name, @email)
+  end
+
+  # Callback implementations that log their execution
+  private def log_before_validation
+    puts "before_validation"
+    true
+  end
+
+  private def log_after_validation
+    puts "after_validation"
+    true
+  end
+
+  private def log_before_save
+    puts "before_save"
+    true
+  end
+
+  private def log_before_create
+    puts "before_create"
+    true
+  end
+
+  private def log_after_create
+    puts "after_create"
+    true
+  end
+
+  private def log_before_update
+    puts "before_update"
+    true
+  end
+
+  private def log_after_update
+    puts "after_update"
+    true
+  end
+
+  private def log_after_save
+    puts "after_save"
+    true
+  end
+
+  private def log_before_destroy
+    puts "before_destroy"
+    true
+  end
+
+  private def log_after_destroy
+    puts "after_destroy"
+    true
+  end
+end
+
+# When creating a new user:
+user = TestUser.new("John", "john@example.com")
+user.save!
+# Output:
+# before_validation
+# after_validation
+# before_save
+# before_create
+# after_create
+# after_save
+
+# When updating an existing user:
+user.name = "Jane"
+user.save!
+# Output:
+# before_validation
+# after_validation
+# before_save
+# before_update
+# after_update
+# after_save
+
+# When destroying a user:
+user.delete!
+# Output:
+# before_destroy
+# after_destroy
+```
+
 ---
 
-## Use Cases
+## Multiple Callbacks and Halting
+
+You can register multiple callbacks for the same event, and any of them can halt the chain:
+
+```crystal
+struct User
+  include CQL::ActiveRecord::Model(Int32)
+  db_context UserDB, :users
+
+  property name : String
+  property email : String
+  property status : String
+
+  def initialize(@name, @email)
+    @status = "pending"
+  end
+
+  # Multiple before_save callbacks
+  before_save :normalize_data
+  before_save :check_permissions
+  before_save :set_timestamps
+
+  private def normalize_data
+    self.name = name.strip
+    self.email = email.downcase
+    true
+  end
+
+  private def check_permissions
+    # This callback can halt the save
+    if status == "banned"
+      errors.add(:status, "banned users cannot be saved")
+      return false
+    end
+    true
+  end
+
+  private def set_timestamps
+    # This callback won't run if check_permissions returns false
+    self.updated_at = Time.utc
+    true
+  end
+end
+
+# This will halt at check_permissions
+user = User.new("John", "john@example.com")
+user.status = "banned"
+user.save # Returns false, set_timestamps never runs
+```
+
+---
+
+## Use Cases and Best Practices
+
+### Common Use Cases
 
 - **Data Manipulation**: Normalize data (e.g., downcasing emails), set default values, generate tokens.
 - **Lifecycle Management**: Update related objects, log changes, manage state transitions.
 - **Notifications**: Send emails or push notifications after certain events (e.g., `after_create`).
 - **Conditional Logic**: A callback method can contain logic to decide if it should perform an action, or even halt the entire operation.
+
+### Best Practices
+
+1. **Keep callbacks simple**: Callbacks should be focused and not contain complex business logic.
+
+2. **Return values matter**: Always return `true` from callbacks unless you specifically want to halt the chain.
+
+3. **Use private methods**: Make callback methods private to indicate they're internal to the model.
+
+4. **Avoid side effects**: Be careful with callbacks that modify other objects or make external API calls.
+
+5. **Test callbacks**: Always test your callbacks to ensure they work as expected and don't cause unexpected behavior.
+
+6. **Consider alternatives**: For complex logic, consider using service objects or other patterns instead of callbacks.
+
+### Anti-patterns to Avoid
+
+```crystal
+# ❌ Don't put complex business logic in callbacks
+before_save :process_complex_business_logic
+
+# ❌ Don't make external API calls in callbacks without error handling
+after_create :send_external_api_request
+
+# ❌ Don't modify other objects in callbacks without careful consideration
+after_save :update_related_objects
+
+# ✅ Do keep callbacks simple and focused
+before_save :normalize_email
+after_create :send_welcome_email
+```
 
 Callbacks are a powerful tool for adding behavior to your models without cluttering your controller or service logic. However, use them judiciously, as complex callback chains can sometimes make debugging harder.
