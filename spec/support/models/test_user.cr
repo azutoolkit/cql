@@ -8,6 +8,8 @@ class TestUser
   property email : String
   property age : Int32 = 0
   property password : String? = nil
+  property created_at : Time?
+  property updated_at : Time?
   @[DB::Field(ignore: true)]
   property password_confirmation : String? = nil
   @[DB::Field(ignore: true)]

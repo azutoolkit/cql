@@ -9,7 +9,8 @@ UserDB = CQL::Schema.define(
     column :email, String
     column :age, Int32
     column :password, String
-    timestamps
+    timestamp :created_at, null: true
+    timestamp :updated_at, null: true
   end
 
   table :posts do
@@ -42,18 +43,21 @@ UserDB = CQL::Schema.define(
     primary :id, Int32
     column :title, String
     column :release_year, Int32
+    timestamps
   end
 
   table :actors do
     primary :id, Int32
     column :name, String
     column :age, Int32
+    timestamps
   end
 
   table :movies_actor do
     primary :id, Int32
     column :movie_id, Int32
     column :actor_id, Int32
+    timestamps
     foreign_key [:movie_id], references: :movies, references_columns: [:id]
     foreign_key [:actor_id], references: :actors, references_columns: [:id]
   end
