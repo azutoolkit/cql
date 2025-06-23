@@ -34,12 +34,12 @@ module CQL::ActiveRecord::Relations
 
       # Define an instance variable to memoize the collection
       @[DB::Field(ignore: true)]
-      @_{{name.id}} : CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk)?
+      @{{name.id}} : CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk)?
 
       # Enhanced getter that memoizes the collection with proper error handling
       @[DB::Field(ignore: true)]
       def {{name.id}} : CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk)
-        return @_{{name.id}}.not_nil! if @_{{name.id}}
+        return @{{name.id}}.not_nil! if @{{name.id}}
 
         parent_id = safe_id(self, Pk)
 
@@ -55,7 +55,7 @@ module CQL::ActiveRecord::Relations
           scoped_query = base_query
         {% end %}
 
-        @_{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
+        @{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
           key: {{fk}},
           id: parent_id,
           cascade: ({{dependent}} == :destroy || {{dependent}} == :delete_all),
@@ -67,23 +67,23 @@ module CQL::ActiveRecord::Relations
 
       # Method to reload the association and clear the memoized value
       def reload_{{name.id}} : CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk)
-        @_{{name.id}} = nil
+        @{{name.id}} = nil
         {{name.id}}
       end
 
       # Check if the association is loaded
       def {{name.id}}_loaded? : Bool
-        !@_{{name.id}}.nil? && @_{{name.id}}.not_nil!.loaded?
+        !@{{name.id}}.nil? && @{{name.id}}.not_nil!.loaded?
       end
 
       # Clear the memoized association (useful for testing)
       def clear_{{name.id}}_cache
-        @_{{name.id}} = nil
+        @{{name.id}} = nil
       end
 
       # Handle dependent associations when parent is destroyed
       def handle_{{name.id}}_dependency
-        return unless @_{{name.id}} # Only process if association was accessed
+        return unless @{{name.id}} # Only process if association was accessed
 
         collection = {{name.id}}
 
@@ -109,29 +109,25 @@ module CQL::ActiveRecord::Relations
 
       # Count associated records without loading them
       def {{name.id}}_count : Int64
-        return @_{{name.id}}.not_nil!.size.to_i64 if @_{{name.id}} && @_{{name.id}}.not_nil!.loaded?
+        return @{{name.id}}.not_nil!.size.to_i64 if @{{name.id}} && @{{name.id}}.not_nil!.loaded?
 
         parent_id = safe_id(self, Pk)
 
-                 safe_db_operation do
-           build_query({{type.id}}).where({ {{fk}} => parent_id }).count
-         end
+        safe_db_operation do
+          build_query({{type.id}}).where({ {{fk}} => parent_id }).count
+        end
       end
 
       # Check if any associated records exist without loading them
       def {{name.id}}_any? : Bool
-        return !@_{{name.id}}.not_nil!.empty? if @_{{name.id}} && @_{{name.id}}.not_nil!.loaded?
+        return !@{{name.id}}.not_nil!.empty? if @{{name.id}} && @{{name.id}}.not_nil!.loaded?
 
         parent_id = safe_id(self, Pk)
 
-                 safe_db_operation do
-           begin
-             build_query({{type.id}}).where({ {{fk}} => parent_id }).limit(1).first({{type.id}})
-             true
-           rescue DB::NoResultsError
-             false
-           end
-         end
+        safe_db_operation do
+          count_result = build_query({{type.id}}).where({ {{fk}} => parent_id }).count.get(Int64?)
+          (count_result || 0_i64) > 0_i64
+        end
       end
 
       # Create associated records in batch
@@ -148,7 +144,7 @@ module CQL::ActiveRecord::Relations
            end
 
           # Clear cache to ensure fresh data on next access
-          @_{{name.id}} = nil
+          @{{name.id}} = nil
 
           created_records
         end

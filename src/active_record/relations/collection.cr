@@ -30,7 +30,6 @@ module CQL::ActiveRecord::Relations
     @target_table : Symbol
     @loaded : Bool = false
     @dependent : Symbol = :nullify
-    forward_missing_to @records
 
     # Initialize the collection class for a one-to-many relationship
     # - **param** : key (Symbol) - The foreign key in the target table (e.g., :user_id)
@@ -88,6 +87,24 @@ module CQL::ActiveRecord::Relations
     def all : Array(Target)
       load_records unless @loaded
       @records
+    end
+
+    # Execute a query and return results of specified type
+    # This is used for method chaining with where, limit, offset, etc.
+    # - **param** : type (Class) - The model type to return
+    # - **return** : Array(T)
+    #
+    # **Example**
+    #
+    # ```
+    # user.posts.offset(2).all(Post)
+    # => [#<Post:0x00007f8b3b1b3f00 @id=3, @title="Post 3">]
+    # ```
+    def all(type : T.class) : Array(T) forall T
+      # This method should not be called on the collection directly
+      # It's only available after chaining query methods
+      load_records unless @loaded
+      @records.as(Array(T))
     end
 
     # Reloads the association records from the database
@@ -232,7 +249,7 @@ module CQL::ActiveRecord::Relations
       return @records.size.to_i64 if @loaded
 
       safe_db_operation do
-        @query.where({@key => @id}).count
+        @query.where({@key => @id}).count.get(Int64?) || 0_i64
       end
     end
 
@@ -403,6 +420,7 @@ module CQL::ActiveRecord::Relations
 
       if @loaded
         @records.each(&.attributes({@key => nil}))
+        @records.clear  # Clear the collection since records are no longer associated
       end
 
       result
@@ -468,8 +486,8 @@ module CQL::ActiveRecord::Relations
     # - **param** : column (Symbol)
     # - **param** : direction (Symbol) - :asc or :desc
     # - **return** : CQL::Query
-    def order(column : Symbol, direction : Symbol = :asc)
-      @query.where({@key => @id}).order(column, direction)
+    def order(**order_by)
+      @query.where({@key => @id}).order(**order_by)
     end
 
     # Clears all associated records from the parent record
@@ -516,6 +534,101 @@ module CQL::ActiveRecord::Relations
     def includes?(record : Target) : Bool
       load_records unless @loaded
       @records.any? { |local_record| local_record.id == record.id }
+    end
+
+    # Explicitly implement Enumerable methods that use blocks to avoid forwarding issues
+
+    # Map over the collection
+    # - **param** : block (Block(Target, U))
+    # - **return** : Array(U)
+    def map(&block : Target -> U) forall U
+      load_records unless @loaded
+      @records.map(&block)
+    end
+
+    # Select records matching the given block
+    # - **param** : block (Block(Target, Bool))
+    # - **return** : Array(Target)
+    def select(&block : Target -> Bool)
+      load_records unless @loaded
+      @records.select(&block)
+    end
+
+    # Reject records matching the given block
+    # - **param** : block (Block(Target, Bool))
+    # - **return** : Array(Target)
+    def reject(&block : Target -> Bool)
+      load_records unless @loaded
+      @records.reject(&block)
+    end
+
+    # Find the first record matching the given block
+    # - **param** : block (Block(Target, Bool))
+    # - **return** : Target?
+    def find(&block : Target -> Bool)
+      load_records unless @loaded
+      @records.find(&block)
+    end
+
+    # Check if any record matches the given block
+    # - **param** : block (Block(Target, Bool))
+    # - **return** : Bool
+    def any?(&block : Target -> Bool)
+      load_records unless @loaded
+      @records.any?(&block)
+    end
+
+    # Check if all records match the given block
+    # - **param** : block (Block(Target, Bool))
+    # - **return** : Bool
+    def all?(&block : Target -> Bool)
+      load_records unless @loaded
+      @records.all?(&block)
+    end
+
+    # Get element at index, returns nil if out of bounds
+    # - **param** : index (Int32)
+    # - **return** : Target?
+    def []?(index : Int32)
+      load_records unless @loaded
+      @records[index]?
+    end
+
+    # Get element at index, raises if out of bounds
+    # - **param** : index (Int32)
+    # - **return** : Target
+    def [](index : Int32)
+      load_records unless @loaded
+      @records[index]
+    end
+
+    # Convert to array
+    # - **return** : Array(Target)
+    def to_a
+      load_records unless @loaded
+      @records.dup
+    end
+
+    # Each with index
+    # - **param** : block (Block(Target, Int32))
+    # - **return** : Nil
+    def each_with_index(&block : Target, Int32 ->)
+      load_records unless @loaded
+      @records.each_with_index(&block)
+    end
+
+    # Map with index
+    # - **param** : block (Block(Target, Int32, U))
+    # - **return** : Array(U)
+    def map_with_index(&block : Target, Int32 -> U) forall U
+      load_records unless @loaded
+      @records.map_with_index(&block)
+    end
+
+    # Get the length/size of the collection
+    # - **return** : Int32
+    def length
+      size
     end
 
     # Add multiple records to the collection

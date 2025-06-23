@@ -257,6 +257,9 @@ module CQL
             .where({@key => @id})
             .commit
         end
+
+        # Clear internal state since associations are gone
+        @records.clear if @loaded
       end
 
       # Build a new target record but don't save it or create association

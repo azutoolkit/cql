@@ -148,10 +148,15 @@ module CQL
         # Create a new record with given attributes
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
         # - **@return** [PrimaryKey] The ID of the new record
+        # - **@raise** [ValidationError] If validation fails
         #
         # **Example** Creating a new record
         #
         def create!
+          # Validate before creating
+          validate!
+
+          # Create the record using the class method
           {{@type.id}}.create!(self)
         end
       end

@@ -127,8 +127,10 @@ module CQL::ActiveRecord::Relations
         {% end %}
 
         safe_db_operation do
-          current_record{% unless optional %}.not_nil!{% end %}.update!(**attributes)
-          current_record{% unless optional %}.not_nil!{% end %}
+          record = current_record{% unless optional %}.not_nil!{% end %}
+          record.attributes(**attributes)
+          record.save!
+          record
         end
       end
 

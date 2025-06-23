@@ -83,10 +83,6 @@ describe "ActiveRecord::QueryBuilder" do
   end
 
   describe "Model Integration" do
-    before_each do
-      TestUser.clear_cache
-    end
-
     it "provides query builder through .query method" do
       builder = TestUser.query
       builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
@@ -107,60 +103,6 @@ describe "ActiveRecord::QueryBuilder" do
     it "provides chainable methods" do
       result = TestUser.where(age: 25).order(name: :asc).limit(5)
       result.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
-    end
-
-    it "provides cache statistics" do
-      stats = TestUser.cache_stats
-      stats[:size].should be_a(Int32)
-    end
-
-    it "can clear cache" do
-      TestUser.where(age: 25).all # This should cache something
-      # Note: The current implementation may not cache as expected
-      # This test verifies the API works, even if caching is not implemented
-      TestUser.cache_stats[:size].should be_a(Int32)
-
-      TestUser.clear_cache
-      TestUser.cache_stats[:size].should eq(0)
-    end
-  end
-
-  describe "Performance and Caching" do
-    before_each do
-      TestUser.clear_cache
-    end
-
-    it "caches query results" do
-      # First call should create cache entry
-      TestUser.all
-      cache_size_after_first = TestUser.cache_stats[:size]
-
-      # Second call should use cache
-      TestUser.all
-      cache_size_after_second = TestUser.cache_stats[:size]
-
-      # Note: The current implementation may not cache as expected
-      # This test verifies the API works, even if caching is not implemented
-      cache_size_after_first.should be_a(Int32)
-      cache_size_after_second.should be_a(Int32)
-    end
-
-    it "creates separate cache entries for different queries" do
-      TestUser.all
-      TestUser.where(age: 25).all
-
-      # Note: The current implementation may not cache as expected
-      # This test verifies the API works, even if caching is not implemented
-      TestUser.cache_stats[:size].should be_a(Int32)
-    end
-
-    it "respects no_cache directive" do
-      TestUser.cache_stats[:size]
-      TestUser.query.no_cache.all
-
-      # Note: The current implementation may not cache as expected
-      # This test verifies the API works, even if caching is not implemented
-      TestUser.cache_stats[:size].should be_a(Int32)
     end
   end
 

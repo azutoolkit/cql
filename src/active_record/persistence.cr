@@ -12,10 +12,7 @@ module CQL
         # ```
         def reload!
           record = {{@type.id}}.find!(id!)
-
-          {% for ivar in @type.instance_vars %}
-            self.@{{ ivar }} = record.{{ ivar }}
-          {% end %}
+          self.attributes(record.attributes)
           self
         end
 

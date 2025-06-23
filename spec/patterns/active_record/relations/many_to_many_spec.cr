@@ -13,9 +13,8 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
     UserDB.movies.drop!
   end
 
-  movie = Movie.new("The Matrix", 1999)
-
   it "returns the associated actors" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor1 = Actor.new(
@@ -49,6 +48,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "creates a new associated actor" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor = movie.actors.create(
@@ -69,6 +69,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "creates multiple associated actors" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     movie.actors.create(
@@ -89,6 +90,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "returns empty array when no associated actors exist" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
     movie.actors.reload
     movie.actors.should be_a(CQL::ActiveRecord::Relations::ManyCollection(Actor, MoviesActor, Int32))
@@ -96,6 +98,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "deletes all associated actors" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor1 = Actor.new(
@@ -126,6 +129,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "counts associated actors" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor1 = Actor.new(
@@ -156,6 +160,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "finds actors by attributes" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor1 = Actor.new(
@@ -187,6 +192,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "checks if actor exists by attributes" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor = Actor.new(
@@ -207,6 +213,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "deletes a specific actor" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor = Actor.new(
@@ -226,10 +233,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "deletes an actor by id" do
-    movie = Movie.new(
-      title: "The Matrix",
-      release_year: 1999
-    )
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor = Actor.new(
@@ -249,6 +253,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "sets actors by ids" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor1 = Actor.new(
@@ -271,6 +276,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "reloads actors after changes" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor = Actor.new(
@@ -298,10 +304,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "returns actor ids" do
-    movie = Movie.new(
-      title: "The Matrix",
-      release_year: 1999
-    )
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor1 = Actor.new(
@@ -331,6 +334,7 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
   end
 
   it "cascades deletion when cascade option is true" do
+    movie = Movie.new("The Matrix", 1999)
     movie.create!
 
     actor = Actor.new(

@@ -514,8 +514,6 @@ module CQL
         def self.size
           query.size
         end
-
-
       end
 
       # The QueryBuilder class provides a chainable interface for building queries

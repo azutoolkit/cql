@@ -36,7 +36,7 @@ class TestUser
   after_destroy :do_after_destroy
 
   has_one :profile, UserProfile
-  has_many :posts, Post, foreign_key: :user_id
+  has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
 
   def initialize(@name, @email, @age = 0, @password = nil, @password_confirmation = nil)
   end

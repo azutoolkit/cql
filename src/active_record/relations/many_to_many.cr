@@ -135,6 +135,7 @@ module CQL::ActiveRecord::Relations
              .from({{join_class}}.table)
              .where({ :{{fk}} => parent_id })
              .count
+             .get(Int64?) || 0_i64
          end
       end
 
@@ -208,7 +209,11 @@ module CQL::ActiveRecord::Relations
       end
 
       # Add a single record to the association
-      def add_{{name.id.stringify.id}}(record : {{klass.id}}) : Bool
+      {%
+        name_str = name.id.stringify
+        singular_name = name_str.ends_with?("s") ? name_str[0..-2] : name_str
+      %}
+      def add_{{singular_name.id}}(record : {{klass.id}}) : Bool
         {{name.id}} << record
         true
       rescue ex : RelationError
@@ -216,7 +221,7 @@ module CQL::ActiveRecord::Relations
       end
 
       # Remove a single record from the association
-      def remove_{{name.id.stringify.id}}(record : {{klass.id}}) : Bool
+      def remove_{{singular_name.id}}(record : {{klass.id}}) : Bool
         result = {{name.id}}.delete(record)
         !result.nil?
       end
