@@ -356,7 +356,141 @@ results = UserDB.exec(sql)
 
 ---
 
-## Query Optimization Tips
+## N+1 Query Prevention
+
+One of the most common performance issues in ORMs is the N+1 query problem, where loading a collection of records results in 1 query for the main records plus N additional queries for each associated record. CQL provides several mechanisms to prevent this issue.
+
+### Understanding the N+1 Problem
+
+```crystal
+# ❌ N+1 Query Problem - Inefficient
+users = User.query.all                    # 1 query: SELECT * FROM users
+users.each do |user|
+  puts user.posts.size                    # N queries: SELECT * FROM posts WHERE user_id = ?
+end
+# Total: 1 + N queries (where N = number of users)
+```
+
+### CQL's JOIN-Based Approach
+
+CQL automatically uses efficient JOIN-based queries instead of separate queries for each association:
+
+#### **Has Many Associations**
+
+```crystal
+# ✅ Efficient: Single query with WHERE clause
+user = User.find(1)
+posts = user.posts.all
+# Generates: SELECT * FROM posts WHERE posts.user_id = 1
+```
+
+#### **Many-to-Many Associations**
+
+```crystal
+# ✅ Efficient: Single query with JOIN
+movie = Movie.find(1)
+actors = movie.actors.all
+# Generates: SELECT actors.* FROM actors
+#           INNER JOIN movies_actors ON actors.id = movies_actors.actor_id
+#           WHERE movies_actors.movie_id = 1
+```
+
+### Lazy Loading with Caching
+
+CQL implements intelligent lazy loading that prevents duplicate queries:
+
+```crystal
+user = User.find(1)
+
+# First access - executes query and caches results
+posts = user.posts.all                  # Query executed
+puts posts.size                         # Uses cached data
+
+# Subsequent access - uses cached data
+user.posts.each { |post| puts post.title }  # No additional query
+```
+
+### Efficient Association Operations
+
+CQL provides methods to perform common operations without loading full records:
+
+#### **Count Without Loading**
+
+```crystal
+# ✅ Efficient: COUNT query without loading records
+user = User.find(1)
+post_count = user.posts_count
+# Generates: SELECT COUNT(*) FROM posts WHERE posts.user_id = 1
+
+# Many-to-many count
+movie = Movie.find(1)
+actor_count = movie.actors_count
+# Generates: SELECT COUNT(*) FROM movies_actors WHERE movies_actors.movie_id = 1
+```
+
+#### **Existence Checks Without Loading**
+
+```crystal
+# ✅ Efficient: EXISTS query
+user = User.find(1)
+has_posts = user.posts_any?
+# Generates: SELECT 1 FROM posts WHERE posts.user_id = 1 LIMIT 1
+
+# Check if specific record exists in association
+actor = Actor.find(1)
+movie = Movie.find(1)
+is_associated = movie.actors_include?(actor)
+# Generates: SELECT 1 FROM movies_actors
+#           WHERE movies_actors.movie_id = 1 AND movies_actors.actor_id = 1 LIMIT 1
+```
+
+#### **ID-Only Operations**
+
+```crystal
+# ✅ Efficient: Get IDs without loading full records
+user = User.find(1)
+post_ids = user.posts_ids
+# Generates: SELECT posts.id FROM posts WHERE posts.user_id = 1
+
+# Set associations by IDs (many-to-many)
+movie = Movie.find(1)
+movie.actors_ids = [1, 2, 3]  # Replaces current associations efficiently
+```
+
+### Query Optimization Strategies
+
+#### **Batch Operations**
+
+```crystal
+# ✅ Efficient: Batch loading patterns
+user_ids = [1, 2, 3, 4, 5]
+
+# Load all posts for multiple users in one query
+posts_by_user = Post.query.where(user_id: user_ids)
+                          .group_by(&.user_id)
+
+# Now access posts without additional queries
+user_ids.each do |user_id|
+  user_posts = posts_by_user[user_id]? || [] of Post
+  puts "User #{user_id} has #{user_posts.size} posts"
+end
+```
+
+#### **Strategic Use of Joins**
+
+```crystal
+# ✅ Efficient: Use joins for filtering and aggregation
+users_with_post_counts = User.query
+  .joins(:posts)
+  .select("users.*, COUNT(posts.id) as post_count")
+  .group_by("users.id")
+  .all
+
+# No N+1 problem - all data loaded in single query
+users_with_post_counts.each do |user|
+  puts "#{user.name} has #{user.post_count} posts"
+end
+```
 
 ### Performance Best Practices
 
@@ -381,17 +515,132 @@ users = User.query.where { email == "user@example.com" }  # Assuming email is in
                  .where { active == true }
                  .all(User)
 
-# 5. Avoid N+1 queries with proper joins
-# Bad: N+1 queries
-users = User.query.all(User)
-users.each { |user| user.posts.size }  # N additional queries
+# 5. ✅ Prefer efficient association methods over loading full collections
+# Bad: Loads all posts just to count them
+users = User.query.all
+users.each { |user| puts user.posts.size }  # N+1 queries + memory overhead
 
-# Good: Single query with join
-users_with_post_count = User.query.joins(:posts)
-                                 .select { [users.*, CQL.count(posts.id).as("post_count")] }
-                                 .group_by(:users.id)
-                                 .all(User)
+# Good: Use count methods
+users = User.query.all
+users.each { |user| puts user.posts_count }  # N COUNT queries (still not ideal)
+
+# Better: Use joins for aggregation
+users_with_counts = User.query
+  .left_joins(:posts)
+  .select("users.*, COUNT(posts.id) as post_count")
+  .group_by("users.id")
+  .all
+users_with_counts.each { |user| puts user.post_count }  # Single query
 ```
+
+### Advanced N+1 Prevention Patterns
+
+#### **Manual Preloading**
+
+```crystal
+# For complex scenarios, manually preload associations
+def load_users_with_posts(user_ids)
+  # Load users
+  users = User.query.where(id: user_ids).all
+
+  # Preload posts in batch
+  posts_by_user = Post.query.where(user_id: user_ids)
+                            .group_by(&.user_id)
+
+  # Create a lookup structure
+  users.each do |user|
+    # Associate posts with users in memory
+    user_posts = posts_by_user[user.id]? || [] of Post
+    # Store in instance variable or similar mechanism
+  end
+
+  users
+end
+```
+
+#### **Caching Association Counts**
+
+```crystal
+# Use database-level caching for frequently accessed counts
+class User
+  # Add posts_count column to users table
+  property posts_count : Int32 = 0
+
+  # Update count when posts are added/removed
+  def update_posts_count!
+    self.posts_count = posts.count
+    save!
+  end
+end
+
+# Now you can access post counts without queries
+users = User.query.all
+users.each { |user| puts user.posts_count }  # No additional queries
+```
+
+### Monitoring and Debugging
+
+#### **Query Analysis**
+
+```crystal
+# Monitor query patterns to identify N+1 issues
+def with_query_logging(&block)
+  query_count = 0
+  start_time = Time.utc
+
+  # This would require database-level query logging
+  # Implementation depends on your database adapter
+
+  result = yield
+
+  end_time = Time.utc
+  puts "Executed #{query_count} queries in #{end_time - start_time} seconds"
+  result
+end
+
+# Usage
+with_query_logging do
+  users = User.query.limit(10).all
+  users.each { |user| puts user.posts_count }  # Monitor query count here
+end
+```
+
+#### **Performance Testing**
+
+```crystal
+# Test different approaches to verify performance
+def benchmark_association_access
+  require "benchmark"
+
+  user_ids = User.query.limit(100).ids
+
+  Benchmark.ips do |x|
+    x.report("N+1 pattern") do
+      users = User.query.where(id: user_ids).all
+      users.each { |user| user.posts.size }
+    end
+
+    x.report("Count method") do
+      users = User.query.where(id: user_ids).all
+      users.each { |user| user.posts_count }
+    end
+
+    x.report("JOIN aggregation") do
+      User.query.where(id: user_ids)
+               .joins(:posts)
+               .select("users.*, COUNT(posts.id) as post_count")
+               .group_by("users.id")
+               .all
+    end
+
+    x.compare!
+  end
+end
+```
+
+---
+
+## Query Optimization Tips
 
 ### Query Analysis
 
@@ -497,6 +746,9 @@ ranked_users = User.query.select { [
 - Use `.limit` and `.offset` for pagination
 - Prefer EXISTS over IN for subqueries with large result sets
 - Use proper indexing strategy for WHERE clause columns
+- Leverage association count and existence methods to avoid N+1 queries
+- Use JOIN-based aggregation instead of iterating over associations
+- Monitor query patterns and optimize based on actual usage patterns
 
 ### Maintainability
 
