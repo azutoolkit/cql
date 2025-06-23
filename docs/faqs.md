@@ -50,7 +50,7 @@ A: CQL is designed to support major relational databases through Crystal DB driv
 
 A: The Active Record pattern maps database tables to Crystal structs (models). Each instance of a model corresponds to a row in the table. This pattern provides methods directly on the model and its instances for database interaction (CRUD operations, queries, etc.).
 
-- For a conceptual overview, see [Active Record Pattern Concept](../coreconcepts/patterns/active-record.md).
+- For a conceptual overview, see [Active Record Pattern Concept](../core-concepts/patterns/active-record.md).
 - For a detailed guide on using it with CQL, see [Active Record with CQL Guide](./guides/active-record-with-cql/README.md).
 
 **Q: How do I define an Active Record model in CQL?**
@@ -69,17 +69,17 @@ A: CQL Active Record provides intuitive methods like `new`/`save`, `create!`, `f
 
 A: CQL offers a chainable query interface. You can start with `Model.query` or methods like `Model.where(...)` and then chain further conditions like `.order()`, `.limit()`, `.join()`, etc.
 
-- Explore the [Querying Guide](./guides/active-record-with-cql/querying.md) for detailed information.
+- Explore the [Queryable Guide](./guides/active-record-with-cql/queryable.md) for detailed information.
 
 **Q: How do I handle database relationships (e.g., `has_many`, `belongs_to`)?**
 
 A: CQL Active Record uses macros like `has_many`, `belongs_to`, `has_one`, and `many_to_many` to define associations between models.
 
 - See the [Relations section in the main Active Record guide](./guides/active-record-with-cql/README.md#relations) for links to detailed guides on each relationship type:
-  - [`belongs_to`](./guides/active-record-with-cql/belongsto.md)
-  - [`has_one`](./guides/active-record-with-cql/hasone.md)
-  - [`has_many`](./guides/active-record-with-cql/hasmany.md)
-  - [`many_to_many`](./guides/active-record-with-cql/manytomany.md)
+  - [`belongs_to`](./guides/active-record-with-cql/relations/belongsto.md)
+  - [`has_one`](./guides/active-record-with-cql/relations/hasone.md)
+  - [`has_many`](./guides/active-record-with-cql/relations/hasmany.md)
+  - [`many_to_many`](./guides/active-record-with-cql/relations/manytomany.md)
 
 **Q: How are validations handled in CQL Active Record?**
 
@@ -104,13 +104,13 @@ A: Methods ending with `!` (bang methods) typically raise an exception if the op
 A: CQL includes a migration system where you define schema changes in Crystal classes (e.g., creating tables, adding columns). These migrations can be run to update your database schema in a version-controlled manner.
 
 - For details, see the [Database Migrations Guide for Active Record](./guides/active-record-with-cql/migrations.md).
-- For a general overview of migrations in CQL, see [Core Concepts: Migrations](../coreconcepts/migrations.md).
+- For a general overview of migrations in CQL, see [Core Concepts: Migrations](../core-concepts/migrations.md).
 
 **Q: Does CQL Active Record support database transactions?**
 
 A: Yes, database transactions are crucial for ensuring data consistency, especially when multiple database operations need to succeed or fail together. CQL typically provides a way to manage transactions.
 
-- See the [Transaction Management Guide](./guides/transaction-management.md) for more details (Note: Ensure this guide specifically covers Active Record transaction patterns if applicable, or link to a more general CQL transaction guide if that's more appropriate).
+- See the [Transactions Guide](./guides/active-record-with-cql/transactions.md) for more details on how to use transactions with Active Record models.
 
 ---
 
