@@ -962,6 +962,7 @@ ranked_users = User.query.select { [
 - Use block syntax for complex conditions to improve readability
 - Leverage automatic relationship detection for simpler joins
 - Use explicit joins when you need custom conditions
+- **Define foreign keys in your schema** to enable implicit joins and automatic relationship detection
 
 ### Performance
 
