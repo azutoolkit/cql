@@ -420,7 +420,7 @@ module CQL::ActiveRecord::Relations
 
       if @loaded
         @records.each(&.attributes({@key => nil}))
-        @records.clear  # Clear the collection since records are no longer associated
+        @records.clear # Clear the collection since records are no longer associated
       end
 
       result

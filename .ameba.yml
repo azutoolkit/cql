@@ -6,3 +6,6 @@ Lint/NotNil:
 
 Performance/AnyInsteadOfEmpty:
   Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Enabled: false

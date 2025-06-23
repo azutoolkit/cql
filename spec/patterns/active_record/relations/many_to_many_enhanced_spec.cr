@@ -150,7 +150,6 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
     end
 
     it "removes multiple records from association" do
-
       movie = TestMovie.new("The Matrix", 1999)
       movie.create!
 

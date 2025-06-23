@@ -76,7 +76,7 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
       )
       user.create!
 
-      post = user.posts.create(title: "Post 1", body: "Content 1")
+      user.posts.create(title: "Post 1", body: "Content 1")
 
       # For now, we'll test that the posts exist
       user.posts.size.should eq(1)
@@ -129,7 +129,7 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
 
       post1 = user.posts.create(title: "Post 1", body: "Content 1")
       post2 = user.posts.create(title: "Post 2", body: "Content 2")
-      post3 = user.posts.create(title: "Post 3", body: "Content 3")
+      user.posts.create(title: "Post 3", body: "Content 3")
 
       user.posts.size.should eq(3)
 
@@ -294,8 +294,8 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
       user.create!
 
       post1 = user.posts.create(title: "First Post", body: "Content 1")
-      post2 = user.posts.create(title: "Second Post", body: "Content 2")
-      post3 = user.posts.create(title: "Third Post", body: "Content 3")
+      user.posts.create(title: "Second Post", body: "Content 2")
+      user.posts.create(title: "Third Post", body: "Content 3")
 
       user.posts.first?.should_not be_nil
       user.posts.last?.should_not be_nil
