@@ -2,6 +2,10 @@ require "../spec_helper"
 
 describe CQL::ActiveRecord::Relations::ManyToMany do
   before_each do
+    UserDB.actors.drop! rescue nil
+    UserDB.movies.drop! rescue nil
+    UserDB.movies_actor.drop! rescue nil
+
     UserDB.movies.create!
     UserDB.actors.create!
     UserDB.movies_actor.create!

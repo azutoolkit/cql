@@ -52,8 +52,16 @@ module CQL::ActiveRecord::Relations
     # ```
     macro many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = :nullify, validate = true, autosave = false)
       # Determine foreign key names if not provided
-      {% fk = foreign_key || "#{@type.name.underscore.id}_id".id %}
-      {% target_fk = association_foreign_key || "#{klass.stringify.underscore.id}_id".id %}
+      {% if foreign_key %}
+        {% fk = foreign_key.id %}
+      {% else %}
+        {% fk = "#{@type.name.underscore.id}_id".id %}
+      {% end %}
+      {% if association_foreign_key %}
+        {% target_fk = association_foreign_key.id %}
+      {% else %}
+        {% target_fk = "#{klass.stringify.underscore.id}_id".id %}
+      {% end %}
 
       # Determine join table class
       {% join_class = join_through.is_a?(Path) ? join_through : join_through.camelcase.id %}
@@ -69,10 +77,11 @@ module CQL::ActiveRecord::Relations
 
         parent_id = safe_id(self, Int32)
 
-        # Build a simpler query without complex joins for now
-        # The ManyCollection will handle the join logic internally
+        # Build a query with proper JOIN to only fetch associated records
         base_query = safe_db_operation do
           build_query({{klass.id}})
+            .join({{join_class}}.table) { |j| j.{{name.id}}.id.eq(j.{{join_class.stringify.underscore.id}}.{{target_fk}}) }
+            .where { {{join_class}}.table_column(:{{fk}}).eq(parent_id) }
         end
 
         @_{{name.id}} = CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Int32).new(
@@ -147,13 +156,13 @@ module CQL::ActiveRecord::Relations
 
         safe_db_operation do
           begin
-            CQL::Query
+            result = CQL::Query
               .new({{join_class}}.schema)
               .from({{join_class}}.table)
               .where({ :{{fk}} => parent_id })
               .limit(1)
               .first({{join_class}})
-            true
+            !result.nil?
           rescue DB::NoResultsError
             false
           end
@@ -169,13 +178,13 @@ module CQL::ActiveRecord::Relations
 
         safe_db_operation do
           begin
-            CQL::Query
+            result = CQL::Query
               .new({{join_class}}.schema)
               .from({{join_class}}.table)
               .where({ :{{fk}} => parent_id, :{{target_fk}} => target_id })
               .limit(1)
               .first({{join_class}})
-            true
+            !result.nil?
           rescue DB::NoResultsError
             false
           end

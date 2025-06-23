@@ -140,20 +140,21 @@ module CQL
       end
 
       # Deletes the association for the given record.
-      # If cascade is true, also deletes the target record itself.
+      # For many-to-many relationships, this only removes the join table record.
       # - **param** : record (Target)
-      # - **return** : Target? - The deleted target record (if cascade=true), or nil
+      # - **return** : Target? - The record if association was removed, nil otherwise
       def delete(record : Target) : Target?
         record_id = safe_id(record, Pk)
-        delete(record_id)
+        success = delete(record_id)
+        success ? record : nil
       end
 
       # Deletes the association for the record with the given ID.
-      # Handles cascading based on the dependent strategy.
+      # For many-to-many relationships, this removes the join table record
+      # and handles the target record based on the dependent strategy.
       # - **param** : id (Pk)
-      # - **return** : Target? - The target record if it was deleted, otherwise nil
+      # - **return** : Target? - The target record if association was removed, nil otherwise
       def delete(id : Pk) : Target?
-        deleted_target_record = nil
         record_to_remove = @records.find { |record| record.id == id } if @loaded
 
         # Delete the association record from the join table
@@ -166,31 +167,38 @@ module CQL
             .rows_affected
         end
 
-        # Handle target record based on dependent strategy
+        deleted_target_record = nil
+
         if rows_affected > 0
+          # Handle target record based on dependent strategy
           case @dependent
           when :destroy
             # Destroy the target record (with callbacks)
-            deleted_target_record = Target.find?(id)
+            deleted_target_record = record_to_remove || safe_db_operation { Target.find?(id) }
             if deleted_target_record
               safe_db_operation { deleted_target_record.delete! }
             end
           when :delete_all
             # Delete the target record (without callbacks)
-            deleted_target_record = Target.find?(id)
+            deleted_target_record = record_to_remove || safe_db_operation { Target.find?(id) }
             if deleted_target_record
               safe_db_operation { Target.delete!(id) }
             end
-            # :nullify doesn't apply to many-to-many relationships
+          else
+            # For :nullify or default, just preserve the target record
+            deleted_target_record = record_to_remove || safe_db_operation { Target.find?(id) }
           end
 
           # Remove from internal array if it was loaded
           if @loaded && record_to_remove
             @records.delete(record_to_remove)
           end
-        end
 
-        deleted_target_record
+          deleted_target_record
+        else
+          # Return nil to indicate no association was removed
+          nil
+        end
       end
 
       # Clears all associated records from the parent record.
@@ -303,13 +311,13 @@ module CQL
           record_id = safe_id(record, Pk)
           safe_db_operation do
             begin
-              CQL::Query
+              result = CQL::Query
                 .new(Through.schema)
                 .from(@through_table)
                 .where({@key => @id, @target_key => record_id})
                 .limit(1)
                 .first(Through)
-              true
+              !result.nil?
             rescue DB::NoResultsError
               false
             end

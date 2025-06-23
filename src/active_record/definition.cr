@@ -45,6 +45,14 @@ module CQL
           @@table.not_nil!
         end
 
+        def self.table_columns
+          schema.tables[table].columns
+        end
+
+        def self.table_column(column : Symbol)
+          table_columns[column].expression
+        end
+
         # Return the adapter for the schema
         # - **@return** [CQL::Adapter] The adapter
         # **Example** Fetching the adapter

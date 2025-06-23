@@ -2,6 +2,10 @@ require "../spec_helper"
 
 describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
   before_each do
+    UserDB.actors.drop! rescue nil
+    UserDB.movies.drop! rescue nil
+    UserDB.movies_actor.drop! rescue nil
+
     UserDB.movies.create!
     UserDB.actors.create!
     UserDB.movies_actor.create!
@@ -146,7 +150,8 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
     end
 
     it "removes multiple records from association" do
-      movie = Movie.new("The Matrix", 1999)
+
+      movie = TestMovie.new("The Matrix", 1999)
       movie.create!
 
       actor1 = Actor.new("Keanu Reeves", 58)
@@ -447,7 +452,7 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
     end
 
     it "handles delete with non-existent record" do
-      movie = Movie.new("The Matrix", 1999)
+      movie = TestMovie.new("The Matrix", 1999)
       movie.create!
 
       actor = Actor.new("Keanu Reeves", 58)
@@ -459,7 +464,7 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
     end
 
     it "handles delete with non-existent ID" do
-      movie = Movie.new("The Matrix", 1999)
+      movie = TestMovie.new("The Matrix", 1999)
       movie.create!
 
       # Try to delete non-existent ID
@@ -533,7 +538,7 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
 
   describe "convenience methods" do
     it "provides add and remove methods" do
-      movie = Movie.new("The Matrix", 1999)
+      movie = TestMovie.new("The Matrix", 1999)
       movie.create!
 
       actor1 = Actor.new("Keanu Reeves", 58)
