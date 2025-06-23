@@ -93,7 +93,7 @@ describe CQL::ActiveRecord::Relations::BelongsTo do
       post = Post.new("My Post", "Post content", user.id!)
       post.create!
 
-      updated_user = post.update_user(name: "John Updated")
+      updated_user = post.update_user(name: "John Updated", password_confirmation: "password123")
       updated_user.name.should eq("John Updated")
       updated_user.id.should eq(user.id)
     end
