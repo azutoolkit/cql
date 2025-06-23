@@ -357,3 +357,459 @@ In this example, you define multiple schemas, and the application can easily swi
 - **Scalability**: Ideal for multi-tenant applications, allowing each tenant to have its schema without interference.
 
 By using CQL's schema system, you gain not only speed and clarity in your database structure but also flexibility in scaling and organizing your application.
+
+# Schema Definition in CQL
+
+CQL uses a declarative DSL for defining database schemas that map directly to your application's data models. The schema system supports multiple database adapters and provides type-safe column definitions with automatic SQL generation.
+
+---
+
+## Basic Schema Definition
+
+Schemas are defined using the `CQL::Schema.define` method with a block containing table definitions:
+
+```crystal
+# Define a schema with database connection details
+UserDB = CQL::Schema.define(
+  :user_database,                          # Schema name
+  adapter: CQL::Adapter::SQLite,           # Database adapter
+  uri: "sqlite3://path/to/database.db"     # Connection URI
+) do
+  # Table definitions go here
+  table :users do
+    primary :id, Int32                     # Primary key
+    column :name, String, null: true       # Nullable column
+    column :email, String                  # Required column
+    column :age, Int32                     # Integer column
+    timestamps                             # created_at/updated_at columns
+  end
+end
+```
+
+---
+
+## Supported Database Adapters
+
+CQL supports three major database systems with proper dialect handling:
+
+### SQLite
+
+```crystal
+AppDB = CQL::Schema.define(
+  :app_database,
+  adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3://db/app.db"
+) do
+  # Table definitions...
+end
+```
+
+### PostgreSQL
+
+```crystal
+ProductionDB = CQL::Schema.define(
+  :production_database,
+  adapter: CQL::Adapter::Postgres,
+  uri: "postgresql://user:password@localhost:5432/mydb"
+) do
+  # Table definitions...
+end
+```
+
+### MySQL
+
+```crystal
+LegacyDB = CQL::Schema.define(
+  :legacy_database,
+  adapter: CQL::Adapter::MySql,
+  uri: "mysql://user:password@localhost:3306/legacy_db"
+) do
+  # Table definitions...
+end
+```
+
+---
+
+## Primary Keys
+
+Define primary keys using the `primary` method with the column name and type:
+
+### Auto-incrementing Integer Primary Keys
+
+```crystal
+table :users do
+  primary :id, Int32        # 32-bit integer primary key
+  # or
+  primary :id, Int64        # 64-bit integer primary key
+end
+```
+
+### UUID Primary Keys
+
+```crystal
+table :sessions do
+  primary :id, UUID         # UUID primary key
+  column :user_id, Int32
+  column :token, String
+end
+```
+
+### ULID Primary Keys
+
+```crystal
+table :events do
+  primary :id, ULID         # ULID primary key (sortable UUIDs)
+  column :event_type, String
+  column :payload, JSON::Any
+end
+```
+
+---
+
+## Column Definitions
+
+Define table columns using the `column` method with name, type, and optional constraints:
+
+### Basic Column Types
+
+```crystal
+table :products do
+  primary :id, Int32
+  column :name, String                    # VARCHAR/TEXT
+  column :price, Float64                  # DOUBLE/REAL
+  column :quantity, Int32                 # INTEGER
+  column :active, Bool                    # BOOLEAN
+  column :created_at, Time                # TIMESTAMP/DATETIME
+  column :metadata, JSON::Any             # JSON/JSONB
+  column :image_data, Slice(UInt8)        # BLOB/BYTEA
+end
+```
+
+### Nullable Columns
+
+```crystal
+table :users do
+  primary :id, Int32
+  column :name, String                    # NOT NULL (default)
+  column :bio, String, null: true         # NULL allowed
+  column :last_login, Time, null: true    # NULL allowed
+end
+```
+
+### Column Size and Precision
+
+```crystal
+table :financial_records do
+  primary :id, Int32
+  column :account_number, String, size: 20    # VARCHAR(20)
+  column :amount, Float64, precision: 10, scale: 2  # DECIMAL(10,2)
+  column :description, String, size: 500      # VARCHAR(500)
+end
+```
+
+---
+
+## Foreign Keys
+
+Define foreign key relationships between tables:
+
+### Basic Foreign Key
+
+```crystal
+table :posts do
+  primary :id, Int32
+  column :title, String
+  column :body, String
+  column :user_id, Int32, null: true
+
+  # Define foreign key constraint
+  foreign_key [:user_id], references: :users, references_columns: [:id]
+end
+```
+
+### Composite Foreign Keys
+
+```crystal
+table :order_items do
+  primary :id, Int32
+  column :order_id, Int32
+  column :product_id, Int32
+  column :quantity, Int32
+
+  # Foreign key to orders table
+  foreign_key [:order_id], references: :orders, references_columns: [:id]
+  # Foreign key to products table
+  foreign_key [:product_id], references: :products, references_columns: [:id]
+end
+```
+
+### Many-to-Many Join Tables
+
+```crystal
+table :movies_actors do
+  primary :id, Int32
+  column :movie_id, Int32
+  column :actor_id, Int32
+
+  # Foreign keys for many-to-many relationship
+  foreign_key [:movie_id], references: :movies, references_columns: [:id]
+  foreign_key [:actor_id], references: :actors, references_columns: [:id]
+end
+```
+
+---
+
+## Timestamps
+
+Add automatic timestamp columns using the `timestamps` helper:
+
+```crystal
+table :articles do
+  primary :id, Int32
+  column :title, String
+  column :content, String
+
+  # Adds created_at and updated_at columns
+  timestamps
+end
+```
+
+This is equivalent to:
+
+```crystal
+table :articles do
+  primary :id, Int32
+  column :title, String
+  column :content, String
+  column :created_at, Time, null: true
+  column :updated_at, Time, null: true
+end
+```
+
+---
+
+## Indexes
+
+Define database indexes for improved query performance:
+
+### Single Column Index
+
+```crystal
+table :users do
+  primary :id, Int32
+  column :email, String
+  column :username, String
+
+  # Create index on email column
+  index :email
+  # Create unique index on username
+  index :username, unique: true
+end
+```
+
+### Composite Index
+
+```crystal
+table :log_entries do
+  primary :id, Int32
+  column :user_id, Int32
+  column :action, String
+  column :created_at, Time
+
+  # Create composite index on multiple columns
+  index [:user_id, :created_at]
+  index [:action, :created_at], name: "idx_action_timestamp"
+end
+```
+
+---
+
+## Complete Schema Example
+
+Here's a comprehensive example showing a complete schema definition:
+
+```crystal
+# Define the main application database schema
+AppDB = CQL::Schema.define(
+  :app_database,
+  adapter: CQL::Adapter::PostgreSQL,
+  uri: ENV["DATABASE_URL"]
+) do
+
+  # Users table
+  table :users do
+    primary :id, Int32
+    column :name, String
+    column :email, String
+    column :password_hash, String
+    column :role, String, default: "user"
+    column :active, Bool, default: true
+    column :last_login, Time, null: true
+    timestamps
+
+    # Indexes
+    index :email, unique: true
+    index :active
+  end
+
+  # Posts table
+  table :posts do
+    primary :id, Int32
+    column :title, String
+    column :body, String
+    column :published, Bool, default: false
+    column :user_id, Int32, null: true
+    timestamps
+
+    # Foreign key to users
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+
+    # Indexes
+    index :user_id
+    index :published
+    index [:user_id, :published]
+  end
+
+  # Comments table
+  table :comments do
+    primary :id, Int32
+    column :content, String
+    column :post_id, Int32
+    column :user_id, Int32, null: true
+    timestamps
+
+    # Foreign keys
+    foreign_key [:post_id], references: :posts, references_columns: [:id]
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+
+    # Indexes
+    index :post_id
+    index :user_id
+  end
+
+  # Tags table for many-to-many with posts
+  table :tags do
+    primary :id, Int32
+    column :name, String
+    timestamps
+
+    index :name, unique: true
+  end
+
+  # Join table for posts and tags
+  table :posts_tags do
+    primary :id, Int32
+    column :post_id, Int32
+    column :tag_id, Int32
+
+    foreign_key [:post_id], references: :posts, references_columns: [:id]
+    foreign_key [:tag_id], references: :tags, references_columns: [:id]
+
+    # Prevent duplicate associations
+    index [:post_id, :tag_id], unique: true
+  end
+end
+```
+
+---
+
+## Schema Operations
+
+### Creating Tables
+
+```crystal
+# Create all tables defined in the schema
+AppDB.create_tables!
+
+# Create specific table
+AppDB.users.create!
+```
+
+### Dropping Tables
+
+```crystal
+# Drop all tables
+AppDB.drop_tables!
+
+# Drop specific table
+AppDB.users.drop!
+```
+
+### Checking Table Existence
+
+```crystal
+# Check if table exists
+if AppDB.users.exists?
+  puts "Users table exists"
+end
+```
+
+---
+
+## Environment-Specific Schemas
+
+Define different schemas for different environments:
+
+```crystal
+# Development schema (SQLite)
+DevelopmentDB = CQL::Schema.define(
+  :development,
+  adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3://db/development.db"
+) do
+  # Table definitions...
+end
+
+# Test schema (in-memory SQLite)
+TestDB = CQL::Schema.define(
+  :test,
+  adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3://:memory:"
+) do
+  # Same table definitions as development...
+end
+
+# Production schema (PostgreSQL)
+ProductionDB = CQL::Schema.define(
+  :production,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"]
+) do
+  # Same table definitions with production optimizations...
+end
+```
+
+---
+
+## Best Practices
+
+### Naming Conventions
+
+- **Schema names**: Use descriptive names like `:user_database`, `:analytics_db`
+- **Table names**: Use plural nouns (`users`, `posts`, `order_items`)
+- **Column names**: Use snake_case (`user_id`, `created_at`, `full_name`)
+- **Foreign keys**: Follow pattern `{table_name}_id` (`user_id`, `post_id`)
+
+### Performance Considerations
+
+- **Add indexes** on frequently queried columns
+- **Use appropriate data types** (Int32 vs Int64, String sizes)
+- **Consider composite indexes** for multi-column queries
+- **Use foreign keys** for referential integrity
+
+### Schema Organization
+
+- **Group related tables** together in the schema definition
+- **Define base tables first**, then tables with foreign keys
+- **Use consistent column ordering** (id, business columns, timestamps)
+- **Document complex relationships** with comments
+
+### Environment Management
+
+- **Use environment variables** for database URIs
+- **Keep schema definitions** consistent across environments
+- **Use migrations** for schema changes in production
+
+---
+
+The CQL schema system provides a powerful, type-safe way to define your database structure with automatic SQL generation and comprehensive relationship management.
