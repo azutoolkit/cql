@@ -295,7 +295,7 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
 
       post1 = user.posts.create(title: "First Post", body: "Content 1")
       user.posts.create(title: "Second Post", body: "Content 2")
-      user.posts.create(title: "Third Post", body: "Content 3")
+      post3 = user.posts.create(title: "Third Post", body: "Content 3")
 
       user.posts.first?.should_not be_nil
       user.posts.last?.should_not be_nil

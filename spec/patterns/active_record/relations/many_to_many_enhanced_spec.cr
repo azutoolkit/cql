@@ -36,7 +36,7 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
       actor1_id = actor1.id!
       actor2_id = actor2.id!
 
-      # Handle dependency (destroy)
+      # Handle dependency (destroy) - this should destroy both join records and target records
       movie.handle_actors_dependency
 
       # Verify actors are deleted from database
@@ -150,7 +150,7 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
     end
 
     it "removes multiple records from association" do
-      movie = TestMovie.new("The Matrix", 1999)
+      movie = Movie.new("The Matrix", 1999)
       movie.create!
 
       actor1 = Actor.new("Keanu Reeves", 58)
@@ -167,16 +167,24 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
 
       movie.actors.size.should eq(3)
 
-      # Remove some actors
+      # Remove some actors (they will be destroyed due to dependent: :destroy)
       actors_to_remove = [actor1, actor2]
       movie.actors.remove(actors_to_remove)
 
       movie.actors.size.should eq(1)
       movie.actors.first.name.should eq("Carrie-Anne Moss")
 
-      # Verify actors still exist in database
-      Actor.find!(actor1.id!).should_not be_nil
-      Actor.find!(actor2.id!).should_not be_nil
+      # Verify removed actors are deleted from database (due to dependent: :destroy)
+      expect_raises(DB::NoResultsError) do
+        Actor.find!(actor1.id!)
+      end
+
+      expect_raises(DB::NoResultsError) do
+        Actor.find!(actor2.id!)
+      end
+
+      # Verify remaining actor still exists
+      Actor.find!(actor3.id!).should_not be_nil
     end
 
     it "checks if association includes specific records" do
@@ -451,7 +459,7 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
     end
 
     it "handles delete with non-existent record" do
-      movie = TestMovie.new("The Matrix", 1999)
+      movie = Movie.new("The Matrix", 1999)
       movie.create!
 
       actor = Actor.new("Keanu Reeves", 58)
@@ -463,7 +471,7 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
     end
 
     it "handles delete with non-existent ID" do
-      movie = TestMovie.new("The Matrix", 1999)
+      movie = Movie.new("The Matrix", 1999)
       movie.create!
 
       # Try to delete non-existent ID
@@ -537,7 +545,7 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
 
   describe "convenience methods" do
     it "provides add and remove methods" do
-      movie = TestMovie.new("The Matrix", 1999)
+      movie = Movie.new("The Matrix", 1999)
       movie.create!
 
       actor1 = Actor.new("Keanu Reeves", 58)
