@@ -60,6 +60,9 @@ class Product
   property id : Int64?
   property name : String
   property price : Float64
+
+  def initialize(@name : String, @price : Float64)
+  end
 end
 ```
 
@@ -74,6 +77,9 @@ class Session
   property user_id : Int32
   property token : String
   property expires_at : Time
+
+  def initialize(@user_id : Int32, @token : String, @expires_at : Time)
+  end
 end
 ```
 
@@ -88,6 +94,9 @@ class Event
   property event_type : String
   property payload : JSON::Any
   property occurred_at : Time
+
+  def initialize(@event_type : String, @payload : JSON::Any, @occurred_at : Time = Time.utc)
+  end
 end
 ```
 
@@ -276,7 +285,35 @@ puts user.age                    # => 25
 
 ---
 
-For more information on model persistence, querying, and relationships, see the other guides in this directory.
+## Related Guides
+
+For more information on working with CQL Active Record models, see these related guides:
+
+**Model Operations:**
+
+- [CRUD Operations](crud-operations.md) - Creating, reading, updating, and deleting records
+- [Queryable](queryable.md) - Advanced querying and filtering
+- [Persistence Details](persistence-details.md) - Deep dive into model persistence
+
+**Data Validation and Integrity:**
+
+- [Validations](validations.md) - Ensuring data integrity with built-in and custom validators
+- [Callbacks](callbacks.md) - Lifecycle hooks for model operations
+- [Optimistic Locking](optimistic-locking.md) - Handling concurrent updates
+
+**Relationships:**
+
+- [Relations Overview](relations/README.md) - Understanding model associations
+- [Belongs To](relations/belongsto.md) - Many-to-one relationships
+- [Has One](relations/hasone.md) - One-to-one relationships
+- [Has Many](relations/hasmany.md) - One-to-many relationships
+- [Many to Many](relations/manytomany.md) - Many-to-many relationships
+
+**Advanced Features:**
+
+- [Scopes](scopes.md) - Reusable query methods
+- [Transactions](transactions.md) - Managing database transactions
+- [Migrations](migrations.md) - Managing database schema changes
 
 ---
 
@@ -357,9 +394,9 @@ email_column = User.table_column(:email)
 Creates a new model instance with the given attributes (alias for `new`):
 
 ```crystal
-# These are equivalent
-user1 = User.new(name: "Alice", email: "alice@example.com", age: 30)
-user2 = User.build(name: "Alice", email: "alice@example.com", age: 30)
+# These are equivalent - both use positional parameters
+user1 = User.new("Alice", "alice@example.com", 30)
+user2 = User.build("Alice", "alice@example.com", 30)
 
 # Both create an unsaved instance
 user1.id  # => nil (not saved yet)
@@ -413,25 +450,24 @@ class UserFactory
   def self.create_user(type : Symbol)
     case type
     when :admin
-      User.build(
-        name: "Admin User",
-        email: "admin@example.com",
-        role: "administrator",
-        active: true
+      User.new(
+        "Admin User",
+        "admin@example.com",
+        35,
+        "admin_password"
       )
     when :regular
-      User.build(
-        name: "Regular User",
-        email: "user@example.com",
-        role: "user",
-        active: true
+      User.new(
+        "Regular User",
+        "user@example.com",
+        25,
+        "user_password"
       )
-    when :inactive
-      User.build(
-        name: "Inactive User",
-        email: "inactive@example.com",
-        role: "user",
-        active: false
+    when :guest
+      User.new(
+        "Guest User",
+        "guest@example.com",
+        0
       )
     else
       raise "Unknown user type: #{type}"
@@ -442,9 +478,11 @@ end
 # Usage
 admin = UserFactory.create_user(:admin)
 regular = UserFactory.create_user(:regular)
+guest = UserFactory.create_user(:guest)
 
 admin.save!    # Persist to database
 regular.save!  # Persist to database
+guest.save!    # Persist to database
 ```
 
 #### Dynamic Model Information
@@ -465,7 +503,6 @@ end
 
 database_info(User)
 database_info(Product)
-database_info(Post)
 ```
 
 #### Multi-Database Setup
@@ -475,12 +512,27 @@ database_info(Post)
 class User
   include CQL::ActiveRecord::Model(Int32)
   db_context PrimaryDB, :users
+
+  property id : Int32?
+  property name : String
+  property email : String
+
+  def initialize(@name : String, @email : String)
+  end
 end
 
 # Analytics database
 class UserAnalytics
   include CQL::ActiveRecord::Model(Int32)
   db_context AnalyticsDB, :user_analytics
+
+  property id : Int32?
+  property user_id : Int32
+  property page_views : Int32
+  property last_activity : Time
+
+  def initialize(@user_id : Int32, @page_views : Int32 = 0, @last_activity : Time = Time.utc)
+  end
 end
 
 # Check which database each model uses
@@ -507,16 +559,37 @@ puts "Analytics adapter: #{UserAnalytics.adapter}" # => CQL::Adapter::SQLite
 class User
   include CQL::ActiveRecord::Model(UUID)
   db_context UserDB, :users         # User management database
+
+  property id : UUID?
+  property name : String
+  property email : String
+
+  def initialize(@name : String, @email : String)
+  end
 end
 
 class InventoryItem
   include CQL::ActiveRecord::Model(Int32)
   db_context InventoryDB, :items    # Inventory database
+
+  property id : Int32?
+  property name : String
+  property quantity : Int32
+
+  def initialize(@name : String, @quantity : Int32 = 0)
+  end
 end
 
 class AnalyticsEvent
   include CQL::ActiveRecord::Model(ULID)
   db_context AnalyticsDB, :events   # Analytics database
+
+  property id : ULID?
+  property event_type : String
+  property occurred_at : Time
+
+  def initialize(@event_type : String, @occurred_at : Time = Time.utc)
+  end
 end
 ```
 
@@ -539,7 +612,7 @@ def inspect_models(*model_classes)
 end
 
 # Usage during development
-inspect_models(User, Product, Post, Comment)
+inspect_models(User, Product, AnalyticsEvent)
 ```
 
 ---
