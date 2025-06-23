@@ -14,7 +14,6 @@ This section covers the fundamental concepts and building blocks of CQL (Crystal
 - **Migrations**: Managing database schema changes systematically
 - **CRUD Operations**: Creating, reading, updating, and deleting records
 - **Design Patterns**: Different approaches to organizing your data access layer
-- **Cache Statistics**: Monitoring and analyzing query cache performance
 
 ## Key Concepts
 
