@@ -78,11 +78,8 @@ module CQL
     # ```
     def all(as as_kind)
       query, params = to_sql
-      cache_key = CQL::Cache::Cache.generate_cache_key(query, params)
-      CQL::Cache::Cache.with_cache(cache_key) do
-        @schema.exec_query do |conn|
-          conn.query_all(query, args: params, as: as_kind)
-        end
+      @schema.exec_query do |conn|
+        conn.query_all(query, args: params, as: as_kind)
       end
     end
 
@@ -117,12 +114,9 @@ module CQL
     # ```
     def first(as as_kind)
       query, params = to_sql
-      cache_key = CQL::Cache::Cache.generate_cache_key(query, params)
-      CQL::Cache::Cache.with_cache(cache_key) do
-        limit(1)
-        @schema.exec_query do |conn|
-          conn.query_one?(query, args: params, as: as_kind)
-        end
+      limit(1)
+      @schema.exec_query do |conn|
+        conn.query_one?(query, args: params, as: as_kind)
       end
     end
 
@@ -155,11 +149,8 @@ module CQL
     # ```
     def get(as as_kind)
       query, params = to_sql
-      cache_key = CQL::Cache::Cache.generate_cache_key(query, params)
-      CQL::Cache::Cache.with_cache(cache_key) do
-        @schema.exec_query do |conn|
-          conn.query_one?(query, args: params, as: as_kind)
-        end
+      @schema.exec_query do |conn|
+        conn.query_one?(query, args: params, as: as_kind)
       end
     end
 
@@ -174,12 +165,9 @@ module CQL
     # ```
     def each(as as_kind, &)
       query, params = to_sql
-      cache_key = CQL::Cache::Cache.generate_cache_key(query, params)
-      CQL::Cache::Cache.with_cache(cache_key) do
-        @schema.exec_query do |conn|
-          conn.query_each(query, args: params) do |result|
-            yield as_kind.from_rs(result)
-          end
+      @schema.exec_query do |conn|
+        conn.query_each(query, args: params) do |result|
+          yield as_kind.from_rs(result)
         end
       end
     end

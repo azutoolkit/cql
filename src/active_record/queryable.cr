@@ -489,10 +489,7 @@ module CQL
           query.unscope(*scopes)
         end
 
-        # Clear the query cache
-        def self.clear_cache
-          CQL::Cache::Cache.clear
-        end
+
 
         # Return a QueryBuilder that will return no results
         # - **@return** [QueryBuilder(T)] A query builder that returns no results
@@ -518,12 +515,7 @@ module CQL
           query.size
         end
 
-        # Return cache statistics
-        # - **@return** [NamedTuple] Cache statistics including size and enabled status
-        def self.cache_stats : NamedTuple(size: Int32, enabled: Bool)
-          stats = CQL::Cache::Cache.statistics
-          {size: stats["cache_size"].as(Int32), enabled: stats["enabled"].as(Bool)}
-        end
+
       end
 
       # The QueryBuilder class provides a chainable interface for building queries
@@ -1135,15 +1127,6 @@ module CQL
         # - **@return** [QueryBuilder(T)] Self for chaining
         def group_by(*columns : Symbol | String)
           group(*columns)
-        end
-
-        # Disable query caching and return a new QueryBuilder
-        # - **@return** [QueryBuilder(T)] A new query builder with caching disabled
-        def no_cache
-          new_query = clone_query(@query)
-          # Note: Caching is now handled globally via CQL::Cache::Cache.enabled=
-          # Individual queries cannot disable caching separately
-          QueryBuilder(T).new(new_query, @model_class)
         end
 
         # Return a QueryBuilder that will return no results

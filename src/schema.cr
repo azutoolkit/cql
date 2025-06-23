@@ -70,8 +70,6 @@ module CQL
     # Holds the active connection if currently inside a transaction block
     private getter? active_connection : DB::Connection? = nil
 
-
-
     # Builds a new schema.
     #
     # - **@param** name [Symbol] the name of the schema
@@ -117,8 +115,6 @@ module CQL
     def dialect
       @adapter.dialect
     end
-
-
 
     # Validates the database URI format
     private def validate_uri!
