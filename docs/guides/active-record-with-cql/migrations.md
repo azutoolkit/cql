@@ -1,219 +1,611 @@
-# Database Migrations
+# Database Migrations in CQL
 
-Database migrations are a crucial part of managing your application's database schema in a structured and version-controlled way. CQL provides a migration system that allows you to evolve your database schema over time as your application's requirements change.
-
-Migrations are Crystal classes that define how to apply changes (`up` method) and how to revert them (`down` method).
+CQL provides a comprehensive migration system for managing database schema changes over time. Migrations allow you to version control your database schema alongside your application code, ensuring consistent deployments across environments.
 
 ---
 
 ## What are Migrations?
 
-As your application evolves, you'll often need to:
+Migrations are Crystal classes that define changes to your database schema. Each migration has:
 
-- Create new tables.
-- Add, remove, or modify columns in existing tables.
-- Add or remove indexes.
-- Perform other schema alterations.
+- **Version Number**: Unique identifier for ordering migrations
+- **Up Method**: Defines changes to apply
+- **Down Method**: Defines how to revert the changes
 
-Migrations allow you to script these changes in Crystal code. Each migration file typically represents a single, atomic change to the database schema and is often timestamped or versioned to ensure changes are applied in the correct order.
+**Benefits of Migrations:**
 
-**Benefits of using migrations:**
-
-- **Version Control**: Schema changes are tracked in your project's version control system (e.g., Git) alongside your application code.
-- **Collaboration**: Makes it easier for teams to manage database schema changes consistently across different development environments.
-- **Reproducibility**: Ensures that the database schema can be recreated reliably in any environment (development, testing, production).
-- **Automation**: Schema changes can be applied automatically as part of deployment processes.
+- **Version Control**: Schema changes are tracked with your code
+- **Team Collaboration**: Consistent schema across development environments
+- **Deployment Safety**: Reliable schema updates in production
+- **Rollback Capability**: Ability to undo problematic changes
 
 ---
 
-## Defining a Migration
+## Migration Structure
 
-Migrations in CQL are Crystal classes that inherit from `CQL::Migration` (or a similar base class provided by the CQL framework).
+### Basic Migration Class
 
-1.  **File Naming and Location**: Migration files are typically placed in a `db/migrate/` directory within your project. The filename often includes a timestamp or a sequential version number to denote the order of execution, followed by a descriptive name for the migration (e.g., `db/migrate/20231027000000_create_users.cr`).
-
-2.  **Migration Class Structure**:
-
-    ```crystal
-    # db/migrate/YYYYMMDDHHMMSS_create_users.cr
-    # Replace YYYYMMDDHHMMSS with the actual timestamp for the migration.
-    class CreateUsers < CQL::Migration
-      # Optional: Define a version for this migration if not derived from filename.
-      # self.version = 20231027000000_i64 # Example version
-
-      # The `up` method describes the changes to apply to the database.
-      def up(schema : CQL::Schema::Definition)
-        # Example: Create a 'users' table
-        schema.create_table :users do |t|
-          # Define columns for the table
-          t.primary_key :id             # Defines an auto-incrementing primary key named 'id'.
-                                        # Specifics like `bigserial` for PostgreSQL might be abstracted or configurable.
-          t.text :name, null: false       # A text column for user's name, cannot be null.
-          t.text :email, null: false, unique: true # Email, cannot be null, must be unique.
-          t.bool :active, default: false  # Boolean for active status, defaults to false.
-          t.timestamps                    # Convenience method to add `created_at` and `updated_at` (both Time, nullable by default usually).
-        end
-
-        # Example: Adding an index separately (if not done in create_table)
-        schema.add_index :users, :email, unique: true, name: "index_users_on_email_unique"
-      end
-
-      # The `down` method describes how to revert the changes made in the `up` method.
-      def down(schema : CQL::Schema::Definition)
-        # Example: Drop the 'users' table
-        schema.drop_table :users
-        # If you added an index separately in `up`, you might remove it here:
-        # schema.remove_index :users, name: "index_users_on_email_unique" (or by column)
-      end
-    end
-    ```
-
-    **Key Points:**
-
-    - **`class CreateUsers < CQL::Migration`**: Your migration class inherits from `CQL::Migration`.
-    - **`up(schema : CQL::Schema::Definition)`**: This method is called when applying the migration. The `schema` object provides methods to manipulate the database structure.
-    - **`down(schema : CQL::Schema::Definition)`**: This method is called when reverting (rolling back) the migration. It should undo the changes made by the `up` method.
-    - **Schema Definition API**: The methods available on the `schema` object (e.g., `create_table`, `add_column`, `drop_table`, `add_index`) and the column definition block (e.g., `t.text`, `t.bool`, `t.primary_key`, `t.timestamps`) are specific to CQL. The exact syntax and available types (`:text`, `:integer`, `:bool`, `:datetime`, etc.) should be referenced from the CQL documentation you are using. The example above uses common conventions.
-
----
-
-## Common Migration Operations
-
-Here are some common operations you might perform within the `up` and `down` methods of a migration:
-
-### Table Operations
-
-- **Create Table** (`schema.create_table :table_name do |t| ... end`):
-
-  ```crystal
-  # up method
-  schema.create_table :posts do |t|
-    t.primary_key :id
-    t.references :user, foreign_key: true # Creates user_id and a foreign key constraint
-    t.text :title, null: false
-    t.text :body
-    t.datetime :published_at
-    t.timestamps
-  end
-  ```
-
-  ```crystal
-  # down method
-  schema.drop_table :posts
-  ```
-
-- **Drop Table** (`schema.drop_table :table_name`):
-  Used in the `down` method to remove a table created in the `up` method.
-
-- **Alter Table** (`schema.alter_table :table_name do |t| ... end`):
-  Used for adding, removing, or changing columns on an existing table.
-
-### Column Operations (within `create_table` or `alter_table`)
-
-- **Add Column** (`t.add_column :column_name, :type, options...` or `schema.add_column :table, :column, :type, ...`):
-
-  ```crystal
-  # up method (inside alter_table)
-  # schema.alter_table :users do |t|
-  #  t.integer :login_count, default: 0
-  # end
-  # Or, if alter_table is not the direct way for add_column with CQL
-  schema.add_column :users, :login_count, :integer, default: 0, null: false
-  ```
-
-  ```crystal
-  # down method
-  schema.remove_column :users, :login_count
-  ```
-
-- **Remove Column** (`t.remove_column :column_name` or `schema.remove_column :table, :column`):
-  Used to drop a column.
-
-- **Rename Column** (`schema.rename_column :table, :old_name, :new_name`):
-  Changes the name of an existing column.
-
-- **Change Column** (`schema.change_column :table, :column, :new_type, options...`):
-  Modifies the type or other options (like `null`, `default`) of an existing column.
-  ```crystal
-  # up method
-  # schema.change_column :users, :email, :text, limit: 255 # Example if changing type or options
-  ```
-
-### Index Operations
-
-- **Add Index** (`schema.add_index :table_name, :column_name_or_columns, options...`):
-  Indexes improve query performance on frequently searched columns.
-
-  ```crystal
-  # up method
-  schema.add_index :posts, :user_id
-  schema.add_index :posts, [:title, :published_at], name: "idx_posts_on_title_and_published_at"
-  ```
-
-- **Remove Index** (`schema.remove_index :table_name, :column_name_or_columns` or `name: :index_name`):
-  ```crystal
-  # down method
-  schema.remove_index :posts, :user_id
-  schema.remove_index :posts, name: "idx_posts_on_title_and_published_at"
-  ```
-
-### Foreign Keys
-
-- Foreign keys can often be defined when creating columns (e.g., `t.references :author, foreign_key: true`) or added separately using methods like `schema.add_foreign_key`.
+All migrations inherit from `CQL::Migration` with a version number:
 
 ```crystal
-# Assuming t.references in create_table does this.
-# If not, explicitly:
-schema.add_foreign_key :posts, :users, column: :user_id, primary_key: :id
+class CreateUsersTable < CQL::Migration(20240101120000)
+  def up
+    # Define schema changes to apply
+  end
+
+  def down
+    # Define how to rollback the changes
+  end
+end
 ```
 
-**Important**: The exact method names and options for schema manipulation (`create_table`, `add_column`, available data types like `:text`, `:integer`, `:bool`, options like `null:`, `default:`, `unique:`) can vary significantly between different database adapters (PostgreSQL, MySQL) and ORM/query builder implementations. **Always refer to the specific CQL documentation for the version you are using** to ensure you are using the correct API for schema definition.
+### Version Numbers
+
+Use timestamp-based version numbers for proper ordering:
+
+```crystal
+# Format: YYYYMMDDHHMMSS
+class CreateUsersTable < CQL::Migration(20240315103000)  # March 15, 2024 10:30:00
+class AddEmailToUsers < CQL::Migration(20240315104500)   # March 15, 2024 10:45:00
+class CreatePostsTable < CQL::Migration(20240316090000)  # March 16, 2024 09:00:00
+```
+
+---
+
+## Creating Tables
+
+### Table Creation Migration
+
+```crystal
+class CreateUsersTable < CQL::Migration(20240101120000)
+  def up
+    # Create table using existing schema definition
+    schema.users.create!
+  end
+
+  def down
+    # Drop the table
+    schema.users.drop!
+  end
+end
+```
+
+**Note**: This approach assumes you've already defined the table structure in your schema. The migration just creates/drops the physical table.
+
+### Complete Table Definition Example
+
+If you need to define table structure within the migration:
+
+```crystal
+class CreateProductsTable < CQL::Migration(20240102120000)
+  def up
+    # Define and create table structure
+    schema.table :products do
+      primary :id, Int32
+      column :name, String
+      column :price, Float64
+      column :category, String
+      column :active, Bool, default: true
+      timestamps
+    end
+    schema.products.create!
+  end
+
+  def down
+    schema.products.drop!
+  end
+end
+```
+
+---
+
+## Altering Tables
+
+### Adding Columns
+
+```crystal
+class AddPhoneToUsers < CQL::Migration(20240103120000)
+  def up
+    schema.alter :users do
+      add_column :phone, String, null: true
+    end
+  end
+
+  def down
+    schema.alter :users do
+      drop_column :phone
+    end
+  end
+end
+```
+
+### Removing Columns
+
+```crystal
+class RemoveMiddleNameFromUsers < CQL::Migration(20240104120000)
+  def up
+    schema.alter :users do
+      drop_column :middle_name
+    end
+  end
+
+  def down
+    schema.alter :users do
+      add_column :middle_name, String, null: true
+    end
+  end
+end
+```
+
+### Renaming Columns
+
+```crystal
+class RenameUserEmailColumn < CQL::Migration(20240105120000)
+  def up
+    schema.alter :users do
+      rename_column :email, :email_address
+    end
+  end
+
+  def down
+    schema.alter :users do
+      rename_column :email_address, :email
+    end
+  end
+end
+```
+
+### Changing Column Types
+
+```crystal
+class ChangeUserAgeToString < CQL::Migration(20240106120000)
+  def up
+    schema.alter :users do
+      change_column :age, String
+    end
+  end
+
+  def down
+    schema.alter :users do
+      change_column :age, Int32
+    end
+  end
+end
+```
+
+---
+
+## Working with Indexes
+
+### Adding Indexes
+
+```crystal
+class AddIndexesToUsers < CQL::Migration(20240107120000)
+  def up
+    schema.alter :users do
+      create_index :idx_users_email, [:email], unique: true
+      create_index :idx_users_name_phone, [:name, :phone]
+    end
+  end
+
+  def down
+    schema.alter :users do
+      drop_index :idx_users_email
+      drop_index :idx_users_name_phone
+    end
+  end
+end
+```
+
+### Removing Indexes
+
+```crystal
+class RemoveOldIndexes < CQL::Migration(20240108120000)
+  def up
+    schema.alter :users do
+      drop_index :old_index_name
+    end
+  end
+
+  def down
+    schema.alter :users do
+      create_index :old_index_name, [:column_name]
+    end
+  end
+end
+```
+
+---
+
+## Foreign Keys
+
+### Adding Foreign Keys
+
+```crystal
+class AddUserForeignKeyToPosts < CQL::Migration(20240109120000)
+  def up
+    schema.alter :posts do
+      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
+    end
+  end
+
+  def down
+    schema.alter :posts do
+      drop_foreign_key :fk_posts_user_id
+    end
+  end
+end
+```
+
+### Complex Foreign Key Example
+
+```crystal
+class AddCompositeKeys < CQL::Migration(20240110120000)
+  def up
+    schema.alter :order_items do
+      foreign_key [:order_id, :product_id],
+                  references: :orders_products,
+                  references_columns: [:order_id, :product_id],
+                  name: :fk_order_items_composite,
+                  on_update: :cascade,
+                  on_delete: :restrict
+    end
+  end
+
+  def down
+    schema.alter :order_items do
+      drop_foreign_key :fk_order_items_composite
+    end
+  end
+end
+```
+
+---
+
+## Table Operations
+
+### Renaming Tables
+
+```crystal
+class RenameUsersToAccounts < CQL::Migration(20240111120000)
+  def up
+    schema.alter :users do
+      rename_table :accounts
+    end
+  end
+
+  def down
+    schema.alter :accounts do
+      rename_table :users
+    end
+  end
+end
+```
 
 ---
 
 ## Running Migrations
 
-CQL will typically provide command-line tools or Rake tasks (if integrated with Rake) to manage and run your migrations.
+### Setting Up the Migrator
 
-Common migration commands (exact syntax will depend on CQL's tooling):
+```crystal
+# Create a migrator instance
+migrator = CQL::Migrator.new(MyAppDB)
 
-- **`db:migrate`**: Applies all pending migrations (those that haven't been run yet).
+# Check migration status
+migrator.print_pending_migrations
+migrator.print_applied_migrations
+```
 
-  ```bash
-  # Example placeholder command - replace with actual CQL command
-  # crystal run path/to/cql/runner.cr db:migrate CONTEXT=YourDBContext
-  # or if using Rake:
-  # rake db:migrate
-  ```
+### Basic Migration Commands
 
-- **`db:rollback`**: Reverts the last applied migration.
+```crystal
+# Apply all pending migrations
+migrator.up
 
-  ```bash
-  # rake db:rollback
-  ```
+# Rollback the last migration
+migrator.down(1)
 
-- **`db:schema:load`**: Loads the schema from a schema file (e.g., `db/schema.cr` or `db/structure.sql`) into the database. This is often used to set up a new database quickly by loading the current schema state, bypassing running all migrations individually.
+# Rollback all migrations
+migrator.down
 
-- **`db:schema:dump`**: Creates or updates a schema file based on the current state of the database. This file represents the authoritative structure of your database.
+# Redo the last migration (rollback then apply)
+migrator.redo
 
-- **`db:reset`**: Typically drops the database, recreates it, and then loads the schema (or runs all migrations). Useful for resetting the database to a clean state in development.
+# Apply migrations up to a specific version
+migrator.up_to(20240105120000)
 
-- **Checking Migration Status**: Tools to see which migrations have been applied and which are pending.
+# Rollback to a specific version
+migrator.down_to(20240103120000)
+```
 
-**Database Context**: When running migrations, you often need to specify the database context (e.g., `CONTEXT=AcmeDB`) if your application uses multiple databases or if the migration runner needs to know which configuration to use.
+### Migration Status
+
+```crystal
+# Get applied migrations
+applied = migrator.applied_migrations
+puts "Applied: #{applied.map(&.version)}"
+
+# Get pending migrations
+pending = migrator.pending_migrations
+puts "Pending: #{pending.map(&.version)}"
+
+# Get last applied migration
+last = migrator.last
+puts "Last: #{last.try(&.version) || "None"}"
+```
 
 ---
 
-## Schema File (`db/schema.cr` or `db/structure.sql`)
+## Complete Migration Example
 
-After migrations are run, CQL (like many ORMs) may maintain a `db/schema.cr` or `db/structure.sql` file.
+Here's a comprehensive example showing a complete migration workflow:
 
-- **`db/schema.cr` (if applicable)**: This would be a Crystal representation of your current database schema, generated by inspecting the database. It's often used by `db:schema:load`.
-- **`db/structure.sql`**: Alternatively, a raw SQL dump of the database structure. This is database-agnostic for loading but less so for inspection.
+```crystal
+# Define your schema
+AppDB = CQL::Schema.define(
+  :app_database,
+  adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3://db/app.db"
+) do
+  table :users do
+    primary :id, Int32
+    column :name, String
+    column :email, String
+    timestamps
+  end
 
-This file serves as the canonical representation of your database schema at a given point in time. It's recommended to commit this file to version control.
+  table :posts do
+    primary :id, Int32
+    column :title, String
+    column :body, String
+    column :user_id, Int32, null: true
+    timestamps
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+  end
+end
+
+# Migration 1: Create users table
+class CreateUsersTable < CQL::Migration(20240101120000)
+  def up
+    schema.users.create!
+  end
+
+  def down
+    schema.users.drop!
+  end
+end
+
+# Migration 2: Create posts table
+class CreatePostsTable < CQL::Migration(20240101130000)
+  def up
+    schema.posts.create!
+  end
+
+  def down
+    schema.posts.drop!
+  end
+end
+
+# Migration 3: Add published flag to posts
+class AddPublishedToPosts < CQL::Migration(20240102120000)
+  def up
+    schema.alter :posts do
+      add_column :published, Bool, default: false
+    end
+  end
+
+  def down
+    schema.alter :posts do
+      drop_column :published
+    end
+  end
+end
+
+# Run migrations
+migrator = CQL::Migrator.new(AppDB)
+
+# Apply all migrations
+migrator.up
+
+# Check status
+migrator.print_applied_migrations
+# ✔ CreateUsersTable         20240101120000
+# ✔ CreatePostsTable         20240101130000
+# ✔ AddPublishedToPosts      20240102120000
+
+# Rollback last migration
+migrator.down(1)
+
+# Check status again
+migrator.print_applied_migrations
+# ✔ CreateUsersTable         20240101120000
+# ✔ CreatePostsTable         20240101130000
+
+migrator.print_pending_migrations
+# ⏱ AddPublishedToPosts      20240102120000
+```
 
 ---
 
-Migrations are a powerful tool for database schema management. Writing reversible migrations (`up` and `down` methods) is crucial, especially for rolling back changes if needed.
-Always test your migrations thoroughly, especially those involving data transformation or potentially destructive operations.
+## Integration with Application
+
+### Development Workflow
+
+```crystal
+# db/migrations/001_create_schema.cr
+class CreateSchema < CQL::Migration(20240101000000)
+  def up
+    AppDB.users.create!
+    AppDB.posts.create!
+  end
+
+  def down
+    AppDB.posts.drop!
+    AppDB.users.drop!
+  end
+end
+
+# db/migrate.cr
+require "../src/schema"
+require "./migrations/*"
+
+migrator = CQL::Migrator.new(AppDB)
+
+case ARGV[0]?
+when "up"
+  migrator.up
+when "down"
+  steps = ARGV[1]?.try(&.to_i) || 1
+  migrator.down(steps)
+when "status"
+  migrator.print_applied_migrations
+  migrator.print_pending_migrations
+when "redo"
+  migrator.redo
+else
+  puts "Usage: crystal db/migrate.cr [up|down|status|redo]"
+end
+```
+
+### Running from Command Line
+
+```bash
+# Apply all pending migrations
+crystal db/migrate.cr up
+
+# Rollback last migration
+crystal db/migrate.cr down
+
+# Rollback last 3 migrations
+crystal db/migrate.cr down 3
+
+# Check migration status
+crystal db/migrate.cr status
+
+# Redo last migration
+crystal db/migrate.cr redo
+```
+
+---
+
+## Best Practices
+
+### Migration Naming
+
+- Use descriptive names: `CreateUsersTable`, `AddEmailToUsers`, `RemoveDeprecatedColumns`
+- Include timestamp-based version numbers
+- Keep migration files organized in a `migrations/` directory
+
+### Safe Migration Practices
+
+```crystal
+# Good: Always provide rollback logic
+class AddColumnSafely < CQL::Migration(20240115120000)
+  def up
+    schema.alter :users do
+      add_column :phone, String, null: true  # Start with nullable
+    end
+  end
+
+  def down
+    schema.alter :users do
+      drop_column :phone
+    end
+  end
+end
+
+# Good: Use transactions for multiple operations
+class ComplexMigration < CQL::Migration(20240116120000)
+  def up
+    AppDB.schema.exec_query do |conn|
+      conn.transaction do
+        schema.alter :users do
+          add_column :status, String, default: "active"
+        end
+
+        schema.alter :posts do
+          add_column :user_status, String
+        end
+      end
+    end
+  end
+
+  def down
+    AppDB.schema.exec_query do |conn|
+      conn.transaction do
+        schema.alter :posts do
+          drop_column :user_status
+        end
+
+        schema.alter :users do
+          drop_column :status
+        end
+      end
+    end
+  end
+end
+```
+
+### Data Migration Guidelines
+
+```crystal
+# When you need to migrate data, do it carefully
+class MigrateUserData < CQL::Migration(20240117120000)
+  def up
+    # Add new column first
+    schema.alter :users do
+      add_column :full_name, String, null: true
+    end
+
+    # Migrate data (this should be done carefully in production)
+    User.all.each do |user|
+      user.full_name = "#{user.first_name} #{user.last_name}"
+      user.save!
+    end
+  end
+
+  def down
+    schema.alter :users do
+      drop_column :full_name
+    end
+  end
+end
+```
+
+### Schema Tracking
+
+- The migration system automatically tracks applied migrations in a `schema_migrations` table
+- Don't modify or delete migration files after they've been applied in production
+- Use new migrations to make further changes
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Migration Order**: Ensure version numbers are sequential and unique
+2. **Rollback Logic**: Always provide working `down` methods
+3. **Schema Conflicts**: Coordinate with team members on schema changes
+4. **Data Dependencies**: Be careful when dropping columns that contain data
+
+### Recovery from Failed Migrations
+
+```crystal
+# Check what migrations failed
+migrator.print_applied_migrations
+
+# If a migration partially succeeded, you may need to:
+# 1. Fix the migration code
+# 2. Manually clean up any partial changes
+# 3. Re-run the migration
+
+# For development, you can reset everything:
+migrator.down  # Rollback all
+migrator.up    # Apply all again
+```
+
+---
+
+The CQL migration system provides a robust way to manage your database schema evolution while maintaining data integrity and team coordination.

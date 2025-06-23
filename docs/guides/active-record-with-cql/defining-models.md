@@ -277,3 +277,271 @@ puts user.age                    # => 25
 ---
 
 For more information on model persistence, querying, and relationships, see the other guides in this directory.
+
+---
+
+## Model Definition Methods
+
+CQL provides several class methods for working with model definitions and metadata. These methods are available on all models that include `CQL::ActiveRecord::Model`.
+
+### Database Context Methods
+
+#### `db_context(schema, table)`
+
+Associates a model with a specific database schema and table:
+
+```crystal
+class User
+  include CQL::ActiveRecord::Model(Int32)
+
+  # Associate with UserDB schema and :users table
+  db_context UserDB, :users
+end
+```
+
+#### `schema`
+
+Returns the schema associated with the model:
+
+```crystal
+User.schema  # => Returns the UserDB schema object
+```
+
+#### `table`
+
+Returns the table name for the model:
+
+```crystal
+User.table  # => :users
+```
+
+#### `adapter`
+
+Returns the database adapter for the model's schema:
+
+```crystal
+User.adapter  # => CQL::Adapter::SQLite (or Postgres, MySql)
+```
+
+### Table Metadata Methods
+
+#### `table_columns`
+
+Returns a hash of all table columns and their definitions:
+
+```crystal
+columns = User.table_columns
+# Returns Hash(Symbol, CQL::Column) with column definitions
+
+columns[:name]     # => Column definition for name field
+columns[:email]    # => Column definition for email field
+columns[:id]       # => Column definition for id field
+```
+
+#### `table_column(column_name)`
+
+Returns the column expression for a specific column:
+
+```crystal
+name_column = User.table_column(:name)
+# Returns the column expression for the name field
+
+email_column = User.table_column(:email)
+# Returns the column expression for the email field
+```
+
+### Object Creation Methods
+
+#### `build(**fields)`
+
+Creates a new model instance with the given attributes (alias for `new`):
+
+```crystal
+# These are equivalent
+user1 = User.new(name: "Alice", email: "alice@example.com", age: 30)
+user2 = User.build(name: "Alice", email: "alice@example.com", age: 30)
+
+# Both create an unsaved instance
+user1.id  # => nil (not saved yet)
+user2.id  # => nil (not saved yet)
+```
+
+### Practical Examples
+
+#### Inspecting Model Metadata
+
+```crystal
+class Product
+  include CQL::ActiveRecord::Model(Int32)
+  db_context StoreDB, :products
+
+  property id : Int32?
+  property name : String
+  property price : Float64
+  property category : String
+  property active : Bool = true
+
+  def initialize(@name : String, @price : Float64, @category : String)
+  end
+end
+
+# Explore model metadata
+puts "Schema: #{Product.schema.name}"        # => "store_database"
+puts "Table: #{Product.table}"               # => :products
+puts "Adapter: #{Product.adapter}"           # => CQL::Adapter::SQLite
+
+# Inspect table structure
+Product.table_columns.each do |name, column|
+  puts "Column #{name}: #{column.class}"
+end
+# Output:
+# Column id: CQL::PrimaryKey(Int32)
+# Column name: CQL::Column(String)
+# Column price: CQL::Column(Float64)
+# Column category: CQL::Column(String)
+# Column active: CQL::Column(Bool)
+
+# Get specific column info
+name_column = Product.table_column(:name)
+puts "Name column expression: #{name_column}"
+```
+
+#### Using Build Method for Factories
+
+```crystal
+class UserFactory
+  def self.create_user(type : Symbol)
+    case type
+    when :admin
+      User.build(
+        name: "Admin User",
+        email: "admin@example.com",
+        role: "administrator",
+        active: true
+      )
+    when :regular
+      User.build(
+        name: "Regular User",
+        email: "user@example.com",
+        role: "user",
+        active: true
+      )
+    when :inactive
+      User.build(
+        name: "Inactive User",
+        email: "inactive@example.com",
+        role: "user",
+        active: false
+      )
+    else
+      raise "Unknown user type: #{type}"
+    end
+  end
+end
+
+# Usage
+admin = UserFactory.create_user(:admin)
+regular = UserFactory.create_user(:regular)
+
+admin.save!    # Persist to database
+regular.save!  # Persist to database
+```
+
+#### Dynamic Model Information
+
+```crystal
+# Get adapter-specific information
+def database_info(model_class)
+  schema = model_class.schema
+  adapter = model_class.adapter
+  table = model_class.table
+
+  puts "Model: #{model_class.name}"
+  puts "Database: #{schema.name}"
+  puts "Adapter: #{adapter}"
+  puts "Table: #{table}"
+  puts "Columns: #{model_class.table_columns.keys.join(", ")}"
+end
+
+database_info(User)
+database_info(Product)
+database_info(Post)
+```
+
+#### Multi-Database Setup
+
+```crystal
+# Primary database
+class User
+  include CQL::ActiveRecord::Model(Int32)
+  db_context PrimaryDB, :users
+end
+
+# Analytics database
+class UserAnalytics
+  include CQL::ActiveRecord::Model(Int32)
+  db_context AnalyticsDB, :user_analytics
+end
+
+# Check which database each model uses
+puts "User schema: #{User.schema.name}"              # => "primary_database"
+puts "Analytics schema: #{UserAnalytics.schema.name}" # => "analytics_database"
+
+# Different adapters possible
+puts "User adapter: #{User.adapter}"              # => CQL::Adapter::Postgres
+puts "Analytics adapter: #{UserAnalytics.adapter}" # => CQL::Adapter::SQLite
+```
+
+### Best Practices
+
+#### Consistent Naming
+
+- Use descriptive model class names that match your domain
+- Follow Crystal naming conventions (PascalCase for classes)
+- Use plural table names (`:users`, `:products`, `:order_items`)
+
+#### Database Context Organization
+
+```crystal
+# Good: Clear database contexts
+class User
+  include CQL::ActiveRecord::Model(UUID)
+  db_context UserDB, :users         # User management database
+end
+
+class InventoryItem
+  include CQL::ActiveRecord::Model(Int32)
+  db_context InventoryDB, :items    # Inventory database
+end
+
+class AnalyticsEvent
+  include CQL::ActiveRecord::Model(ULID)
+  db_context AnalyticsDB, :events   # Analytics database
+end
+```
+
+#### Metadata Inspection for Development
+
+```crystal
+# Development helper to inspect all models
+def inspect_models(*model_classes)
+  model_classes.each do |model_class|
+    puts "\n=== #{model_class.name} ==="
+    puts "Table: #{model_class.table}"
+    puts "Schema: #{model_class.schema.name}"
+    puts "Adapter: #{model_class.adapter}"
+    puts "Columns:"
+
+    model_class.table_columns.each do |name, column|
+      puts "  #{name}: #{column.class}"
+    end
+  end
+end
+
+# Usage during development
+inspect_models(User, Product, Post, Comment)
+```
+
+---
+
+These model definition methods provide powerful introspection capabilities and help you work dynamically with your models while maintaining type safety. They're particularly useful for building developer tools, debugging, and creating flexible application architectures.
