@@ -20,6 +20,229 @@ users_with_posts = User.query.join(Post) { users.id == posts.user_id }
                              .all(User)
 ```
 
+### Foreign Key Requirements for Implicit Joins
+
+**Important**: Implicit joins in CQL require foreign key relationships to be explicitly defined in your schema. CQL uses these foreign key definitions to automatically infer the correct JOIN conditions.
+
+#### **Schema Definition with Foreign Keys**
+
+For implicit joins to work, you must define foreign key constraints in your schema:
+
+```crystal
+AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
+  table :users do
+    primary :id, Int32
+    column :name, String
+    column :email, String
+    timestamps
+  end
+
+  table :posts do
+    primary :id, Int32
+    column :title, String
+    column :body, String
+    column :user_id, Int32  # Foreign key column
+    timestamps
+
+    # ✅ Required: Foreign key definition for implicit joins
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+  end
+
+  table :comments do
+    primary :id, Int32
+    column :content, String
+    column :post_id, Int32
+    column :user_id, Int32
+    timestamps
+
+    # Multiple foreign keys
+    foreign_key [:post_id], references: :posts, references_columns: [:id]
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+  end
+
+  # Many-to-many join table
+  table :post_tags do
+    primary :id, Int32
+    column :post_id, Int32
+    column :tag_id, Int32
+
+    # Both foreign keys defined for many-to-many relationships
+    foreign_key [:post_id], references: :posts, references_columns: [:id]
+    foreign_key [:tag_id], references: :tags, references_columns: [:id]
+  end
+
+  table :tags do
+    primary :id, Int32
+    column :name, String
+  end
+end
+```
+
+#### **How CQL Uses Foreign Keys for Implicit Joins**
+
+When you use implicit joins, CQL:
+
+1. **Looks up the foreign key definition** in the schema
+2. **Automatically determines the join condition** based on the foreign key relationship
+3. **Generates the appropriate SQL JOIN clause**
+
+```crystal
+# CQL analyzes the schema and finds:
+# posts table has foreign_key [:user_id] references :users [:id]
+
+users_with_posts = User.query.joins(:posts).all(User)
+# CQL automatically generates:
+# SELECT * FROM users INNER JOIN posts ON users.id = posts.user_id
+```
+
+#### **Multi-Level Implicit Joins**
+
+With proper foreign key definitions, CQL can handle complex multi-level joins:
+
+```crystal
+# Schema relationships: users -> posts -> comments
+users_with_post_comments = User.query.joins(posts: :comments).all(User)
+# Generates:
+# SELECT * FROM users
+# INNER JOIN posts ON users.id = posts.user_id
+# INNER JOIN comments ON posts.id = comments.post_id
+```
+
+#### **Without Foreign Keys - Explicit Joins Required**
+
+If foreign keys are not defined in the schema, you must use explicit joins:
+
+```crystal
+# ❌ This won't work without foreign key definitions
+User.query.joins(:posts).all(User)  # Error: Cannot infer join condition
+
+# ✅ Use explicit joins when foreign keys are missing
+User.query.join(Post) { |j| j.users.id.eq(j.posts.user_id) }.all(User)
+```
+
+#### **Composite Foreign Keys**
+
+CQL supports composite foreign keys for complex relationships:
+
+```crystal
+AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
+  table :order_items do
+    primary :id, Int32
+    column :order_id, Int32
+    column :product_id, Int32
+    column :quantity, Int32
+
+    # Composite foreign key
+    foreign_key [:order_id, :product_id],
+                references: :order_products,
+                references_columns: [:order_id, :product_id]
+  end
+
+  table :order_products do
+    column :order_id, Int32
+    column :product_id, Int32
+    column :price, Float64
+
+    primary [:order_id, :product_id]  # Composite primary key
+  end
+end
+
+# CQL can handle composite foreign key joins
+order_items_with_details = OrderItem.query.joins(:order_products).all(OrderItem)
+# Generates: SELECT * FROM order_items
+#           INNER JOIN order_products ON (order_items.order_id = order_products.order_id
+#                                        AND order_items.product_id = order_products.product_id)
+```
+
+#### **Foreign Key vs Column Reference**
+
+There's an important distinction between having a column that references another table and having a proper foreign key constraint:
+
+```crystal
+# ❌ Column exists but no foreign key defined
+table :posts do
+  primary :id, Int32
+  column :title, String
+  column :user_id, Int32  # Just a column, not a foreign key
+end
+
+# ❌ Implicit joins won't work
+User.query.joins(:posts).all(User)  # Error: No foreign key relationship found
+
+# ✅ Proper foreign key definition
+table :posts do
+  primary :id, Int32
+  column :title, String
+  column :user_id, Int32
+
+  # This tells CQL about the relationship
+  foreign_key [:user_id], references: :users, references_columns: [:id]
+end
+
+# ✅ Now implicit joins work
+User.query.joins(:posts).all(User)  # Success!
+```
+
+#### **Checking Schema Foreign Keys**
+
+You can inspect your schema's foreign key definitions:
+
+```crystal
+# Get foreign keys for a table
+posts_foreign_keys = AppDB.posts.foreign_keys
+posts_foreign_keys.each do |fk|
+  puts "Foreign key: #{fk.name}"
+  puts "Columns: #{fk.columns}"
+  puts "References: #{fk.references_table}.#{fk.references_columns}"
+end
+
+# Check if a foreign key exists
+has_user_fk = AppDB.posts.foreign_keys.any? { |fk| fk.references_table == :users }
+```
+
+#### **Best Practices for Foreign Keys and Joins**
+
+1. **Always define foreign keys** in your schema for relationships you'll query
+2. **Use consistent naming** for foreign key columns (e.g., `user_id`, `post_id`)
+3. **Define foreign keys before creating tables** in your schema
+4. **Use explicit joins** when you need custom join conditions beyond foreign key relationships
+5. **Document complex relationships** in your schema comments
+
+```crystal
+AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
+  table :users do
+    primary :id, Int32
+    column :name, String
+    column :email, String
+    column :department_id, Int32
+    timestamps
+
+    # Foreign key for department relationship
+    foreign_key [:department_id], references: :departments, references_columns: [:id]
+  end
+
+  table :posts do
+    primary :id, Int32
+    column :title, String
+    column :body, String
+    column :author_id, Int32      # Could be user_id, but using descriptive name
+    column :category_id, Int32
+    timestamps
+
+    # Clear foreign key definitions
+    foreign_key [:author_id], references: :users, references_columns: [:id]
+    foreign_key [:category_id], references: :categories, references_columns: [:id]
+  end
+end
+
+# Now all these implicit joins work seamlessly
+users_with_posts = User.query.joins(:posts).all(User)
+posts_with_authors = Post.query.joins(:author).all(Post)  # Uses author_id -> users.id
+posts_with_categories = Post.query.joins(:category).all(Post)
+```
+
+This foreign key requirement ensures that CQL can provide type-safe, automatic join generation while maintaining clear relationships in your database schema.
+
 ### Inner Joins (Default)
 
 Inner joins return only records that have matching records in both tables:
