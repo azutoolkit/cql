@@ -49,6 +49,7 @@ CQL is a powerful Object-Relational Mapping (ORM) library for the Crystal progra
 - **💾 Transaction Support**: Full ACID transaction support with nested transactions (savepoints)
 - **🔐 Optimistic Locking**: Built-in support for optimistic concurrency control
 - **🎯 Query Scopes**: Reusable query scopes for common filtering patterns
+- **🚀 N+1 Query Prevention**: Intelligent association loading to prevent performance issues
 - **🌐 Multi-Database**: Support for PostgreSQL, MySQL, and SQLite
 - **🔑 Flexible Primary Keys**: Support for Int32, Int64, UUID, and ULID primary keys
 
@@ -297,10 +298,11 @@ class Post
   many_to_many :tags, Tag, join_through: :post_tags
 end
 
-# Work with associations
+# Work with associations efficiently (avoids N+1 queries)
 user = User.find(1)
 user.posts.create(title: "New Post", body: "Content")
-user.posts.where(published: true).count
+user.posts_count                    # Efficient count without loading
+user.posts_any?                     # Check existence without loading
 user.profile.update!(bio: "Updated bio")
 ```
 
@@ -381,53 +383,66 @@ author_posts = Post.by_author(user.id).published.all
 
 ## Advanced Features
 
-- **Optimistic Locking**: Prevent concurrent update conflicts
-- **Callbacks**: `before_save`, `after_create`, `before_destroy`, etc.
-- **Query Caching**: Automatic query result caching
+- **Optimistic Locking**: Prevent concurrent update conflicts with version-based locking
+- **Lifecycle Callbacks**: `before_save`, `after_create`, `before_destroy`, and more
+- **N+1 Query Prevention**: Automatic JOIN-based queries and smart association loading
 - **Connection Pooling**: Efficient database connection management
 - **Multi-Database**: Work with multiple databases simultaneously
 - **Raw SQL**: Execute raw SQL when needed with full type safety
 - **Database Introspection**: Runtime schema inspection capabilities
+- **Query Caching**: Built-in query result caching for improved performance
 
 ## Documentation
 
-Comprehensive documentation is available at:
-
-**📚 [CQL Documentation](https://azutopia.gitbook.io/cql/)**
+The complete documentation is available in the [docs](./docs) directory:
 
 ### Quick Links
 
-- [Installation Guide](https://azutopia.gitbook.io/cql/installation)
-- [Getting Started](https://azutopia.gitbook.io/cql/guides/getting-started)
-- [Schema Definition](https://azutopia.gitbook.io/cql/core-concepts/schemas)
-- [Active Record Models](https://azutopia.gitbook.io/cql/guides/active-record-with-cql/defining-models)
-- [Validations](https://azutopia.gitbook.io/cql/guides/active-record-with-cql/validations)
-- [Relationships](https://azutopia.gitbook.io/cql/guides/active-record-with-cql/relations)
-- [Transactions](https://azutopia.gitbook.io/cql/guides/active-record-with-cql/transactions)
-- [Migrations](https://azutopia.gitbook.io/cql/guides/active-record-with-cql/migrations)
+- **[Installation Guide](./docs/installation.md)** - Setting up CQL in your project
+- **[Introduction](./docs/introduction.md)** - Core concepts and philosophy
+- **[Getting Started](./docs/guides/getting-started.md)** - Your first CQL application
+- **[Schema Definition](./docs/core-concepts/schemas.md)** - Defining database schemas
+- **[Defining Models](./docs/guides/active-record-with-cql/defining-models.md)** - Active Record model setup
+- **[CRUD Operations](./docs/guides/active-record-with-cql/crud-operations.md)** - Create, read, update, delete
+- **[Complex Queries](./docs/guides/active-record-with-cql/complex-queries.md)** - Advanced querying and N+1 prevention
+- **[Validations](./docs/guides/active-record-with-cql/validations.md)** - Data validation and integrity
+- **[Relationships](./docs/guides/active-record-with-cql/relations/README.md)** - Model associations and relationships
+- **[Transactions](./docs/guides/active-record-with-cql/transactions.md)** - Managing database transactions
+- **[Migrations](./docs/guides/active-record-with-cql/migrations.md)** - Schema evolution and versioning
+- **[Callbacks](./docs/guides/active-record-with-cql/callbacks.md)** - Lifecycle hooks and callbacks
+- **[Scopes](./docs/guides/active-record-with-cql/scopes.md)** - Reusable query methods
+- **[Optimistic Locking](./docs/guides/active-record-with-cql/optimistic-locking.md)** - Concurrency control
+- **[Core Concepts](./docs/core-concepts/README.md)** - Understanding CQL's architecture
+- **[Patterns](./docs/core-concepts/patterns/README.md)** - Active Record, Repository, and more
+- **[Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
 
 ## Development
 
 ### Running Tests
 
 ```bash
-# Start PostgreSQL
+# Start PostgreSQL for full test suite
 docker run --rm -e POSTGRES_DB=spec -e POSTGRES_PASSWORD=password -p 5432:5432 postgres
 
-# Run tests
+# Run tests with PostgreSQL
 DATABASE_URL="postgres://postgres:password@localhost:5432/spec" crystal spec
 
 # Run with SQLite (default)
 crystal spec
+
+# Run specific test files
+crystal spec spec/patterns/active_record/relations/
 ```
 
 ### Database Support
 
-CQL is tested against:
+CQL is actively tested against:
 
-- PostgreSQL 12+
-- MySQL 8.0+
-- SQLite 3.35+
+- **PostgreSQL**: 12, 13, 14, 15, 16
+- **MySQL**: 8.0+
+- **SQLite**: 3.35+
+
+Each database adapter supports dialect-specific features and optimizations.
 
 ## Contributing
 
@@ -435,18 +450,21 @@ We welcome contributions! Here's how to get started:
 
 1. **Fork** the repository
 2. **Create** your feature branch: `git checkout -b my-new-feature`
-3. **Make** your changes and add tests
+3. **Make** your changes and add comprehensive tests
 4. **Run** the test suite: `crystal spec`
-5. **Commit** your changes: `git commit -am 'Add some feature'`
-6. **Push** to your branch: `git push origin my-new-feature`
-7. **Create** a Pull Request
+5. **Update** documentation for any API changes
+6. **Commit** your changes: `git commit -am 'Add some feature'`
+7. **Push** to your branch: `git push origin my-new-feature`
+8. **Create** a Pull Request
 
 ### Development Guidelines
 
-- Follow Crystal coding conventions
-- Add tests for new features
-- Update documentation for API changes
+- Follow Crystal coding conventions and style guidelines
+- Add comprehensive tests for new features and bug fixes
+- Update documentation for API changes and new features
 - Ensure all tests pass across all supported databases
+- Use meaningful commit messages following conventional commits
+- Add performance tests for query-related features
 
 ## License
 
