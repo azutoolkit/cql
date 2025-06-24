@@ -82,7 +82,7 @@ describe "CQL::ActiveRecord Touch Demo" do
         "check_halt_save",
         "before_update",
         "after_update",
-        "after_save"
+        "after_save",
       ]
       CallbackTracker.order.should eq(expected_callbacks)
       puts "✅ Full callback chain executed for regular saves"

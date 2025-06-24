@@ -35,7 +35,7 @@ module CQL
       @db = open_database_connection(@uri)
     end
 
-        # Dump the database schema to a file
+    # Dump the database schema to a file
     # - **@param** file_path [String] Path where to save the schema file
     # - **@param** schema_name [Symbol] Name for the schema constant
     # - **@param** schema_symbol [Symbol] Symbol name for the schema
@@ -89,8 +89,8 @@ module CQL
     private def inspect_sqlite_tables
       tables = [] of TableInfo
 
-      @db.query_each("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") do |rs|
-        table_name = rs.read(String)
+      @db.query_each("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") do |record_set|
+        table_name = record_set.read(String)
         table_info = TableInfo.new(table_name)
 
         # Get columns
@@ -122,7 +122,7 @@ module CQL
           referenced_column = fk_rs.read(String)
           on_update = fk_rs.read(String)
           on_delete = fk_rs.read(String)
-          match = fk_rs.read(String)
+          _match = fk_rs.read(String)
 
           fk_info = ForeignKeyInfo.new(
             columns: [local_column],
@@ -145,15 +145,14 @@ module CQL
       tables = [] of TableInfo
 
       # Get all tables
-      @db.query_each(<<-SQL) do |rs|
+      @db.query_each(<<-SQL) do |record_set|
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = 'public'
         AND table_type = 'BASE TABLE'
         ORDER BY table_name
         SQL
-
-        table_name = rs.read(String)
+        table_name = record_set.read(String)
         table_info = TableInfo.new(table_name)
 
         # Get columns
@@ -163,7 +162,6 @@ module CQL
           WHERE table_schema = 'public' AND table_name = $1
           ORDER BY ordinal_position
           SQL
-
           column_name = col_rs.read(String)
           column_type = col_rs.read(String)
           nullable = col_rs.read(String) == "YES"
@@ -171,7 +169,7 @@ module CQL
 
           # Check if it's a primary key
           is_primary = false
-          @db.query_each(<<-SQL, table_name, column_name) do |pk_rs|
+          @db.query_each(<<-SQL, table_name, column_name) do |_|
             SELECT 1 FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu
             ON tc.constraint_name = kcu.constraint_name
@@ -216,7 +214,6 @@ module CQL
           AND tc.table_schema = 'public'
           AND tc.table_name = $1
           SQL
-
           local_column = fk_rs.read(String)
           referenced_table = fk_rs.read(String)
           referenced_column = fk_rs.read(String)
@@ -243,8 +240,8 @@ module CQL
     private def inspect_mysql_tables
       tables = [] of TableInfo
 
-      @db.query_each("SHOW TABLES") do |rs|
-        table_name = rs.read(String)
+      @db.query_each("SHOW TABLES") do |record_set|
+        table_name = record_set.read(String)
         table_info = TableInfo.new(table_name)
 
         # Get columns
@@ -254,7 +251,7 @@ module CQL
           nullable = col_rs.read(String) == "YES"
           key = col_rs.read(String?)
           default_value = col_rs.read(String?)
-          extra = col_rs.read(String?)
+          _extra = col_rs.read(String?)
 
           is_primary = key == "PRI"
           crystal_type = map_sql_type_to_crystal(column_type)
@@ -282,7 +279,6 @@ module CQL
           AND TABLE_NAME = ?
           AND REFERENCED_TABLE_NAME IS NOT NULL
           SQL
-
           local_column = fk_rs.read(String)
           referenced_table = fk_rs.read(String)
           referenced_column = fk_rs.read(String)
@@ -305,7 +301,7 @@ module CQL
       tables
     end
 
-                            # Map SQL type to Crystal type name
+    # Map SQL type to Crystal type name
     private def map_sql_type_to_crystal(sql_type : String) : String
       # Normalize the SQL type (remove size specifications, etc.)
       normalized_type = sql_type.upcase.gsub(/\(\d+\)/, "").strip
@@ -314,19 +310,19 @@ module CQL
       case @adapter
       when CQL::Adapter::SQLite
         case normalized_type
-        when "INTEGER"          then "Int32"
-        when "BIGINT"           then "Int64"
-        when "INTEGER UNSIGNED" then "UInt32"
-        when "BIGINT UNSIGNED"  then "UInt64"
-        when "FLOAT"            then "Float32"
-        when "DOUBLE"           then "Float64"
-        when "TEXT", "VARCHAR"  then "String"
-        when "BOOLEAN"          then "Bool"
+        when "INTEGER"           then "Int32"
+        when "BIGINT"            then "Int64"
+        when "INTEGER UNSIGNED"  then "UInt32"
+        when "BIGINT UNSIGNED"   then "UInt64"
+        when "FLOAT"             then "Float32"
+        when "DOUBLE"            then "Float64"
+        when "TEXT", "VARCHAR"   then "String"
+        when "BOOLEAN"           then "Bool"
         when "TIMESTAMP", "DATE" then "Time"
-        when "INTERVAL"         then "Time::Span"
-        when "BLOB"             then "Slice(UInt8)"
-        when "JSON"             then "JSON::Any"
-        else "String"
+        when "INTERVAL"          then "Time::Span"
+        when "BLOB"              then "Slice(UInt8)"
+        when "JSON"              then "JSON::Any"
+        else                          "String"
         end
       when CQL::Adapter::MySql
         case normalized_type
@@ -342,21 +338,21 @@ module CQL
         when "TIME"             then "Time::Span"
         when "BLOB"             then "Slice(UInt8)"
         when "JSON"             then "JSON::Any"
-        else "String"
+        else                         "String"
         end
       when CQL::Adapter::Postgres
         case downcase_type
-        when "integer"                then "Int32"
-        when "bigint"                 then "Int64"
-        when "real"                   then "Float32"
-        when "double precision"       then "Float64"
-        when "character varying", "varchar", "text" then "String"
-        when "boolean"                then "Bool"
+        when "integer"                                          then "Int32"
+        when "bigint"                                           then "Int64"
+        when "real"                                             then "Float32"
+        when "double precision"                                 then "Float64"
+        when "character varying", "varchar", "text"             then "String"
+        when "boolean"                                          then "Bool"
         when "timestamp without time zone", "timestamp", "date" then "Time"
-        when "interval"               then "Time::Span"
-        when "bytea"                  then "Slice(UInt8)"
-        when "jsonb", "json"          then "JSON::Any"
-        else "String"
+        when "interval"                                         then "Time::Span"
+        when "bytea"                                            then "Slice(UInt8)"
+        when "jsonb", "json"                                    then "JSON::Any"
+        else                                                         "String"
         end
       else
         "String"
@@ -366,19 +362,19 @@ module CQL
     # Map Crystal type to the correct CQL column method
     private def get_column_method(crystal_type : String) : String
       case crystal_type
-      when "Int32"          then "integer"
-      when "Int64"          then "bigint"
-      when "UInt32"         then "integer"     # No specific UInt32 method, use integer
-      when "UInt64"         then "bigint"      # No specific UInt64 method, use bigint
-      when "Float32"        then "float"
-      when "Float64"        then "double"
-      when "String"         then "text"        # Use text for general strings
-      when "Bool"           then "boolean"
-      when "Time"           then "timestamp"
-      when "Time::Span"     then "interval"
-      when "Slice(UInt8)"   then "blob"
-      when "JSON::Any"      then "json"
-      else "text"  # Default fallback
+      when "Int32"        then "integer"
+      when "Int64"        then "bigint"
+      when "UInt32"       then "integer" # No specific UInt32 method, use integer
+      when "UInt64"       then "bigint"  # No specific UInt64 method, use bigint
+      when "Float32"      then "float"
+      when "Float64"      then "double"
+      when "String"       then "text" # Use text for general strings
+      when "Bool"         then "boolean"
+      when "Time"         then "timestamp"
+      when "Time::Span"   then "interval"
+      when "Slice(UInt8)" then "blob"
+      when "JSON::Any"    then "json"
+      else                     "text" # Default fallback
       end
     end
 
@@ -388,26 +384,26 @@ module CQL
         str << "  table :#{table.name} do\n"
 
         # Primary key
-        primary_columns = table.columns.select(&.primary_key)
+        primary_columns = table.columns.select(&.primary_key?)
         if primary_columns.size == 1
           pk = primary_columns.first
           str << "    primary :#{pk.name}, #{pk.type}\n"
         end
 
-                # Check if we should use timestamps macro
-        has_created_at = table.columns.any? { |c| c.name == "created_at" }
-        has_updated_at = table.columns.any? { |c| c.name == "updated_at" }
+        # Check if we should use timestamps macro
+        has_created_at = table.columns.any? { |column| column.name == "created_at" }
+        has_updated_at = table.columns.any? { |column| column.name == "updated_at" }
         use_timestamps_macro = has_created_at && has_updated_at
 
         # Regular columns (excluding timestamp columns if using timestamps macro)
-        table.columns.reject(&.primary_key).each do |column|
+        table.columns.reject(&.primary_key?).each do |column|
           # Skip timestamp columns if we're using the timestamps macro
           if use_timestamps_macro && (column.name == "created_at" || column.name == "updated_at")
             next
           end
 
           str << "    #{get_column_method(column.type)} :#{column.name}"
-          str << ", null: true" if column.nullable
+          str << ", null: true" if column.nullable?
           str << ", default: #{column.default.inspect}" if column.default
           str << "\n"
         end
@@ -418,12 +414,12 @@ module CQL
         end
 
         # Foreign keys
-        table.foreign_keys.each do |fk|
-          str << "    foreign_key [:#{fk.columns.join(", :")}], "
-          str << "references: :#{fk.references_table}, "
-          str << "references_columns: [:#{fk.references_columns.join(", :")}]"
-          str << ", on_delete: :#{fk.on_delete}" if fk.on_delete != "no_action"
-          str << ", on_update: :#{fk.on_update}" if fk.on_update != "no_action"
+        table.foreign_keys.each do |foreign_key|
+          str << "    foreign_key [:#{foreign_key.columns.join(", :")}], "
+          str << "references: :#{foreign_key.references_table}, "
+          str << "references_columns: [:#{foreign_key.references_columns.join(", :")}]"
+          str << ", on_delete: :#{foreign_key.on_delete}" if foreign_key.on_delete != "no_action"
+          str << ", on_update: :#{foreign_key.on_update}" if foreign_key.on_update != "no_action"
           str << "\n"
         end
 
@@ -455,13 +451,13 @@ module CQL
       end
     end
 
-        # Information about a database column
+    # Information about a database column
     private struct ColumnInfo
       property name : String
-    property type : String
-      property nullable : Bool
+      property type : String
+      property? nullable : Bool
       property default : String?
-      property primary_key : Bool
+      property? primary_key : Bool
 
       def initialize(@name : String, @type : String, @nullable : Bool = false, @default : String? = nil, @primary_key : Bool = false)
       end

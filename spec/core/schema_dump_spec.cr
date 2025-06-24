@@ -4,7 +4,7 @@ describe CQL::SchemaDump do
   describe "SQLite schema dumping" do
     it "can dump a SQLite database schema" do
       # Use the existing UserDB test database
-      UserDB.build  # Make sure the database exists
+      UserDB.build # Make sure the database exists
 
       dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://spec/support/db/user_db.db")
 
@@ -26,7 +26,7 @@ describe CQL::SchemaDump do
     end
 
     it "can dump schema to file" do
-      UserDB.build  # Make sure the database exists
+      UserDB.build # Make sure the database exists
 
       dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://spec/support/db/user_db.db")
 
@@ -44,7 +44,7 @@ describe CQL::SchemaDump do
     end
 
     it "handles foreign keys correctly" do
-      UserDB.build  # Make sure the database exists
+      UserDB.build # Make sure the database exists
 
       dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://spec/support/db/user_db.db")
 
@@ -58,17 +58,17 @@ describe CQL::SchemaDump do
     end
   end
 
-    describe "type mapping" do
+  describe "type mapping" do
     it "maps SQLite types correctly through schema generation" do
-      UserDB.build  # Make sure the database exists
+      UserDB.build # Make sure the database exists
 
       dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://spec/support/db/user_db.db")
 
       schema_content = dumper.generate_schema_content(:TestDB, :test_db)
 
       # Verify that the generated schema contains the correct column methods
-      schema_content.should contain("integer") # From INTEGER columns
-      schema_content.should contain("text")    # From TEXT columns
+      schema_content.should contain("integer")            # From INTEGER columns
+      schema_content.should contain("text")               # From TEXT columns
       schema_content.should contain("primary :id, Int32") # Primary key still shows type
 
       dumper.close
