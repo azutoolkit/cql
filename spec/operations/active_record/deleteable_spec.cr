@@ -290,4 +290,76 @@ describe CQL::ActiveRecord::Deleteable do
       CallbackTracker.order.should eq(["before_destroy", "check_halt_destroy"])
     end
   end
+
+  describe "#destroyed?" do
+    it "returns false for new records" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+
+      user.destroyed?.should be_false
+    end
+
+    it "returns false for persisted records" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+      user.create!
+
+      user.destroyed?.should be_false
+    end
+
+    it "returns true after record is successfully deleted" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+      user.create!
+
+      user.destroyed?.should be_false
+      user.delete!
+      user.destroyed?.should be_true
+    end
+
+    it "returns false when deletion fails due to nil id" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+
+      user.destroyed?.should be_false
+      user.delete!.should be_false    # Deletion fails
+      user.destroyed?.should be_false # Should still be false
+    end
+
+    it "returns false when deletion is halted by callback" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+      user.create!
+      user.halt_on_callback = "before_destroy"
+
+      user.destroyed?.should be_false
+      user.delete!.should be_false    # Deletion halted
+      user.destroyed?.should be_false # Should still be false
+    end
+  end
 end

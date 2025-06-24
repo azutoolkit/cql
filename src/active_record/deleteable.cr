@@ -2,6 +2,10 @@ module CQL
   module ActiveRecord
     module Deleteable
       macro included
+        # Internal property to track destroyed state
+        @[DB::Field(ignore: true)]
+        property destroyed : Bool = false
+
         # Delete a record by ID
         # - **@param** id [PrimaryKey] The ID of the record
         #
@@ -64,6 +68,17 @@ module CQL
             .commit
         end
 
+        # Check if the record has been destroyed (deleted from the database)
+        # - **@return** [Bool] True if the record has been destroyed, false otherwise
+        #
+        # **Example** Checking if the record is destroyed
+        # ```
+        # user.destroyed?
+        # ```
+        def destroyed?
+          destroyed
+        end
+
         # Delete the record from the database
         # - **@return** [Bool] True if deleted successfully, false otherwise
         #
@@ -86,6 +101,7 @@ module CQL
           if success
             run_callbacks(:after_destroy)
             @id = nil
+            self.destroyed = true
           end
 
           success

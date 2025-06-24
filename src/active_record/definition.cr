@@ -87,11 +87,12 @@ module CQL
         # User.from_hash({name: "Alice", email: "alice@example.com"})
         # ```
         def self.from_hash(hash_attrs : Hash(Symbol, DB::Any))
-          {% for field in @type.instance_vars %}
-            {% if field.type.is_a?(CQL::Column) %}
-              @{{field.name}} = hash_attrs[{{field.name.stringify}}]
-            {% end %}
-          {% end %}
+          # Create instance using build method with empty fields and then set attributes
+          instance = allocate
+          instance.initialize
+          # Use the existing attributes method to set the hash values
+          instance.attributes(hash_attrs) if instance.responds_to?(:attributes)
+          instance
         end
       end
     end

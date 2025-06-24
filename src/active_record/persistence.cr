@@ -27,6 +27,17 @@ module CQL
           !id.nil?
         end
 
+        # Check if the record is a new record (not yet saved to the database)
+        # - **@return** [Bool] True if the record is new (no ID), false if persisted
+        #
+        # **Example** Checking if the record is new
+        # ```
+        # user.new_record?
+        # ```
+        def new_record?
+          id.nil?
+        end
+
         # Touch one or more timestamp attributes without triggering callbacks
         # Updates the specified timestamp fields to the current time and saves
         # directly to the database without running validations or callbacks.
@@ -86,19 +97,12 @@ module CQL
 
           # Update the local instance attributes to match
           if result.rows_affected > 0
+            # Update the local attributes using the attributes setter if available
+            attrs_for_local_update = {} of Symbol => DB::Any
             touch_fields.each do |field|
-              # Use Crystal's macro system to dynamically set the instance variable
-              {% begin %}
-                case field
-                {% for var in @type.instance_vars %}
-                  {% if var.type == Time || var.type == Time? %}
-                when :{{var.name.id}}
-                  @{{var.name.id}} = time
-                  {% end %}
-                {% end %}
-                end
-              {% end %}
+              attrs_for_local_update[field] = time.as(DB::Any)
             end
+            self.attributes(attrs_for_local_update) if self.responds_to?(:attributes)
             true
           else
             false
@@ -220,28 +224,22 @@ module CQL
           has_created_at = table.columns[:created_at]?
           has_updated_at = table.columns[:updated_at]?
 
-          if !persisted?
+          # Build attributes hash for timestamp updates
+          timestamp_attrs = {} of Symbol => DB::Any
+
+          if !persisted? && has_created_at
             # Set created_at for new records
-            if has_created_at
-              {% begin %}
-                {% for var in @type.instance_vars %}
-                  {% if var.name.id == "created_at" && (var.type == Time || var.type == Time?) %}
-                    @created_at = current_time if @created_at.nil?
-                  {% end %}
-                {% end %}
-              {% end %}
-            end
+            timestamp_attrs[:created_at] = current_time.as(DB::Any)
           end
 
-          # Always set updated_at
           if has_updated_at
-            {% begin %}
-              {% for var in @type.instance_vars %}
-                {% if var.name.id == "updated_at" && (var.type == Time || var.type == Time?) %}
-                  @updated_at = current_time
-                {% end %}
-              {% end %}
-            {% end %}
+            # Always set updated_at
+            timestamp_attrs[:updated_at] = current_time.as(DB::Any)
+          end
+
+          # Update the attributes if we have any timestamp fields to set
+          unless timestamp_attrs.empty?
+            self.attributes(timestamp_attrs) if self.responds_to?(:attributes)
           end
         end
 

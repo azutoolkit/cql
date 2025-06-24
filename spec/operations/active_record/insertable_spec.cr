@@ -329,4 +329,80 @@ describe CQL::ActiveRecord::Insertable do
       user.age.should eq(30) # Should remain unchanged due to type mismatch
     end
   end
+
+  describe "#new_record?" do
+    it "returns true for new records" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+
+      user.new_record?.should be_true
+      user.persisted?.should be_false
+    end
+
+    it "returns false for persisted records" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+      user.create!
+
+      user.new_record?.should be_false
+      user.persisted?.should be_true
+    end
+
+    it "returns false after successful save" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+
+      user.new_record?.should be_true
+      user.save!
+      user.new_record?.should be_false
+    end
+
+    it "returns true when record creation fails" do
+      user = TestUser.new(
+        name: "J", # Too short - validation should fail
+        email: "invalid-email",
+        age: 0,
+        password: "password123",
+        password_confirmation: "different"
+      )
+
+      user.new_record?.should be_true
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError) do
+        user.save!
+      end
+      user.new_record?.should be_true # Should still be true after failed save
+    end
+
+    it "is opposite of persisted?" do
+      user = TestUser.new(
+        name: "John Doe",
+        email: "john@example.com",
+        age: 30,
+        password: "password123",
+        password_confirmation: "password123"
+      )
+
+      # Before creation
+      user.new_record?.should eq(!user.persisted?)
+
+      # After creation
+      user.create!
+      user.new_record?.should eq(!user.persisted?)
+    end
+  end
 end
