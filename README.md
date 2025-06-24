@@ -26,6 +26,7 @@ CQL is a powerful Object-Relational Mapping (ORM) library for the Crystal progra
     - [Database Transactions](#database-transactions)
     - [Schema Migrations](#schema-migrations)
     - [Query Scopes](#query-scopes)
+    - [Schema Dump](#schema-dump)
   - [Advanced Features](#advanced-features)
   - [Documentation](#documentation)
     - [Quick Links](#quick-links)
@@ -45,6 +46,7 @@ CQL is a powerful Object-Relational Mapping (ORM) library for the Crystal progra
 - **✅ Comprehensive Validations**: Built-in validation system with custom validator support
 - **🔄 Lifecycle Callbacks**: Before/after hooks for validation, save, create, update, and destroy
 - **🗄️ Database Migrations**: Schema evolution tools for managing database changes
+- **📋 Schema Dump**: Reverse-engineer existing databases into CQL schema definitions
 - **🔍 Flexible Querying**: Fluent query builder with complex joins and subqueries
 - **💾 Transaction Support**: Full ACID transaction support with nested transactions (savepoints)
 - **🔐 Optimistic Locking**: Built-in support for optimistic concurrency control
@@ -381,8 +383,29 @@ recent_posts = Post.published.recent.limit(10).all
 author_posts = Post.by_author(user.id).published.all
 ```
 
+### Schema Dump
+
+```crystal
+# Reverse-engineer existing databases into CQL schemas
+require "cql"
+
+# Connect to existing database
+dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://legacy_app.db")
+
+# Generate CQL schema from existing database
+dumper.dump_to_file("src/schemas/legacy_schema.cr", :LegacyDB, :legacy_db)
+
+# Generated schema uses proper CQL methods:
+# integer :user_id          # instead of column :user_id, Int32
+# text :name               # instead of column :name, String
+# timestamps               # instead of individual created_at/updated_at
+
+dumper.close
+```
+
 ## Advanced Features
 
+- **Schema Dump**: Reverse-engineer existing databases into idiomatic CQL schema definitions
 - **Optimistic Locking**: Prevent concurrent update conflicts with version-based locking
 - **Lifecycle Callbacks**: `before_save`, `after_create`, `before_destroy`, and more
 - **N+1 Query Prevention**: Automatic JOIN-based queries and smart association loading
@@ -409,6 +432,7 @@ The complete documentation is available in the [docs](./docs) directory:
 - **[Relationships](./docs/guides/active-record-with-cql/relations/README.md)** - Model associations and relationships
 - **[Transactions](./docs/guides/active-record-with-cql/transactions.md)** - Managing database transactions
 - **[Migrations](./docs/guides/active-record-with-cql/migrations.md)** - Schema evolution and versioning
+- **[Schema Dump](./docs/guides/schema-dump.md)** - Reverse-engineer database schemas from existing databases
 - **[Callbacks](./docs/guides/active-record-with-cql/callbacks.md)** - Lifecycle hooks and callbacks
 - **[Scopes](./docs/guides/active-record-with-cql/scopes.md)** - Reusable query methods
 - **[Optimistic Locking](./docs/guides/active-record-with-cql/optimistic-locking.md)** - Concurrency control

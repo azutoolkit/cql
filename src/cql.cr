@@ -27,6 +27,7 @@ require "./cache"
 require "./merge_query"
 require "./query"
 require "./repository"
+require "./schema_dump"
 require "./active_record/model"
 
 module CQL

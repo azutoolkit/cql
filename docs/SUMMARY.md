@@ -48,6 +48,7 @@
 - [Migrations](guides/active-record-with-cql/migrations.md)
 - [Migration Best Practices](guides/handling-migrations.md)
 - [Schema Migrations](core-concepts/migrations.md)
+- [Schema Dump](guides/schema-dump.md)
 
 ## Resources
 
