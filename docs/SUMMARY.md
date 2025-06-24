@@ -42,13 +42,14 @@
 - [Persistence Details](guides/active-record-with-cql/persistence-details.md)
 - [Optimistic Locking](guides/active-record-with-cql/optimistic-locking.md)
 - [Query Scopes](guides/active-record-with-cql/scopes.md)
+- [🆕 Integrated Migration Workflow](guides/active-record-with-cql/integrated-migration-workflow.md)
 
 ## Database Management
 
-- [Migrations](guides/active-record-with-cql/migrations.md)
-- [Migration Best Practices](guides/handling-migrations.md)
-- [Schema Migrations](core-concepts/migrations.md)
-- [Schema Dump](guides/schema-dump.md)
+- [🆕 Migrations](guides/active-record-with-cql/migrations.md)
+- [🆕 Migration Best Practices](guides/handling-migrations.md)
+- [🆕 Schema Migrations](core-concepts/migrations.md)
+- [🆕 Schema Dump](guides/schema-dump.md)
 
 ## Resources
 

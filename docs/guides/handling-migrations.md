@@ -2,6 +2,8 @@
 
 Migrations in CQL provide a structured way to evolve your database schema over time. They allow you to create, modify, and drop tables and columns in a versioned, reversible manner using Crystal code.
 
+**🆕 Integrated Workflow**: CQL now provides automatic schema file synchronization with migrations. For the complete Active Record integration guide, see [Integrated Migration Workflow](active-record-with-cql/integrated-migration-workflow.md).
+
 ---
 
 ## What is a Migration?
@@ -46,23 +48,45 @@ end
 
 ## Running Migrations
 
-You can run migrations using your preferred migration runner or a custom script. A typical workflow:
-
-1. Place migration files in a `db/migrations/` directory.
-2. Load and apply migrations in order:
+### 🆕 Modern Approach: Integrated Workflow
 
 ```crystal
 require "cql"
 
+# Configure automatic schema synchronization
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  schema_symbol: :app_schema,
+  auto_sync: true  # Automatically update schema file
+)
+
+# Initialize migrator with configuration
+migrator = AcmeDB.migrator(config)
+
+# Load migration files
+Dir.glob("./db/migrations/*.cr").each { |file| require file }
+
+# Apply migrations - schema file automatically updated
+migrator.up
+
+# Verify everything is in sync
+puts "Schema consistent: #{migrator.verify_schema_consistency}"
+```
+
+### Traditional Approach
+
+You can still use the traditional approach without automatic schema synchronization:
+
+```crystal
 # Load all migration files
 dir = "./db/migrations"
 Dir.glob("#{dir}/*.cr").each { |file| require file }
 
-# Run all migrations (pseudo-code, depends on your runner)
-CQL::Migrator.new(AcmeDB).migrate!
+# Traditional migrator (no auto-sync)
+migrator = CQL::Migrator.new(AcmeDB)
+migrator.up
 ```
-
-Consult your project's migration runner or CQL's documentation for details on migration management.
 
 ---
 

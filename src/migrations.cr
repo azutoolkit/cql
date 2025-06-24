@@ -80,14 +80,14 @@ module CQL
   class MigrationRecord
     include DB::Serializable
 
-    getter id : Int64
+    getter id : Int32
     getter name : String
     getter version : Int32
     getter? created_at : Time?
     getter? updated_at : Time?
 
     def initialize(
-      @id : Int64,
+      @id : Int32,
       @name : String,
       @version : Int32,
       @created_at = Time.local,
@@ -154,7 +154,7 @@ module CQL
   #   table :schema_migrations do
   #     primary :id, Int32
   #     column :name, String
-  #     column :version, Int64, index: true, unique: true
+  #     column :version, Int32, index: true, unique: true
   #     timestamps
   #   end
   # end
@@ -169,14 +169,14 @@ module CQL
     Log = ::Log.for(self)
 
     # Represents a migration record.
-    # @field id [Int64] the migration record id
+    # @field id [Int32] the migration record id
     # @field name [String] the migration name
-    # @field version [Int64] the migration version
+    # @field version [Int32] the migration version
     # @field created_at [Time] the creation time
     # @field updated_at [Time] the update time
     # **Example** Creating a migration record
     # ```
-    # record = CQL::MigrationRecord.new(0_i64, "CreateUsersTable", 1_i64)
+    # record = CQL::MigrationRecord.new(0, "CreateUsersTable", 1)
     # ```
 
     getter schema : CQL::Schema
@@ -343,23 +343,23 @@ module CQL
     end
 
     # Rolls back to a specific migration version.
-    # - **@param** version [Int64] the version to roll back to
+    # - **@param** version [Int32] the version to roll back to
     # **Example** Rolling back to a specific version
     # ```
-    # migrator.down_to(1_i64)
+    # migrator.down_to(1)
     # ```
-    def down_to(version : Int64)
+    def down_to(version : Int32)
       index = sorted_migrations.index { |migration| migration.version == version }
       down(index ? index + 1 : 0) if index
     end
 
     # Applies migrations up to a specific version.
-    # - **@param** version [Int64] the version to apply up to
+    # - **@param** version [Int32] the version to apply up to
     # **Example** Applying to a specific version
     # ```
-    # migrator.up_to(1_i64)
+    # migrator.up_to(1)
     # ```
-    def up_to(version : Int64)
+    def up_to(version : Int32)
       index = sorted_migrations.index { |migration| migration.version == version }
       up(index ? index + 1 : 0) if index
     end

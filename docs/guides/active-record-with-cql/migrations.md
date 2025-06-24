@@ -1,6 +1,6 @@
 # Database Migrations in CQL
 
-CQL provides a comprehensive migration system for managing database schema changes over time. Migrations allow you to version control your database schema alongside your application code, ensuring consistent deployments across environments.
+CQL provides a comprehensive migration system for managing database schema changes over time with **automatic schema file synchronization**. This integrated workflow ensures your schema files always match your database state, providing compile-time type safety for Active Record models.
 
 ---
 
@@ -18,6 +18,50 @@ Migrations are Crystal classes that define changes to your database schema. Each
 - **Team Collaboration**: Consistent schema across development environments
 - **Deployment Safety**: Reliable schema updates in production
 - **Rollback Capability**: Ability to undo problematic changes
+- **🆕 Automatic Schema Sync**: Schema files automatically updated after migrations
+- **🆕 Type Safety**: Compile-time guarantees for Active Record models
+
+---
+
+## 🆕 Integrated Migration Workflow
+
+CQL now provides an integrated migration system that automatically maintains schema files in sync with your database changes:
+
+### Quick Setup
+
+```crystal
+# 1. Configure automatic schema synchronization
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  schema_symbol: :app_schema,
+  auto_sync: true  # Automatically update schema file after migrations
+)
+
+# 2. Initialize migrator with config
+migrator = AppDB.migrator(config)
+
+# 3. Run migrations - schema file automatically updated!
+migrator.up
+```
+
+### Benefits for Active Record
+
+```crystal
+# After migrations run, your schema file is automatically updated
+require "./src/schemas/app_schema"
+
+class User
+  include CQL::ActiveRecord::Model(Int32)
+  db_context AppSchema, :users  # Uses auto-generated schema
+
+  # Compile-time type safety guaranteed!
+  property name : String
+  property email : String
+end
+```
+
+**For a complete guide on this workflow, see [Integrated Migration Workflow with Active Record](integrated-migration-workflow.md).**
 
 ---
 
@@ -289,12 +333,46 @@ end
 ### Setting Up the Migrator
 
 ```crystal
-# Create a migrator instance
-migrator = CQL::Migrator.new(MyAppDB)
+# 🆕 New: Configure with automatic schema synchronization
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  schema_symbol: :app_schema,
+  auto_sync: true
+)
+
+migrator = MyAppDB.migrator(config)
+
+# Traditional: Basic migrator (no auto-sync)
+# migrator = CQL::Migrator.new(MyAppDB)
 
 # Check migration status
 migrator.print_pending_migrations
 migrator.print_applied_migrations
+```
+
+### 🆕 Environment-Specific Configurations
+
+```crystal
+# Development: Auto-sync enabled for rapid iteration
+dev_config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  auto_sync: true
+)
+
+# Production: Manual control for safety
+prod_config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/production_schema.cr",
+  schema_name: :ProductionSchema,
+  auto_sync: false
+)
+
+# Test: Separate schema file
+test_config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/test_schema.cr",
+  schema_name: :TestSchema,
+  auto_sync: true
+)
 ```
 
 ### Basic Migration Commands
@@ -333,6 +411,27 @@ puts "Pending: #{pending.map(&.version)}"
 # Get last applied migration
 last = migrator.last
 puts "Last: #{last.try(&.version) || "None"}"
+```
+
+### 🆕 Schema Synchronization Methods
+
+```crystal
+# Bootstrap schema file from existing database (first-time setup)
+migrator.bootstrap_schema
+
+# Manually update schema file to match current database
+migrator.update_schema_file
+
+# Verify schema file matches database state
+consistent = migrator.verify_schema_consistency
+puts "Schema consistent: #{consistent}"
+
+# Example: Manual sync workflow
+unless migrator.verify_schema_consistency
+  puts "Schema file out of sync - updating..."
+  migrator.update_schema_file
+  puts "Schema file updated!"
+end
 ```
 
 ---
@@ -402,10 +501,15 @@ class AddPublishedToPosts < CQL::Migration(20240102120000)
   end
 end
 
-# Run migrations
-migrator = CQL::Migrator.new(AppDB)
+# 🆕 Run migrations with automatic schema synchronization
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  auto_sync: true
+)
+migrator = AppDB.migrator(config)
 
-# Apply all migrations
+# Apply all migrations - schema file automatically updated!
 migrator.up
 
 # Check status
@@ -414,7 +518,21 @@ migrator.print_applied_migrations
 # ✔ CreatePostsTable         20240101130000
 # ✔ AddPublishedToPosts      20240102120000
 
-# Rollback last migration
+# Schema file is now updated and ready for Active Record models!
+require "./src/schemas/app_schema"
+
+class User
+  include CQL::ActiveRecord::Model(Int32)
+  db_context AppSchema, :users
+
+  property id : Int32?
+  property name : String
+  property email : String
+  property created_at : Time?
+  property updated_at : Time?
+end
+
+# Rollback last migration - schema file automatically updated!
 migrator.down(1)
 
 # Check status again
@@ -496,6 +614,30 @@ crystal db/migrate.cr redo
 - Use descriptive names: `CreateUsersTable`, `AddEmailToUsers`, `RemoveDeprecatedColumns`
 - Include timestamp-based version numbers
 - Keep migration files organized in a `migrations/` directory
+
+### 🆕 Schema Synchronization Best Practices
+
+```crystal
+# 1. Always commit both migrations and schema files together
+git add migrations/003_add_user_roles.cr
+git add src/schemas/app_schema.cr
+git commit -m "Add user roles migration and update schema"
+
+# 2. Use environment-specific configurations
+# Development: auto_sync: true for rapid iteration
+# Production: auto_sync: false for manual control
+
+# 3. Verify schema consistency in CI/CD
+unless migrator.verify_schema_consistency
+  puts "❌ DEPLOYMENT FAILED: Schema file out of sync"
+  exit(1)
+end
+
+# 4. Bootstrap new developers easily
+git clone project
+migrator.up  # Applies migrations and generates schema file
+# Ready to code with type-safe models!
+```
 
 ### Safe Migration Practices
 

@@ -2,6 +2,8 @@
 
 The `CQL::SchemaDump` class provides functionality to reverse-engineer existing database schemas and generate CQL schema definition files. This is useful when you have an existing database and want to create a CQL schema that matches its structure.
 
+**🆕 Integration with Migrations**: Schema dumping is now integrated with the migration system to provide automatic schema file synchronization. See [Integrated Migration Workflow](active-record-with-cql/integrated-migration-workflow.md) for the complete workflow.
+
 ## Overview
 
 Schema dumping allows you to:
@@ -199,6 +201,30 @@ Convert an existing database to use CQL:
 1. Dump the existing schema using `SchemaDump`
 2. Review and adjust the generated schema as needed
 3. Use the schema in your CQL application
+
+### 🆕 Migration Integration
+
+The schema dump functionality is now integrated with the migration system:
+
+```crystal
+# Automatic schema synchronization with migrations
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  auto_sync: true
+)
+
+migrator = AppDB.migrator(config)
+
+# Bootstrap from existing database
+migrator.bootstrap_schema  # Uses SchemaDump internally
+
+# Run migrations - schema file automatically updated
+migrator.up  # Uses SchemaDump to keep schema file current
+
+# Manual schema updates
+migrator.update_schema_file  # Uses SchemaDump to regenerate schema
+```
 
 ### Schema Documentation
 
