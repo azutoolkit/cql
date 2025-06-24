@@ -1,5 +1,19 @@
 require "./spec_helper"
 
+# Test class for acceptance validation
+class TestAcceptanceUser
+  include CQL::ActiveRecord::Validations
+
+  property name : String?
+  property email : String?
+  property terms_accepted : Bool | String | Nil
+
+  validate :terms_accepted, accept: true, message: "Terms must be accepted"
+
+  def initialize(@name = nil, @email = nil, @terms_accepted = nil)
+  end
+end
+
 describe CQL::ActiveRecord::Validations do
   describe TestUser do
     describe "validations" do
@@ -87,6 +101,51 @@ describe CQL::ActiveRecord::Validations do
           user.valid?.should be_true
           user.errors.empty?.should be_true
         end
+      end
+    end
+
+    describe "acceptance validation" do
+
+      it "should be valid when terms are accepted with true" do
+        user = TestAcceptanceUser.new("John Doe", "john@example.com", true)
+        user.valid?.should be_true
+        user.errors.map(&.message).should_not contain("Terms must be accepted")
+      end
+
+      it "should be valid when terms are accepted with string 'true'" do
+        user = TestAcceptanceUser.new("John Doe", "john@example.com", "true")
+        user.valid?.should be_true
+        user.errors.map(&.message).should_not contain("Terms must be accepted")
+      end
+
+      it "should be valid when terms are accepted with '1'" do
+        user = TestAcceptanceUser.new("John Doe", "john@example.com", "1")
+        user.valid?.should be_true
+        user.errors.map(&.message).should_not contain("Terms must be accepted")
+      end
+
+      it "should be valid when terms are accepted with 'yes'" do
+        user = TestAcceptanceUser.new("John Doe", "john@example.com", "yes")
+        user.valid?.should be_true
+        user.errors.map(&.message).should_not contain("Terms must be accepted")
+      end
+
+      it "should be invalid when terms are not accepted (false)" do
+        user = TestAcceptanceUser.new("John Doe", "john@example.com", false)
+        user.valid?.should be_false
+        user.errors.map(&.message).should contain("Terms must be accepted")
+      end
+
+      it "should be invalid when terms are not accepted (nil)" do
+        user = TestAcceptanceUser.new("John Doe", "john@example.com", nil)
+        user.valid?.should be_false
+        user.errors.map(&.message).should contain("Terms must be accepted")
+      end
+
+      it "should be invalid when terms are not accepted ('no')" do
+        user = TestAcceptanceUser.new("John Doe", "john@example.com", "no")
+        user.valid?.should be_false
+        user.errors.map(&.message).should contain("Terms must be accepted")
       end
     end
   end

@@ -122,6 +122,31 @@ module CQL
         end
       end
 
+      module Confirmation
+        def confirmation?(value, confirmation_value)
+          return false if value.nil? || confirmation_value.nil?
+          value == confirmation_value
+        end
+      end
+
+      module Acceptance
+        def accept?(value, accepted_values = true)
+          return false if value.nil?
+          # If accepted_values is true, use default acceptance values
+          if accepted_values == true
+            default_accepted = [true, "true", "1", "on", "yes"]
+            default_accepted.includes?(value)
+          else
+            case accepted_values
+            when Array
+              accepted_values.includes?(value)
+            else
+              value == accepted_values
+            end
+          end
+        end
+      end
+
       module Size
         def size?(value, size : AllNumbers)
           return false if value.nil? || size.nil?
@@ -146,6 +171,8 @@ module CQL
         include Size
         include Presence
         include Required
+        include Confirmation
+        include Acceptance
       end
 
       class Constraint
@@ -221,18 +248,30 @@ module CQL
                   {% if options[:on] == context || context.nil? %}
                     {% for predicate, expected_value in options %}
                       {% if !["message", "on"].includes?(predicate.stringify) %}
-                      unless rule.{{predicate.id}}?(instance.{{name.id}}, {{expected_value}})
-                        errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
-                      end
+                        {% if predicate.stringify == "confirmation" %}
+                        unless rule.confirmation?(instance.{{name.id}}, instance.{{expected_value.id}})
+                          errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
+                        end
+                        {% else %}
+                        unless rule.{{predicate.id}}?(instance.{{name.id}}, {{expected_value}})
+                          errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
+                        end
+                        {% end %}
                       {% end %}
                     {% end %}
                   {% end %}
                 {% else %}
                   {% for predicate, expected_value in options %}
                     {% if !["message", "on"].includes?(predicate.stringify) %}
-                    unless rule.{{predicate.id}}?(instance.{{name.id}}, {{expected_value}})
-                      errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
-                    end
+                      {% if predicate.stringify == "confirmation" %}
+                      unless rule.confirmation?(instance.{{name.id}}, instance.{{expected_value.id}})
+                        errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
+                      end
+                      {% else %}
+                      unless rule.{{predicate.id}}?(instance.{{name.id}}, {{expected_value}})
+                        errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
+                      end
+                      {% end %}
                     {% end %}
                   {% end %}
                 {% end %}
@@ -264,6 +303,10 @@ module CQL
               "#{field} must have a size of #{value}"
             when "presence?"
               "#{field} must be present"
+            when "confirmation?"
+              "#{field} confirmation doesn't match"
+            when "accept?"
+              "#{field} must be accepted"
             else
               "Invalid #{field}"
             end
