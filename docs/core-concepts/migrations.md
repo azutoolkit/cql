@@ -1,359 +1,844 @@
 # Migrations
 
-Migrations in CQL provide a structured way to manage incremental changes to your database schema over time. They work in conjunction with the SchemaDump feature to maintain an up-to-date representation of your database schema.
+## What Are Migrations and Why Do You Need Them?
 
-## Overview
+If you've ever worked on a team project where someone says "it works on my machine" regarding database changes, you understand the pain that migrations solve. **Migrations are version control for your database schema** - they provide a systematic way to evolve your database structure over time while keeping everyone's environment in sync.
 
-CQL migrations consist of three main components:
+### The Problem Migrations Solve
 
-1. **Migration Classes**: Define incremental schema changes
-2. **Migrator**: Executes migrations and manages schema synchronization
-3. **AppSchema.cr**: Central schema file that reflects the current database state
+Imagine you're building an e-commerce application. Initially, you might have a simple `users` table:
 
-## Schema Synchronization Workflow
-
-### 1. Initial Bootstrap (Existing Database)
-
-If you have an existing database, start by bootstrapping your AppSchema.cr:
-
-```crystal
-# Initialize your schema connection
-MyDB = CQL::Schema.define(
-  :my_database,
-  adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]
-) do
-  # This will be populated by bootstrap
-end
-
-# Configure the migrator for schema synchronization
-config = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  schema_symbol: :app_schema,
-  auto_sync: true
-)
-
-migrator = MyDB.migrator(config)
-
-# Bootstrap the schema file from existing database
-migrator.bootstrap_schema
+```sql
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255),
+  email VARCHAR(255)
+);
 ```
 
-This creates `src/schemas/app_schema.cr` with the current database structure:
+Three weeks later, you need to add user preferences and email verification. Without migrations, you might:
+
+1. Manually add columns to your local database
+2. Tell your teammate to add the same columns
+3. Hope production gets updated correctly
+4. Lose track of what changes were made when
+
+**This approach breaks down quickly.** Migrations solve this by making database changes:
+
+- **Trackable**: Each change is a numbered file
+- **Reversible**: You can roll back problematic changes
+- **Shareable**: Team members get the same database structure
+- **Automatic**: Your application code stays in sync with your database
+
+### How CQL Migrations Work
+
+CQL migrations work differently from traditional SQL migrations. Instead of writing raw SQL, you use CQL's schema definition language, and the system automatically maintains a synchronized `AppSchema.cr` file that reflects your current database structure.
 
 ```crystal
-AppSchema = CQL::Schema.define(
-  :app_schema,
-  adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]) do
+# Traditional approach (manual schema management)
+MyApp.cr ⟷ Database
+     ↑           ↑
+  Manual     Manual SQL
+  Updates    Scripts
 
+# CQL approach (automatic schema synchronization)
+Migration Files → Database
+       ↓             ↓
+   Automatic → AppSchema.cr → Your Application Code
+```
+
+This means your Crystal code always knows the exact structure of your database, providing compile-time safety and IntelliSense support.
+
+---
+
+## Core Concepts You Need to Understand
+
+### 1. Migration Classes - Your Database Change Scripts
+
+A migration class represents a single, specific change to your database structure. Think of each migration as a "diff" for your database:
+
+```crystal
+# This migration adds email verification to users
+class AddEmailVerificationToUsers < CQL::Migration(3)
+  def up    # What to do when applying this migration
+    schema.alter :users do
+      add_column :email_verified, Bool, default: false
+      add_column :verification_token, String, null: true
+    end
+  end
+
+  def down  # How to undo this migration if needed
+    schema.alter :users do
+      drop_column :verification_token
+      drop_column :email_verified
+    end
+  end
+end
+```
+
+**Key points:**
+
+- The number `(3)` is the migration version - it must be unique and sequential
+- `up` method defines what changes to make
+- `down` method defines how to reverse those changes
+- Always test both directions!
+
+### 2. The Migrator - Your Database Change Manager
+
+The migrator is CQL's migration engine. It:
+
+- Tracks which migrations have been applied
+- Runs pending migrations in order
+- Updates your AppSchema.cr file automatically
+- Provides rollback capabilities
+
+```crystal
+# Think of the migrator as your database's "git"
+migrator = AppDB.migrator(config)
+
+migrator.up           # Like "git pull" - apply all pending changes
+migrator.rollback     # Like "git revert" - undo the last change
+migrator.status       # Like "git status" - see what's pending
+```
+
+### 3. AppSchema.cr - Your Database's Source of Truth
+
+This is CQL's secret sauce. Unlike other ORMs where you manually keep model definitions in sync with your database, CQL automatically generates a schema file that perfectly matches your database structure:
+
+```crystal
+# This file is automatically generated and updated
+AppSchema = CQL::Schema.define(:app_schema, adapter: CQL::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
   table :users do
     primary :id, Int32
     text :name
     text :email
-    timestamp :created_at, null: true
-    timestamp :updated_at, null: true
-  end
-
-  table :posts do
-    primary :id, Int32
-    text :title
-    text :content
-    integer :user_id
-    timestamp :created_at, null: true
-    timestamp :updated_at, null: true
-
-    foreign_key [:user_id], references: :users, references_columns: [:id]
+    bool :email_verified      # ← Added by migration #3
+    text :verification_token  # ← Added by migration #3
   end
 end
 ```
 
-### 2. Creating Migrations
+**Why this matters:**
 
-Create migration classes to define schema changes:
+- Your Crystal code gets compile-time type safety
+- IntelliSense knows your database structure
+- No more "field not found" runtime errors
+- Schema changes are impossible to forget
+
+---
+
+## Learning Path: From Zero to Migration Master
+
+### Step 1: Understanding the Basics (New Project)
+
+Let's build a blog application from scratch to understand migrations:
 
 ```crystal
-# migrations/001_add_email_index.cr
-class AddEmailIndex < CQL::Migration(1)
+# 1. Start with a minimal database connection
+BlogDB = CQL::Schema.define(
+  :blog_database,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"] || "postgres://localhost/blog_development"
+) do
+  # Empty! We'll build this through migrations
+end
+
+# 2. Configure automatic schema file generation
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/blog_schema.cr",
+  schema_name: :BlogSchema,
+  auto_sync: true  # This is the magic - automatic synchronization
+)
+
+# 3. Initialize the database infrastructure
+BlogDB.init
+
+# 4. Set up your migrator
+migrator = BlogDB.migrator(config)
+```
+
+Now you're ready to create your first migration!
+
+### Step 2: Your First Migration - Creating Tables
+
+```crystal
+# migrations/001_create_users.cr
+class CreateUsers < CQL::Migration(1)
+  def up
+    # Create a users table with essential fields
+    schema.table :users do
+      primary :id, Int32, auto_increment: true
+      text :name, null: false
+      text :email, null: false
+      timestamp :created_at, null: true
+      timestamp :updated_at, null: true
+    end
+
+    # Add an index for fast email lookups
+    schema.alter :users do
+      create_index :idx_users_email, [:email], unique: true
+    end
+  end
+
+  def down
+    # Always provide a way to undo your changes
+    schema.drop :users
+  end
+end
+```
+
+**Key learning points:**
+
+- Start with essential fields only
+- Always add timestamps (`created_at`, `updated_at`) - you'll thank yourself later
+- Think about indexes from the beginning
+- The `down` method should completely reverse the `up` method
+
+Run this migration:
+
+```crystal
+migrator.up
+puts "Migration applied! Check your blog_schema.cr file."
+```
+
+### Step 3: Evolving Your Schema - Adding Relationships
+
+```crystal
+# migrations/002_create_posts.cr
+class CreatePosts < CQL::Migration(2)
+  def up
+    schema.table :posts do
+      primary :id, Int32, auto_increment: true
+      text :title, null: false
+      text :content, null: true
+      integer :user_id, null: false  # Foreign key to users
+      bool :published, default: false
+      timestamp :created_at, null: true
+      timestamp :updated_at, null: true
+
+      # Define the relationship
+      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: "CASCADE"
+    end
+
+    # Add indexes for common queries
+    schema.alter :posts do
+      create_index :idx_posts_user_id, [:user_id]
+      create_index :idx_posts_published, [:published]
+      create_index :idx_posts_created_at, [:created_at]
+    end
+  end
+
+  def down
+    schema.drop :posts
+  end
+end
+```
+
+**Why we structure it this way:**
+
+- Foreign keys maintain data integrity
+- `on_delete: "CASCADE"` means deleting a user deletes their posts
+- Indexes speed up common queries like "show all posts by user X"
+- `published` boolean lets us have draft posts
+
+### Step 4: Real-World Changes - Altering Existing Tables
+
+```crystal
+# migrations/003_add_user_profile_fields.cr
+class AddUserProfileFields < CQL::Migration(3)
   def up
     schema.alter :users do
-      create_index :email_idx, [:email], unique: true
+      # Add new fields that weren't needed initially
+      add_column :bio, String, null: true
+      add_column :avatar_url, String, null: true
+      add_column :email_verified, Bool, default: false
+      add_column :last_login_at, Time, null: true
+
+      # Add performance indexes
+      create_index :idx_users_email_verified, [:email_verified]
+      create_index :idx_users_last_login, [:last_login_at]
     end
   end
 
   def down
     schema.alter :users do
-      drop_index :email_idx
-    end
-  end
-end
-
-# migrations/002_add_posts_published_column.cr
-class AddPostsPublishedColumn < CQL::Migration(2)
-  def up
-    schema.alter :posts do
-      add_column :published, Bool, default: false
-    end
-  end
-
-  def down
-    schema.alter :posts do
-      drop_column :published
+      # Remove in reverse order
+      drop_index :idx_users_last_login
+      drop_index :idx_users_email_verified
+      drop_column :last_login_at
+      drop_column :email_verified
+      drop_column :avatar_url
+      drop_column :bio
     end
   end
 end
 ```
 
-### 3. Running Migrations with Auto-Sync
+**Migration best practices:**
 
-When you run migrations, the AppSchema.cr file is automatically updated:
+- Add fields as `null: true` unless absolutely required
+- Provide sensible defaults for boolean fields
+- Consider the performance impact of new fields
+- Remove indexes before dropping columns in `down` method
+
+---
+
+## Working with Existing Databases
+
+### The Bootstrap Process - Adopting CQL for Existing Projects
+
+Maybe you have an existing application with an established database. CQL's bootstrap feature lets you adopt the migration workflow without starting over:
 
 ```crystal
-# Initialize your working schema (can be minimal)
-MyDB = CQL::Schema.define(
-  :my_database,
+# 1. Connect to your existing database
+ExistingDB = CQL::Schema.define(
+  :existing_database,
   adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
 ) do
-  # Tables will be managed by migrations
-end
-
-# Configure migrator with auto-sync enabled (default)
-config = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  schema_symbol: :app_schema,
-  auto_sync: true  # Automatically update schema file after migrations
-)
-
-migrator = MyDB.migrator(config)
-
-# Apply all pending migrations
-# This will automatically update AppSchema.cr after each migration
-migrator.up
-
-# Roll back the last migration
-# This will automatically update AppSchema.cr to reflect the rollback
-migrator.rollback
-
-# Apply migrations up to a specific version
-migrator.up_to(5)
-```
-
-### 4. Manual Schema Synchronization
-
-You can also manually update the schema file:
-
-```crystal
-# Manually update the schema file to match current database state
-migrator.update_schema_file
-
-# Verify that the schema file matches the database
-consistent = migrator.verify_schema_consistency
-puts "Schema is consistent: #{consistent}"
-```
-
-## Migration Management
-
-### Checking Migration Status
-
-```crystal
-# List applied migrations
-migrator.print_applied_migrations
-
-# List pending migrations
-migrator.print_pending_migrations
-
-# Get the last applied migration
-last_migration = migrator.last
-puts "Last migration: #{last_migration.try(&.name)}" if last_migration
-```
-
-### Rollback Operations
-
-```crystal
-# Rollback last migration
-migrator.rollback
-
-# Rollback multiple migrations
-migrator.rollback(3)
-
-# Rollback to specific version
-migrator.down_to(2)
-
-# Redo last migration (rollback then apply)
-migrator.redo
-```
-
-## Configuration Options
-
-### MigratorConfig
-
-```crystal
-config = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",  # Where to save schema file
-  schema_name: :AppSchema,                        # Constant name in schema file
-  schema_symbol: :app_schema,                     # Symbol name for schema
-  auto_sync: true                                 # Auto-update schema file after migrations
-)
-```
-
-### Disabling Auto-Sync
-
-If you prefer manual control over schema synchronization:
-
-```crystal
-config = CQL::MigratorConfig.new(auto_sync: false)
-migrator = MyDB.migrator(config)
-
-# Run migrations without auto-updating schema file
-migrator.up
-
-# Manually update when needed
-migrator.update_schema_file
-```
-
-## Best Practices
-
-### 1. Version Control Integration
-
-Always commit both your migrations and the updated AppSchema.cr:
-
-```bash
-git add migrations/003_add_user_roles.cr
-git add src/schemas/app_schema.cr
-git commit -m "Add user roles migration and update schema"
-```
-
-### 2. Schema File Organization
-
-Keep your schema files organized:
-
-```
-src/schemas/
-├── app_schema.cr          # Main application schema (auto-generated)
-├── test_schema.cr         # Test-specific schema
-└── development_schema.cr  # Development overrides
-```
-
-### 3. Environment-Specific Configurations
-
-Use different configurations for different environments:
-
-```crystal
-# config/database.cr
-database_config = case ENV["CRYSTAL_ENV"]?
-when "production"
-  CQL::MigratorConfig.new(
-    schema_file_path: "src/schemas/production_schema.cr",
-    schema_name: :ProductionSchema,
-    auto_sync: false  # Manual control in production
-  )
-when "test"
-  CQL::MigratorConfig.new(
-    schema_file_path: "src/schemas/test_schema.cr",
-    schema_name: :TestSchema,
-    auto_sync: true
-  )
-else
-  CQL::MigratorConfig.new(
-    schema_file_path: "src/schemas/app_schema.cr",
-    schema_name: :AppSchema,
-    auto_sync: true
-  )
-end
-```
-
-### 4. Continuous Integration
-
-Verify schema consistency in CI:
-
-```crystal
-# In your test setup
-migrator = AppDB.migrator(config)
-unless migrator.verify_schema_consistency
-  puts "ERROR: Schema file is out of sync with database!"
-  puts "Run: migrator.update_schema_file"
-  exit(1)
-end
-```
-
-## Important Considerations
-
-### 1. Schema File Conflicts
-
-When working in teams, schema file conflicts can occur. To resolve:
-
-1. Pull latest changes
-2. Run migrations to sync database
-3. Update schema file: `migrator.update_schema_file`
-4. Commit the updated schema file
-
-### 2. Production Deployments
-
-For production environments:
-
-1. Set `auto_sync: false` in production config
-2. Run migrations: `migrator.up`
-3. Manually verify: `migrator.verify_schema_consistency`
-4. Update schema file if needed: `migrator.update_schema_file`
-
-### 3. Database Consistency
-
-The AppSchema.cr file represents the expected database state after migrations. Always ensure your database matches by running pending migrations before using the schema file.
-
-### 4. Rollback Considerations
-
-When rolling back migrations:
-
-- The schema file is automatically updated to reflect the rollback
-- Ensure your application code is compatible with the rolled-back schema
-- Test rollbacks in development before applying to production
-
-## Example: Complete Workflow
-
-Here's a complete example of the integrated workflow:
-
-```crystal
-# 1. Define your base schema connection
-AppDB = CQL::Schema.define(
-  :app_database,
-  adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]
-) do
-  # Minimal definition - tables managed by migrations
+  # Leave empty - bootstrap will fill this in
 end
 
 # 2. Configure the migrator
 config = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  schema_symbol: :app_schema
+  schema_file_path: "src/schemas/existing_schema.cr",
+  schema_name: :ExistingSchema,
+  auto_sync: true
 )
 
-# 3. Initialize migrator
-migrator = AppDB.migrator(config)
+# 3. Bootstrap: generate schema file from existing database
+migrator = ExistingDB.migrator(config)
+migrator.bootstrap_schema
 
-# 4. Bootstrap from existing database (first time only)
-# migrator.bootstrap_schema
-
-# 5. Create and run migrations
-migrator.up
-
-# 6. Verify everything is in sync
-if migrator.verify_schema_consistency
-  puts "✅ Database and schema file are in sync"
-else
-  puts "❌ Schema inconsistency detected"
-  puts "Run: migrator.update_schema_file"
-end
-
-# 7. Use the generated schema in your application
-require "./src/schemas/app_schema"
-
-# Now AppSchema reflects the current database state
-users = AppSchema.query.from(:users).all
+puts "✅ Generated schema file from existing database!"
+puts "📁 Check src/schemas/existing_schema.cr"
 ```
 
-This integrated approach ensures that your schema file always represents the true state of your database, making it easier to manage schema changes across development, testing, and production environments.
+**What happens during bootstrap:**
+
+1. CQL examines your existing database structure
+2. Generates a complete schema file with all tables, columns, and relationships
+3. Creates a baseline migration state
+4. Future changes use the normal migration workflow
+
+**This is powerful because:**
+
+- You don't lose any existing data
+- You can immediately start using CQL's type safety
+- Future schema changes are tracked and reversible
+- Team members can sync their databases easily
+
+---
+
+## Configuration and Environments
+
+### Understanding MigratorConfig
+
+```crystal
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",  # Where to save the schema
+  schema_name: :AppSchema,                        # Constant name in the file
+  schema_symbol: :app_schema,                     # Symbol for internal use
+  auto_sync: true                                 # Automatically update schema file
+)
+```
+
+**Why these settings matter:**
+
+- `schema_file_path`: This file contains your database structure definition
+- `schema_name`: This becomes a Crystal constant you'll use in your code
+- `auto_sync: true`: Schema file updates automatically (great for development)
+- `auto_sync: false`: Manual control (safer for production)
+
+### Environment-Specific Configurations
+
+Different environments need different strategies:
+
+```crystal
+# Development: Fast iteration with auto-sync
+development_config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  auto_sync: true  # Automatically update schema file
+)
+
+# Production: Manual control for safety
+production_config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/production_schema.cr",
+  schema_name: :ProductionSchema,
+  auto_sync: false  # Manual schema file updates
+)
+
+# Test: Isolated schema for testing
+test_config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/test_schema.cr",
+  schema_name: :TestSchema,
+  auto_sync: true,
+  # Test-specific settings could go here
+)
+```
+
+**Why different configs for different environments:**
+
+- **Development**: You want speed and convenience
+- **Production**: You want control and safety
+- **Test**: You want isolation and repeatability
+
+---
+
+## Common Patterns and Best Practices
+
+### Migration Naming That Makes Sense
+
+```crystal
+# ✅ Good: Descriptive and follows a pattern
+001_create_users_table.cr
+002_create_posts_table.cr
+003_add_email_verification_to_users.cr
+004_add_published_index_to_posts.cr
+005_create_comments_table.cr
+
+# ❌ Bad: Unclear purpose
+001_initial.cr
+002_changes.cr
+003_update.cr
+004_fix.cr
+```
+
+**Why naming matters:**
+
+- Future you (and your teammates) need to understand what each migration does
+- Good names make it easy to find related migrations
+- Clear names help when debugging or rolling back changes
+
+### Writing Reversible Migrations
+
+```crystal
+class AddCategoriesTable < CQL::Migration(6)
+  def up
+    # Create the table
+    schema.table :categories do
+      primary :id, Int32, auto_increment: true
+      text :name, null: false
+      text :slug, null: false
+      timestamp :created_at, null: true
+    end
+
+    # Add unique constraint
+    schema.alter :categories do
+      create_index :idx_categories_slug, [:slug], unique: true
+    end
+
+    # Add relationship to posts
+    schema.alter :posts do
+      add_column :category_id, Int32, null: true
+      foreign_key [:category_id], references: :categories, references_columns: [:id]
+      create_index :idx_posts_category_id, [:category_id]
+    end
+  end
+
+  def down
+    # Reverse everything in opposite order
+    schema.alter :posts do
+      drop_index :idx_posts_category_id
+      drop_foreign_key :fk_posts_category_id  # CQL auto-generates FK names
+      drop_column :category_id
+    end
+
+    schema.drop :categories  # This also drops its indexes
+  end
+end
+```
+
+**Key principles for reversible migrations:**
+
+1. **Reverse in opposite order**: Last change first in `down` method
+2. **Drop foreign keys before columns**: Database constraints matter
+3. **Test both directions**: Make sure `up` and then `down` works
+4. **Don't lose data**: Be careful with `drop_column` on production data
+
+### Handling Data Migrations
+
+Sometimes you need to transform data, not just structure:
+
+```crystal
+class MigrateUserEmailsToLowercase < CQL::Migration(7)
+  def up
+    # First, add the new column
+    schema.alter :users do
+      add_column :email_normalized, String, null: true
+    end
+
+    # Then, populate it with normalized data
+    # Note: In a real app, you'd batch this for large datasets
+    AppDB.query("UPDATE users SET email_normalized = LOWER(email)")
+
+    # Finally, make it required and drop the old column
+    schema.alter :users do
+      # In production, you might do this in a separate migration
+      # to avoid long-running transactions
+      change_column :email_normalized, String, null: false
+      drop_column :email
+      rename_column :email_normalized, :email
+    end
+  end
+
+  def down
+    # This is complex to reverse - document carefully!
+    schema.alter :users do
+      rename_column :email, :email_backup
+      add_column :email, String, null: true
+    end
+
+    AppDB.query("UPDATE users SET email = email_backup")
+
+    schema.alter :users do
+      change_column :email, String, null: false
+      drop_column :email_backup
+    end
+  end
+end
+```
+
+**Data migration best practices:**
+
+- **Separate structure from data changes** when possible
+- **Batch large updates** to avoid blocking the database
+- **Document complex reversals** - they're often application-specific
+- **Test with production-like data** - edge cases matter
+
+---
+
+## Team Collaboration and Workflow
+
+### The Daily Development Workflow
+
+Here's how migrations work in a team environment:
+
+```crystal
+# Morning routine: Getting up to date
+puts "🌅 Starting development - syncing database..."
+
+migrator = AppDB.migrator(config)
+
+# Check what's new
+pending = migrator.pending_migrations
+if pending.any?
+  puts "📥 Found #{pending.size} new migrations from teammates:"
+  pending.each { |m| puts "  - #{m.name}" }
+
+  # Apply them
+  migrator.up
+  puts "✅ Database updated!"
+else
+  puts "✅ Database already up to date"
+end
+
+# Verify everything is consistent
+unless migrator.verify_schema_consistency
+  puts "⚠️  Schema file out of sync - updating..."
+  migrator.update_schema_file
+end
+
+puts "🚀 Ready to code!"
+```
+
+### Resolving Migration Conflicts
+
+Sometimes two developers create migrations with the same number:
+
+```crystal
+# Sarah creates:
+# migrations/005_add_user_preferences.cr
+
+# Bob creates (at the same time):
+# migrations/005_add_post_tags.cr
+
+# Conflict! Who gets version 5?
+```
+
+**How to resolve:**
+
+1. **Communicate**: Use your team chat when creating migrations
+2. **Renumber**: One person renames their migration to the next available number
+3. **Sequential assignment**: Designate one person to assign migration numbers
+4. **Use timestamps**: Some teams use timestamp-based numbering
+
+### Handling Schema File Conflicts in Git
+
+```crystal
+# When you pull and see conflicts in AppSchema.cr:
+# 1. Don't manually edit the schema file
+# 2. Run migrations to sync database
+# 3. Regenerate the schema file
+
+migrator = AppDB.migrator(config)
+
+# Apply any pending migrations
+migrator.up
+
+# Regenerate the schema file from current database state
+migrator.update_schema_file
+
+# Now the schema file matches your database exactly
+puts "✅ Schema conflicts resolved"
+```
+
+---
+
+## Debugging and Troubleshooting
+
+### Common Migration Issues and Solutions
+
+#### Problem: "Column already exists"
+
+```crystal
+# Error: PG::DuplicateColumn: column "email_verified" of relation "users" already exists
+
+# Cause: You ran a migration, it failed partway through, but some changes were applied
+# Solution: Check your database state
+migrator.print_applied_migrations  # See what's actually applied
+```
+
+#### Problem: "Cannot drop column - it's referenced by a foreign key"
+
+```crystal
+# Error when trying to drop a column that's referenced
+# Solution: Drop foreign keys first
+class FixDropColumnIssue < CQL::Migration(8)
+  def up
+    schema.alter :posts do
+      drop_foreign_key :fk_posts_category_id  # Drop FK first
+    end
+
+    schema.alter :categories do
+      drop_column :some_column  # Now this works
+    end
+  end
+end
+```
+
+#### Problem: "Schema file doesn't match database"
+
+```crystal
+# This happens when schema file gets out of sync
+unless migrator.verify_schema_consistency
+  puts "Schema file is out of sync with database"
+
+  # Option 1: Update schema file to match database (usually what you want)
+  migrator.update_schema_file
+
+  # Option 2: Reset database to match schema file (destructive!)
+  # AppDB.drop && AppDB.init && migrator.up
+end
+```
+
+### Debugging Migration Issues
+
+```crystal
+# Check migration status
+puts "Applied migrations:"
+migrator.applied_migrations.each { |m| puts "  ✅ #{m.name}" }
+
+puts "Pending migrations:"
+migrator.pending_migrations.each { |m| puts "  ⏳ #{m.name}" }
+
+# Test a specific migration
+begin
+  migrator.up_to(5)  # Apply up to migration 5
+  puts "✅ Migration 5 applied successfully"
+rescue ex
+  puts "❌ Migration 5 failed: #{ex.message}"
+  # You might want to rollback
+  migrator.rollback(1)
+end
+```
+
+---
+
+## Production Deployment Strategies
+
+### Safe Production Deployments
+
+Production migrations require extra care:
+
+```crystal
+# Production migration strategy
+production_config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/production_schema.cr",
+  schema_name: :ProductionSchema,
+  auto_sync: false  # Manual control for safety
+)
+
+prod_migrator = ProdDB.migrator(production_config)
+
+# 1. Check what migrations will be applied
+pending = prod_migrator.pending_migrations
+puts "Migrations to apply in production:"
+pending.each { |m| puts "  - #{m.name}" }
+
+# 2. Apply migrations
+puts "Applying #{pending.size} migrations..."
+prod_migrator.up
+
+# 3. Verify success
+unless prod_migrator.verify_schema_consistency
+  puts "⚠️  Schema file needs manual update"
+  # In production, you might want to review before updating
+  # prod_migrator.update_schema_file
+end
+
+puts "✅ Production deployment complete"
+```
+
+### Rollback Strategies
+
+```crystal
+# If something goes wrong in production
+puts "🚨 Rolling back last migration..."
+
+# Check what the last migration was
+last = prod_migrator.last
+puts "Last applied migration: #{last.name}" if last
+
+# Rollback
+prod_migrator.rollback(1)
+
+# Verify rollback worked
+puts "✅ Rollback complete"
+puts "Current schema version: #{prod_migrator.applied_migrations.size}"
+```
+
+---
+
+## Advanced Patterns
+
+### Migration Dependencies and Ordering
+
+```crystal
+# Sometimes migrations have implicit dependencies
+class CreateTagsTable < CQL::Migration(10)
+  def up
+    schema.table :tags do
+      primary :id, Int32, auto_increment: true
+      text :name, null: false
+    end
+  end
+end
+
+class CreatePostTagsJoinTable < CQL::Migration(11)
+  def up
+    # This migration depends on both posts and tags existing
+    schema.table :post_tags do
+      primary :id, Int32, auto_increment: true
+      integer :post_id, null: false
+      integer :tag_id, null: false
+
+      foreign_key [:post_id], references: :posts, references_columns: [:id]
+      foreign_key [:tag_id], references: :tags, references_columns: [:id]
+    end
+
+    schema.alter :post_tags do
+      create_index :idx_post_tags_unique, [:post_id, :tag_id], unique: true
+    end
+  end
+end
+```
+
+### Performance Considerations
+
+```crystal
+# For large tables, consider performance impact
+class AddIndexToLargeTable < CQL::Migration(12)
+  def up
+    # Adding an index to a large table can be slow and block writes
+    # Consider doing this during maintenance windows
+    schema.alter :posts do
+      create_index :idx_posts_full_text_search, [:title, :content]
+    end
+  end
+
+  # Note: In PostgreSQL, you can use CONCURRENTLY for non-blocking index creation
+  # but CQL abstracts this - check your specific database documentation
+end
+```
+
+---
+
+## Complete Example: Building a Real Application
+
+Let's put it all together with a complete blog application:
+
+```crystal
+# 1. Set up the database
+BlogDB = CQL::Schema.define(
+  :blog_database,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"] || "postgres://localhost/blog_development"
+) do
+  # Schema built through migrations
+end
+
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/blog_schema.cr",
+  schema_name: :BlogSchema,
+  auto_sync: true
+)
+
+BlogDB.init
+migrator = BlogDB.migrator(config)
+
+# 2. Create the complete migration set
+migrations = [
+  "001_create_users.cr",
+  "002_create_posts.cr",
+  "003_add_user_profile_fields.cr",
+  "004_create_categories.cr",
+  "005_add_post_categories.cr",
+  "006_create_comments.cr",
+  "007_add_post_publishing.cr"
+]
+
+# 3. Apply all migrations
+migrator.up
+puts "✅ Blog database ready with #{migrator.applied_migrations.size} migrations"
+
+# 4. Your generated schema file now contains:
+require "./src/schemas/blog_schema"
+
+# 5. Use it in your application
+users = BlogSchema.query.from(:users).all
+published_posts = BlogSchema.query.from(:posts).where(published: true).all
+```
+
+This gives you a complete, production-ready database setup with:
+
+- User management
+- Post creation and publishing
+- Categories and relationships
+- Comments system
+- Full rollback capability
+- Automatic schema synchronization
+
+---
+
+## Related Documentation
+
+- [Initializing the Database](initializing-the-database.md) - Database setup strategies and patterns
+- [Altering the Schema](altering-the-schema.md) - Detailed guide to schema modification operations
+- [Schema Dump Guide](../guides/schema-dump.md) - Working with existing databases
+- [Integrated Migration Workflow](../guides/active-record-with-cql/integrated-migration-workflow.md) - Advanced patterns and real-world examples
+
+---
+
+## Key Takeaways
+
+1. **Migrations are database version control** - they track changes over time
+2. **CQL's automatic schema generation** eliminates manual synchronization errors
+3. **Start simple** - add complexity through migrations as your application grows
+4. **Always write reversible migrations** - you'll need to rollback eventually
+5. **Test both directions** - `up` and `down` should both work perfectly
+6. **Communicate with your team** - migration conflicts are easier to prevent than resolve
+7. **Be extra careful in production** - use manual verification and rollback plans
+
+Migrations transform database management from a painful, error-prone process into a smooth, collaborative workflow. Once you experience the safety and convenience of CQL's integrated migration system, you'll wonder how you ever managed databases without it!
