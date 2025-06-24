@@ -23,6 +23,8 @@ module CQL
 
     class Error < Exception; end
 
+    DEFAULT_SCHEMA_DUMP_FILE_PATH = "./src/schemas/schema.cr"
+
     getter adapter : Adapter
     getter uri : String
     private getter db : DB::Database
@@ -39,12 +41,20 @@ module CQL
     # - **@param** file_path [String] Path where to save the schema file
     # - **@param** schema_name [Symbol] Name for the schema constant
     # - **@param** schema_symbol [Symbol] Symbol name for the schema
-    def dump_to_file(file_path : String, schema_name : Symbol, schema_symbol : Symbol = :schema)
+    def dump_to_file(file_path : String = DEFAULT_SCHEMA_DUMP_FILE_PATH, schema_name : Symbol = :AppSchema, schema_symbol : Symbol = :app_schema)
       schema_content = generate_schema_content(schema_name, schema_symbol)
 
       Dir.mkdir_p(File.dirname(file_path))
       File.write(file_path, schema_content)
       Log.info { "Schema dumped to #{file_path}" }
+    end
+
+    # Create a SchemaDump instance from an existing CQL::Schema
+    # This is useful for migration integration where you already have a schema instance
+    # - **@param** schema [CQL::Schema] The existing schema instance
+    # - **@return** [SchemaDump] New SchemaDump instance
+    def self.from_schema(schema : CQL::Schema)
+      new(schema.adapter, schema.uri)
     end
 
     # Generate the schema content as a string

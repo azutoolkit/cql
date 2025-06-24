@@ -1,305 +1,359 @@
 # Migrations
 
-Database migrations are essential for managing changes to your schema over time in a controlled manner. In CQL, migrations are handled through the `Migration` and `Migrator` classes. This guide will help you understand how to create, apply, rollback, and manage migrations using `CQL::Migrator` in your projects.
+Migrations in CQL provide a structured way to manage incremental changes to your database schema over time. They work in conjunction with the SchemaDump feature to maintain an up-to-date representation of your database schema.
 
-## Why Use Migrations?
+## Overview
 
-Migrations allow you to:
+CQL migrations consist of three main components:
 
-- Apply changes to your database schema over time.
-- Roll back changes in case of errors or updates.
-- Track applied and pending changes, ensuring consistency across environments.
+1. **Migration Classes**: Define incremental schema changes
+2. **Migrator**: Executes migrations and manages schema synchronization
+3. **AppSchema.cr**: Central schema file that reflects the current database state
 
----
+## Schema Synchronization Workflow
 
-### Real-World Example: Creating and Applying Migrations
+### 1. Initial Bootstrap (Existing Database)
 
-Let's start with a simple example. Suppose we need to add a `users` table to our database with two columns: `name` and `age`.
+If you have an existing database, start by bootstrapping your AppSchema.cr:
 
 ```crystal
-class CreateUsersTable < CQL::Migration(1)
+# Initialize your schema connection
+MyDB = CQL::Schema.define(
+  :my_database,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"]
+) do
+  # This will be populated by bootstrap
+end
+
+# Configure the migrator for schema synchronization
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  schema_symbol: :app_schema,
+  auto_sync: true
+)
+
+migrator = MyDB.migrator(config)
+
+# Bootstrap the schema file from existing database
+migrator.bootstrap_schema
+```
+
+This creates `src/schemas/app_schema.cr` with the current database structure:
+
+```crystal
+AppSchema = CQL::Schema.define(
+  :app_schema,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"]) do
+
+  table :users do
+    primary :id, Int32
+    text :name
+    text :email
+    timestamp :created_at, null: true
+    timestamp :updated_at, null: true
+  end
+
+  table :posts do
+    primary :id, Int32
+    text :title
+    text :content
+    integer :user_id
+    timestamp :created_at, null: true
+    timestamp :updated_at, null: true
+
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+  end
+end
+```
+
+### 2. Creating Migrations
+
+Create migration classes to define schema changes:
+
+```crystal
+# migrations/001_add_email_index.cr
+class AddEmailIndex < CQL::Migration(1)
   def up
     schema.alter :users do
-      add_column :name, String
-      add_column :age, Int32
+      create_index :email_idx, [:email], unique: true
     end
   end
 
   def down
     schema.alter :users do
-      drop_column :name
-      drop_column :age
+      drop_index :email_idx
+    end
+  end
+end
+
+# migrations/002_add_posts_published_column.cr
+class AddPostsPublishedColumn < CQL::Migration(2)
+  def up
+    schema.alter :posts do
+      add_column :published, Bool, default: false
+    end
+  end
+
+  def down
+    schema.alter :posts do
+      drop_column :published
     end
   end
 end
 ```
 
-#### Explanation
+### 3. Running Migrations with Auto-Sync
 
-- **The `up` method**: defines the changes to apply when the migration is run (e.g., adding new columns).
-- **The `down` method**: defines how to revert the changes (e.g., dropping columns).
-- **Versioning**: Each migration is assigned a version number, which ensures migrations are run in the correct order.
-
----
-
-#### Initializing the Schema and Migrator
-
-Before applying migrations, you need to set up the schema and create an instance of the `Migrator`.
+When you run migrations, the AppSchema.cr file is automatically updated:
 
 ```crystal
-schema = CQL::Schema.build(:my_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do |s|
-  ...
+# Initialize your working schema (can be minimal)
+MyDB = CQL::Schema.define(
+  :my_database,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"]
+) do
+  # Tables will be managed by migrations
 end
 
-migrator = CQL::Migrator.new(schema)
-```
+# Configure migrator with auto-sync enabled (default)
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  schema_symbol: :app_schema,
+  auto_sync: true  # Automatically update schema file after migrations
+)
 
-The **migrator,** upon initialization, automatically creates a `schema_migrations` table to track which migrations have been applied.
+migrator = MyDB.migrator(config)
 
----
-
-#### Applying Migrations
-
-To apply all pending migrations, simply call the `up` method on the `migrator` object:
-
-```crystal
+# Apply all pending migrations
+# This will automatically update AppSchema.cr after each migration
 migrator.up
+
+# Roll back the last migration
+# This will automatically update AppSchema.cr to reflect the rollback
+migrator.rollback
+
+# Apply migrations up to a specific version
+migrator.up_to(5)
 ```
 
-This will apply all pending migrations in order of their version numbers.
+### 4. Manual Schema Synchronization
 
-**Applying Migrations Up to a Specific Version**
-
-You can also apply migrations up to a specific version:
+You can also manually update the schema file:
 
 ```crystal
-migrator.up_to(1_i64)
+# Manually update the schema file to match current database state
+migrator.update_schema_file
+
+# Verify that the schema file matches the database
+consistent = migrator.verify_schema_consistency
+puts "Schema is consistent: #{consistent}"
 ```
 
-This will apply all migrations up to version `1_i64`.
+## Migration Management
 
----
-
-#### Rolling Back Migrations
-
-To roll back the last migration, use the `down` method:
+### Checking Migration Status
 
 ```crystal
-migrator.down
-```
+# List applied migrations
+migrator.print_applied_migrations
 
-You can also roll back to a specific migration version:
+# List pending migrations
+migrator.print_pending_migrations
 
-```crystal
-migrator.down_to(1_i64)
-```
-
-This rolls back all migrations down to version `1_i64`.
-
----
-
-#### Redoing Migrations
-
-If you want to rollback and then re-apply the last migration, use the `redo` method:
-
-```crystal
-migrator.redo
-```
-
-This first rolls back the last migration and then re-applies it.
-
----
-
-#### Listing Migrations
-
-You can list applied, pending, and rolled-back migrations with the following commands:
-
-- **List Applied Migrations**:
-
-  ```crystal
-  migrator.print_applied_migrations
-  ```
-
-- **List Pending Migrations**:
-
-  ```crystal
-  migrator.print_pending_migrations
-  ```
-
-- **List Rolled Back Migrations**:
-
-  ```crystal
-  migrator.print_rolled_back_migrations
-  ```
-
-These commands provide a clear view of the current state of your migrations, making it easy to track progress and issues.
-
----
-
-#### Managing Migrations
-
-**Checking the Last Applied Migration**
-
-You can retrieve information about the last applied migration using:
-
-```crystal
+# Get the last applied migration
 last_migration = migrator.last
-puts last_migration
+puts "Last migration: #{last_migration.try(&.name)}" if last_migration
 ```
 
-This gives you details about the last migration that was successfully applied.
-
-**Getting Applied Migrations List**
-
-You can get a list of all applied migrations:
+### Rollback Operations
 
 ```crystal
-applied_migrations = migrator.applied_migrations
-applied_migrations.each do |migration|
-  puts "Applied: #{migration.version}"
-end
-```
+# Rollback last migration
+migrator.rollback
 
-**Getting Pending Migrations List**
+# Rollback multiple migrations
+migrator.rollback(3)
 
-You can get a list of all pending migrations:
+# Rollback to specific version
+migrator.down_to(2)
 
-```crystal
-pending_migrations = migrator.pending_migrations
-pending_migrations.each do |migration|
-  puts "Pending: #{migration.version}"
-end
-```
-
----
-
-#### Advanced Migration Operations
-
-**Rollback to Specific Version**
-
-Rollback all migrations down to a specific version:
-
-```crystal
-# Rollback to version 1
-migrator.down_to(CreateUsersMigration.version)
-
-# Check the last applied migration
-migrator.last.try(&.version).should eq(CreateUsersMigration.version)
-migrator.applied_migrations.map(&.version).should eq([CreateUsersMigration.version])
-```
-
-**Up to Specific Version**
-
-Apply migrations up to a specific version:
-
-```crystal
-# Apply up to version 2
-migrator.up_to(AlterUsersMigration.version)
-
-# Check the last applied migration
-migrator.last.try(&.version).should eq(AlterUsersMigration.version)
-migrator.applied_migrations.map(&.version).should eq([CreateUsersMigration.version, AlterUsersMigration.version])
-```
-
-**Complete Rollback**
-
-Rollback all migrations:
-
-```crystal
-migrator.down
-
-# Verify no migrations are applied
-migrator.last.should eq(nil)
-migrator.applied_migrations.size.should eq(0)
-migrator.applied_migrations.map(&.version).should eq([] of Int32)
-```
-
-**Redo Last Migration**
-
-Redo the last applied migration:
-
-```crystal
-# First apply migrations
-migrator.up
-
-# Then redo the last migration
+# Redo last migration (rollback then apply)
 migrator.redo
-
-# The migration should still be applied
-migrator.last.try(&.version).should eq(AlterUsersMigration.version)
-migrator.applied_migrations.map(&.version).should eq([CreateUsersMigration.version, AlterUsersMigration.version])
 ```
 
----
+## Configuration Options
 
-#### Advanced Example: Managing Multiple Migrations
-
-Here's an example where we define multiple migrations and apply them sequentially:
+### MigratorConfig
 
 ```crystal
-class CreateMoviesTable < CQL::Migration(2)
-  def up
-    schema.alter :movies do
-      add_column :title, String
-      add_column :release_year, Int32
-    end
-  end
-
-  def down
-    schema.alter :movies do
-      drop_column :title
-      drop_column :release_year
-    end
-  end
-end
-
-class CreateActorsTable < CQL::Migration
-  self.version = 3_i64
-
-  def up
-    schema.alter :actors do
-      add_column :name, String
-    end
-  end
-
-  def down
-    schema.alter :actors do
-      drop_column :name
-    end
-  end
-end
-
-# Apply the migrations
-migrator.up
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",  # Where to save schema file
+  schema_name: :AppSchema,                        # Constant name in schema file
+  schema_symbol: :app_schema,                     # Symbol name for schema
+  auto_sync: true                                 # Auto-update schema file after migrations
+)
 ```
 
-- **Versioning** ensures that migrations are applied in the correct order.
-- Each migration can be applied and rolled back independently, offering flexibility in managing your database schema.
+### Disabling Auto-Sync
 
----
+If you prefer manual control over schema synchronization:
 
-#### Migration Best Practices
+```crystal
+config = CQL::MigratorConfig.new(auto_sync: false)
+migrator = MyDB.migrator(config)
 
-1. **Always include both `up` and `down` methods**: This ensures you can rollback changes if needed.
+# Run migrations without auto-updating schema file
+migrator.up
 
-2. **Use descriptive migration names**: Names should clearly indicate what the migration does.
+# Manually update when needed
+migrator.update_schema_file
+```
 
-3. **Test migrations in development**: Always test your migrations in a development environment before applying them to production.
+## Best Practices
 
-4. **Keep migrations small and focused**: Each migration should make a single, logical change to your schema.
+### 1. Version Control Integration
 
-5. **Use version numbers consistently**: Ensure version numbers are sequential and don't conflict.
+Always commit both your migrations and the updated AppSchema.cr:
 
-6. **Backup before major migrations**: Always backup your database before applying major schema changes.
+```bash
+git add migrations/003_add_user_roles.cr
+git add src/schemas/app_schema.cr
+git commit -m "Add user roles migration and update schema"
+```
 
----
+### 2. Schema File Organization
 
-#### Conclusion
+Keep your schema files organized:
 
-The `CQL::Migrator` class makes it easy to manage database migrations in a structured and version-controlled manner. By following this guide, you can:
+```
+src/schemas/
+├── app_schema.cr          # Main application schema (auto-generated)
+├── test_schema.cr         # Test-specific schema
+└── development_schema.cr  # Development overrides
+```
 
-- Create and apply migrations to modify your schema.
-- Roll back changes if needed.
-- Track applied and pending migrations to keep your database consistent across environments.
+### 3. Environment-Specific Configurations
 
-This approach is essential for teams working on large applications where database changes need to be applied safely and consistently over time.
+Use different configurations for different environments:
+
+```crystal
+# config/database.cr
+database_config = case ENV["CRYSTAL_ENV"]?
+when "production"
+  CQL::MigratorConfig.new(
+    schema_file_path: "src/schemas/production_schema.cr",
+    schema_name: :ProductionSchema,
+    auto_sync: false  # Manual control in production
+  )
+when "test"
+  CQL::MigratorConfig.new(
+    schema_file_path: "src/schemas/test_schema.cr",
+    schema_name: :TestSchema,
+    auto_sync: true
+  )
+else
+  CQL::MigratorConfig.new(
+    schema_file_path: "src/schemas/app_schema.cr",
+    schema_name: :AppSchema,
+    auto_sync: true
+  )
+end
+```
+
+### 4. Continuous Integration
+
+Verify schema consistency in CI:
+
+```crystal
+# In your test setup
+migrator = AppDB.migrator(config)
+unless migrator.verify_schema_consistency
+  puts "ERROR: Schema file is out of sync with database!"
+  puts "Run: migrator.update_schema_file"
+  exit(1)
+end
+```
+
+## Important Considerations
+
+### 1. Schema File Conflicts
+
+When working in teams, schema file conflicts can occur. To resolve:
+
+1. Pull latest changes
+2. Run migrations to sync database
+3. Update schema file: `migrator.update_schema_file`
+4. Commit the updated schema file
+
+### 2. Production Deployments
+
+For production environments:
+
+1. Set `auto_sync: false` in production config
+2. Run migrations: `migrator.up`
+3. Manually verify: `migrator.verify_schema_consistency`
+4. Update schema file if needed: `migrator.update_schema_file`
+
+### 3. Database Consistency
+
+The AppSchema.cr file represents the expected database state after migrations. Always ensure your database matches by running pending migrations before using the schema file.
+
+### 4. Rollback Considerations
+
+When rolling back migrations:
+
+- The schema file is automatically updated to reflect the rollback
+- Ensure your application code is compatible with the rolled-back schema
+- Test rollbacks in development before applying to production
+
+## Example: Complete Workflow
+
+Here's a complete example of the integrated workflow:
+
+```crystal
+# 1. Define your base schema connection
+AppDB = CQL::Schema.define(
+  :app_database,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"]
+) do
+  # Minimal definition - tables managed by migrations
+end
+
+# 2. Configure the migrator
+config = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  schema_symbol: :app_schema
+)
+
+# 3. Initialize migrator
+migrator = AppDB.migrator(config)
+
+# 4. Bootstrap from existing database (first time only)
+# migrator.bootstrap_schema
+
+# 5. Create and run migrations
+migrator.up
+
+# 6. Verify everything is in sync
+if migrator.verify_schema_consistency
+  puts "✅ Database and schema file are in sync"
+else
+  puts "❌ Schema inconsistency detected"
+  puts "Run: migrator.update_schema_file"
+end
+
+# 7. Use the generated schema in your application
+require "./src/schemas/app_schema"
+
+# Now AppSchema reflects the current database state
+users = AppSchema.query.from(:users).all
+```
+
+This integrated approach ensures that your schema file always represents the true state of your database, making it easier to manage schema changes across development, testing, and production environments.

@@ -1,3 +1,5 @@
+require "./schema_dump"
+
 module CQL
   # Migrations are used to manage changes to the database schema over time.
   # Each migration is a subclass of `Migration` and must implement the `up` and `down` methods.
@@ -127,6 +129,22 @@ module CQL
     end
   end
 
+  # Configuration for schema synchronization
+  struct MigratorConfig
+    property schema_file_path : String
+    property schema_name : Symbol
+    property schema_symbol : Symbol
+    property? auto_sync : Bool = true
+
+    def initialize(
+      @schema_file_path : String = "src/schemas/app_schema.cr",
+      @schema_name : Symbol = :AppSchema,
+      @schema_symbol : Symbol = :app_schema,
+      @auto_sync : Bool? = true,
+    )
+    end
+  end
+
   # The `Migrator` class is used to manage migrations and provides methods to apply,
   # rollback, and redo migrations.
   # The `Migrator` class also provides methods to list applied and pending migrations.
@@ -162,10 +180,12 @@ module CQL
     # ```
 
     getter schema : CQL::Schema
+    getter config : MigratorConfig
     class_property migrations : Array(BaseMigration.class) = [] of BaseMigration.class
     getter repo : Repository(MigrationRecord, Int32)
 
-    def initialize(@schema : Schema)
+    def initialize(@schema : Schema, @config = MigratorConfig.new)
+      bootstrap_schema if @config.auto_sync?
       ensure_schema_migrations_table
       @repo = Repository(MigrationRecord, Int32).new(schema, :schema_migrations)
     end
@@ -187,6 +207,9 @@ module CQL
           end
         end
       end
+
+      # Update schema file after migrations
+      update_schema_file if config.auto_sync?
       print_applied_migrations
     end
 
@@ -209,6 +232,9 @@ module CQL
           end
         end
       end
+
+      # Update schema file after rollback
+      update_schema_file if config.auto_sync?
       # Pass the actually rolled back migrations to the print method
       print_rolled_back_migrations(rolled_back_migrations)
     end
@@ -232,6 +258,73 @@ module CQL
     def redo
       rollback
       up
+    end
+
+    # Bootstraps the AppSchema.cr file from the current database state.
+    # This is useful when starting with an existing database.
+    # **Example** Bootstrapping schema from existing database
+    # ```
+    # migrator.bootstrap_schema
+    # ```
+    def bootstrap_schema
+      Log.info { "Bootstrapping schema from existing database..." }
+      update_schema_file
+      Log.info { "Schema bootstrapped successfully to #{config.schema_file_path}" }
+    end
+
+    # Manually updates the AppSchema.cr file to reflect current database state.
+    # **Example** Manually updating schema file
+    # ```
+    # migrator.update_schema_file
+    # ```
+    def update_schema_file
+      Log.debug { "Updating schema file: #{config.schema_file_path}" }
+
+      begin
+        schema_dumper = SchemaDump.new(schema.adapter, schema.uri)
+        schema_dumper.dump_to_file(
+          config.schema_file_path,
+          config.schema_name,
+          config.schema_symbol
+        )
+        Log.info { "Schema file updated: #{config.schema_file_path}" }
+      rescue ex : Exception
+        Log.error { "Failed to update schema file: #{ex.message}" }
+        raise Error.new("Schema update failed: #{ex.message}")
+      end
+    end
+
+    # Verifies that the current database state matches the AppSchema.cr file.
+    # **Example** Verifying schema consistency
+    # ```
+    # consistent = migrator.verify_schema_consistency
+    # ```
+    def verify_schema_consistency : Bool
+      Log.debug { "Verifying schema consistency..." }
+
+      begin
+        schema_dumper = SchemaDump.new(schema.adapter, schema.uri)
+        current_schema = schema_dumper.generate_schema_content(config.schema_name, config.schema_symbol)
+
+        if File.exists?(config.schema_file_path)
+          existing_schema = File.read(config.schema_file_path)
+          consistent = current_schema == existing_schema
+
+          if consistent
+            Log.info { "Schema is consistent with database" }
+          else
+            Log.warn { "Schema file is out of sync with database" }
+          end
+
+          consistent
+        else
+          Log.warn { "Schema file does not exist: #{config.schema_file_path}" }
+          false
+        end
+      rescue ex : Exception
+        Log.error { "Failed to verify schema consistency: #{ex.message}" }
+        false
+      end
     end
 
     # Returns the last migration.
@@ -381,5 +474,7 @@ module CQL
     private def remove_migration_record(migration : BaseMigration.class)
       repo.delete_by(name: migration.name, version: migration.version)
     end
+
+    class Error < Exception; end
   end
 end

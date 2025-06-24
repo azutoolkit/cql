@@ -200,47 +200,4 @@ describe CQL::Schema do
       end
     end
   end
-
-  describe "structure dumping" do
-    it "dumps schema structure to file" do
-      test_schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
-        table :users do
-          primary :id, type: Int32, auto_increment: false
-          column :name, String
-        end
-      end
-
-      test_schema.tables.size.should eq 1
-
-      test_schema.dump_structure("test_structure.sql")
-
-      content = File.read("test_structure.sql")
-      content.should contain("-- Table: users")
-      content.should contain("-- Primary Key: id")
-      content.should contain("CREATE TABLE")
-      content.should contain("id INTEGER PRIMARY KEY")
-      content.should contain("name TEXT NOT NULL")
-
-      File.delete("test_structure.sql")
-    end
-
-    pending "handles structure dump errors gracefully" do
-      invalid_path = "/invalid/path/structure.sql"
-      File.delete(invalid_path) if File.exists?(invalid_path)
-
-      schema = CQL::Schema.define(
-        :test_db,
-        adapter: CQL::Adapter::SQLite,
-        uri: "sqlite3://#{db_file}") do
-        table :users do
-          primary :id, Int32
-          column :name, String
-        end
-      end
-
-      expect_raises(CQL::Schema::Error) do
-        schema.dump_structure(invalid_path)
-      end
-    end
-  end
 end

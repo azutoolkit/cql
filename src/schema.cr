@@ -266,6 +266,32 @@ module CQL
       Migrator.new(self)
     end
 
+    # Creates a new migrator with custom configuration for schema synchronization.
+    # - **@param** config [MigratorConfig] the configuration for the migrator
+    # - **@return** [Migrator] the new migrator with custom config
+    # **Example**
+    # ```
+    # config = CQL::MigratorConfig.new(
+    #   schema_file_path: "src/schemas/my_app_schema.cr",
+    #   schema_name: :MyAppSchema,
+    #   schema_symbol: :my_app_schema
+    # )
+    # migrator = schema.migrator(config)
+    # ```
+    def migrator(config : MigratorConfig)
+      Migrator.new(self, config)
+    end
+
+    # Creates a schema dumper for this schema.
+    # - **@return** [SchemaDump] the new schema dumper
+    # **Example**
+    # ```
+    # dumper = schema.schema_dumper
+    # ```
+    def schema_dumper
+      SchemaDump.from_schema(self)
+    end
+
     # Creates a new table in the schema.
     # - **@param** name [Symbol] the name of the table
     # - **@param** as_name [Symbol] the alias of the table
@@ -327,36 +353,6 @@ module CQL
           end
         end
       end
-    end
-
-    # TODO: For each adapter implement dumping the database structure tp a file
-    # called `structure.sql`. This file should contain the SQL statements to create the
-    # tables in the schema. The file should be saved in the ./src/db/ directory.
-    # **Example**
-    # ```
-    # schema.dump_structure
-    # ```
-    #
-    # **Example**
-    # ```
-    # schema.dump_structure("db/structure.sql")
-    # ```
-    def dump_structure(file = "db/structure.sql")
-      Dir.mkdir_p(File.dirname(file))
-
-      content = @tables.map do |_, table|
-        lines = [] of String
-        lines << "-- Table: #{table.table_name}"
-        lines << "-- Primary Key: #{table.primary.name}" if table.primary
-        lines << table.create_sql
-        lines.join("\n")
-      end.join("\n\n")
-
-      File.write(file, content)
-    rescue ex : IO::Error
-      Log.error { "Failed to write structure file: #{file}" }
-      Log.error { ex.message }
-      raise Error.new("Failed to write structure file: #{ex.message}")
     end
 
     macro method_missing(call)
