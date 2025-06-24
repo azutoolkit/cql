@@ -102,7 +102,7 @@ describe CQL::Migration do
       custom_migrator.config.should eq(config)
     end
 
-        it "verifies schema consistency" do
+    it "verifies schema consistency" do
       config = CQL::MigratorConfig.new(
         schema_file_path: "spec/support/nonexistent_schema.cr",
         auto_sync: false
@@ -196,7 +196,7 @@ describe CQL::Migration do
 
   describe "Migration steps parameter" do
     it "migrates up with limited steps" do
-      migrator.down # Reset
+      migrator.down  # Reset
       migrator.up(1) # Only migrate one step
 
       migrator.applied_migrations.size.should eq(1)
@@ -204,7 +204,7 @@ describe CQL::Migration do
     end
 
     it "migrates down with limited steps" do
-      migrator.up # Apply all
+      migrator.up      # Apply all
       migrator.down(1) # Only rollback one step
 
       migrator.applied_migrations.size.should eq(1)
@@ -212,7 +212,7 @@ describe CQL::Migration do
     end
 
     it "rollback with custom steps" do
-      migrator.up # Apply all
+      migrator.up          # Apply all
       migrator.rollback(1) # Rollback one step
 
       migrator.applied_migrations.size.should eq(1)
@@ -274,7 +274,7 @@ describe CQL::Migration do
       migrator.applied_migrations.size.should eq(original_count)
     end
 
-        it "handles database connection errors gracefully" do
+    it "handles database connection errors gracefully" do
       # Test with a bad URI to simulate connection issues
       expect_raises(CQL::Schema::InvalidURIError) do
         CQL::Schema.define(

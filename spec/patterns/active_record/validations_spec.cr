@@ -105,7 +105,6 @@ describe CQL::ActiveRecord::Validations do
     end
 
     describe "acceptance validation" do
-
       it "should be valid when terms are accepted with true" do
         user = TestAcceptanceUser.new("John Doe", "john@example.com", true)
         user.valid?.should be_true
