@@ -81,10 +81,10 @@ module CQL::Performance
 
     # Alternative constructor with dependency injection
     def self.create_with_dependencies(event_bus : EventPublisher,
-                                     query_analyzer : Analyzers::StrategyBasedQueryAnalyzer?,
-                                     n_plus_one_detector : Detectors::NPlusOneDetector,
-                                     query_profiler : Profilers::QueryProfiler,
-                                     config : PerformanceConfig = PerformanceConfig.new)
+                                      query_analyzer : Analyzers::StrategyBasedQueryAnalyzer?,
+                                      n_plus_one_detector : Detectors::NPlusOneDetector,
+                                      query_profiler : Profilers::QueryProfiler,
+                                      config : PerformanceConfig = PerformanceConfig.new)
       monitor = allocate
       monitor.initialize_with_dependencies(event_bus, query_analyzer, n_plus_one_detector, query_profiler, config)
       monitor
@@ -92,10 +92,10 @@ module CQL::Performance
 
     # For dependency injection
     protected def initialize_with_dependencies(@event_bus : EventPublisher,
-                                             @query_analyzer : Analyzers::StrategyBasedQueryAnalyzer?,
-                                             @n_plus_one_detector : Detectors::NPlusOneDetector,
-                                             @query_profiler : Profilers::QueryProfiler,
-                                             @config : PerformanceConfig)
+                                               @query_analyzer : Analyzers::StrategyBasedQueryAnalyzer?,
+                                               @n_plus_one_detector : Detectors::NPlusOneDetector,
+                                               @query_profiler : Profilers::QueryProfiler,
+                                               @config : PerformanceConfig)
       @start_time = Time.utc
       @schema = nil
 
@@ -114,7 +114,7 @@ module CQL::Performance
     end
 
     def after_query(sql : String, params : Array(DB::Any), execution_time : Time::Span,
-                   rows_affected : Int64? = nil) : Void
+                    rows_affected : Int64? = nil) : Void
       return unless enabled?
 
       context = build_context()
@@ -196,9 +196,9 @@ module CQL::Performance
         events: [] of MonitoringEvent, # Could collect from event bus if needed
         issues: collect_all_issues(),
         metadata: {
-          "generated_at" => Time.utc.to_s,
-          "uptime" => (Time.utc - @start_time).to_s,
-          "monitoring_enabled" => enabled?.to_s
+          "generated_at"       => Time.utc.to_s,
+          "uptime"             => (Time.utc - @start_time).to_s,
+          "monitoring_enabled" => enabled?.to_s,
         }
       )
 
@@ -382,10 +382,10 @@ module CQL::Performance
     execution_time = Time.monotonic - start_time
     begin
       rows_affected = if result.responds_to?(:rows_affected)
-                       result.rows_affected.to_i64
-                     else
-                       nil
-                     end
+                        result.rows_affected.to_i64
+                      else
+                        nil
+                      end
       after_query(sql, params, execution_time, rows_affected)
     rescue ex
       Log.debug { "Performance monitoring error (after): #{ex.message}" }

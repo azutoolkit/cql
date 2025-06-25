@@ -60,7 +60,6 @@ module CQL::Performance::Reports
         puts colorize("\n💡 RECOMMENDATIONS", :green, :bold)
         puts colorize("─" * 25, :green)
         generate_recommendations(data.issues)
-
       else
         # Success case with celebration
         puts colorize("\n✅ EXCELLENT PERFORMANCE!", :green, :bold)
@@ -106,25 +105,25 @@ module CQL::Performance::Reports
 
     private def colorize(text : String, color : Symbol, style : Symbol? = nil) : String
       result = case color
-      when :red
-        "\e[31m#{text}\e[0m"
-      when :light_red
-        "\e[91m#{text}\e[0m"
-      when :green
-        "\e[32m#{text}\e[0m"
-      when :yellow
-        "\e[33m#{text}\e[0m"
-      when :blue
-        "\e[34m#{text}\e[0m"
-      when :magenta
-        "\e[35m#{text}\e[0m"
-      when :cyan
-        "\e[36m#{text}\e[0m"
-      when :white
-        "\e[97m#{text}\e[0m"
-      else
-        text
-      end
+               when :red
+                 "\e[31m#{text}\e[0m"
+               when :light_red
+                 "\e[91m#{text}\e[0m"
+               when :green
+                 "\e[32m#{text}\e[0m"
+               when :yellow
+                 "\e[33m#{text}\e[0m"
+               when :blue
+                 "\e[34m#{text}\e[0m"
+               when :magenta
+                 "\e[35m#{text}\e[0m"
+               when :cyan
+                 "\e[36m#{text}\e[0m"
+               when :white
+                 "\e[97m#{text}\e[0m"
+               else
+                 text
+               end
 
       # Apply bold styling if requested
       if style == :bold

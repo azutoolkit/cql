@@ -127,7 +127,7 @@ begin
   users = [
     User.new("Alice Smith", "alice@example.com"),
     User.new("Bob Johnson", "bob@example.com"),
-    User.new("Carol Williams", "carol@example.com")
+    User.new("Carol Williams", "carol@example.com"),
   ]
 
   user_ids = [] of Int32
@@ -145,7 +145,7 @@ begin
     {user_id: user_ids[0], title: "First Post", content: "This is Alice's first post"},
     {user_id: user_ids[0], title: "Second Post", content: "This is Alice's second post"},
     {user_id: user_ids[1], title: "Bob's Thoughts", content: "This is Bob's post"},
-    {user_id: user_ids[2], title: "Carol's Update", content: "This is Carol's post"}
+    {user_id: user_ids[2], title: "Carol's Update", content: "This is Carol's post"},
   ]
 
   post_ids = [] of Int32
@@ -177,7 +177,6 @@ begin
   end
 
   puts "Sample data created successfully!"
-
 rescue ex
   puts "Database setup error: #{ex.message}"
 end
@@ -327,7 +326,7 @@ puts "JSON report saved to 'performance_report.json'"
 # Configuration management
 puts "\nDemonstrating configuration management..."
 monitor.configure do |config|
-  config.query_profiling_enabled = false  # Temporarily disable profiling
+  config.query_profiling_enabled = false # Temporarily disable profiling
   puts "Query profiling disabled"
 end
 
@@ -338,7 +337,7 @@ execution_time = Time.monotonic - start_time
 monitor.after_query("SELECT id, name FROM users", [] of DB::Any, execution_time, users.size.to_i64)
 
 monitor.configure do |config|
-  config.query_profiling_enabled = true   # Re-enable profiling
+  config.query_profiling_enabled = true # Re-enable profiling
   puts "Query profiling re-enabled"
 end
 

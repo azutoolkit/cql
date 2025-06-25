@@ -9,23 +9,23 @@ module CQL::Performance::Reports
 
     def generate(data : ReportData) : String
       {
-        "report_type" => "comprehensive",
+        "report_type"  => "comprehensive",
         "generated_at" => data.metadata["generated_at"]? || Time.utc.to_s,
-        "metadata" => data.metadata,
-        "issues" => {
-          "count" => data.issues.size,
+        "metadata"     => data.metadata,
+        "issues"       => {
+          "count"       => data.issues.size,
           "by_severity" => data.issues.group_by(&.severity.to_s),
-          "details" => data.issues.map { |issue|
+          "details"     => data.issues.map { |issue|
             {
-              "type" => issue.type,
-              "severity" => issue.severity.to_s,
-              "message" => issue.message,
-              "summary" => issue.summary,
-              "detected_at" => issue.detected_at.to_rfc3339
+              "type"        => issue.type,
+              "severity"    => issue.severity.to_s,
+              "message"     => issue.message,
+              "summary"     => issue.summary,
+              "detected_at" => issue.detected_at.to_rfc3339,
             }
-          }
+          },
         },
-        "events_count" => data.events.size
+        "events_count" => data.events.size,
       }.to_json
     end
   end
