@@ -5,6 +5,7 @@
 /.vscode/
 .DS_Store
 /*.db
+**/*.db
 spec/support/db/*.db
 examples/*.db
 # Libraries don't need dependency lock
