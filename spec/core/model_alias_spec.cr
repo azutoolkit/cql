@@ -14,12 +14,14 @@ end
 class TestWithAlias
   include CQL::Model(Int32)
   property name : String
+
   def initialize(@name : String); end
 end
 
 class TestWithFullPath
   include CQL::ActiveRecord::Model(Int32)
   property name : String
+
   def initialize(@name : String); end
 end
 
@@ -29,7 +31,7 @@ describe "CQL::Model alias" do
     CQL::Model.should eq(CQL::ActiveRecord::Model)
   end
 
-    it "should work when including the alias in a class" do
+  it "should work when including the alias in a class" do
     # Verify the class has the expected ActiveRecord functionality
     test_instance = TestModelWithAlias.new("Test")
     test_instance.name.should eq("Test")
