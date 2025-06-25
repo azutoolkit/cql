@@ -30,10 +30,10 @@ module CQL::Performance
     def normalized_sql : String
       # Remove parameters and normalize whitespace for grouping
       @sql.gsub(/\$\d+|\?/, "?")
-          .gsub(/\b\d+\b/, "?")
-          .gsub(/'.+?'/, "'?'")
-          .gsub(/\s+/, " ")
-          .strip
+        .gsub(/\b\d+\b/, "?")
+        .gsub(/'.+?'/, "'?'")
+        .gsub(/\s+/, " ")
+        .strip
     end
 
     def to_json(json : JSON::Builder)
@@ -142,8 +142,8 @@ module CQL::Performance
 
     # Record a query execution
     def record_execution(sql : String, params : Array(DB::Any), execution_time : Time::Span,
-                        context : String? = nil, endpoint : String? = nil,
-                        user_id : String? = nil, rows_affected : Int64? = nil)
+                         context : String? = nil, endpoint : String? = nil,
+                         user_id : String? = nil, rows_affected : Int64? = nil)
       return unless @config.enabled
       return if should_ignore_query?(sql)
 
@@ -239,7 +239,7 @@ module CQL::Performance
     private def should_ignore_query?(sql : String) : Bool
       normalized = sql.strip.upcase
       @config.queries_to_ignore.any? { |pattern| normalized.starts_with?(pattern) } ||
-      normalized.starts_with?("EXPLAIN")
+        normalized.starts_with?("EXPLAIN")
     end
 
     private def current_memory_usage : Int64
@@ -346,14 +346,14 @@ module CQL::Performance
 
     private def generate_json_report : String
       {
-        "report_generated" => Time.utc.to_rfc3339,
+        "report_generated"        => Time.utc.to_rfc3339,
         "profiler_uptime_seconds" => (Time.utc - @start_time).total_seconds,
-        "total_queries" => @executions.size,
-        "unique_patterns" => @stats.size,
-        "slow_queries_count" => @slow_queries.size,
-        "slowest_patterns" => slowest_queries(10),
-        "endpoint_summary" => endpoint_summary,
-        "recent_slow_queries" => @slow_queries.last(10)
+        "total_queries"           => @executions.size,
+        "unique_patterns"         => @stats.size,
+        "slow_queries_count"      => @slow_queries.size,
+        "slowest_patterns"        => slowest_queries(10),
+        "endpoint_summary"        => endpoint_summary,
+        "recent_slow_queries"     => @slow_queries.last(10),
       }.to_json
     end
 
@@ -375,8 +375,7 @@ module CQL::Performance
         str << "<h2>Top 10 Slowest Query Patterns</h2><table>"
         str << "<tr><th>Query</th><th>Executions</th><th>Avg Time (ms)</th><th>Max Time (ms)</th></tr>"
         slowest_queries(10).each do |stats|
-          css_class = stats.avg_time > @config.very_slow_threshold ? "slow" :
-                     stats.avg_time > @config.slow_query_threshold ? "warning" : ""
+          css_class = stats.avg_time > @config.very_slow_threshold ? "slow" : stats.avg_time > @config.slow_query_threshold ? "warning" : ""
           str << "<tr class='#{css_class}'>"
           str << "<td>#{stats.normalized_sql[0..100]}...</td>"
           str << "<td>#{stats.execution_count}</td>"
@@ -405,7 +404,7 @@ module CQL::Performance
 
   # Convenience method for recording executions
   def self.record_execution(sql : String, params : Array(DB::Any), execution_time : Time::Span,
-                           context : String? = nil, endpoint : String? = nil, user_id : String? = nil)
+                            context : String? = nil, endpoint : String? = nil, user_id : String? = nil)
     profiler.record_execution(sql, params, execution_time, context, endpoint, user_id)
   end
 end

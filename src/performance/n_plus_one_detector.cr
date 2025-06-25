@@ -19,9 +19,9 @@ module CQL::Performance
     getter severity : Severity
 
     enum Severity
-      Low    # 2-5 repetitions
-      Medium # 6-20 repetitions
-      High   # 21-50 repetitions
+      Low      # 2-5 repetitions
+      Medium   # 6-20 repetitions
+      High     # 21-50 repetitions
       Critical # 50+ repetitions
     end
 
@@ -89,10 +89,10 @@ module CQL::Performance
     private def normalize_sql(sql : String) : String
       # Normalize SQL by removing parameter values to detect patterns
       sql.gsub(/\$\d+|\?/, "?")
-         .gsub(/\b\d+\b/, "?")
-         .gsub(/'.+?'/, "'?'")
-         .gsub(/\s+/, " ")
-         .strip
+        .gsub(/\b\d+\b/, "?")
+        .gsub(/'.+?'/, "'?'")
+        .gsub(/\s+/, " ")
+        .strip
     end
 
     def detect_patterns : Array(NPlusOnePattern)

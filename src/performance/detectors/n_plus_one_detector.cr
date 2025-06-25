@@ -5,7 +5,7 @@ require "../interfaces"
 require "../event_system"
 
 module CQL::Performance::Detectors
-    # N+1 Performance Issue
+  # N+1 Performance Issue
   struct NPlusOneIssue < PerformanceIssue
     include JSON::Serializable
 
@@ -114,10 +114,10 @@ module CQL::Performance::Detectors
     private def normalize_sql(sql : String) : String
       # Normalize SQL by removing parameter values to detect patterns
       sql.gsub(/\$\d+|\?/, "?")
-         .gsub(/\b\d+\b/, "?")
-         .gsub(/'.+?'/, "'?'")
-         .gsub(/\s+/, " ")
-         .strip
+        .gsub(/\b\d+\b/, "?")
+        .gsub(/'.+?'/, "'?'")
+        .gsub(/\s+/, " ")
+        .strip
     end
 
     private def is_n_plus_one_pattern?(indices : Array(Int32)) : Bool
@@ -157,7 +157,6 @@ module CQL::Performance::Detectors
 
   # N+1 Query Detector implementing EventListener and PerformanceDetector
   class NPlusOneDetector < EventListener
-
     Log = ::Log.for(self)
 
     @config : NPlusOneConfig

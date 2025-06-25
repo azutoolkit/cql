@@ -8,10 +8,10 @@ module CQL::Performance::Reports
   # Factory for creating report generators (Factory Pattern)
   class ReportGeneratorFactory
     @@generators = {
-      "text" => TextReportGenerator.new,
-      "json" => JsonReportGenerator.new,
-      "html" => HtmlReportGenerator.new,
-      "logger" => LoggerReportGenerator.new
+      "text"   => TextReportGenerator.new,
+      "json"   => JsonReportGenerator.new,
+      "html"   => HtmlReportGenerator.new,
+      "logger" => LoggerReportGenerator.new,
     }
 
     def self.create(format : String) : ReportGenerator

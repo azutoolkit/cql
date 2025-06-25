@@ -45,8 +45,8 @@ module CQL::Performance::Analyzers
     protected def should_analyze?(sql : String) : Bool
       normalized = sql.strip.downcase
       normalized.starts_with?("select") ||
-      normalized.starts_with?("update") ||
-      normalized.starts_with?("delete")
+        normalized.starts_with?("update") ||
+        normalized.starts_with?("delete")
     end
   end
 

@@ -9,7 +9,7 @@ require "../src/performance"
 # during development and debugging.
 
 class LoggerReportExample
-    def self.run
+  def self.run
     puts "🚀 CQL Logger Report Generator Example"
     puts "====================================="
 
@@ -38,7 +38,7 @@ class LoggerReportExample
     puts "  • Performance recommendations guide optimization efforts"
   end
 
-    private def self.create_sample_performance_data(monitor)
+  private def self.create_sample_performance_data(monitor)
     # Simulate some N+1 queries
     10.times do |i|
       monitor.after_query(

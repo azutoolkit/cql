@@ -16,7 +16,7 @@ module CQL::Performance
     getter execution_time : Time::Span?
     getter warnings : Array(String)
 
-        def initialize(@sql : String, @plan : String,
+    def initialize(@sql : String, @plan : String,
                    @estimated_cost : Float64? = nil,
                    @estimated_rows : Int64? = nil,
                    @execution_time : Time::Span? = nil,
@@ -26,8 +26,8 @@ module CQL::Performance
     # Check if the plan indicates potential performance issues
     def has_performance_issues? : Bool
       warnings.any? ||
-      (estimated_cost && estimated_cost.not_nil! > 1000.0_f32) ||
-      (estimated_rows && estimated_rows.not_nil! > 10_000) || false
+        (estimated_cost && estimated_cost.not_nil! > 1000.0_f32) ||
+        (estimated_rows && estimated_rows.not_nil! > 10_000) || false
     end
 
     # Get a human-readable summary of the plan
@@ -104,8 +104,8 @@ module CQL::Performance
       # Only analyze SELECT statements and potentially expensive operations
       normalized = sql.strip.downcase
       normalized.starts_with?("select") ||
-      normalized.starts_with?("update") ||
-      normalized.starts_with?("delete")
+        normalized.starts_with?("update") ||
+        normalized.starts_with?("delete")
     end
 
     private def analyze_postgres(sql : String, params : Array(DB::Any)) : QueryPlan
