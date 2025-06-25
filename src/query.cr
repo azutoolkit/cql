@@ -78,8 +78,11 @@ module CQL
     # ```
     def all(as as_kind)
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.query_all(query, args: params, as: as_kind)
+
+      CQL::Performance.benchmark(query, params) do
+        @schema.exec_query do |conn|
+          conn.query_all(query, args: params, as: as_kind)
+        end
       end
     end
 

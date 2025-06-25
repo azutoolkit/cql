@@ -157,16 +157,20 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      if conn = @active_connection
-        conn.exec(sql)
-      else
-        @db.using_connection do |db_conn|
-          db_conn.exec(sql)
+      CQL::Performance.benchmark(sql, [] of DB::Any) do
+        if conn = @active_connection
+          conn.exec(sql)
+        else
+          @db.using_connection do |db_conn|
+            db_conn.exec(sql)
+          end
         end
       end
     end
 
     def exec_query(&)
+      # Performance monitoring will be handled by individual query methods
+      # that call this method, as we don't have access to SQL/params here
       if conn = @active_connection
         yield conn
       else

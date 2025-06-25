@@ -107,7 +107,7 @@ module Expression
             string << (default_value ? "1" : "0")
           when Time
             # Format time values as ISO8601 strings
-            string << "'" << default_value.to_s("'%Y-%m-%d %H:%M:%S.%L'") << "'"
+            string << "'" << default_value.to_s("%Y-%m-%d %H:%M:%S.%L") << "'"
           when Nil
             string << "NULL"
           else
