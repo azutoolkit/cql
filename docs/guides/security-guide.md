@@ -94,6 +94,31 @@ end
 
 ### 🔑 Secure Password Handling
 
+```mermaid
+flowchart TD
+    A[User Registration] --> B[Password Input]
+    B --> C{Password Validation}
+    C -->|Invalid| D[Return Errors]
+    C -->|Valid| E[Generate Salt]
+    E --> F[Hash with BCrypt]
+    F --> G[Store Hash in DB]
+    G --> H[Clear Plaintext]
+
+    I[User Login] --> J[Password Input]
+    J --> K[Retrieve Hash from DB]
+    K --> L[BCrypt Verify]
+    L -->|Success| M[Authenticate User]
+    L -->|Failure| N[Increment Failed Attempts]
+    N --> O{Max Attempts?}
+    O -->|Yes| P[Lock Account]
+    O -->|No| Q[Allow Retry]
+
+    style E fill:#e8f5e8
+    style F fill:#e8f5e8
+    style H fill:#e8f5e8
+    style P fill:#ffebee
+```
+
 ```crystal
 # User model with secure password
 require "crypto/bcrypt/password"
@@ -168,6 +193,37 @@ end
 ```
 
 ### 🛡️ Role-Based Access Control
+
+```mermaid
+graph TD
+    subgraph "Role-Based Access Control Matrix"
+        A[User Request] --> B{Check User Role}
+
+        B --> C[Guest]
+        B --> D[User]
+        B --> E[Moderator]
+        B --> F[Admin]
+        B --> G[Super Admin]
+
+        C --> C1[No Permissions]
+        D --> D1[ReadUsers]
+        E --> E1[ReadUsers<br/>WriteUsers]
+        F --> F1[ReadUsers<br/>WriteUsers<br/>DeleteUsers<br/>ReadReports]
+        G --> G1[All Permissions]
+
+        C1 --> H{Permission Check}
+        D1 --> H
+        E1 --> H
+        F1 --> H
+        G1 --> H
+
+        H -->|Authorized ✅| I[Execute Action]
+        H -->|Denied ❌| J[Throw AuthorizationError]
+    end
+
+    style I fill:#e8f5e8
+    style J fill:#ffebee
+```
 
 ```crystal
 # Permission system
@@ -835,6 +891,39 @@ end
 ```
 
 ### 🕵️ Threat Detection
+
+```mermaid
+flowchart TD
+    A[Incoming Request] --> B[Extract User, Action, IP]
+    B --> C[Rate Limit Check]
+    C --> D{> 100 actions/min?}
+    D -->|Yes| E[Log Rate Limit Event]
+    D -->|No| F[Geolocation Check]
+
+    F --> G{Unusual Location?}
+    G -->|Yes| H[Log Suspicious Location]
+    G -->|No| I[Behavioral Analysis]
+
+    I --> J{Unusual Pattern?}
+    J -->|Yes| K[Log Unusual Behavior]
+    J -->|No| L[Allow Request]
+
+    E --> M[Block Request]
+    H --> N{High Risk?}
+    K --> N
+    N -->|Yes| M
+    N -->|No| O[Require 2FA]
+
+    M --> P[Send Alert]
+    O --> Q[Challenge User]
+    L --> R[Process Normally]
+
+    style M fill:#ffebee
+    style P fill:#ffebee
+    style O fill:#fff3e0
+    style L fill:#e8f5e8
+    style R fill:#e8f5e8
+```
 
 ```crystal
 # Advanced threat detection patterns

@@ -233,7 +233,7 @@ To avoid N+1 query problems when loading many posts and their comments, use eage
 
 ```crystal
 # Fetches all posts and their associated comments in a more optimized way (typically 2 queries)
-posts_with_comments = Post.query.includes(:comments).all(Post)
+posts_with_comments = Post.query.join(:comments).all(Post)
 
 posts_with_comments.each do |p|
   puts "Post: #{p.title} has #{p.comments.size} comments (already loaded):"

@@ -396,7 +396,7 @@ describe "User Persistence" do
     end
 
     it "finds published posts with authors" do
-      published_posts = Post.includes(:user).where(published: true).all
+      published_posts = Post.join(:user).where(published: true).all
       published_posts.size.should eq(1)
       published_posts.first.user.name.should eq("Admin")
     end
@@ -514,6 +514,30 @@ end
 ```
 
 ### 🎭 Service Mocking
+
+```mermaid
+sequenceDiagram
+    participant Test as Test Suite
+    participant Mock as MockEmailService
+    participant Model as User Model
+    participant Real as Real EmailService
+
+    Note over Test,Real: Service Mocking Flow
+    Test->>Mock: Create mock instance
+    Test->>Model: Stub EmailService.instance
+    Model-->>Mock: Return mock instead of real service
+
+    Test->>Model: user.save! (triggers callback)
+    Model->>Mock: send_email(user.email, "Welcome", "...")
+    Mock-->>Model: Return true (simulated success)
+    Model-->>Test: Save completed
+
+    Test->>Mock: Check sent_emails array
+    Mock-->>Test: Return captured email data
+
+    Note over Test: Assert email was sent with correct data
+    Note over Real: Real service never called! ✅
+```
 
 ```crystal
 # spec/mocks/mock_services.cr
@@ -673,6 +697,32 @@ end
 
 ### 🎯 Advanced Factory with Traits
 
+```mermaid
+flowchart TD
+    A[AdvancedUserFactory.create] --> B[Process Traits]
+    B --> C{Admin Trait?}
+    B --> D{Inactive Trait?}
+    B --> E{Premium Trait?}
+    B --> F{WithPosts Trait?}
+
+    C -->|Yes| C1[Set role: 'admin']
+    D -->|Yes| D1[Set active: false]
+    E -->|Yes| E1[Set plan: 'premium'<br/>Set expiry date]
+    F -->|Yes| F1[Create 3 posts]
+
+    C1 --> G[Merge Attributes]
+    D1 --> G
+    E1 --> G
+    G --> H[User.create!]
+    H --> I[Apply Post-Creation Traits]
+    F1 --> I
+    I --> J[Return User]
+
+    style A fill:#e8f5e8
+    style H fill:#fff3e0
+    style J fill:#e8f5e8
+```
+
 ```crystal
 # spec/factories/advanced_user_factory.cr
 class AdvancedUserFactory
@@ -801,6 +851,26 @@ end
 
 ### 🧹 Database Cleaning Strategies
 
+```mermaid
+graph TD
+    subgraph "Database Cleaning Strategy Decision"
+        A[Test Type?] --> B[Unit Tests]
+        A --> C[Integration Tests]
+        A --> D[System Tests]
+
+        B --> B1[No DB Cleaning<br/>Mock Everything]
+        C --> C1[Transaction Rollback<br/>⚡ Fastest]
+        D --> D1[Table Truncation<br/>🧹 Complete Reset]
+
+        C1 --> C2[BEGIN TRANSACTION<br/>Run Test<br/>ROLLBACK]
+        D1 --> D2[DELETE FROM table1<br/>DELETE FROM table2<br/>RESET sequences]
+    end
+
+    style B1 fill:#e8f5e8
+    style C1 fill:#fff3e0
+    style D1 fill:#ffebee
+```
+
 ```crystal
 # spec/support/database_cleaner.cr
 module DatabaseCleaner
@@ -889,7 +959,7 @@ describe "Query Performance" do
     end
 
     # Test eager loading
-    users = User.includes(:posts).limit(10).all
+    users = User.join(:posts).limit(10).all
     users.each { |user| user.posts.size }
 
     # Should be 2 queries: users + posts

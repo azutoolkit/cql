@@ -998,7 +998,7 @@ end
 users = User.select(:id, :name, :email).where(active: true).all
 
 # Use includes for eager loading
-users = User.includes(:posts).where(active: true).all
+users = User.join(:posts).where(active: true).all
 ```
 
 **Repository Optimization**

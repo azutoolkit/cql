@@ -249,7 +249,7 @@ To avoid N+1 queries with many-to-many associations, use `includes`:
 
 ```crystal
 # Fetches all posts and their associated tags efficiently
-posts_with_tags = Post.query.includes(:tags).all(Post)
+posts_with_tags = Post.query.join(:tags).all(Post)
 
 posts_with_tags.each do |p|
   puts "Post: #{p.title} has tags: #{p.tags.map(&.name).join(", ") || "None"} (already loaded)"

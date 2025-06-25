@@ -104,7 +104,7 @@ User.join(:profiles, :left).on("users.id = profiles.user_id")
 
 ```crystal
 # Includes (eager loading)
-User.includes(:posts, :profile).all
+User.join(:posts, :profile).all
 
 # Aggregations
 User.count
@@ -127,6 +127,37 @@ end
 ## 📦 Active Record
 
 ### Model Definition
+
+```mermaid
+classDiagram
+    class User {
+        +Int64? id
+        +String name
+        +String email
+        +Bool active
+        +Time? created_at
+        +Time? updated_at
+
+        +initialize(name, email)
+        +save() Bool
+        +save!() void
+        +update(attrs) Bool
+        +delete!() void
+        +valid?() Bool
+        +errors() ErrorCollection
+    }
+
+    class CQLActiveRecordModel {
+        <<mixin>>
+        +find(id) Model?
+        +find!(id) Model
+        +create(attrs) Model
+        +all() Array(Model)
+        +where(conditions) Query
+    }
+
+    User --|> CQLActiveRecordModel
+```
 
 ```crystal
 struct User
@@ -194,6 +225,50 @@ User.by_role("admin").recent(7).all
 ## 🔗 Relationships
 
 ### Association Types
+
+```mermaid
+erDiagram
+    User ||--o{ Post : "has_many"
+    User ||--|| UserProfile : "has_one"
+    User }o--o{ Role : "many_to_many"
+    Post }o--|| User : "belongs_to"
+    UserProfile }o--|| User : "belongs_to"
+
+    User {
+        int64 id PK
+        string name
+        string email
+        bool active
+    }
+
+    Post {
+        int64 id PK
+        string title
+        string content
+        int64 user_id FK
+        bool published
+    }
+
+    UserProfile {
+        int64 id PK
+        string bio
+        int64 user_id FK
+    }
+
+    Role {
+        int64 id PK
+        string name
+        string description
+    }
+
+    UserRoles {
+        int64 user_id FK
+        int64 role_id FK
+    }
+
+    User ||--o{ UserRoles : "through"
+    Role ||--o{ UserRoles : "through"
+```
 
 ```crystal
 # belongs_to
@@ -411,6 +486,35 @@ end
 ```
 
 ### Transaction Control
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant DB as Database
+    participant Tx as Transaction
+
+    Note over App,Tx: Transaction Lifecycle
+    App->>DB: BEGIN TRANSACTION
+    DB-->>Tx: Transaction Started
+
+    App->>Tx: User.create!(name: "Test")
+    Tx->>DB: INSERT INTO users...
+    DB-->>Tx: Row inserted (not committed)
+
+    App->>App: Check some_condition
+
+    alt Condition Failed
+        App->>Tx: tx.rollback
+        Tx->>DB: ROLLBACK
+        DB-->>App: All changes discarded ❌
+    else Condition Passed
+        App->>Tx: user.update!(active: true)
+        Tx->>DB: UPDATE users...
+        DB-->>Tx: Row updated (not committed)
+        Tx->>DB: COMMIT
+        DB-->>App: All changes saved ✅
+    end
+```
 
 ```crystal
 UserDB.transaction do |tx|

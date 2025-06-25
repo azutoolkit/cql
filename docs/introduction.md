@@ -130,7 +130,7 @@ end
 
 # Use with ease
 user.posts.where(published: true).count
-post.comments.includes(:user).all  # Eager loading
+post.comments.join(:user).all  # Eager loading
 ```
 
 ### ✅ **Comprehensive Validations**

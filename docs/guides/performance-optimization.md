@@ -75,6 +75,25 @@ graph TD
 
 ### 🎯 The N+1 Query Problem
 
+**❌ The Problem Visualization:**
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant DB as Database
+
+    Note over App,DB: N+1 Query Problem
+    App->>DB: SELECT * FROM users (1 query)
+    DB-->>App: Returns 1000 users
+
+    loop For each user (N=1000)
+        App->>DB: SELECT COUNT(*) FROM posts WHERE user_id = ?
+        DB-->>App: Returns count
+    end
+
+    Note over App,DB: Total: 1001 queries! 😱
+```
+
 **❌ The Problem:**
 
 ```crystal
@@ -88,9 +107,27 @@ end
 
 **✅ Solution 1: Eager Loading**
 
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant DB as Database
+
+    Note over App,DB: Eager Loading Solution
+    App->>DB: SELECT * FROM users
+    DB-->>App: Returns 1000 users
+    App->>DB: SELECT * FROM posts WHERE user_id IN (1,2,3...1000)
+    DB-->>App: Returns all posts for all users
+
+    loop For each user (N=1000)
+        Note over App: Access posts.size (no DB query!)
+    end
+
+    Note over App,DB: Total: Only 2 queries! ✅
+```
+
 ```crystal
 # This generates only 2 queries regardless of user count
-users = User.includes(:posts).all  # Query 1: Users, Query 2: All related posts
+users = User.join(:posts).all  # Query 1: Users, Query 2: All related posts
 
 users.each do |user|
   puts user.posts.size  # No additional queries - data already loaded
@@ -167,6 +204,25 @@ recent_active = User.where("active = ? AND created_at > ?", true, 1.week.ago).al
 ```
 
 **3. Efficient Pagination**
+
+```mermaid
+graph LR
+    subgraph "OFFSET Pagination Performance"
+        A[Page 1<br/>OFFSET 0] --> B[Page 100<br/>OFFSET 2000]
+        B --> C[Page 1000<br/>OFFSET 20000]
+        A --> A1[Fast ⚡]
+        B --> B1[Slower 🐌]
+        C --> C1[Very Slow 🐢]
+    end
+
+    subgraph "Cursor-based Pagination Performance"
+        D[Page 1<br/>WHERE id > 0] --> E[Page 100<br/>WHERE id > 2000]
+        E --> F[Page 1000<br/>WHERE id > 20000]
+        D --> D1[Fast ⚡]
+        E --> E1[Fast ⚡]
+        F --> F1[Fast ⚡]
+    end
+```
 
 ```crystal
 # ❌ OFFSET pagination (gets slower with higher page numbers)
@@ -386,6 +442,33 @@ posts = Post.where("MATCH(title, content) AGAINST('crystal programming' IN NATUR
 
 ### 🔧 Connection Pool Optimization
 
+```mermaid
+graph TD
+    subgraph "Connection Pool Architecture"
+        A[Application Requests] --> B[Connection Pool Manager]
+        B --> C[Available Connections]
+        B --> D[Active Connections]
+        B --> E[Waiting Queue]
+
+        C --> C1[Conn 1 💤]
+        C --> C2[Conn 2 💤]
+        C --> C3[Conn 3 💤]
+
+        D --> D1[Conn 4 🔄]
+        D --> D2[Conn 5 🔄]
+
+        E --> E1[Request 1 ⏳]
+        E --> E2[Request 2 ⏳]
+
+        D1 --> F[(Database)]
+        D2 --> F
+    end
+
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
+    style E fill:#ffebee
+```
+
 ```crystal
 # Configure connection pools for different environments
 module DatabaseConfig
@@ -468,6 +551,22 @@ end
 ## 💾 Caching Strategies
 
 ### 🎯 Multi-Level Caching
+
+```mermaid
+graph TD
+    A[Client Request] --> B{Application Cache<br/>Redis}
+    B -->|Cache Hit ✅| C[Return Cached Data]
+    B -->|Cache Miss ❌| D{Query Cache<br/>In-Memory}
+    D -->|Cache Hit ✅| E[Store in Redis<br/>Return Data]
+    D -->|Cache Miss ❌| F[Database Query]
+    F --> G[Store in Query Cache]
+    G --> H[Store in Redis]
+    H --> I[Return Fresh Data]
+
+    style B fill:#e8f5e8
+    style D fill:#fff3e0
+    style F fill:#ffebee
+```
 
 ```crystal
 # Application-level caching with Redis
@@ -724,7 +823,7 @@ end
 def get_user_dashboard(user_id)
   PerformanceMonitor.measure("user_dashboard") do
     user = User.find!(user_id)
-    posts = user.posts.includes(:comments).limit(10).all
+    posts = user.posts.join(:comments).limit(10).all
     stats = user.post_statistics
 
     {user: user, posts: posts, stats: stats}
@@ -1001,7 +1100,7 @@ class CQLBenchmarks
   end
 
   private def self.simulate_eager_loading
-    users = User.includes(:posts).limit(20).all
+    users = User.join(:posts).limit(20).all
     users.each { |user| user.posts.size }
   end
 end
@@ -1037,7 +1136,7 @@ end
 
 # Profile memory usage
 MemoryProfiler.profile do
-  users = User.includes(:posts, :comments).limit(100).all
+  users = User.join(:posts, :comments).limit(100).all
   users.each { |user| process_user_data(user) }
 end
 ```

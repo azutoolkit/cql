@@ -167,6 +167,25 @@ end
 
 Set up automatic schema synchronization and run your migrations:
 
+```mermaid
+flowchart TD
+    A[Application Start] --> B[Load CQL & Dependencies]
+    B --> C[Define Schema Connection]
+    C --> D[Initialize Database]
+    D --> E[Configure Migrator]
+    E --> F[Check Migration Status]
+    F --> G{Pending Migrations?}
+    G -->|Yes| H[Run Migrations]
+    G -->|No| I[Schema Ready]
+    H --> J[Update Schema File]
+    J --> K[Application Ready]
+    I --> K
+
+    style D fill:#e8f5e8
+    style H fill:#fff3e0
+    style K fill:#e8f5e8
+```
+
 ```crystal
 # src/database.cr
 require "cql"
@@ -195,6 +214,36 @@ puts "✅ Database initialized with #{migrator.applied_migrations.size} migratio
 ## 6. Basic CRUD Operations
 
 Now you can start working with your data:
+
+```mermaid
+stateDiagram-v2
+    [*] --> NewRecord : User.new()
+    NewRecord --> Persisted : save() / create()
+    NewRecord --> [*] : validation fails
+
+    Persisted --> Modified : attribute=()
+    Modified --> Persisted : save() / update()
+    Modified --> [*] : validation fails
+
+    Persisted --> [*] : delete()
+
+    note right of NewRecord
+        new_record? = true
+        persisted? = false
+        id = nil
+    end note
+
+    note right of Persisted
+        new_record? = false
+        persisted? = true
+        id = assigned
+    end note
+
+    note right of Modified
+        changed? = true
+        has pending changes
+    end note
+```
 
 ### Create Records
 
@@ -381,6 +430,34 @@ end
 
 Add validations to ensure data integrity:
 
+```mermaid
+flowchart TD
+    A[user.save called] --> B[Run Validations]
+    B --> C[Presence Validations]
+    C --> D[Format Validations]
+    D --> E[Custom Validations]
+    E --> F{All Valid?}
+    F -->|Yes| G[Save to Database]
+    F -->|No| H[Populate Errors]
+    G --> I[Return true]
+    H --> J[Return false]
+
+    subgraph "Validation Types"
+        C1[presence: true]
+        D1[match: /@/]
+        E1[validate_email_uniqueness]
+    end
+
+    C -.-> C1
+    D -.-> D1
+    E -.-> E1
+
+    style G fill:#e8f5e8
+    style I fill:#e8f5e8
+    style H fill:#ffebee
+    style J fill:#ffebee
+```
+
 ```crystal
 struct User
   include CQL::ActiveRecord::Model(Int64)
@@ -496,7 +573,7 @@ end
 
 ## Example Application Structure
 
-```
+```shell
 myapp/
 ├── shard.yml
 ├── src/

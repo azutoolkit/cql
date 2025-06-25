@@ -511,7 +511,7 @@ user.save  # Returns false but no error details shown
    end
 
    # ✅ Use eager loading (when available)
-   users = User.includes(:posts).all
+   users = User.join(:posts).all
    users.each do |user|
      puts user.posts.count  # Posts already loaded
    end
