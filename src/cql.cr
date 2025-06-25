@@ -29,6 +29,7 @@ require "./query"
 require "./repository"
 require "./schema_dump"
 require "./active_record/model"
+require "./active_record/soft_deletable"
 
 module CQL
   # :nodoc:
