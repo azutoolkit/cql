@@ -195,8 +195,8 @@ module CQL::Performance::Analyzers
 
       plan_lines = [] of String
       schema.exec_query do |conn|
-        conn.query_each(explain_sql, args: params) do |rs|
-          line = rs.read(String?) || rs.read(String?) || rs.read(String?) || rs.read(String?)
+        conn.query_each(explain_sql, args: params) do |result_set|
+          line = result_set.read(String?) || result_set.read(String?) || result_set.read(String?) || result_set.read(String?)
           plan_lines << line if line
         end
       end

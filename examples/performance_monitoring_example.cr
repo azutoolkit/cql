@@ -325,8 +325,8 @@ puts "JSON report saved to 'performance_report.json'"
 
 # Configuration management
 puts "\nDemonstrating configuration management..."
-monitor.configure do |config|
-  config.query_profiling_enabled = false # Temporarily disable profiling
+monitor.configure do |cfg|
+  cfg.query_profiling_enabled = false # Temporarily disable profiling
   puts "Query profiling disabled"
 end
 
@@ -336,8 +336,8 @@ users = AcmeDB.query.from(:users).all({id: Int32, name: String})
 execution_time = Time.monotonic - start_time
 monitor.after_query("SELECT id, name FROM users", [] of DB::Any, execution_time, users.size.to_i64)
 
-monitor.configure do |config|
-  config.query_profiling_enabled = true # Re-enable profiling
+monitor.configure do |cfg|
+  cfg.query_profiling_enabled = true # Re-enable profiling
   puts "Query profiling re-enabled"
 end
 
@@ -345,7 +345,7 @@ end
 puts "\nDemonstrating advanced component access..."
 puts "Event bus type: #{monitor.event_bus.class}"
 puts "Query profiler stats: #{monitor.query_profiler.statistics.size} patterns tracked"
-puts "N+1 detector issues: #{monitor.n_plus_one_detector.get_issues.size} issues detected"
+puts "N+1 detector issues: #{monitor.n_plus_one_detector.issues.size} issues detected"
 
 puts "\n" + "="*60
 puts "PERFORMANCE MONITORING DEMO COMPLETE"

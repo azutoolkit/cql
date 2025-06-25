@@ -111,13 +111,13 @@ module CQL::Performance
 
   # Configuration for the query profiler
   struct ProfilerConfig
-    property enabled : Bool = true
+    property? enabled : Bool = true
     property slow_query_threshold : Time::Span = 100.milliseconds
     property very_slow_threshold : Time::Span = 1.second
-    property log_all_queries : Bool = false
-    property log_slow_queries : Bool = true
+    property? log_all_queries : Bool = false
+    property? log_slow_queries : Bool = true
     property max_recorded_queries : Int32 = 10_000
-    property enable_memory_tracking : Bool = false
+    property? enable_memory_tracking : Bool = false
     property endpoints_to_track : Array(String) = [] of String
     property queries_to_ignore : Array(String) = ["COMMIT", "BEGIN", "ROLLBACK"]
 

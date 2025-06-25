@@ -146,9 +146,9 @@ module CQL::Performance::Detectors
 
   # Configuration for N+1 Detection
   struct NPlusOneConfig
-    property enabled : Bool = true
+    property? enabled : Bool = true
     property threshold : Int32 = 2
-    property strict_mode : Bool = false
+    property? strict_mode : Bool = false
     property ignore_patterns : Array(String) = [] of String
 
     def initialize
@@ -186,7 +186,7 @@ module CQL::Performance::Detectors
       new_patterns.map(&.as(PerformanceIssue))
     end
 
-    def get_issues : Array(PerformanceIssue)
+    def issues : Array(PerformanceIssue)
       @detected_issues.map(&.as(PerformanceIssue))
     end
 
@@ -205,7 +205,7 @@ module CQL::Performance::Detectors
     end
 
     def enabled? : Bool
-      @config.enabled
+      @config.enabled?
     end
 
     # Generate report
@@ -230,14 +230,14 @@ module CQL::Performance::Detectors
     end
 
     private def handle_query_event(event : QueryExecutionEvent)
-      return unless @config.enabled
+      return unless @config.enabled?
       return if should_ignore_query?(event.sql)
 
       current_context.add_query(event.sql)
     end
 
     private def handle_relation_event(event : RelationLoadingEvent)
-      return unless @config.enabled
+      return unless @config.enabled?
 
       case event.loading_type
       when RelationLoadingEvent::LoadingType::Started
