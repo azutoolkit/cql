@@ -10,7 +10,23 @@ The `HasMany` relationship indicates that one entity (a record) is related to mu
 
 ### Example Scenario: Posts and Comments
 
-<figure><img src="../../.gitbook/assets/Untitled-2.svg" alt=""><figcaption></figcaption></figure>
+```mermaid
+erDiagram
+    POSTS ||--o{ COMMENTS : "has many"
+
+    POSTS {
+        int64 id PK "Primary Key, Auto Increment"
+        text title "Post Title"
+        text body "Post Content"
+        timestamp published_at "Publication Date"
+    }
+
+    COMMENTS {
+        int64 id PK "Primary Key, Auto Increment"
+        int64 post_id FK "Foreign Key to posts.id"
+        text body "Comment Content"
+    }
+```
 
 In a blogging system:
 
@@ -229,7 +245,7 @@ If you delete the parent record (`post.delete`), associated comments are _not_ a
 
 ## Eager Loading
 
-To avoid N+1 query problems when loading many posts and their comments, use eager loading:
+To avoid N+1 query problems when loading many posts and their comments, use joins:
 
 ```crystal
 # Fetches all posts and their associated comments in a more optimized way (typically 2 queries)
@@ -243,7 +259,7 @@ posts_with_comments.each do |p|
 end
 ```
 
-- `includes(:comments)` tells CQL to fetch all comments for the retrieved posts in a separate, optimized query.
+- `join(:comments)` tells CQL to fetch all comments for the retrieved posts using efficient JOIN operations.
 
 ---
 

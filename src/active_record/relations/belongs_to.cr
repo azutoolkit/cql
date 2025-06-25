@@ -19,7 +19,7 @@ module CQL::ActiveRecord::Relations
     # **Example**
     # ```
     # class Post
-    #   include CQL::Model(Post, Int64)
+    #   include CQL::Model(Int64)
     #   belongs_to :user, User, :user_id, optional: false, cache: true
     # end
     # ```

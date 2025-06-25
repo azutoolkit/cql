@@ -13,7 +13,23 @@ Let's say we have a system where:
 - A **User** can have one **Profile**.
 - A **Profile** belongs to one **User**.
 
-<figure><img src="../../.gitbook/assets/Untitled-4.svg" alt=""><figcaption></figcaption></figure>
+```mermaid
+erDiagram
+    USERS ||--|| PROFILES : "has one"
+
+    USERS {
+        int64 id PK "Primary Key (default), Auto Increment"
+        text name "User Name"
+        text email "Email Address"
+    }
+
+    PROFILES {
+        int64 id PK "Primary Key (default), Auto Increment"
+        bigint user_id FK "Foreign Key to users.id, Indexed"
+        text bio "User Biography"
+        text avatar_url "Avatar Image URL"
+    }
+```
 
 We will represent this one-to-one relationship using CQL's `HasOne` and `BelongsTo` associations.
 

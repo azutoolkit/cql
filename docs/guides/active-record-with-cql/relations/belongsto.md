@@ -13,7 +13,23 @@ Let's say you have a blog system where:
 - A **Post** can have many **Comments**.
 - A **Comment** belongs to one **Post**.
 
-<figure><img src="../../.gitbook/assets/Untitled-2.svg" alt=""><figcaption></figcaption></figure>
+```mermaid
+erDiagram
+    POSTS ||--o{ COMMENTS : "has many"
+
+    POSTS {
+        int64 id PK "Primary Key (default), Auto Increment"
+        text title "Post Title"
+        text body "Post Content"
+        timestamp published_at "Publication Date"
+    }
+
+    COMMENTS {
+        int64 id PK "Primary Key (default), Auto Increment"
+        bigint post_id FK "Foreign Key to posts.id"
+        text body "Comment Content"
+    }
+```
 
 We'll start by implementing the `BelongsTo` relationship from the `Comment` to the `Post`.
 

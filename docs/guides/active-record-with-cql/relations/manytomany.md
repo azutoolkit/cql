@@ -15,7 +15,29 @@ A `ManyToMany` relationship means that multiple records in one table can relate 
 
 ### Example Scenario: Posts and Tags
 
-<figure><img src="../../.gitbook/assets/Untitled-5.svg" alt=""><figcaption></figcaption></figure>
+```mermaid
+erDiagram
+    POSTS ||--o{ POST_TAGS : "has many through"
+    TAGS ||--o{ POST_TAGS : "has many through"
+
+    POSTS {
+        int64 id PK "Primary Key (default), Auto Increment"
+        text title "Post Title"
+        text body "Post Content"
+        timestamp published_at "Publication Date"
+    }
+
+    TAGS {
+        int64 id PK "Primary Key (default), Auto Increment"
+        text name "Tag Name"
+    }
+
+    POST_TAGS {
+        int64 id PK "Primary Key (default), Auto Increment"
+        bigint post_id FK "Foreign Key to posts.id, Indexed"
+        bigint tag_id FK "Foreign Key to tags.id, Indexed"
+    }
+```
 
 We'll use a scenario where:
 
@@ -243,9 +265,9 @@ Deleting a `Post` or a `Tag` will _not_ automatically delete its associations fr
 
 ---
 
-## Eager Loading `ManyToMany`
+## Efficient Querying for `ManyToMany`
 
-To avoid N+1 queries with many-to-many associations, use `includes`:
+To avoid N+1 queries with many-to-many associations, use `join`:
 
 ```crystal
 # Fetches all posts and their associated tags efficiently

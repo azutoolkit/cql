@@ -14,20 +14,20 @@ module CQL
     # **Example**
     # ```
     # class Movie
-    #   include CQL::Model(Movie, Int64)
+    #   include CQL::Model(Int64)
     #   property id : Int64
     #   property title : String
     #   many_to_many :actors, Actor, join_through: MoviesActors
     # end
     #
     # class Actor
-    #   include CQL::Model(Actor, Int64)
+    #   include CQL::Model(Int64)
     #   property id : Int64
     #   property name : String
     # end
     #
     # class MoviesActors
-    #   include CQL::Model(MoviesActors, Int64)
+    #   include CQL::Model(Int64)
     #   property id : Int64
     #   property movie_id : Int64
     #   property actor_id : Int64

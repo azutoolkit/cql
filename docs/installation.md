@@ -330,9 +330,9 @@ when "production"
   )
 else
   # Development
-  AppDB = CQL::Schema.define(
+AppDB = CQL::Schema.define(
     :dev_db,
-    adapter: CQL::Adapter::SQLite,
+  adapter: CQL::Adapter::SQLite,
     uri: "sqlite3://./db/development.db",
     pool_size: 1
   )

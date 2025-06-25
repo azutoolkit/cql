@@ -297,7 +297,7 @@ user.updated_at = Time.utc
 begin
   user.save!
   puts "✅ User '#{user.name}' updated successfully"
-rescue CQL::RecordInvalid => ex
+rescue CQL::ActiveRecord::Validations::ValidationError => ex
   puts "❌ Validation failed: #{ex.record.errors.full_messages.join(", ")}"
 rescue Exception => ex
   puts "💥 Update failed: #{ex.message}"
@@ -319,7 +319,7 @@ begin
     active: true
   )
   puts "✅ User updated successfully"
-rescue CQL::RecordInvalid => ex
+rescue CQL::ActiveRecord::Validations::ValidationError => ex
   puts "❌ Update failed: #{ex.record.errors.full_messages.join(", ")}"
 end
 
@@ -342,7 +342,7 @@ begin
   puts "✅ User ID 1 updated via class method"
 rescue DB::NoResultsError
   puts "❌ User ID 1 not found"
-rescue CQL::RecordInvalid => ex
+rescue CQL::ActiveRecord::Validations::ValidationError => ex
   puts "❌ Validation failed: #{ex.record.errors.full_messages.join(", ")}"
 rescue Exception => ex
   puts "💥 Update failed: #{ex.message}"
@@ -625,11 +625,11 @@ first_user = User.first        # Much better
 # Always handle validation errors gracefully
 begin
   user = User.create!(invalid_data)
-rescue CQL::RecordInvalid => ex
-  Rails.logger.error "User creation failed: #{ex.record.errors.full_messages}"
+rescue CQL::ActiveRecord::Validations::ValidationError => ex
+  puts "User creation failed: #{ex.record.errors.full_messages}"
   # Handle appropriately - show user-friendly message, etc.
 rescue Exception => ex
-  Rails.logger.error "Unexpected error creating user: #{ex.message}"
+  puts "Unexpected error creating user: #{ex.message}"
   # Handle system errors
 end
 ```
@@ -656,15 +656,15 @@ end
 
 ```crystal
 # ✅ Good: Log important operations
-Rails.logger.info "Creating user: #{user.email}"
+puts "Creating user: #{user.email}"
 user = User.create!(user_params)
-Rails.logger.info "User created successfully: ID #{user.id}"
+puts "User created successfully: ID #{user.id}"
 
 # ✅ Good: Track performance-critical operations
 start_time = Time.utc
 users = User.where(complex_conditions).all
 duration = Time.utc - start_time
-Rails.logger.info "Query completed in #{duration.total_milliseconds}ms, found #{users.size} users"
+puts "Query completed in #{duration.total_milliseconds}ms, found #{users.size} users"
 ```
 
 ### 🎯 Transaction Safety
@@ -676,7 +676,7 @@ UserDB.transaction do
   UserProfile.create!(user_id: user.id, profile_params)
   UserPreferences.create!(user_id: user.id, default_preferences)
 
-  Rails.logger.info "User onboarding completed for #{user.email}"
+  puts "User onboarding completed for #{user.email}"
 end
 ```
 

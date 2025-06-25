@@ -22,7 +22,7 @@ module CQL::ActiveRecord::Relations
     # **Example**
     # ```
     # class User
-    #   include CQL::Model(User, Int64)
+    #   include CQL::Model(Int64)
     #   property id : Int64
     #   property name : String
     #   has_many :posts, Post, foreign_key: :user_id, dependent: :destroy

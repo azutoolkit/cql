@@ -4,11 +4,41 @@
 
 Defining the schema first is a fundamental approach in CQL, helping developers quickly structure their database while keeping their application's data model in sync with real-world entities. By defining your schema upfront, you can rapidly iterate over your database tables, making it easy to adjust data structures as your application evolves. This method ensures that your schema is the single source of truth, giving you a clear view of how your data is organized and how relationships between different tables are modeled.
 
-<div data-full-width="true">
+```mermaid
+erDiagram
+    MOVIES ||--o{ SCREENPLAYS : "has many"
+    MOVIES ||--o{ DIRECTORS : "has many"
+    MOVIES ||--o{ MOVIES_ACTORS : "has many"
+    ACTORS ||--o{ MOVIES_ACTORS : "has many"
 
-<figure><img src="../.gitbook/assets/Untitled.svg" alt=""><figcaption></figcaption></figure>
+    MOVIES {
+        int64 id PK "Primary Key, Auto Increment"
+        text title "Movie Title"
+    }
 
-</div>
+    SCREENPLAYS {
+        int64 id PK "Primary Key, Auto Increment"
+        bigint movie_id FK "Foreign Key to movies.id"
+        text content "Screenplay Content"
+    }
+
+    ACTORS {
+        int64 id PK "Primary Key, Auto Increment"
+        text name "Actor Name"
+    }
+
+    DIRECTORS {
+        int64 id PK "Primary Key, Auto Increment"
+        bigint movie_id FK "Foreign Key to movies.id"
+        text name "Director Name"
+    }
+
+    MOVIES_ACTORS {
+        int64 id PK "Primary Key, Auto Increment"
+        bigint movie_id FK "Foreign Key to movies.id"
+        bigint actor_id FK "Foreign Key to actors.id"
+    }
+```
 
 ## Benefits of Defining the Schema First
 

@@ -19,7 +19,7 @@ module CQL::ActiveRecord::Relations
     # **Example**
     # ```
     # class User
-    #   include CQL::Model(User, Int64)
+    #   include CQL::Model(Int64)
     #   has_one :profile, Profile, foreign_key: :user_id, dependent: :destroy
     # end
     # ```
