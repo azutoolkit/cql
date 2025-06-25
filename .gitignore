@@ -4,7 +4,9 @@
 *.dwarf
 /.vscode/
 .DS_Store
-*.db
+/*.db
+/example/*.db
+spec/support/db/*.db
 # Libraries don't need dependency lock
 # Dependencies will be locked in applications that use them
 /shard.lock
