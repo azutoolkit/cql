@@ -23,6 +23,7 @@
 ## Getting Started
 
 - [Getting Started Guide](guides/getting-started.md)
+- [Architecture Overview](guides/architecture-overview.md)
 
 ## Active Record with CQL
 
@@ -51,7 +52,14 @@
 - [🆕 Schema Migrations](core-concepts/migrations.md)
 - [🆕 Schema Dump](guides/schema-dump.md)
 
+## Advanced Guides
+
+- [⚡ Performance Optimization](guides/performance-optimization.md)
+- [🧪 Testing Strategies](guides/testing-strategies.md)
+- [🔐 Security Guide](guides/security-guide.md)
+
 ## Resources
 
+- [🌐 API Reference](guides/api-reference.md)
 - [Troubleshooting](troubleshooting.md)
 - [Frequently Asked Questions](faqs.md)
