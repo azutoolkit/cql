@@ -24,8 +24,6 @@ Choose your learning path based on your experience level:
 ### 🚀 Building Production Apps?
 
 1. **[Performance Guide](guides/performance-optimization.md)** - Scale to millions of records
-2. **[Deployment Guide](guides/deployment-guide.md)** - Production-ready setups
-3. **[Monitoring & Debugging](guides/monitoring-debugging.md)** - Keep your app healthy
 
 ## 📚 Core Documentation
 
@@ -77,110 +75,51 @@ Choose your learning path based on your experience level:
 - **[Transactions](guides/active-record-with-cql/transactions.md)** - Maintain data consistency
 - **[Database Migrations](guides/active-record-with-cql/migrations.md)** - Evolve your schema
 - **[Touch Operations](guides/active-record-with-cql/touch.md)** - Update timestamps efficiently
+- **[Soft Deletes](guides/active-record-with-cql/soft-deletes.md)** - Keep deleted records
+- **[Integrated Migration Workflow](guides/active-record-with-cql/integrated-migration-workflow.md)** - Streamlined schema management
 
 ## 🔧 Advanced Topics
 
 ### Alternative Patterns
 
 - **[Repository Pattern](core-concepts/patterns/repository.md)** - Alternative to Active Record
-- **[Data Mapper Pattern](core-concepts/patterns/data-mapper.md)** - Separate your domain from persistence
-- **[Service Layer Pattern](guides/patterns/service-layer.md)** - Organize complex business logic
+- **[Active Record Pattern](core-concepts/patterns/active-record.md)** - Traditional ORM approach
+- **[Entity Framework Pattern](core-concepts/patterns/entity-framework.md)** - .NET-style patterns
 
 ### Performance & Scaling
 
-- **[Query Optimization](guides/performance/query-optimization.md)** - Make your queries fast
-- **[Connection Pooling](guides/performance/connection-pooling.md)** - Manage database connections
-- **[Caching Strategies](guides/performance/caching-strategies.md)** - Speed up your app
-- **[Database Indexing](guides/performance/indexing-guide.md)** - Optimize your database
+- **[Performance Optimization](guides/performance-optimization.md)** - Make your queries fast
 
 ### Database Management
 
 - **[Schema Dumping](guides/schema-dump.md)** - Export your schema
 - **[Migration Strategies](guides/handling-migrations.md)** - Deploy schema changes safely
-- **[Backup & Recovery](guides/backup-recovery.md)** - Protect your data
+- **[Migration Workflow Enhancements](MIGRATION_WORKFLOW_ENHANCEMENTS.md)** - Enhanced migration features
 
 ### Testing & Quality Assurance
 
-- **[Testing Guide](guides/testing-guide.md)** - Test your database code
-- **[Test Data Management](guides/test-data-management.md)** - Manage test data effectively
-- **[Performance Testing](guides/performance-testing.md)** - Ensure your app scales
-
-## 🎨 Real-World Examples
-
-### Complete Applications
-
-- **[Blog Engine](examples/blog-engine/README.md)** - Posts, comments, users, and tags
-- **[E-commerce Platform](examples/ecommerce/README.md)** - Products, orders, payments
-- **[Social Network](examples/social-network/README.md)** - Users, posts, followers, messages
-
-### Common Patterns
-
-- **[Multi-tenancy](examples/patterns/multi-tenancy.md)** - SaaS application architecture
-- **[Audit Logging](examples/patterns/audit-logging.md)** - Track data changes
-- **[Soft Deletes](examples/patterns/soft-deletes.md)** - Keep deleted records
-- **[Content Versioning](examples/patterns/content-versioning.md)** - Track content changes
-
-## 🌍 Database-Specific Guides
-
-### PostgreSQL
-
-- **[PostgreSQL Features](guides/databases/postgresql-features.md)** - JSONB, arrays, custom types
-- **[PostgreSQL Performance](guides/databases/postgresql-performance.md)** - Optimize for PostgreSQL
-- **[PostgreSQL Extensions](guides/databases/postgresql-extensions.md)** - Use PostgreSQL extensions
-
-### MySQL
-
-- **[MySQL Features](guides/databases/mysql-features.md)** - MySQL-specific optimizations
-- **[MySQL Performance](guides/databases/mysql-performance.md)** - Tune for MySQL
-- **[MySQL Compatibility](guides/databases/mysql-compatibility.md)** - Version compatibility
-
-### SQLite
-
-- **[SQLite Features](guides/databases/sqlite-features.md)** - Lightweight database features
-- **[SQLite Limitations](guides/databases/sqlite-limitations.md)** - What to watch out for
-- **[SQLite in Production](guides/databases/sqlite-production.md)** - Using SQLite at scale
+- **[Testing Strategies](guides/testing-strategies.md)** - Test your database code
 
 ## 🛠️ Tools & Utilities
 
-### Development Tools
-
-- **[CQL CLI](tools/cql-cli.md)** - Command-line interface
-- **[Schema Inspector](tools/schema-inspector.md)** - Analyze your schema
-- **[Query Analyzer](tools/query-analyzer.md)** - Optimize your queries
-
-### IDE Integration
-
-- **[VS Code Setup](tools/vscode-setup.md)** - Crystal and CQL extensions
-- **[Vim/Neovim Setup](tools/vim-setup.md)** - Syntax highlighting and completion
+> **Note: Tools and utilities are currently in development**
 
 ## 🆘 Help & Troubleshooting
 
 ### Common Issues
 
 - **[Troubleshooting Guide](troubleshooting.md)** - Solve common problems
-- **[Error Reference](guides/error-reference.md)** - Understand error messages
 - **[FAQ](faqs.md)** - Frequently asked questions
 
 ### Getting Help
 
 - **[Community](guides/community.md)** - Connect with other developers
-- **[Contributing](guides/contributing.md)** - Help improve CQL
-- **[Support](guides/support.md)** - Get professional support
 
 ## 📊 Quick Reference
 
-### Cheat Sheets
+<!-- **Note: Quick reference guides are currently in development** -->
 
-- **[Query Methods](reference/query-methods.md)** - All query methods at a glance
-- **[Model Methods](reference/model-methods.md)** - Model lifecycle methods
-- **[Migration Methods](reference/migration-methods.md)** - Schema modification methods
-- **[Validation Rules](reference/validation-rules.md)** - All built-in validators
-
-### API Reference
-
-- **[Core API](reference/core-api.md)** - Schema, Query, Migration classes
-- **[Active Record API](reference/active-record-api.md)** - Model methods and callbacks
-- **[Validation API](reference/validation-api.md)** - Validation methods and custom validators
+- **[API Reference](guides/api-reference.md)** - Complete API documentation
 
 ---
 
@@ -190,7 +129,7 @@ Choose your learning path based on your experience level:
 
 **Experienced with ORMs?** → [Feature Comparison](guides/feature-comparison.md) → [Migration Guide](guides/migration-guide.md) → [Best Practices](guides/best-practices.md)
 
-**Building for Production?** → [Performance Guide](guides/performance-optimization.md) → [Deployment Guide](guides/deployment-guide.md) → [Monitoring](guides/monitoring-debugging.md)
+**Building for Production?** → [Performance Guide](guides/performance-optimization.md) → [Security Guide](guides/security-guide.md) → [Testing Strategies](guides/testing-strategies.md)
 
 **Need Specific Feature?** → Use the search function or browse the [Complete Table of Contents](SUMMARY.md)
 
