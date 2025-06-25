@@ -10,7 +10,7 @@ The `HasMany` relationship indicates that one entity (a record) is related to mu
 
 ### Example Scenario: Posts and Comments
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 erDiagram
     POSTS ||--o{ COMMENTS : "has many"
 

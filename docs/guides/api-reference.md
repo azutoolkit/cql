@@ -128,7 +128,7 @@ end
 
 ### Model Definition
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 classDiagram
     class User {
         +Int64? id
@@ -226,7 +226,7 @@ User.by_role("admin").recent(7).all
 
 ### Association Types
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 erDiagram
     User ||--o{ Post : "has_many"
     User ||--|| UserProfile : "has_one"
@@ -487,7 +487,7 @@ end
 
 ### Transaction Control
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 sequenceDiagram
     participant App as Application
     participant DB as Database

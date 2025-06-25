@@ -23,7 +23,7 @@ CQL supports multiple design patterns, giving you the flexibility to choose the 
 
 CQL supports three main architectural patterns for data access, each with distinct characteristics and use cases:
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 graph TD
     A[📊 Data Access Patterns] --> B[🏛️ Active Record]
     A --> C[📦 Repository]
@@ -729,7 +729,7 @@ end
 
 ### 🤔 Decision Matrix
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 flowchart TD
     A[Start: Choose Data Access Pattern] --> B{Application Complexity?}
 

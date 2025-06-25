@@ -6,7 +6,7 @@ This guide provides a comprehensive overview of CQL's architecture, explaining h
 
 CQL follows a layered architecture pattern that separates concerns and provides flexibility while maintaining performance:
 
-```mermaid fullWidth="true"  darkMode="true fullWidth="true"
+```mermaid fullWidth="true"
 graph TB
     A[Application Layer] --> B[Active Record Models]
     A --> C[Repository Pattern]
@@ -41,8 +41,8 @@ The schema layer is the foundation of CQL, providing type-safe database structur
 # Schema defines the database structure
 AcmeDB = CQL::Schema.define(
   :acme_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: "postgresql://localhost/myapp"
+  "postgresql://localhost/myapp",
+  CQL::Adapter::Postgres
 ) do
   table :users do
     primary :id, Int64
@@ -88,17 +88,17 @@ The expression builder translates Crystal expressions into SQL:
 
 ```crystal
 # Crystal expressions become SQL
-query.where { users.age > 18 & users.active.eq(true) }
-# Generates: WHERE (users.age > ?) AND (users.active = ?)
+query.where { |q| q.users.age > 18 }
+# Generates: WHERE users.age > ?
 ```
 
 **Capabilities:**
 
-- Operator overloading
+- Filter builders for where clauses
+- Having builders for aggregate conditions
 - Type-safe comparisons
 - Complex boolean logic
-- Function calls
-- Subquery expressions
+- Aggregate function support
 
 ### 4. Database Adapters
 
@@ -109,7 +109,7 @@ Adapters handle database-specific SQL generation and features:
 case adapter
 when CQL::Adapter::Postgres
   "SELECT ... LIMIT $1 OFFSET $2"
-when CQL::Adapter::MySQL
+when CQL::Adapter::MySql
   "SELECT ... LIMIT ? OFFSET ?"
 when CQL::Adapter::SQLite
   "SELECT ... LIMIT ? OFFSET ?"
@@ -131,7 +131,7 @@ end
 CQL implements the Active Record pattern where models represent database tables:
 
 ```crystal
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :users
 
@@ -140,36 +140,20 @@ struct User
   property email : String
 
   # Active Record methods are automatically available
-  # user.save, user.update, user.delete, etc.
+  # user.save!, user.update!, user.destroy!, etc.
 end
 ```
 
 **Pattern Flow:**
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 sequenceDiagram
     participant App as Application
     participant Model as User Model
     participant Schema as Schema Layer
     participant DB as Database
 
-    App->>Model: user.save
-    Model->>Model: validate
-    Model->>Schema: execute INSERT
-    Schema->>DB: SQL query
-    DB-->>Schema: result
-    Schema-->>Model: record ID
-    Model-->>App: saved user
-```
-
-```mermaid fullWidth="true"  darkMode="true
-sequenceDiagram
-    participant App as Application
-    participant Model as User Model
-    participant Schema as Schema Layer
-    participant DB as Database
-
-    App->>Model: user.save
+    App->>Model: user.save!
     Model->>Model: validate
     Model->>Schema: execute INSERT
     Schema->>DB: SQL query
@@ -184,6 +168,10 @@ For applications that prefer separation of concerns:
 
 ```crystal
 class UserRepository < CQL::Repository(User, Int64)
+  def initialize
+    super(AcmeDB, :users)
+  end
+
   def find_active_users
     query.where(active: true).all(User)
   end
@@ -196,7 +184,7 @@ end
 
 **Pattern Flow:**
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 sequenceDiagram
     participant App as Application
     participant Repo as Repository
@@ -215,7 +203,7 @@ sequenceDiagram
 
 ### Query Execution Flow
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 flowchart TD
     A[Method Call] --> B{Query Type}
     B -->|SELECT| C[Query Builder]
@@ -244,20 +232,68 @@ flowchart TD
 
 ### Model Lifecycle
 
-```mermaid fullWidth="true"  darkMode="true
-stateDiagram-v2
-    [*] --> New: User.new
-    New --> Validating: save/create
-    Validating --> Invalid: validation fails
-    Validating --> BeforeSave: validation passes
-    BeforeSave --> Persisting: callbacks pass
-    Persisting --> Persisted: SQL succeeds
-    Persisted --> AfterSave:
-    AfterSave --> [*]
+```mermaid fullWidth="true"
+sequenceDiagram
+    participant Client
+    participant User
+    participant DB
 
-    Invalid --> [*]: return false
-    BeforeSave --> [*]: callback halts
-    Persisting --> [*]: SQL error
+    %% CREATE FLOW
+    Client->>User: new
+    Client->>User: save!
+    User->>User: before_validation
+    alt Validation fails
+        User-->>Client: return false
+    else Validation passes
+        User->>User: after_validation
+        User->>User: before_save
+        User->>User: before_create
+        User->>DB: INSERT
+        alt SQL error
+            DB-->>User: error
+            User-->>Client: fail
+        else Success
+            DB-->>User: id assigned
+            User->>User: after_create
+            User->>User: after_save
+            User-->>Client: persisted
+        end
+    end
+
+    %% UPDATE FLOW
+    Client->>User: find(id)
+    Client->>User: update!
+    User->>User: before_validation
+    alt Validation fails
+        User-->>Client: return false
+    else Validation passes
+        User->>User: after_validation
+        User->>User: before_save
+        User->>User: before_update
+        User->>DB: UPDATE
+        alt SQL error
+            DB-->>User: error
+            User-->>Client: fail
+        else Success
+            DB-->>User: update ok
+            User->>User: after_update
+            User->>User: after_save
+            User-->>Client: persisted
+        end
+    end
+
+    %% DESTROY FLOW
+    Client->>User: destroy!
+    User->>User: before_destroy
+    User->>DB: DELETE
+    alt SQL error
+        DB-->>User: error
+        User-->>Client: fail
+    else Success
+        DB-->>User: delete ok
+        User->>User: after_destroy
+        User-->>Client: destroyed
+    end
 ```
 
 ## 🎯 Type Safety Architecture
@@ -268,19 +304,19 @@ CQL leverages Crystal's macro system for compile-time type safety:
 
 ```crystal
 # Macros generate type-safe methods
-macro column(name, type, **options)
-  property {{name}} : {{type}}{% if options[:null] %}?{% end %}
-
-  # Generate type-safe query methods
-  def self.find_by_{{name}}(value : {{type}})
-    where({{name}}: value).first
-  end
+macro included
+  include CQL::ActiveRecord::Validations
+  include CQL::ActiveRecord::Queryable
+  include CQL::ActiveRecord::Insertable
+  include CQL::ActiveRecord::Updateable
+  include CQL::ActiveRecord::Deleteable
+  include CQL::ActiveRecord::Persistence
 end
 ```
 
 ### Runtime Type Validation
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 graph LR
     A[Crystal Code] --> B[Macro Expansion]
     B --> C[Type Checking]
@@ -302,7 +338,7 @@ class Schema
   private getter db : DB::Database
   private getter? active_connection : DB::Connection?
 
-  def exec_query(&block : DB::Connection -> T) : T forall T
+  def exec_query(&)
     if conn = @active_connection
       yield conn  # Use transaction connection
     else
@@ -316,17 +352,15 @@ end
 
 ### Query Optimization
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 graph TD
-    A[Query Request] --> B[Query Cache Check]
-    B -->|Hit| C[Return Cached Plan]
-    B -->|Miss| D[Parse Query]
-    D --> E[Optimize Query]
-    E --> F[Generate SQL]
-    F --> G[Cache Plan]
-    G --> H[Execute SQL]
-    C --> H
-    H --> I[Return Results]
+    A[Query Request] --> B[Expression Builder]
+    B --> C[SQL Generator]
+    C --> D[Parameterized Query]
+    D --> E[Database Execution]
+    E --> F[Result Parsing]
+    F --> G[Object Mapping]
+    G --> H[Return Results]
 ```
 
 ## 🔧 Extension Points
@@ -349,20 +383,6 @@ class EmailValidator < CQL::ActiveRecord::Validations::CustomValidator
 end
 ```
 
-### Custom Adapters
-
-```crystal
-class MyCustomDialect < CQL::Expression::BaseDialect
-  def placeholder_format(index : Int32) : String
-    "#{index}"  # Custom placeholder format
-  end
-
-  def auto_increment_primary_key(column, sql_type)
-    "#{column.name} #{sql_type} AUTO_INCREMENT PRIMARY KEY"
-  end
-end
-```
-
 ### Custom Column Types
 
 ```crystal
@@ -373,6 +393,7 @@ enum Status
   Suspended
 end
 
+# Extend type mapping for adapters
 CQL::DB_TYPE_MAPPING[CQL::Adapter::Postgres][Status] = "VARCHAR(20)"
 ```
 
@@ -389,7 +410,7 @@ end
 
 # All SQL queries will be logged with parameters
 user = User.where(active: true).first
-# Logs: SELECT * FROM users WHERE active = ? [true]
+# Logs: SQL queries with parameters
 ```
 
 ### Schema Introspection
@@ -413,7 +434,7 @@ schema_code = dumper.generate_schema_content(:MySchema, :my_schema)
 | ------------- | --------------------- | ------------ |
 | Simple SELECT | \~50,000 ops/sec      | Low          |
 | Complex JOIN  | \~10,000 ops/sec      | Medium       |
-| Bulk INSERT   | \~100,000 records/sec | Medium       |
+| Bulk Insert   | \~100,000 records/sec | Medium       |
 | Transaction   | \~20,000 ops/sec      | Low          |
 
 ### Optimization Tips
@@ -430,26 +451,45 @@ schema_code = dumper.generate_schema_content(:MySchema, :my_schema)
 
 ```crystal
 # Different databases for different purposes
-ReadDB = CQL::Schema.define(:read_db, adapter: CQL::Adapter::Postgres, uri: read_uri) do
+ReadDB = CQL::Schema.define(
+  :read_db,
+  "postgresql://readonly@localhost/myapp",
+  CQL::Adapter::Postgres
+) do
   # Read-only replica configuration
 end
 
-WriteDB = CQL::Schema.define(:write_db, adapter: CQL::Adapter::Postgres, uri: write_uri) do
+WriteDB = CQL::Schema.define(
+  :write_db,
+  "postgresql://user:pass@localhost/myapp",
+  CQL::Adapter::Postgres
+) do
   # Primary database configuration
 end
 ```
 
-### Sharding Support
+### Migration Support
 
 ```crystal
-# Database sharding by user ID
-def shard_for_user(user_id : Int64)
-  shard_id = user_id % SHARD_COUNT
-  SHARDS[shard_id]
+# Create a migration
+class CreateUsersMigration < CQL::Migration(20241201001)
+  def up
+    schema.table :users do
+      primary :id, Int64
+      column :name, String
+      column :email, String
+      timestamps
+    end
+  end
+
+  def down
+    schema.exec("DROP TABLE users")
+  end
 end
 
-user_shard = shard_for_user(user.id)
-user_shard.query.from(:user_data).where(user_id: user.id)
+# Run migrations
+migrator = schema.migrator
+migrator.up
 ```
 
 ## 🛡️ Security Architecture
@@ -470,7 +510,16 @@ query.where("name = ?", user_input)  # Safe - explicitly parameterized
 ```crystal
 # SSL/TLS support for database connections
 secure_uri = "postgresql://user:pass@host:5432/db?sslmode=require"
-SecureDB = CQL::Schema.define(:secure_db, adapter: CQL::Adapter::Postgres, uri: secure_uri)
+SecureDB = CQL::Schema.define(:secure_db, secure_uri, CQL::Adapter::Postgres)
 ```
 
+## 🧭 Navigation
+
 This architecture provides a solid foundation for building scalable, maintainable, and performant Crystal applications while maintaining type safety and developer productivity.
+
+For more detailed information, see:
+
+- [Getting Started Guide](../getting-started.md)
+- [Active Record Guide](../active-record-with-cql/README.md)
+- [Schema Definition](../../core-concepts/schemas.md)
+- [Migration Workflow](../handling-migrations.md)

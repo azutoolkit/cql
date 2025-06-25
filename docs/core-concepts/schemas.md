@@ -4,7 +4,7 @@
 
 Defining the schema first is a fundamental approach in CQL, helping developers quickly structure their database while keeping their application's data model in sync with real-world entities. By defining your schema upfront, you can rapidly iterate over your database tables, making it easy to adjust data structures as your application evolves. This method ensures that your schema is the single source of truth, giving you a clear view of how your data is organized and how relationships between different tables are modeled.
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 erDiagram
     MOVIES ||--o{ SCREENPLAYS : "has many"
     MOVIES ||--o{ DIRECTORS : "has many"

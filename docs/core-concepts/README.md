@@ -23,7 +23,7 @@ This section covers the essential building blocks that make CQL powerful and dev
 
 ## 🎯 Learning Path
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 graph LR
     A[🏁 Start Here] --> B[📊 Schema Definition]
     B --> C[🔗 Database Init]

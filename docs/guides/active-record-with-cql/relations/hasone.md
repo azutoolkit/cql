@@ -13,7 +13,7 @@ Let's say we have a system where:
 - A **User** can have one **Profile**.
 - A **Profile** belongs to one **User**.
 
-```mermaid fullWidth="true"  darkMode="true
+```mermaid fullWidth="true"
 erDiagram
     USERS ||--|| PROFILES : "has one"
 
