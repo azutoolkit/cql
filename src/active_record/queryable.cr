@@ -89,7 +89,7 @@ module CQL
         # Create a QueryBuilder and execute where with block
         # - **@yield** [FilterBuilder] The block to build conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.where(&block)
+        def self.where(&block : -> Expression::ConditionBuilder)
           query.where(&block)
         end
 
@@ -177,7 +177,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
+        def self.join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
           query.join(table_or_alias, &block)
         end
 
@@ -185,7 +185,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
+        def self.left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
           query.left(table_or_alias, &block)
         end
 
@@ -193,7 +193,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
+        def self.right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
           query.right(table_or_alias, &block)
         end
 

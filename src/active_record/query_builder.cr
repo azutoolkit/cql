@@ -3,6 +3,8 @@ module CQL
     module Queryable
       # The QueryBuilder class provides a chainable interface for building queries
       # while maintaining type safety and integration with the CQL::Query system.
+ # The QueryBuilder class provides a chainable interface for building queries
+      # while maintaining type safety and integration with the CQL::Query system.
       class QueryBuilder(T)
         @query : CQL::Query
         @model_class : T.class
@@ -103,8 +105,9 @@ module CQL
         # Add where conditions with block
         # - **@yield** [FilterBuilder] The block to build conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def where(&block)
-          clone_builder.tap(&.query.where)
+        def where(&block : Expression::FilterBuilder -> Expression::ConditionBuilder)
+          @query = query.where(&block)
+          clone_builder.tap(&.query)
         end
 
         # Add LIKE conditions
@@ -153,8 +156,9 @@ module CQL
         # Add having conditions
         # - **@yield** [HavingBuilder] The block to build having conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def having(&block)
-          clone_builder.tap(&.query.having)
+        def having(&block : Expression::HavingBuilder -> Expression::Having)
+          @query = query.where(&block)
+          clone_builder.tap(&.query)
         end
 
         # Set distinct flag
@@ -174,7 +178,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
+        def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
           clone_builder.tap(&.query.join(table_or_alias))
         end
 
@@ -196,16 +200,16 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def left(table_or_alias : Symbol, &block : Expression::FilterBuilder ->)
-          clone_builder.tap(&.query.left(table_or_alias))
+        def left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
+          clone_builder.tap(&.query.left(table_or_alias, &block))
         end
 
         # Execute right join with block conditions
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def right(table_or_alias : Symbol, &block : Expression::FilterBuilder ->)
-          clone_builder.tap(&.query.right(table_or_alias))
+        def right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
+          clone_builder.tap(&.query.right(table_or_alias, &block))
         end
 
         # Execute automatic inner join using named arguments for table aliasing

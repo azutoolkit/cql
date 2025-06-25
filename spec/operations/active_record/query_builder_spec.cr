@@ -59,6 +59,22 @@ describe "ActiveRecord::QueryBuilder" do
       builder1_sql.should_not eq(builder2_sql)
     end
 
+    it "can build IS NOT NULL" do
+      builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
+      builder.where {
+        TestUser.table_column(:name).is_not_null
+      }
+      builder.to_sql.should eq("SELECT users.id, users.name, users.email, users.age, users.password, users.created_at, users.updated_at FROM users WHERE users.name IS NOT NULL")
+    end
+
+    it "can build IS NULL" do
+      builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
+      builder.where {
+        TestUser.table_column(:name).null
+      }
+      builder.to_sql.should eq("SELECT * FROM users WHERE users.name IS NULL")
+    end
+
     it "generates consistent cache behavior for same queries" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
 

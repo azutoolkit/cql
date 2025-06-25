@@ -71,6 +71,20 @@ describe CQL::Query do
   end
 
   describe "WHERE clause" do
+    it "filters not null" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :city)
+        .where { customers.name.is_not_null }
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.city FROM customers WHERE customers.name IS NOT NULL
+      SQL
+
+      select_query.should eq({output.strip, [] of DB::Any})
+    end
+
     it "handles WHERE clause with Symbol => DB::Value" do
       select_query = Northwind.query
         .from(:customers)
