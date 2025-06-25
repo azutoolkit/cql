@@ -41,9 +41,9 @@ module CQL
 
     private def self.enabled_features(config : PerformanceConfig) : Array(String)
       features = [] of String
-      features << "Query Plan Analysis" if config.plan_analysis_enabled
-      features << "N+1 Detection" if config.n_plus_one_detection_enabled
-      features << "Query Profiling" if config.query_profiling_enabled
+      features << "Query Plan Analysis" if config.plan_analysis_enabled?
+      features << "N+1 Detection" if config.n_plus_one_detection_enabled?
+      features << "Query Profiling" if config.query_profiling_enabled?
       features
     end
   end
