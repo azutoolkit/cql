@@ -14,6 +14,8 @@ require "./transactional"
 require "./optimistic_locking"
 
 module CQL
+  alias Model = CQL::ActiveRecord::Model
+
   module ActiveRecord
     # The Model module provides Active Record functionality for your models.
     # It combines validations, callbacks, persistence, and relationship handling
