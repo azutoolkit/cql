@@ -76,7 +76,7 @@ module CQL::Performance::Reports
         puts "  📝 Total Events: #{colorize(data.events.size.to_s, :white, :bold)}"
 
         # Group events by type
-        by_type = data.events.group_by { |e| e.class.name.split("::").last }
+        by_type = data.events.group_by(&.class.name.split("::").last)
         by_type.each do |type, events|
           puts "  🔸 #{type}: #{colorize(events.size.to_s, :cyan)}"
         end

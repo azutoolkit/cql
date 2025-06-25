@@ -196,7 +196,7 @@ module CQL::Performance::Detectors
     end
 
     # Configuration management
-    def configure(&block : NPlusOneConfig ->)
+    def configure(& : NPlusOneConfig ->)
       yield @config
     end
 

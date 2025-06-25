@@ -19,7 +19,7 @@ module CQL
     #   config.plan_analysis = true
     # end
     # ```
-    def self.setup(schema : Schema, &block : PerformanceConfig ->)
+    def self.setup(schema : Schema, & : PerformanceConfig ->)
       config = PerformanceConfig.new
       yield config
 

@@ -249,7 +249,7 @@ module CQL::Performance::Profilers
     end
 
     # Configuration management
-    def configure(&block : ProfilerConfig ->)
+    def configure(& : ProfilerConfig ->)
       yield @config
     end
 

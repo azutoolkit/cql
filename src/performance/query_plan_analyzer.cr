@@ -217,9 +217,9 @@ module CQL::Performance
 
       plan_lines = [] of String
       @schema.exec_query do |conn|
-        conn.query_each(explain_sql, args: params) do |rs|
+        conn.query_each(explain_sql, args: params) do |record_set|
           # SQLite returns multiple columns, we want the detail column
-          line = rs.read(String?) || rs.read(String?) || rs.read(String?) || rs.read(String?)
+          line = record_set.read(String?) || record_set.read(String?) || rs.read(String?) || record_set.read(String?)
           plan_lines << line if line
         end
       end
