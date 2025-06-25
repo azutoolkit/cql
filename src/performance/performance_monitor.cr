@@ -238,7 +238,7 @@ module CQL::Performance
     end
 
     # Configuration management
-    def configure(&block : PerformanceConfig ->) : Void
+    def configure(& : PerformanceConfig ->) : Void
       yield @config
 
       # Update component configurations
@@ -366,7 +366,7 @@ module CQL::Performance
   #   conn.exec(sql)
   # end
   # ```
-  def self.benchmark(sql : String, params : Array(DB::Any) = [] of DB::Any, &block)
+  def self.benchmark(sql : String, params : Array(DB::Any) = [] of DB::Any, &)
     # Performance monitoring hook - before query
     start_time = Time.monotonic
     begin

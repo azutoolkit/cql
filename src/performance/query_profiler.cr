@@ -232,7 +232,7 @@ module CQL::Performance
     end
 
     # Update configuration
-    def configure(&block : ProfilerConfig ->)
+    def configure(& : ProfilerConfig ->)
       yield @config
     end
 
