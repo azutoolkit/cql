@@ -6,7 +6,7 @@ This guide provides a comprehensive overview of CQL's architecture, explaining h
 
 CQL follows a layered architecture pattern that separates concerns and provides flexibility while maintaining performance:
 
-```mermaid
+```mermaid fullWidth="true"
 graph TB
     A[Application Layer] --> B[Active Record Models]
     A --> C[Repository Pattern]
@@ -55,11 +55,11 @@ end
 
 **Key Responsibilities:**
 
-- Database connection management
-- Table and column definitions
-- Index and constraint management
-- Migration execution
-- Transaction handling
+* Database connection management
+* Table and column definitions
+* Index and constraint management
+* Migration execution
+* Transaction handling
 
 ### 2. Query Builder
 
@@ -76,11 +76,11 @@ query = AcmeDB.query
 
 **Features:**
 
-- Type-safe query construction
-- Method chaining
-- Complex joins and subqueries
-- Aggregate functions
-- Raw SQL integration
+* Type-safe query construction
+* Method chaining
+* Complex joins and subqueries
+* Aggregate functions
+* Raw SQL integration
 
 ### 3. Expression Builder
 
@@ -94,11 +94,11 @@ query.where { users.age > 18 & users.active.eq(true) }
 
 **Capabilities:**
 
-- Operator overloading
-- Type-safe comparisons
-- Complex boolean logic
-- Function calls
-- Subquery expressions
+* Operator overloading
+* Type-safe comparisons
+* Complex boolean logic
+* Function calls
+* Subquery expressions
 
 ### 4. Database Adapters
 
@@ -118,11 +118,11 @@ end
 
 **Adapter Features:**
 
-- Database-specific SQL dialects
-- Connection pooling
-- Transaction management
-- Error handling
-- Feature detection
+* Database-specific SQL dialects
+* Connection pooling
+* Transaction management
+* Error handling
+* Feature detection
 
 ## 🎭 Design Patterns
 
@@ -145,6 +145,22 @@ end
 ```
 
 **Pattern Flow:**
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Model as User Model
+    participant Schema as Schema Layer
+    participant DB as Database
+
+    App->>Model: user.save
+    Model->>Model: validate
+    Model->>Schema: execute INSERT
+    Schema->>DB: SQL query
+    DB-->>Schema: result
+    Schema-->>Model: record ID
+    Model-->>App: saved user
+```
 
 ```mermaid
 sequenceDiagram
@@ -393,12 +409,12 @@ schema_code = dumper.generate_schema_content(:MySchema, :my_schema)
 
 ### Benchmarks
 
-| Operation     | Performance          | Memory Usage |
-| ------------- | -------------------- | ------------ |
-| Simple SELECT | ~50,000 ops/sec      | Low          |
-| Complex JOIN  | ~10,000 ops/sec      | Medium       |
-| Bulk INSERT   | ~100,000 records/sec | Medium       |
-| Transaction   | ~20,000 ops/sec      | Low          |
+| Operation     | Performance           | Memory Usage |
+| ------------- | --------------------- | ------------ |
+| Simple SELECT | \~50,000 ops/sec      | Low          |
+| Complex JOIN  | \~10,000 ops/sec      | Medium       |
+| Bulk INSERT   | \~100,000 records/sec | Medium       |
+| Transaction   | \~20,000 ops/sec      | Low          |
 
 ### Optimization Tips
 
