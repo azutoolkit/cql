@@ -4,9 +4,9 @@ require "./migrations"
 require "./performance"
 
 module CQL
-  # Centralized configuration management for CQL library
+  # Centralized configuration management for CQL library using SOLID principles
   #
-  # This module provides a thread-safe way to configure all fundamental
+  # This module provides a thread-safe, extensible way to configure all fundamental
   # settings of the CQL library from one centralized place.
   #
   # **Example** Basic configuration
@@ -17,188 +17,367 @@ module CQL
   #   config.default_timezone = :utc
   # end
   # ```
-  #
-  # **Example** Environment-specific configuration
-  # ```
-  # CQL.configure do |config|
-  #   case ENV["CRYSTAL_ENV"]? || "development"
-  #   when "production"
-  #     config.database_url = ENV["DATABASE_URL"]
-  #     config.logger = Log.for("Production")
-  #     config.auto_load_models = false
-  #   when "test"
-  #     config.database_url = "sqlite3://:memory:"
-  #     config.logger = Log.for("Test")
-  #     config.migration_table_name = "test_schema_migrations"
-  #   else
-  #     config.database_url = "sqlite3://./db/development.db"
-  #     config.logger = Log.for("Development")
-  #     config.auto_load_models = true
-  #   end
-  # end
-  # ```
   module Configure
     # Thread-safe mutex for configuration access
     @@config_mutex = Mutex.new
     @@config_instance : Config? = nil
 
-    # Configuration object that holds all CQL settings
-    class Config
-      # Database connection URL
-      property database_url : String = "sqlite3://./db/development.db"
+    # Database-specific configuration interface
+    abstract class DatabaseConfig
+      abstract def apply_to_params(params : HTTP::Params) : Nil
+      abstract def validate! : Nil
+    end
 
-      # Logger instance for CQL operations
-      property logger : Log? = nil
+    # PostgreSQL-specific configuration
+    class PostgreSQLConfig < DatabaseConfig
+      property auth_methods : String = "scram-sha-256,md5"
 
-      # Default timezone for timestamp operations
-      property default_timezone : Symbol = :utc
+      def apply_to_params(params : HTTP::Params) : Nil
+        params.add("auth_methods", auth_methods)
+      end
 
-      # Name of the migration table in the database
-      property migration_table_name : String = "cql_schema_migrations"
+      def validate! : Nil
+        # Add PostgreSQL-specific validation if needed
+      end
+    end
 
-      # Path where schema files are stored
-      property schema_path : String = "src/schemas"
+    # MySQL-specific configuration
+    class MySQLConfig < DatabaseConfig
+      property encoding : String = "utf8mb4_unicode_ci"
 
-      # Whether to automatically load model files
-      property? auto_load_models : Bool = true
+      def apply_to_params(params : HTTP::Params) : Nil
+        params.add("encoding", encoding)
+      end
 
-      # Connection pool size (default: 10)
-      property pool_size : Int32 = 10
+      def validate! : Nil
+        # Add MySQL-specific validation if needed
+      end
+    end
 
-      # Connection checkout timeout
+    # SQLite-specific configuration
+    class SQLiteConfig < DatabaseConfig
+      property journal_mode : String = "wal"
+      property synchronous : String = "normal"
+      property cache_size : Int32 = -4000
+      property? foreign_keys : Bool = true
+      property busy_timeout : Int32 = 5000
+
+      def apply_to_params(params : HTTP::Params) : Nil
+        params.add("journal_mode", journal_mode)
+        params.add("synchronous", synchronous)
+        params.add("cache_size", cache_size.to_s)
+        params.add("foreign_keys", foreign_keys? ? "1" : "0")
+        params.add("busy_timeout", busy_timeout.to_s)
+      end
+
+      def validate! : Nil
+        raise ArgumentError.new("sqlite_busy_timeout must be non-negative") if busy_timeout < 0
+
+        valid_journal_modes = %w[delete truncate persist memory wal off]
+        unless valid_journal_modes.includes?(journal_mode)
+          raise ArgumentError.new("sqlite_journal_mode must be one of: #{valid_journal_modes.join(", ")}")
+        end
+
+        valid_sync_modes = %w[off normal full extra]
+        unless valid_sync_modes.includes?(synchronous)
+          raise ArgumentError.new("sqlite_synchronous must be one of: #{valid_sync_modes.join(", ")}")
+        end
+      end
+    end
+
+    # SSL/TLS configuration
+    class SSLConfig
+      property mode : String = "prefer"
+      property cert_path : String? = nil
+      property key_path : String? = nil
+      property ca_path : String? = nil
+
+      def apply_to_params(params : HTTP::Params, adapter : Adapter) : Nil
+        case adapter
+        when Adapter::Postgres, Adapter::MySql
+          params.add("sslmode", mode)
+          params.add("sslcert", cert_path) if cert_path
+          params.add("sslkey", key_path) if key_path
+          params.add("sslca", ca_path) if ca_path
+        end
+      end
+
+      def validate! : Nil
+        valid_ssl_modes = %w[disable allow prefer require verify-ca verify-full]
+        unless valid_ssl_modes.includes?(mode)
+          raise ArgumentError.new("ssl_mode must be one of: #{valid_ssl_modes.join(", ")}")
+        end
+      end
+    end
+
+    # Connection pool configuration
+    class ConnectionPoolConfig
+      property size : Int32 = 10
+      property initial_size : Int32 = 1
+      property max_idle_size : Int32 = 1
       property checkout_timeout : Time::Span = 10.seconds
-
-      # Query timeout for database operations
       property query_timeout : Time::Span = 30.seconds
+      property max_retry_attempts : Int32 = 3
+      property retry_delay : Time::Span = 1.second
+      property? use_prepared_statements : Bool = true
 
-      # Enable query caching
-      property? enable_query_cache : Bool = false
+      def apply_to_params(params : HTTP::Params) : Nil
+        params.add("initial_pool_size", initial_size.to_s)
+        params.add("max_pool_size", size.to_s)
+        params.add("max_idle_pool_size", max_idle_size.to_s)
+        params.add("checkout_timeout", checkout_timeout.total_seconds.to_s)
+        params.add("retry_attempts", max_retry_attempts.to_s)
+        params.add("retry_delay", retry_delay.total_seconds.to_s)
+        params.add("prepared_statements", use_prepared_statements?.to_s)
+      end
 
-      # Default cache TTL for query results
-      property cache_ttl : Time::Span = 1.hour
+      def validate! : Nil
+        raise ArgumentError.new("pool_size must be positive") if size <= 0
+        raise ArgumentError.new("initial_pool_size must be positive") if initial_size <= 0
+        raise ArgumentError.new("max_idle_pool_size must be positive") if max_idle_size <= 0
+        raise ArgumentError.new("max_retry_attempts must be positive") if max_retry_attempts <= 0
+      end
+    end
 
-      # Environment name (development, test, production)
+    # Database URL builder using Builder pattern
+    class DatabaseURLBuilder
+      def initialize(@database_url : String)
+      end
+
+      def with_connection_pool(pool_config : ConnectionPoolConfig) : self
+        @pool_config = pool_config
+        self
+      end
+
+      def with_ssl(ssl_config : SSLConfig) : self
+        @ssl_config = ssl_config
+        self
+      end
+
+      def with_database_config(db_config : DatabaseConfig) : self
+        @db_config = db_config
+        self
+      end
+
+      def with_adapter_config(adapter_config : Hash(String, String)) : self
+        @adapter_config = adapter_config
+        self
+      end
+
+      def build : String
+        uri = URI.parse(@database_url)
+        params = HTTP::Params.new
+
+        # Apply connection pool configuration
+        @pool_config.try(&.apply_to_params(params))
+
+        # Apply SSL configuration
+        adapter = detect_adapter(@database_url)
+        @ssl_config.try(&.apply_to_params(params, adapter))
+
+        # Apply database-specific configuration
+        @db_config.try(&.apply_to_params(params))
+
+        # Apply custom adapter configuration
+        @adapter_config.try do |config|
+          config.each { |key, value| params.add(key, value) }
+        end
+
+        # Rebuild the URL with parameters
+        uri.query = params.to_s
+        uri.to_s
+      end
+
+      private def detect_adapter(url : String) : Adapter
+        case url
+        when .starts_with?("postgresql://"), .starts_with?("postgres://")
+          Adapter::Postgres
+        when .starts_with?("mysql://")
+          Adapter::MySql
+        when .starts_with?("sqlite3://")
+          Adapter::SQLite
+        else
+          raise ArgumentError.new("Unsupported database URL format: #{url}")
+        end
+      end
+    end
+
+    # Configuration validator using Strategy pattern
+    abstract class ConfigValidator
+      abstract def validate!(config : Config) : Nil
+    end
+
+    class BasicConfigValidator < ConfigValidator
+      def validate!(config : Config) : Nil
+        raise ArgumentError.new("database_url cannot be empty") if config.database_url.empty?
+        raise ArgumentError.new("schema_path cannot be empty") if config.schema_path.empty?
+        raise ArgumentError.new("migration_table_name cannot be empty") if config.migration_table_name.empty?
+        raise ArgumentError.new("schema_file_name cannot be empty") if config.schema_file_name.empty?
+
+        unless [:utc, :local].includes?(config.default_timezone)
+          raise ArgumentError.new("default_timezone must be :utc or :local")
+        end
+
+        unless config.schema_file_name.ends_with?(".cr")
+          raise ArgumentError.new("schema_file_name must end with .cr extension")
+        end
+      end
+    end
+
+    # Environment configuration strategy using Strategy pattern
+    abstract class EnvironmentStrategy
+      abstract def apply(config : Config) : Nil
+    end
+
+    class ProductionStrategy < EnvironmentStrategy
+      def apply(config : Config) : Nil
+        config.auto_load_models = false
+        config.enable_sql_logging = false
+        config.connection_pool.size = 25
+        config.connection_pool.initial_size = 5
+        config.connection_pool.max_idle_size = 10
+        config.connection_pool.checkout_timeout = 15.seconds
+        config.connection_pool.max_retry_attempts = 5
+        config.ssl.mode = "require"
+
+        # Schema settings
+        config.enable_auto_schema_sync = false
+        config.verify_schema_on_startup = true
+        config.bootstrap_on_startup = false
+      end
+    end
+
+    class TestStrategy < EnvironmentStrategy
+      def apply(config : Config) : Nil
+        config.database_url = "sqlite3://:memory:"
+        config.migration_table_name = "test_schema_migrations"
+        config.auto_load_models = false
+        config.enable_sql_logging = false
+        config.connection_pool.size = 1
+        config.connection_pool.initial_size = 1
+        config.connection_pool.max_idle_size = 1
+        config.sqlite.journal_mode = "memory"
+
+        # Schema settings
+        config.schema_file_name = "test_schema.cr"
+        config.schema_constant_name = :TestSchema
+        config.schema_symbol = :test_schema
+        config.enable_auto_schema_sync = true
+        config.bootstrap_on_startup = false
+        config.verify_schema_on_startup = false
+      end
+    end
+
+    class DevelopmentStrategy < EnvironmentStrategy
+      def apply(config : Config) : Nil
+        config.enable_sql_logging = true
+        config.enable_performance_monitoring = true
+        config.connection_pool.size = 5
+        config.connection_pool.initial_size = 2
+        config.connection_pool.max_idle_size = 3
+        config.sqlite.journal_mode = "wal"
+
+        # Schema settings
+        config.enable_auto_schema_sync = true
+        config.verify_schema_on_startup = true
+        config.bootstrap_on_startup = false
+      end
+    end
+
+    # Factory for creating environment strategies
+    class EnvironmentStrategyFactory
+      def self.create(environment : String) : EnvironmentStrategy
+        case environment
+        when "production"
+          ProductionStrategy.new
+        when "test"
+          TestStrategy.new
+        when "development"
+          DevelopmentStrategy.new
+        else
+          DevelopmentStrategy.new
+        end
+      end
+    end
+
+    # Factory for creating database configurations
+    class DatabaseConfigFactory
+      def self.create(adapter : Adapter) : DatabaseConfig
+        case adapter
+        when Adapter::Postgres
+          PostgreSQLConfig.new
+        when Adapter::MySql
+          MySQLConfig.new
+        when Adapter::SQLite
+          SQLiteConfig.new
+        else
+          raise ArgumentError.new("Unsupported adapter: #{adapter}")
+        end
+      end
+    end
+
+    # Main configuration class with single responsibility
+    class Config
+      # Core settings
+      property database_url : String = "sqlite3://./db/development.db"
+      property logger : Log? = nil
+      property default_timezone : Symbol = :utc
       property environment : String = ENV["CRYSTAL_ENV"]? || "development"
 
-      # Maximum number of connection retry attempts
-      property max_retry_attempts : Int32 = 3
+      # Migration and Schema Management
+      property migration_table_name : String = "cql_schema_migrations"
+      property schema_path : String = "src/schemas"
+      property schema_file_name : String = "app_schema.cr"
+      property schema_constant_name : Symbol = :AppSchema
+      property schema_symbol : Symbol = :app_schema
+      property? auto_load_models : Bool = true
+      property? enable_auto_schema_sync : Bool = true
+      property? bootstrap_on_startup : Bool = false
+      property? verify_schema_on_startup : Bool = false
 
-      # Delay between connection retry attempts
-      property retry_delay : Time::Span = 1.second
-
-      # Enable SQL query logging
+      # Query and Performance settings
+      property? enable_query_cache : Bool = false
+      property cache_ttl : Time::Span = 1.hour
       property? enable_sql_logging : Bool = false
-
-      # Log level for SQL queries
       property sql_log_level : Log::Severity = Log::Severity::Debug
-
-      # Enable performance monitoring
       property? enable_performance_monitoring : Bool = false
-
-      # Performance monitoring configuration
       property performance_config : CQL::Performance::PerformanceConfig? = nil
 
       # Custom adapter configuration
       property adapter_config : Hash(String, String) = Hash(String, String).new
 
-      # Migration and Schema Management
-      # Whether to enable automatic schema file synchronization
-      property? enable_auto_schema_sync : Bool = true
+      # Composed configuration objects
+      getter connection_pool : ConnectionPoolConfig = ConnectionPoolConfig.new
+      getter ssl : SSLConfig = SSLConfig.new
+      getter postgresql : PostgreSQLConfig = PostgreSQLConfig.new
+      getter mysql : MySQLConfig = MySQLConfig.new
+      getter sqlite : SQLiteConfig = SQLiteConfig.new
 
-      # Default schema file name (without path)
-      property schema_file_name : String = "app_schema.cr"
-
-      # Schema constant name in generated file
-      property schema_constant_name : Symbol = :AppSchema
-
-      # Schema symbol for internal use
-      property schema_symbol : Symbol = :app_schema
-
-      # Whether to bootstrap schema on first run
-      property? bootstrap_on_startup : Bool = false
-
-      # Whether to verify schema consistency on startup
-      property? verify_schema_on_startup : Bool = false
+      # Validators and strategies
+      @validators = [BasicConfigValidator.new] of ConfigValidator
+      @environment_strategy : EnvironmentStrategy? = nil
 
       def initialize
-        # Set default logger based on environment
         setup_default_logger
-
-        # Set environment-specific defaults
         apply_environment_defaults
       end
 
-      # Apply environment-specific default configurations
-      private def apply_environment_defaults
-        case environment
-        when "production"
-          self.auto_load_models = false
-          self.enable_sql_logging = false
-          self.pool_size = 25
-          self.checkout_timeout = 15.seconds
-          self.max_retry_attempts = 5
-        when "test"
-          self.database_url = "sqlite3://:memory:"
-          self.migration_table_name = "test_schema_migrations"
-          self.auto_load_models = false
-          self.enable_sql_logging = false
-          self.pool_size = 1
-        when "development"
-          self.enable_sql_logging = true
-          self.enable_performance_monitoring = true
-          self.pool_size = 5
-        end
-
-        # Apply schema-specific environment defaults
-        apply_schema_environment_defaults
+      # Validation using composite pattern
+      def validate! : Nil
+        @validators.each(&.validate!(self))
+        connection_pool.validate!
+        ssl.validate!
+        database_config.validate!
       end
 
-      # Setup default logger based on environment
-      private def setup_default_logger
-        @logger = case environment
-                  when "production"
-                    Log.for("CQL::Production")
-                  when "test"
-                    Log.for("CQL::Test")
-                  else
-                    Log.for("CQL::Development")
-                  end
-      end
-
-      # Validate configuration settings
-      def validate!
-        raise ArgumentError.new("database_url cannot be empty") if database_url.empty?
-        raise ArgumentError.new("schema_path cannot be empty") if schema_path.empty?
-        raise ArgumentError.new("migration_table_name cannot be empty") if migration_table_name.empty?
-        raise ArgumentError.new("schema_file_name cannot be empty") if schema_file_name.empty?
-        raise ArgumentError.new("pool_size must be positive") if pool_size <= 0
-        raise ArgumentError.new("max_retry_attempts must be positive") if max_retry_attempts <= 0
-
-        unless [:utc, :local].includes?(default_timezone)
-          raise ArgumentError.new("default_timezone must be :utc or :local")
-        end
-
-        # Validate schema file name has .cr extension
-        unless schema_file_name.ends_with?(".cr")
-          raise ArgumentError.new("schema_file_name must end with .cr extension")
-        end
-      end
-
-      # Get the effective logger (return a default if none set)
-      def effective_logger : Log
-        @logger || Log.for("CQL")
-      end
-
-      # Configure performance monitoring if enabled
-      def setup_performance_monitoring(schema : Schema)
-        return unless enable_performance_monitoring?
-
-        perf_config = performance_config || CQL::Performance::PerformanceConfig.new
-        Performance.setup(schema) do |config|
-          config.query_profiling_enabled = perf_config.query_profiling_enabled?
-          config.n_plus_one_detection_enabled = perf_config.n_plus_one_detection_enabled?
-          config.plan_analysis_enabled = perf_config.plan_analysis_enabled?
-        end
+      # Get effective database URL using Builder pattern
+      def effective_database_url : String
+        DatabaseURLBuilder.new(database_url)
+          .with_connection_pool(connection_pool)
+          .with_ssl(ssl)
+          .with_database_config(database_config)
+          .with_adapter_config(adapter_config)
+          .build
       end
 
       # Get database adapter based on URL
@@ -215,6 +394,25 @@ module CQL
         end
       end
 
+      # Get database-specific configuration
+      def database_config : DatabaseConfig
+        case database_adapter
+        when Adapter::Postgres
+          postgresql
+        when Adapter::MySql
+          mysql
+        when Adapter::SQLite
+          sqlite
+        else
+          raise ArgumentError.new("Unsupported adapter: #{database_adapter}")
+        end
+      end
+
+      # Get the effective logger
+      def effective_logger : Log
+        @logger || Log.for("CQL")
+      end
+
       # Convert timezone symbol to actual timezone
       def timezone : Time::Location
         case default_timezone
@@ -227,14 +425,24 @@ module CQL
         end
       end
 
+      # Configure performance monitoring if enabled
+      def setup_performance_monitoring(schema : Schema) : Nil
+        return unless enable_performance_monitoring?
+
+        perf_config = performance_config || CQL::Performance::PerformanceConfig.new
+        Performance.setup(schema) do |config|
+          config.query_profiling_enabled = perf_config.query_profiling_enabled?
+          config.n_plus_one_detection_enabled = perf_config.n_plus_one_detection_enabled?
+          config.plan_analysis_enabled = perf_config.plan_analysis_enabled?
+        end
+      end
+
       # Migration and Schema Integration Methods
 
-      # Get full path to schema file
       def schema_file_path : String
         File.join(schema_path, schema_file_name)
       end
 
-      # Create MigratorConfig from current configuration
       def create_migrator_config : CQL::MigratorConfig
         CQL::MigratorConfig.new(
           schema_file_path: schema_file_path,
@@ -244,7 +452,6 @@ module CQL
         )
       end
 
-      # Create MigratorConfig with custom overrides
       def create_migrator_config(
         schema_file_path : String? = nil,
         schema_name : Symbol? = nil,
@@ -259,7 +466,6 @@ module CQL
         )
       end
 
-      # Create environment-specific MigratorConfig
       def create_migrator_config_for_environment(env : String) : CQL::MigratorConfig
         case env
         when "production"
@@ -283,7 +489,6 @@ module CQL
         end
       end
 
-      # Create a configured migrator for a schema
       def create_migrator(schema : Schema) : CQL::Migrator
         migrator_config = create_migrator_config
         migrator = schema.migrator(migrator_config)
@@ -305,25 +510,25 @@ module CQL
         migrator
       end
 
-      # Environment-specific schema settings
-      def apply_schema_environment_defaults
-        case environment
-        when "production"
-          self.enable_auto_schema_sync = false # Manual control in production
-          self.verify_schema_on_startup = true
-          self.bootstrap_on_startup = false
-        when "test"
-          self.schema_file_name = "test_schema.cr"
-          self.schema_constant_name = :TestSchema
-          self.schema_symbol = :test_schema
-          self.enable_auto_schema_sync = true
-          self.bootstrap_on_startup = false
-          self.verify_schema_on_startup = false
-        when "development"
-          self.enable_auto_schema_sync = true
-          self.verify_schema_on_startup = true
-          self.bootstrap_on_startup = false
-        end
+      # Add custom validator
+      def add_validator(validator : ConfigValidator) : Nil
+        @validators << validator
+      end
+
+      private def setup_default_logger
+        @logger = case environment
+                  when "production"
+                    Log.for("CQL::Production")
+                  when "test"
+                    Log.for("CQL::Test")
+                  else
+                    Log.for("CQL::Development")
+                  end
+      end
+
+      private def apply_environment_defaults
+        strategy = EnvironmentStrategyFactory.create(environment)
+        strategy.apply(self)
       end
     end
 
@@ -335,7 +540,7 @@ module CQL
     end
 
     # Reset configuration to defaults (useful for testing)
-    def self.reset!
+    def self.reset! : Nil
       @@config_mutex.synchronize do
         @@config_instance = nil
       end
@@ -367,7 +572,7 @@ module CQL
   #   config.database_url = ENV["DATABASE_URL"]
   #   config.logger = Log.for("Production")
   #   config.environment = "production"
-  #   config.pool_size = 25
+  #   config.connection_pool.size = 25
   #   config.enable_performance_monitoring = false
   #   config.auto_load_models = false
   # end
@@ -385,7 +590,7 @@ module CQL
   end
 
   # Reset configuration to defaults
-  def self.reset_config!
+  def self.reset_config! : Nil
     Configure.reset!
   end
 
