@@ -177,7 +177,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
+        def self.join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
           query.join(table_or_alias, &block)
         end
 
@@ -185,7 +185,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
+        def self.left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
           query.left(table_or_alias, &block)
         end
 
@@ -193,7 +193,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
+        def self.right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
           query.right(table_or_alias, &block)
         end
 

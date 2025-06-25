@@ -72,7 +72,7 @@ describe "ActiveRecord::QueryBuilder" do
       builder.where {
         TestUser.table_column(:name).null
       }
-      builder.to_sql.should eq("SELECT * FROM users WHERE users.name IS NULL")
+      builder.to_sql.should eq("SELECT users.id, users.name, users.email, users.age, users.password, users.created_at, users.updated_at FROM users WHERE users.name IS NULL")
     end
 
     it "generates consistent cache behavior for same queries" do

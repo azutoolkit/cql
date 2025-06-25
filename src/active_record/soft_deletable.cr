@@ -48,18 +48,30 @@ module CQL
           @@_acts_as_paranoid
         end
 
+        # Override the base query method to automatically exclude soft-deleted records
+        def self.query
+          if acts_as_paranoid?
+            previous_def.where { {{@type.id}}.table_column(:deleted_at).null}
+          else
+            previous_def
+          end
+        end
+
+        # Scope to include soft-deleted records
+        scope :with_deleted, -> {
+          query_without_soft_delete_filter
+        }
 
         # Scope to show only soft-deleted records
         scope :only_deleted, -> {
-          query.where {
-            {{@type.id}}.table_column(:deleted_at).is_not_null
+          QueryBuilder({{@type.id}}).from_model({{@type.id}}).where {
+            {{@type.id}}.table_column(:deleted_at).not_null
           }
         }
 
-        def self.with_deleted
-          where {
-            {{@type.id}}.table_column(:deleted_at).is_not_null
-          }
+        # Helper method to get query without soft delete filter
+        def self.query_without_soft_delete_filter
+          QueryBuilder({{@type.id}}).from_model({{@type.id}})
         end
 
         # Check if this record is soft deleted
@@ -156,12 +168,11 @@ module CQL
 
         # Delete a record by ID (soft delete)
         def self.delete!(id : Pk)
-          record = find(id)
-          return DB::ExecResult.new(0_i64, 0_i64) unless record
+          record = with_deleted.find(id)
+          return false unless record
 
           success = record.delete!
-          rows_affected = success ? 1_i64 : 0_i64
-          DB::ExecResult.new(0_i64, rows_affected)
+          success
         end
 
         # Force delete a record by ID (permanent delete)
@@ -175,7 +186,7 @@ module CQL
 
         # Soft delete records matching specific fields
         def self.delete_by!(**fields)
-          records = where(**fields).all
+          records = with_deleted.where(**fields).all
           rows_affected = 0_i64
 
           records.each do |record|

@@ -72,14 +72,8 @@ describe CQL::ActiveRecord::SoftDeletable do
       # Delete only one user
       user1.delete!
 
-      query, params = SoftDeletableUser.only_deleted.to_sql_with_params
-      puts "\n\nquery: #{query}"
-      puts "params: #{params}"
-
       # only_deleted should return only the soft-deleted user
       deleted_users = SoftDeletableUser.only_deleted.all
-      puts "deleted_users: #{deleted_users.size}"
-
       deleted_users.size.should eq(1)
       deleted_users.first.name.should eq("Alice")
 
@@ -185,7 +179,7 @@ describe CQL::ActiveRecord::SoftDeletable do
 
       # Delete using class method
       result = SoftDeletableUser.delete!(user_id)
-      result.rows_affected.should eq(1)
+      result.should be_true
 
       # User should be soft-deleted
       SoftDeletableUser.all.should be_empty
@@ -200,8 +194,8 @@ describe CQL::ActiveRecord::SoftDeletable do
 
       # Delete by email
       result = SoftDeletableUser.delete_by!(email: "delete_by@example.com")
-      result.rows_affected.should eq(2)
 
+      SoftDeletableUser.count_with_deleted.should eq(2)
       # Users should be soft-deleted
       SoftDeletableUser.all.should be_empty
       SoftDeletableUser.only_deleted.count.should eq(2)

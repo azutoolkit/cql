@@ -178,7 +178,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
+        def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
           @query = query.join(table_or_alias, &block)
           clone_builder.tap(&.query)
         end
@@ -201,7 +201,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
+        def left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
           @query = query.left(table_or_alias, &block)
           clone_builder.tap(&.query)
         end
@@ -210,7 +210,7 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
+        def right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
           @query = query.right(table_or_alias, &block)
           clone_builder.tap(&.query)
         end
