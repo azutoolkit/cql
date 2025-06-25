@@ -64,7 +64,8 @@ describe "ActiveRecord::QueryBuilder" do
       builder.where {
         TestUser.table_column(:name).is_not_null
       }
-      builder.to_sql.should eq("SELECT users.id, users.name, users.email, users.age, users.password, users.created_at, users.updated_at FROM users WHERE users.name IS NOT NULL")
+      builder.to_sql.should eq("SELECT users.id, users.name, users.email, users.age, users.password, users.created_at, \
+      users.updated_at FROM users WHERE users.name IS NOT NULL")
     end
 
     it "can build IS NULL" do
@@ -72,7 +73,8 @@ describe "ActiveRecord::QueryBuilder" do
       builder.where {
         TestUser.table_column(:name).null
       }
-      builder.to_sql.should eq("SELECT users.id, users.name, users.email, users.age, users.password, users.created_at, users.updated_at FROM users WHERE users.name IS NULL")
+      builder.to_sql.should eq("SELECT users.id, users.name, users.email, users.age, users.password, users.created_at, \
+      users.updated_at FROM users WHERE users.name IS NULL")
     end
 
     it "generates consistent cache behavior for same queries" do

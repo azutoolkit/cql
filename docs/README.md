@@ -2,7 +2,7 @@
 
 Welcome to **CQL (Crystal Query Language)** - the most comprehensive, type-safe ORM for Crystal! 🚀
 
-CQL combines the power of raw SQL with Crystal's compile-time type safety, offering an intuitive Active Record pattern while maintaining flexibility for Repository and Data Mapper patterns. Built for performance and developer experience.
+CQL combines the power of raw SQL with Crystal's compile-time type safety, offering an intuitive Active Record pattern while maintaining flexibility for Repository and Data Mapper patterns. Built for performance and developer experience, with comprehensive monitoring tools for query optimization and N+1 detection.
 
 ## 🎯 Quick Start Paths
 
@@ -24,6 +24,8 @@ Choose your learning path based on your experience level:
 ### 🚀 Building Production Apps?
 
 1. **[Performance Guide](guides/performance-optimization.md)** - Scale to millions of records
+2. **[Performance Monitoring](guides/performance-tools.md)** - Query analysis and N+1 detection
+3. **[Monitoring Architecture](guides/performance-monitoring-architecture.md)** - Advanced monitoring patterns
 
 ## 📚 Core Documentation
 
@@ -89,6 +91,8 @@ Choose your learning path based on your experience level:
 ### Performance & Scaling
 
 - **[Performance Optimization](guides/performance-optimization.md)** - Make your queries fast
+- **[Performance Monitoring Architecture](guides/performance-monitoring-architecture.md)** - Advanced monitoring system design
+- **[Performance Tools](guides/performance-tools.md)** - Query analysis, N+1 detection, and profiling
 
 ### Database Management
 
@@ -129,7 +133,7 @@ Choose your learning path based on your experience level:
 
 **Experienced with ORMs?** → [Feature Comparison](guides/feature-comparison.md) → [Migration Guide](guides/migration-guide.md) → [Best Practices](guides/best-practices.md)
 
-**Building for Production?** → [Performance Guide](guides/performance-optimization.md) → [Security Guide](guides/security-guide.md) → [Testing Strategies](guides/testing-strategies.md)
+**Building for Production?** → [Performance Guide](guides/performance-optimization.md) → [Performance Monitoring](guides/performance-tools.md) → [Security Guide](guides/security-guide.md) → [Testing Strategies](guides/testing-strategies.md)
 
 **Need Specific Feature?** → Use the search function or browse the [Complete Table of Contents](SUMMARY.md)
 

@@ -61,6 +61,8 @@
 ## Advanced Guides
 
 - [Performance Optimization](guides/performance-optimization.md)
+- [Performance Monitoring Architecture](guides/performance-monitoring-architecture.md)
+- [Performance Tools](guides/performance-tools.md)
 - [Testing Strategies](guides/testing-strategies.md)
 - [Security Guide](guides/security-guide.md)
 
