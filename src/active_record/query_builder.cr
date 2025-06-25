@@ -105,7 +105,7 @@ module CQL
         # Add where conditions with block
         # - **@yield** [FilterBuilder] The block to build conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def where(&block : Expression::FilterBuilder -> Expression::ConditionBuilder)
+        def where(&block : -> Expression::ConditionBuilder)
           @query = query.where(&block)
           clone_builder.tap(&.query)
         end
@@ -179,7 +179,8 @@ module CQL
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
-          clone_builder.tap(&.query.join(table_or_alias))
+          @query = query.join(table_or_alias, &block)
+          clone_builder.tap(&.query)
         end
 
         # Execute automatic left join
@@ -200,16 +201,18 @@ module CQL
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
-          clone_builder.tap(&.query.left(table_or_alias, &block))
+        def left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
+          @query = query.left(table_or_alias, &block)
+          clone_builder.tap(&.query)
         end
 
         # Execute right join with block conditions
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
-          clone_builder.tap(&.query.right(table_or_alias, &block))
+        def right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::Condition)
+          @query = query.right(table_or_alias, &block)
+          clone_builder.tap(&.query)
         end
 
         # Execute automatic inner join using named arguments for table aliasing
