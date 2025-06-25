@@ -108,6 +108,10 @@ module Expression
       ConditionBuilder.new(IsNotNull.new(self))
     end
 
+    def is_not_null : ConditionBuilder
+      ConditionBuilder.new(IsNotNull.new(self))
+    end
+
     def between(min : DB::Any, max : DB::Any) : ConditionBuilder
       ConditionBuilder.new(Between.new(self, min, max))
     end
@@ -206,6 +210,10 @@ module Expression
     end
 
     def not_null : ConditionBuilder
+      ConditionBuilder.new(IsNotNull.new(self))
+    end
+
+    def is_not_null : ConditionBuilder
       ConditionBuilder.new(IsNotNull.new(self))
     end
 
