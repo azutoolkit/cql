@@ -36,10 +36,6 @@ describe "CQL::ActiveRecord Touch Demo" do
 
       # Verify no callbacks were run
       CallbackTracker.order.should be_empty
-
-      puts "✅ Touch functionality implemented successfully!"
-      puts "✅ Record can be touched without running validation, save, or update callbacks"
-      puts "✅ Timestamps can be updated directly in the database"
     end
 
     it "demonstrates touch vs save callback behavior" do
@@ -64,15 +60,12 @@ describe "CQL::ActiveRecord Touch Demo" do
       # Touch should not trigger any callbacks
       user.touch
       CallbackTracker.order.should be_empty
-      puts "✅ Touch bypasses all callbacks"
-
       # Now regular save should trigger callbacks
       user.name = "Updated Name"
       user.save!
 
       # Verify callbacks were triggered for regular save
       CallbackTracker.order.should_not be_empty
-      puts "✅ Regular save still triggers callbacks as expected"
 
       # Show the difference
       expected_callbacks = [
@@ -85,7 +78,6 @@ describe "CQL::ActiveRecord Touch Demo" do
         "after_save",
       ]
       CallbackTracker.order.should eq(expected_callbacks)
-      puts "✅ Full callback chain executed for regular saves"
     end
   end
 end
