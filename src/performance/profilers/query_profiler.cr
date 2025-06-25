@@ -116,13 +116,13 @@ module CQL::Performance::Profilers
 
   # Configuration for the query profiler
   struct ProfilerConfig
-    property enabled : Bool = true
+    property? enabled : Bool = true
     property slow_query_threshold : Time::Span = 100.milliseconds
     property very_slow_threshold : Time::Span = 1.second
-    property log_all_queries : Bool = false
-    property log_slow_queries : Bool = true
+    property? log_all_queries : Bool = false
+    property? log_slow_queries : Bool = true
     property max_recorded_queries : Int32 = 10_000
-    property enable_memory_tracking : Bool = false
+    property? enable_memory_tracking : Bool = false
     property endpoints_to_track : Array(String) = [] of String
     property queries_to_ignore : Array(String) = ["COMMIT", "BEGIN", "ROLLBACK"]
 
@@ -209,7 +209,7 @@ module CQL::Performance::Profilers
       issues
     end
 
-    def get_issues : Array(PerformanceIssue)
+    def issues : Array(PerformanceIssue)
       @detected_issues.map(&.as(PerformanceIssue))
     end
 
@@ -279,7 +279,7 @@ module CQL::Performance::Profilers
     end
 
     private def handle_query_execution(event : QueryExecutionEvent)
-      return unless @config.enabled
+      return unless @config.enabled?
       return if should_ignore_query?(event.sql)
 
       execution = create_execution_from_event(event)
@@ -295,7 +295,7 @@ module CQL::Performance::Profilers
     end
 
     private def create_execution_from_event(event : QueryExecutionEvent) : QueryExecution
-      memory_usage = @config.enable_memory_tracking ? current_memory_usage : nil
+      memory_usage = @config.enable_memory_tracking? ? current_memory_usage : nil
 
       QueryExecution.new(
         sql: event.sql,
@@ -332,7 +332,7 @@ module CQL::Performance::Profilers
       @executions << execution
 
       # Log if configured
-      if @config.log_all_queries
+      if @config.log_all_queries?
         Log.info { "Query executed: #{execution.sql[0..100]}... (#{execution.execution_time.total_milliseconds.round(2)}ms)" }
       end
     end
@@ -354,7 +354,7 @@ module CQL::Performance::Profilers
       if execution.slow?(@config.slow_query_threshold)
         @slow_queries << execution
 
-        if @config.log_slow_queries
+        if @config.log_slow_queries?
           severity = execution.execution_time > @config.very_slow_threshold ? "VERY SLOW" : "SLOW"
           Log.warn { "#{severity} QUERY (#{execution.execution_time.total_milliseconds.round(2)}ms): #{execution.sql}" }
         end

@@ -13,13 +13,13 @@ module CQL::Performance
 
   # Configuration for the performance monitor
   struct PerformanceConfig
-    property plan_analysis_enabled : Bool = true
-    property n_plus_one_detection_enabled : Bool = true
-    property query_profiling_enabled : Bool = true
-    property auto_analyze_slow_queries : Bool = true
-    property context_tracking_enabled : Bool = true
-    property endpoint_tracking_enabled : Bool = false
-    property async_processing : Bool = false
+    property? plan_analysis_enabled : Bool = true
+    property? n_plus_one_detection_enabled : Bool = true
+    property? query_profiling_enabled : Bool = true
+    property? auto_analyze_slow_queries : Bool = true
+    property? context_tracking_enabled : Bool = true
+    property? endpoint_tracking_enabled : Bool = false
+    property? async_processing : Bool = false
     property current_endpoint : String? = nil
     property current_user_id : String? = nil
 
@@ -33,7 +33,7 @@ module CQL::Performance
     getter slow_queries : Int32
     getter n_plus_one_patterns : Int32
     getter avg_query_time : Float64
-    getter monitoring_enabled : Bool
+    getter? monitoring_enabled : Bool
     getter uptime : Time::Span
 
     def initialize(@total_queries : Int32, @slow_queries : Int32, @n_plus_one_patterns : Int32,
@@ -57,7 +57,7 @@ module CQL::Performance
       @start_time = Time.utc
 
       # Initialize event system
-      @event_bus = if @config.async_processing
+      @event_bus = if @config.async_processing?
                      AsyncEventBus.new
                    else
                      EventBus.new
@@ -76,7 +76,7 @@ module CQL::Performance
     def initialize_with_schema(schema : Schema, config : PerformanceConfig = PerformanceConfig.new)
       initialize(config)
       @schema = schema
-      @query_analyzer = Analyzers::StrategyBasedQueryAnalyzer.new(schema) if @config.plan_analysis_enabled
+      @query_analyzer = Analyzers::StrategyBasedQueryAnalyzer.new(schema) if @config.plan_analysis_enabled?
     end
 
     # Alternative constructor with dependency injection
@@ -132,7 +132,7 @@ module CQL::Performance
       @event_bus.publish(event)
 
       # Auto-analyze slow queries if enabled
-      if @config.auto_analyze_slow_queries && @query_analyzer &&
+      if @config.auto_analyze_slow_queries? && @query_analyzer &&
          execution_time > 100.milliseconds # threshold
         analyze_slow_query(sql, params, execution_time)
       end
@@ -142,7 +142,7 @@ module CQL::Performance
 
     # Relation loading tracking
     def start_relation_loading(relation_name : String, parent_model : String) : Void
-      return unless @config.n_plus_one_detection_enabled
+      return unless @config.n_plus_one_detection_enabled?
 
       event = RelationLoadingEvent.new(
         relation_name: relation_name,
@@ -155,7 +155,7 @@ module CQL::Performance
     end
 
     def end_relation_loading : Void
-      return unless @config.n_plus_one_detection_enabled
+      return unless @config.n_plus_one_detection_enabled?
 
       # We need to track which relation loading ended, but for simplicity
       # we'll create a generic event. In a real implementation, you'd track the stack.
@@ -177,13 +177,13 @@ module CQL::Performance
 
     # Query plan analysis
     def analyze_query_plan(sql : String, params : Array(DB::Any) = [] of DB::Any) : Analyzers::QueryPlanResult?
-      return nil unless @query_analyzer && @config.plan_analysis_enabled
+      return nil unless @query_analyzer && @config.plan_analysis_enabled?
 
       @query_analyzer.try(&.analyze(sql, params).as?(Analyzers::QueryPlanResult))
     end
 
     def analyze_query_plan_with_execution(sql : String, params : Array(DB::Any) = [] of DB::Any) : Analyzers::QueryPlanResult?
-      return nil unless @query_analyzer && @config.plan_analysis_enabled
+      return nil unless @query_analyzer && @config.plan_analysis_enabled?
 
       @query_analyzer.try(&.analyze_with_execution(sql, params))
     end
@@ -218,7 +218,7 @@ module CQL::Performance
       stats = @query_profiler.statistics
       total_queries = stats.values.sum(&.execution_count)
       slow_queries = @query_profiler.slow_queries.size
-      n_plus_one_patterns = @n_plus_one_detector.get_issues.size
+      n_plus_one_patterns = @n_plus_one_detector.issues.size
       avg_query_time = stats.empty? ? 0.0 : stats.values.sum(&.avg_time.total_milliseconds) / stats.size
 
       PerformanceMetrics.new(
@@ -242,10 +242,10 @@ module CQL::Performance
       yield @config
 
       # Update component configurations
-      @n_plus_one_detector.enabled = @config.n_plus_one_detection_enabled
+      @n_plus_one_detector.enabled = @config.n_plus_one_detection_enabled?
 
       @query_profiler.configure do |profiler_config|
-        profiler_config.enabled = @config.query_profiling_enabled
+        profiler_config.enabled = @config.query_profiling_enabled?
       end
     end
 
@@ -254,7 +254,7 @@ module CQL::Performance
     end
 
     def enabled? : Bool
-      @config.plan_analysis_enabled || @config.n_plus_one_detection_enabled || @config.query_profiling_enabled
+      @config.plan_analysis_enabled? || @config.n_plus_one_detection_enabled? || @config.query_profiling_enabled?
     end
 
     # Component access (for advanced usage)
@@ -276,7 +276,7 @@ module CQL::Performance
 
     private def create_n_plus_one_detector : Detectors::NPlusOneDetector
       config = Detectors::NPlusOneConfig.new
-      config.enabled = @config.n_plus_one_detection_enabled
+      config.enabled = @config.n_plus_one_detection_enabled?
       config.strict_mode = ENV["CQL_N_PLUS_ONE_STRICT"]? ? true : false
 
       Detectors::NPlusOneDetector.new(config)
@@ -284,7 +284,7 @@ module CQL::Performance
 
     private def create_query_profiler : Profilers::QueryProfiler
       config = Profilers::ProfilerConfig.new
-      config.enabled = @config.query_profiling_enabled
+      config.enabled = @config.query_profiling_enabled?
       config.log_slow_queries = true
       config.enable_memory_tracking = false
 
@@ -302,7 +302,7 @@ module CQL::Performance
     end
 
     private def build_context : String?
-      return nil unless @config.context_tracking_enabled
+      return nil unless @config.context_tracking_enabled?
 
       context_parts = [] of String
       context_parts << "endpoint:#{@config.current_endpoint}" if @config.current_endpoint
@@ -313,8 +313,8 @@ module CQL::Performance
 
     private def collect_all_issues : Array(PerformanceIssue)
       issues = [] of PerformanceIssue
-      issues.concat(@n_plus_one_detector.get_issues)
-      issues.concat(@query_profiler.get_issues)
+      issues.concat(@n_plus_one_detector.issues)
+      issues.concat(@query_profiler.issues)
       issues
     end
   end

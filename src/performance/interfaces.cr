@@ -59,7 +59,7 @@ module CQL::Performance
   # Single responsibility: Detect performance issues
   abstract class PerformanceDetector
     abstract def process_event(event : MonitoringEvent) : Array(PerformanceIssue)
-    abstract def get_issues : Array(PerformanceIssue)
+    abstract def issues : Array(PerformanceIssue)
     abstract def clear_issues : Void
   end
 
