@@ -104,6 +104,10 @@ module Expression
       ConditionBuilder.new(IsNull.new(self))
     end
 
+    def is_null : ConditionBuilder
+      ConditionBuilder.new(IsNull.new(self))
+    end
+
     def not_null : ConditionBuilder
       ConditionBuilder.new(IsNotNull.new(self))
     end

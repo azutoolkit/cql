@@ -9,3 +9,6 @@ Performance/AnyInsteadOfEmpty:
 
 Metrics/CyclomaticComplexity:
   Enabled: false
+
+Naming/PredicateName:
+  Enabled: false

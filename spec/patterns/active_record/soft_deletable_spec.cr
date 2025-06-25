@@ -193,7 +193,7 @@ describe CQL::ActiveRecord::SoftDeletable do
       user2.create!
 
       # Delete by email
-      result = SoftDeletableUser.delete_by!(email: "delete_by@example.com")
+      SoftDeletableUser.delete_by!(email: "delete_by@example.com")
 
       SoftDeletableUser.count_with_deleted.should eq(2)
       # Users should be soft-deleted

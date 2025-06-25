@@ -3,7 +3,7 @@ module CQL
     module Queryable
       # The QueryBuilder class provides a chainable interface for building queries
       # while maintaining type safety and integration with the CQL::Query system.
- # The QueryBuilder class provides a chainable interface for building queries
+      # The QueryBuilder class provides a chainable interface for building queries
       # while maintaining type safety and integration with the CQL::Query system.
       class QueryBuilder(T)
         @query : CQL::Query
@@ -331,7 +331,7 @@ module CQL
 
         # Iterate over each result
         # - **@yield** [T] Each model instance
-        def each(&block)
+        def each(&)
           @query.each(T) do |record|
             yield record
           end
@@ -419,7 +419,7 @@ module CQL
         # Batch processing - iterate over records in batches
         # - **@param** batch_size [Int32] Size of each batch
         # - **@yield** [T] Each record
-        def find_each(batch_size : Int32 = 1000, &block : T ->)
+        def find_each(batch_size : Int32 = 1000, & : T ->)
           # Ensure we have a consistent ordering to avoid infinite loops
           # If no ordering is specified, order by primary key (usually id)
           query_with_order = @query.order_by.empty? ? order(:id) : self
@@ -463,7 +463,7 @@ module CQL
         # Process records in batches
         # - **@param** batch_size [Int32] Size of each batch
         # - **@yield** [Array(T)] Each batch of records
-        def find_in_batches(batch_size : Int32 = 1000, &block : Array(T) ->)
+        def find_in_batches(batch_size : Int32 = 1000, & : Array(T) ->)
           # Ensure we have a consistent ordering to avoid infinite loops
           # If no ordering is specified, order by primary key (usually id)
           query_with_order = @query.order_by.empty? ? order(:id) : self
