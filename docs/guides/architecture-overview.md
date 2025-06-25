@@ -6,7 +6,7 @@ This guide provides a comprehensive overview of CQL's architecture, explaining h
 
 CQL follows a layered architecture pattern that separates concerns and provides flexibility while maintaining performance:
 
-```mermaid fullWidth="true"
+```mermaid fullWidth="true"  darkMode="true fullWidth="true"
 graph TB
     A[Application Layer] --> B[Active Record Models]
     A --> C[Repository Pattern]
@@ -55,11 +55,11 @@ end
 
 **Key Responsibilities:**
 
-* Database connection management
-* Table and column definitions
-* Index and constraint management
-* Migration execution
-* Transaction handling
+- Database connection management
+- Table and column definitions
+- Index and constraint management
+- Migration execution
+- Transaction handling
 
 ### 2. Query Builder
 
@@ -76,11 +76,11 @@ query = AcmeDB.query
 
 **Features:**
 
-* Type-safe query construction
-* Method chaining
-* Complex joins and subqueries
-* Aggregate functions
-* Raw SQL integration
+- Type-safe query construction
+- Method chaining
+- Complex joins and subqueries
+- Aggregate functions
+- Raw SQL integration
 
 ### 3. Expression Builder
 
@@ -94,11 +94,11 @@ query.where { users.age > 18 & users.active.eq(true) }
 
 **Capabilities:**
 
-* Operator overloading
-* Type-safe comparisons
-* Complex boolean logic
-* Function calls
-* Subquery expressions
+- Operator overloading
+- Type-safe comparisons
+- Complex boolean logic
+- Function calls
+- Subquery expressions
 
 ### 4. Database Adapters
 
@@ -118,11 +118,11 @@ end
 
 **Adapter Features:**
 
-* Database-specific SQL dialects
-* Connection pooling
-* Transaction management
-* Error handling
-* Feature detection
+- Database-specific SQL dialects
+- Connection pooling
+- Transaction management
+- Error handling
+- Feature detection
 
 ## 🎭 Design Patterns
 
@@ -146,7 +146,7 @@ end
 
 **Pattern Flow:**
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 sequenceDiagram
     participant App as Application
     participant Model as User Model
@@ -162,7 +162,7 @@ sequenceDiagram
     Model-->>App: saved user
 ```
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 sequenceDiagram
     participant App as Application
     participant Model as User Model
@@ -196,7 +196,7 @@ end
 
 **Pattern Flow:**
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 sequenceDiagram
     participant App as Application
     participant Repo as Repository
@@ -215,7 +215,7 @@ sequenceDiagram
 
 ### Query Execution Flow
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 flowchart TD
     A[Method Call] --> B{Query Type}
     B -->|SELECT| C[Query Builder]
@@ -244,7 +244,7 @@ flowchart TD
 
 ### Model Lifecycle
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 stateDiagram-v2
     [*] --> New: User.new
     New --> Validating: save/create
@@ -280,7 +280,7 @@ end
 
 ### Runtime Type Validation
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph LR
     A[Crystal Code] --> B[Macro Expansion]
     B --> C[Type Checking]
@@ -316,7 +316,7 @@ end
 
 ### Query Optimization
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph TD
     A[Query Request] --> B[Query Cache Check]
     B -->|Hit| C[Return Cached Plan]

@@ -167,7 +167,7 @@ end
 
 Set up automatic schema synchronization and run your migrations:
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 flowchart TD
     A[Application Start] --> B[Load CQL & Dependencies]
     B --> C[Define Schema Connection]
@@ -215,7 +215,7 @@ puts "✅ Database initialized with #{migrator.applied_migrations.size} migratio
 
 Now you can start working with your data:
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 stateDiagram-v2
     [*] --> NewRecord : User.new()
     NewRecord --> Persisted : save() / create()
@@ -430,7 +430,7 @@ end
 
 Add validations to ensure data integrity:
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 flowchart TD
     A[user.save called] --> B[Run Validations]
     B --> C[Presence Validations]

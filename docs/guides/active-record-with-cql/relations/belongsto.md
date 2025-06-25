@@ -13,7 +13,7 @@ Let's say you have a blog system where:
 - A **Post** can have many **Comments**.
 - A **Comment** belongs to one **Post**.
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 erDiagram
     POSTS ||--o{ COMMENTS : "has many"
 

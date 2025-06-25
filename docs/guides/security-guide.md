@@ -94,7 +94,7 @@ end
 
 ### 🔑 Secure Password Handling
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 flowchart TD
     A[User Registration] --> B[Password Input]
     B --> C{Password Validation}
@@ -194,7 +194,7 @@ end
 
 ### 🛡️ Role-Based Access Control
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph TD
     subgraph "Role-Based Access Control Matrix"
         A[User Request] --> B{Check User Role}
@@ -892,7 +892,7 @@ end
 
 ### 🕵️ Threat Detection
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 flowchart TD
     A[Incoming Request] --> B[Extract User, Action, IP]
     B --> C[Rate Limit Check]

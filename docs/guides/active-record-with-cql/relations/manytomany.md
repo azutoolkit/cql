@@ -15,7 +15,7 @@ A `ManyToMany` relationship means that multiple records in one table can relate 
 
 ### Example Scenario: Posts and Tags
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 erDiagram
     POSTS ||--o{ POST_TAGS : "has many through"
     TAGS ||--o{ POST_TAGS : "has many through"

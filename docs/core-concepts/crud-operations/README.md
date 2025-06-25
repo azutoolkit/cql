@@ -475,7 +475,7 @@ puts "🧹 Deleted old inactive users"
 
 ## 🔄 CRUD Flow Diagram
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph TD
     A[🆕 New Record] --> B{Save Method}
     B -->|save| C{Validation}

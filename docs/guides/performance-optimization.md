@@ -28,7 +28,7 @@ Performance is crucial for production applications. This comprehensive guide cov
 
 Understanding CQL's performance characteristics helps you make informed optimization decisions:
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph TD
     A[Crystal Application] --> B[CQL Active Record]
     B --> C[Query Builder]
@@ -77,7 +77,7 @@ graph TD
 
 **❌ The Problem Visualization:**
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 sequenceDiagram
     participant App as Application
     participant DB as Database
@@ -107,7 +107,7 @@ end
 
 **✅ Solution 1: Eager Loading**
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 sequenceDiagram
     participant App as Application
     participant DB as Database
@@ -205,7 +205,7 @@ recent_active = User.where("active = ? AND created_at > ?", true, 1.week.ago).al
 
 **3. Efficient Pagination**
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph LR
     subgraph "OFFSET Pagination Performance"
         A[Page 1<br/>OFFSET 0] --> B[Page 100<br/>OFFSET 2000]
@@ -442,7 +442,7 @@ posts = Post.where("MATCH(title, content) AGAINST('crystal programming' IN NATUR
 
 ### 🔧 Connection Pool Optimization
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph TD
     subgraph "Connection Pool Architecture"
         A[Application Requests] --> B[Connection Pool Manager]
@@ -552,7 +552,7 @@ end
 
 ### 🎯 Multi-Level Caching
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph TD
     A[Client Request] --> B{Application Cache<br/>Redis}
     B -->|Cache Hit ✅| C[Return Cached Data]

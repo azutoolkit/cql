@@ -29,7 +29,7 @@ Testing is essential for building reliable applications. This guide covers compr
 
 CQL applications benefit from a well-structured testing pyramid:
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph TD
     A[🔬 Unit Tests] --> B[🔗 Integration Tests]
     B --> C[🌐 End-to-End Tests]
@@ -515,7 +515,7 @@ end
 
 ### 🎭 Service Mocking
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 sequenceDiagram
     participant Test as Test Suite
     participant Mock as MockEmailService
@@ -697,7 +697,7 @@ end
 
 ### 🎯 Advanced Factory with Traits
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 flowchart TD
     A[AdvancedUserFactory.create] --> B[Process Traits]
     B --> C{Admin Trait?}
@@ -851,7 +851,7 @@ end
 
 ### 🧹 Database Cleaning Strategies
 
-```mermaid
+```mermaid fullWidth="true"  darkMode="true
 graph TD
     subgraph "Database Cleaning Strategy Decision"
         A[Test Type?] --> B[Unit Tests]
