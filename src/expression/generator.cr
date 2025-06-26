@@ -12,6 +12,12 @@ module Expression
       @dialect = @adapter.dialect
     end
 
+    # Helper method to check if a column is an auto-timestamp column
+    private def is_auto_timestamp_column?(column : CQL::BaseColumn) : Bool
+      column_name = column.name.to_s
+      %w[created_at updated_at].includes?(column_name)
+    end
+
     def reset
       @params.clear
       @query = ""
@@ -493,7 +499,7 @@ module Expression
               column.default,
               column.null?,
               column.unique?,
-              [:created_at, :updated_at].includes?(column.name) # TODO: This is a hack, remove it
+              is_auto_timestamp_column?(column)
             )
           end
         end
