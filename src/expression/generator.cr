@@ -34,7 +34,11 @@ module Expression
         aggr_sql = node.aggr_columns.map(&.accept(self))
 
         select_parts = columns_sql + aggr_sql
-        string << select_parts.join(", ")
+        if select_parts.empty?
+          string << "*"
+        else
+          string << select_parts.join(", ")
+        end
 
         # From node now contains Expression::Table nodes potentially with aliases
         string << node.from.accept(self)

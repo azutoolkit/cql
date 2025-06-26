@@ -68,7 +68,7 @@
 
 ## Examples
 
-- [Blog Engine](examples/blog-engine/)
+- [Blog Engine](examples/blog/)
 - [E-commerce](examples/ecommerce/)
 - [Social Network](examples/social-network/)
 - [Patterns](examples/patterns/)
