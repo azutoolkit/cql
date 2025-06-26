@@ -12,3 +12,6 @@ Metrics/CyclomaticComplexity:
 
 Naming/PredicateName:
   Enabled: false
+
+Naming/QueryBoolMethods:
+  Enabled: false
