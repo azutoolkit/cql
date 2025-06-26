@@ -196,7 +196,7 @@ module Expression
       column_type : String,
       default_value : DB::Any?,
       nullable : Bool,
-      unique : Bool
+      unique : Bool,
     ) : String
       build_sql(128) do |str|
         str << column_name << " " << column_type
@@ -215,7 +215,7 @@ module Expression
       index_name : String,
       table_name : String,
       columns : Array(String),
-      unique : Bool
+      unique : Bool,
     ) : String
       build_sql(128) do |str|
         str << "CREATE "
@@ -232,7 +232,7 @@ module Expression
       references_table : String,
       references_columns : Array(String),
       on_delete : String,
-      on_update : String
+      on_update : String,
     ) : String
       build_sql(256) do |str|
         str << "CONSTRAINT #{constraint_name} " if constraint_name

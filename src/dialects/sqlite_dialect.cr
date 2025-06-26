@@ -5,13 +5,13 @@ module Expression
   class SqliteDialect < BaseDialect
     # Cache for frequently used SQLite-specific strings
     @@cached_strings = {
-      "sqlite_placeholder"           => "?",
-      "sqlite_integer_pk_autoincr"   => "INTEGER PRIMARY KEY AUTOINCREMENT",
-      "sqlite_primary_key"           => " PRIMARY KEY",
-      "sqlite_drop_index_prefix"     => "DROP INDEX IF EXISTS ",
-      "sqlite_delete_from_prefix"    => "DELETE FROM ",
-      "sqlite_rename_column_prefix"  => "RENAME COLUMN ",
-      "sqlite_add_column_prefix"     => "ADD COLUMN ",
+      "sqlite_placeholder"          => "?",
+      "sqlite_integer_pk_autoincr"  => "INTEGER PRIMARY KEY AUTOINCREMENT",
+      "sqlite_primary_key"          => " PRIMARY KEY",
+      "sqlite_drop_index_prefix"    => "DROP INDEX IF EXISTS ",
+      "sqlite_delete_from_prefix"   => "DELETE FROM ",
+      "sqlite_rename_column_prefix" => "RENAME COLUMN ",
+      "sqlite_add_column_prefix"    => "ADD COLUMN ",
     }
 
     # SQLite uses ? for all placeholders regardless of position
@@ -128,15 +128,12 @@ module Expression
 
     def drop_column(column_name : String) : String
       # SQLite prior to version 3.35.0 doesn't support DROP COLUMN directly
-      # For compatibility, we should raise an error and suggest the workaround
-      workaround = <<-MSG
-      You need to follow these steps:
-
-        1. Create a new table without the column.
-        2. Copy data from the old table to the new table.
-        3. Drop the old table.
-        4. Rename the new table to the original table name.
-      MSG
+      # For compatibility, we return the standard syntax but include a warning
+      # The workaround would be:
+      #   1. Create a new table without the column.
+      #   2. Copy data from the old table to the new table.
+      #   3. Drop the old table.
+      #   4. Rename the new table to the original table name.
 
       # We'll return the standard syntax for newer SQLite versions
       # but include a warning in the comment
@@ -251,7 +248,7 @@ module Expression
       value ? "1" : "0"
     end
 
-        # Override time formatting for SQLite-specific format
+    # Override time formatting for SQLite-specific format
     protected def format_time(value : Time) : String
       # Format time values as ISO8601 strings with SQLite-style escaping
       "''#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}''"
