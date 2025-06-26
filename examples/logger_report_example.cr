@@ -13,9 +13,6 @@ class LoggerReportExample
     puts "🚀 CQL Logger Report Generator Example"
     puts "====================================="
 
-    # Enable debug logging to see the logger output
-    ::Log.setup(:debug)
-
     # Create performance monitor with logger report format
     monitor = CQL::Performance::PerformanceMonitor.new
 
