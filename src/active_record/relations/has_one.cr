@@ -25,7 +25,7 @@ module CQL::ActiveRecord::Relations
     # ```
     macro has_one(name, kind, foreign_key = nil, dependent = :destroy, cache = true)
       # Determine foreign key name if not provided
-      {% fk = foreign_key.id || "#{@type.name.underscore.id}_id".id %}
+      {% fk = foreign_key || "#{@type.name.underscore.id}_id".id %}
 
       # Cache variables (if caching enabled)
       {% if cache %}
