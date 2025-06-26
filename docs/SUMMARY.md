@@ -24,6 +24,7 @@
 ## Getting Started
 
 - [Getting Started Guide](guides/getting-started.md)
+- [Configuration](guides/configuration.md)
 - [Architecture Overview](guides/architecture-overview.md)
 - [Best Practices](guides/best-practices.md)
 - [Feature Comparison](guides/feature-comparison.md)
@@ -52,6 +53,7 @@
 
 ## Database Management
 
+- [Configuration](guides/configuration.md)
 - [Migrations](guides/active-record-with-cql/migrations.md)
 - [Migration Best Practices](guides/handling-migrations.md)
 - [Migration Guide](guides/migration-guide.md)

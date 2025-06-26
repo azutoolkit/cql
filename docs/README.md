@@ -12,8 +12,9 @@ Choose your learning path based on your experience level:
 
 1. **[What is CQL?](introduction.md)** - Understand the core concepts
 2. **[Installation Guide](installation.md)** - Get up and running in 5 minutes
-3. **[Your First App](guides/getting-started.md)** - Build a complete example
-4. **[Core Concepts](core-concepts/README.md)** - Master the fundamentals
+3. **[Configuration Guide](guides/configuration.md)** - Configure CQL for your environment
+4. **[Your First App](guides/getting-started.md)** - Build a complete example
+5. **[Core Concepts](core-concepts/README.md)** - Master the fundamentals
 
 ### 🔄 Migrating from Another ORM?
 
@@ -33,6 +34,7 @@ Choose your learning path based on your experience level:
 
 - **[Introduction](introduction.md)** - Why CQL and what it offers
 - **[Installation](installation.md)** - Setup for all supported databases
+- **[Configuration](guides/configuration.md)** - Configure CQL for all environments
 - **[Architecture Overview](guides/architecture-overview.md)** - How CQL works under the hood
 
 ### Core Concepts
@@ -96,6 +98,7 @@ Choose your learning path based on your experience level:
 
 ### Database Management
 
+- **[Configuration](guides/configuration.md)** - Configure CQL for all environments
 - **[Schema Dumping](guides/schema-dump.md)** - Export your schema
 - **[Migration Strategies](guides/handling-migrations.md)** - Deploy schema changes safely
 - **[Migration Workflow Enhancements](MIGRATION_WORKFLOW_ENHANCEMENTS.md)** - Enhanced migration features
@@ -103,10 +106,6 @@ Choose your learning path based on your experience level:
 ### Testing & Quality Assurance
 
 - **[Testing Strategies](guides/testing-strategies.md)** - Test your database code
-
-## 🛠️ Tools & Utilities
-
-> **Note: Tools and utilities are currently in development**
 
 ## 🆘 Help & Troubleshooting
 
@@ -121,19 +120,17 @@ Choose your learning path based on your experience level:
 
 ## 📊 Quick Reference
 
-<!-- **Note: Quick reference guides are currently in development** -->
-
 - **[API Reference](guides/api-reference.md)** - Complete API documentation
 
 ---
 
 ## 🏁 Where to Start?
 
-**New to ORMs?** → Start with [Introduction](introduction.md) → [Installation](installation.md) → [Getting Started](guides/getting-started.md)
+**New to ORMs?** → Start with [Introduction](introduction.md) → [Installation](installation.md) → [Configuration](guides/configuration.md) → [Getting Started](guides/getting-started.md)
 
 **Experienced with ORMs?** → [Feature Comparison](guides/feature-comparison.md) → [Migration Guide](guides/migration-guide.md) → [Best Practices](guides/best-practices.md)
 
-**Building for Production?** → [Performance Guide](guides/performance-optimization.md) → [Performance Monitoring](guides/performance-tools.md) → [Security Guide](guides/security-guide.md) → [Testing Strategies](guides/testing-strategies.md)
+**Building for Production?** → [Configuration](guides/configuration.md) → [Performance Guide](guides/performance-optimization.md) → [Performance Monitoring](guides/performance-tools.md) → [Security Guide](guides/security-guide.md) → [Testing Strategies](guides/testing-strategies.md)
 
 **Need Specific Feature?** → Use the search function or browse the [Complete Table of Contents](SUMMARY.md)
 
