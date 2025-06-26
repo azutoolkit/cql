@@ -36,7 +36,7 @@ module CQL
   # ```
   # The `Schema` class represents a database schema.
   class Schema
-    Log = ::Log.for(self)
+    Log = CQL.config.logger
 
     class Error < Exception; end
 
@@ -143,7 +143,6 @@ module CQL
     def build
       @tables.each do |_tbl_name, table|
         sql = table.create_sql
-        Log.debug { sql }
         exec(sql)
       end
     end
@@ -345,14 +344,12 @@ module CQL
       alter_table = AlterTable.new(tables[table_name], self)
       with alter_table yield
       sql_statements = alter_table.to_sql(@gen)
-      Log.debug { sql_statements }
 
       exec_query do |conn|
         conn.transaction do |tx|
           cnn = tx.connection
           sql_statements.split(";\n").each do |sql|
             next if sql.empty?
-            Log.debug { "Executing: #{sql}" }
             cnn.exec(sql)
           end
         end

@@ -38,7 +38,7 @@ module CQL
   #   ).commit
   # ```
   class Insert
-    Log = ::Log.for(self)
+    Log = CQL.config.logger
 
     @table : Table? = nil
     @columns : Set(Expression::Column) = Set(Expression::Column).new

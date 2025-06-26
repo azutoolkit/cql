@@ -9,7 +9,7 @@ require "./profilers/query_profiler"
 require "./reports/report_generators"
 
 module CQL::Performance
-  Log = ::Log.for(self)
+  Log = CQL.config.logger
 
   # Configuration for the performance monitor
   struct PerformanceConfig

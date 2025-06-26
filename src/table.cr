@@ -38,7 +38,7 @@ module CQL
   # ```
   #
   class Table
-    Log = ::Log.for(self)
+    Log = CQL.config.logger
 
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
@@ -615,6 +615,10 @@ module CQL
     def add_index(columns : Array(Symbol), unique : Bool = false)
       index = Index.new(self, columns, unique, nil)
       index
+    end
+
+    def index(columns : Array(Symbol), unique : Bool = false)
+      add_index(columns, unique)
     end
 
     # Adds a UNIQUE constraint to the table.

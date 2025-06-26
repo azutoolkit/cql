@@ -14,6 +14,7 @@ module CQL
   # => #<AlterTable:0x00007f8e7a4e1e80>
   # ```
   class AlterTable
+    Log = CQL.config.logger
     @actions : Array(Expression::AlterAction) = [] of Expression::AlterAction
     private getter schema : CQL::Schema
     private getter table : CQL::Table

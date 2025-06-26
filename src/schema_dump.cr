@@ -19,7 +19,7 @@ module CQL
   # dumper.dump_to_file("src/schemas/production_schema.cr", :ProductionDB, :production_db)
   # ```
   class SchemaDump
-    Log = ::Log.for(self)
+    Log = CQL.config.logger
 
     class Error < Exception; end
 
@@ -428,8 +428,8 @@ module CQL
           str << "    foreign_key [:#{foreign_key.columns.join(", :")}], "
           str << "references: :#{foreign_key.references_table}, "
           str << "references_columns: [:#{foreign_key.references_columns.join(", :")}]"
-          str << ", on_delete: :#{foreign_key.on_delete}" if foreign_key.on_delete != "no_action"
-          str << ", on_update: :#{foreign_key.on_update}" if foreign_key.on_update != "no_action"
+          str << ", on_delete: :#{foreign_key.on_delete.downcase.gsub(" ", "_")}" if foreign_key.on_delete != "no_action"
+          str << ", on_update: :#{foreign_key.on_update.downcase.gsub(" ", "_")}" if foreign_key.on_update != "no_action"
           str << "\n"
         end
 
