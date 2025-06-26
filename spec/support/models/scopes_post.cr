@@ -8,9 +8,7 @@ class ScopesPost
   getter id : Int64?
   getter title : String
   getter body : String
-  # ameba:disable Naming/QueryBoolMethods
   getter published : Bool
-  # ameba:enable Naming/QueryBoolMethods
   getter category : String
   getter created_at : Time
 
