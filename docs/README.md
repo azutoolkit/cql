@@ -107,6 +107,15 @@ Choose your learning path based on your experience level:
 
 - **[Testing Strategies](guides/testing-strategies.md)** - Test your database code
 
+## 📖 Examples & Tutorials
+
+### Complete Applications
+
+- **[Blog Engine](examples/blog-engine.md)** - Full-featured blog with performance monitoring
+- **[E-commerce](examples/ecommerce/)** - Online store with complex relationships
+- **[Social Network](examples/social-network/)** - Social features and real-time data
+- **[Design Patterns](examples/patterns/)** - Different architectural approaches
+
 ## 🆘 Help & Troubleshooting
 
 ### Common Issues
@@ -131,6 +140,8 @@ Choose your learning path based on your experience level:
 **Experienced with ORMs?** → [Feature Comparison](guides/feature-comparison.md) → [Migration Guide](guides/migration-guide.md) → [Best Practices](guides/best-practices.md)
 
 **Building for Production?** → [Configuration](guides/configuration.md) → [Performance Guide](guides/performance-optimization.md) → [Performance Monitoring](guides/performance-tools.md) → [Security Guide](guides/security-guide.md) → [Testing Strategies](guides/testing-strategies.md)
+
+**Want to See CQL in Action?** → [Blog Engine Example](examples/blog-engine.md) - Complete application with performance monitoring
 
 **Need Specific Feature?** → Use the search function or browse the [Complete Table of Contents](SUMMARY.md)
 

@@ -70,7 +70,8 @@
 
 ## Examples
 
-- [Blog Engine](examples/blog/)
+- [Blog Engine](examples/blog-engine.md)
+- [Blog Engine (Code)](examples/blog/)
 - [E-commerce](examples/ecommerce/)
 - [Social Network](examples/social-network/)
 - [Patterns](examples/patterns/)
