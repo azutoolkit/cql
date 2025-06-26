@@ -6,7 +6,7 @@ require "./interfaces"
 module CQL::Performance
   # Implementation of EventPublisher using Observer Pattern
   class EventBus < EventPublisher
-    Log = ::Log.for(self)
+    Log = CQL.config.logger
 
     @listeners : Array(EventListener) = [] of EventListener
     @enabled : Bool = true

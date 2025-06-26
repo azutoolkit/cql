@@ -134,12 +134,14 @@ module CQL
     property schema_file_path : String
     property schema_name : Symbol
     property schema_symbol : Symbol
+    property migration_table_name : Symbol
     property? auto_sync : Bool = true
 
     def initialize(
       @schema_file_path : String = "src/schemas/app_schema.cr",
       @schema_name : Symbol = :AppSchema,
       @schema_symbol : Symbol = :app_schema,
+      @migration_table_name : Symbol = :cql_schema_migrations,
       @auto_sync : Bool? = true,
     )
     end
@@ -166,7 +168,7 @@ module CQL
   # migrator.up
   # ```
   class Migrator
-    Log = ::Log.for(self)
+    Log = CQL.config.logger
 
     # Represents a migration record.
     # @field id [Int32] the migration record id
@@ -187,7 +189,7 @@ module CQL
     def initialize(@schema : Schema, @config = MigratorConfig.new)
       bootstrap_schema if @config.auto_sync?
       ensure_schema_migrations_table
-      @repo = Repository(MigrationRecord, Int32).new(schema, :schema_migrations)
+      @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
 
     # Applies the pending migrations.
@@ -436,13 +438,8 @@ module CQL
     end
 
     private def ensure_schema_migrations_table
-      # Check if table exists first
-      schema.exec_query do |conn|
-        conn.query_one?("SELECT 1 FROM schema_migrations LIMIT 1", as: Int32)
-      end
-    rescue
       # Table doesn't exist, create it
-      schema.table :schema_migrations do
+      schema.table @config.migration_table_name do
         primary :id, Int32
         column :name, String
         column :version, Int32, index: true, unique: true
@@ -450,7 +447,7 @@ module CQL
         column :created_at, String, null: true
         column :updated_at, String, null: true
       end
-      schema.schema_migrations.create!
+      schema.tables[@config.migration_table_name].create!
     end
 
     private def migration_applied?(version)
