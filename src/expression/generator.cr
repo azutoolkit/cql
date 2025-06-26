@@ -152,6 +152,34 @@ module Expression
       end
     end
 
+    def visit(node : BaseColumn) : String
+      # Delegate to the specific column type - this should not be called directly
+      # but is here for completeness
+      visit(node.as(Column))
+    end
+
+    def visit(node : TypedColumn) : String
+      # TypedColumn behaves the same as Column for SQL generation
+      String.build do |string|
+        if alias_name = node.alias_name
+          # Use alias if provided
+          string << alias_name
+          string << "."
+          string << node.column.name
+        elsif node.column.name == :*
+          # Handle SELECT *
+          string << "*"
+        else
+          # No alias provided on the column expression, use the original table name
+          table = node.column.table
+          raise "Internal Error: Column expression missing table context and no alias provided" unless table
+          string << table.table_name
+          string << "."
+          string << node.column.name
+        end
+      end
+    end
+
     def visit(node : And) : String
       String.build do |string|
         # Wrap sides in parentheses for correct precedence
@@ -191,10 +219,10 @@ module Expression
 
     def visit(node : CompareCondition) : String
       String.build do |string|
-        # Left and Right can be Expression::Column (now alias-aware)
+        # Left and Right can be Expression::BaseColumn (now alias-aware)
         # or DB::Any (which becomes a placeholder)
-        if node.left.is_a?(Expression::Column) || node.left.is_a?(Condition)
-          string << node.left.as(Expression::Column | Condition).accept(self)
+        if node.left.is_a?(Expression::BaseColumn) || node.left.is_a?(Condition)
+          string << node.left.as(Expression::BaseColumn | Condition).accept(self)
         else
           @params << node.left.as(DB::Any)
           string << placeholder
@@ -202,8 +230,8 @@ module Expression
         string << " "
         string << node.operator
         string << " "
-        if node.right.is_a?(Expression::Column) || node.right.is_a?(Condition)
-          string << node.right.as(Expression::Column | Condition).accept(self)
+        if node.right.is_a?(Expression::BaseColumn) || node.right.is_a?(Condition)
+          string << node.right.as(Expression::BaseColumn | Condition).accept(self)
         else
           @params << node.right.as(DB::Any)
           string << placeholder

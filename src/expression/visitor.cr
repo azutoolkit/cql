@@ -3,7 +3,9 @@ module Expression
     abstract def visit(node : Query) : String
     abstract def visit(node : Insert) : String
     abstract def visit(node : Where) : String
+    abstract def visit(node : BaseColumn) : String
     abstract def visit(node : Column) : String
+    abstract def visit(node : TypedColumn) : String
     abstract def visit(node : And) : String
     abstract def visit(node : Or) : String
     abstract def visit(node : Not) : String
@@ -49,5 +51,6 @@ module Expression
     abstract def visit(node : ChangeColumn) : String
     abstract def visit(node : RenameTable) : String
     abstract def visit(node : AddForeignKey) : String
+    abstract def visit(node : DropForeignKey) : String
   end
 end

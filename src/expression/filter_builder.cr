@@ -14,11 +14,6 @@ module Expression
       ConditionBuilder.new(Exists.new(sub_query.build))
     end
 
-    # Helper method for debugging - let's see what tables are available
-    def debug_tables
-      @tables.keys
-    end
-
     # Direct table access method
     def table(name : String)
       @tables[name]? || raise "Table '#{name}' not found in filter context. Available tables: #{@tables.keys.join(", ")}"

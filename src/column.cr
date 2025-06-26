@@ -69,7 +69,7 @@ module CQL
     end
 
     # Expressions for this column
-    # - **@return** [Expression::ColumnBuilder] the column expression builder
+    # - **@return** [Expression::BaseColumn] the column expression builder
     #
     # **Example**
     #
@@ -77,7 +77,7 @@ module CQL
     # column = CQL::Column.new(:name, String)
     # column.expression.eq("John")
     # ```
-    def expression : Expression::Column
+    def expression : Expression::BaseColumn
       Expression::TypedColumn(Type).new(self, @as_name)
     end
 
