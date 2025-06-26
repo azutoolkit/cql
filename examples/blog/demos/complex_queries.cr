@@ -43,7 +43,7 @@ module BlogDemo
 
       # Some potentially slow queries for demonstration
       slow_query_start = Time.monotonic
-      complex_data = schema.exec(<<-SQL)
+      schema.exec(<<-SQL)
         SELECT u.username, p.title, c.content
         FROM users u
         LEFT JOIN posts p ON u.id = p.user_id
@@ -51,7 +51,7 @@ module BlogDemo
         WHERE p.published = 1
         ORDER BY p.views_count DESC, c.created_at DESC
       SQL
-      slow_query_duration = Time.monotonic - slow_query_start
+      Time.monotonic - slow_query_start
 
       # Aggregation queries
       puts "\nAggregation Queries:"

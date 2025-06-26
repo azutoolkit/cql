@@ -19,13 +19,13 @@ module BlogDemo
       puts "  Total Categories: #{Category.count}"
 
       puts "\nContent Analysis:"
-      puts "  Average post word count: #{Post.all.map(&.word_count).sum / Post.count}"
+      puts "  Average post word count: #{Post.all.sum(&.word_count) / Post.count}"
       most_active_author = User.all.max_by(&.posts.count)
       puts "  Most active author: #{most_active_author.username}"
 
       # Raw SQL example
       puts "\nRaw SQL Query:"
-      top_users = schema.exec(<<-SQL)
+      schema.exec(<<-SQL)
         SELECT users.username, COUNT(posts.id) as post_count
         FROM users
         LEFT JOIN posts ON users.id = posts.user_id

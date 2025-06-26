@@ -9,7 +9,9 @@ The CQL::Configure module provides a centralized, thread-safe way to configure a
 - [Environment-Specific Configuration](#environment-specific-configuration)
 - [Integration with Schema Definition](#integration-with-schema-definition)
 - [Performance Monitoring Configuration](#performance-monitoring-configuration)
-- [Configuration Helpers](#configuration-helpers)
+- [Database-Specific Configuration](#database-specific-configuration)
+- [Connection Pooling Configuration](#connection-pooling-configuration)
+- [SSL Configuration](#ssl-configuration)
 - [Thread Safety](#thread-safety)
 - [Validation](#validation)
 - [Best Practices](#best-practices)
@@ -39,68 +41,62 @@ After configuration, you can access settings throughout your application:
 ```crystal
 # Direct access
 puts CQL.config.database_url
-puts CQL.config.pool_size
+puts CQL.config.connection_pool.size
 
-# Using helper methods
-puts CQL::ConfigHelpers.database_url
-puts CQL::ConfigHelpers.environment
+# Using effective methods
+puts CQL.config.effective_database_url
+puts CQL.config.effective_logger
 ```
 
 ## Configuration Options
 
 ### Core Database Settings
 
-| Option               | Type         | Default                           | Description                       |
-| -------------------- | ------------ | --------------------------------- | --------------------------------- |
-| `database_url`       | `String`     | `"sqlite3://./db/development.db"` | Database connection URL           |
-| `pool_size`          | `Int32`      | `10`                              | Connection pool size              |
-| `checkout_timeout`   | `Time::Span` | `10.seconds`                      | Connection checkout timeout       |
-| `query_timeout`      | `Time::Span` | `30.seconds`                      | Query execution timeout           |
-| `max_retry_attempts` | `Int32`      | `3`                               | Maximum connection retry attempts |
-| `retry_delay`        | `Time::Span` | `1.second`                        | Delay between retry attempts      |
-
-### Application Settings
-
-| Option             | Type     | Default                                 | Description                               |
-| ------------------ | -------- | --------------------------------------- | ----------------------------------------- |
-| `logger`           | `Log?`   | Environment-based                       | Logger instance for CQL operations        |
-| `default_timezone` | `Symbol` | `:utc`                                  | Default timezone (`:utc` or `:local`)     |
-| `environment`      | `String` | `ENV["CRYSTAL_ENV"]` or `"development"` | Application environment                   |
-| `auto_load_models` | `Bool`   | `true`                                  | Whether to automatically load model files |
-
-### Schema Management
-
-| Option                 | Type     | Default                   | Description                        |
-| ---------------------- | -------- | ------------------------- | ---------------------------------- |
-| `migration_table_name` | `String` | `"cql_schema_migrations"` | Name of migration tracking table   |
-| `schema_path`          | `String` | `"src/schemas"`           | Path where schema files are stored |
-
-### Query Caching
-
-| Option               | Type         | Default  | Description                 |
-| -------------------- | ------------ | -------- | --------------------------- |
-| `enable_query_cache` | `Bool`       | `false`  | Enable query result caching |
-| `cache_ttl`          | `Time::Span` | `1.hour` | Default cache time-to-live  |
-
-### Logging and Monitoring
-
-| Option                          | Type                                   | Default                | Description                          |
-| ------------------------------- | -------------------------------------- | ---------------------- | ------------------------------------ |
-| `enable_sql_logging`            | `Bool`                                 | Environment-based      | Enable SQL query logging             |
-| `sql_log_level`                 | `Log::Severity`                        | `Log::Severity::Debug` | Log level for SQL queries            |
-| `enable_performance_monitoring` | `Bool`                                 | Environment-based      | Enable performance monitoring        |
-| `performance_config`            | `CQL::Performance::PerformanceConfig?` | `nil`                  | Performance monitoring configuration |
+| Option             | Type     | Default                                 | Description                           |
+| ------------------ | -------- | --------------------------------------- | ------------------------------------- |
+| `database_url`     | `String` | `"sqlite3://./db/development.db"`       | Database connection URL               |
+| `logger`           | `Log`    | Environment-based                       | Logger instance for CQL operations    |
+| `default_timezone` | `Symbol` | `:utc`                                  | Default timezone (`:utc` or `:local`) |
+| `environment`      | `String` | `ENV["CRYSTAL_ENV"]` or `"development"` | Application environment               |
 
 ### Migration and Schema Management
 
-| Option                     | Type     | Default           | Description                                     |
-| -------------------------- | -------- | ----------------- | ----------------------------------------------- |
-| `enable_auto_schema_sync`  | `Bool`   | `true`            | Enable automatic schema file synchronization    |
-| `schema_file_name`         | `String` | `"app_schema.cr"` | Default schema file name (without path)         |
-| `schema_constant_name`     | `Symbol` | `:AppSchema`      | Schema constant name in generated file          |
-| `schema_symbol`            | `Symbol` | `:app_schema`     | Schema symbol for internal use                  |
-| `bootstrap_on_startup`     | `Bool`   | `false`           | Whether to bootstrap schema on first run        |
-| `verify_schema_on_startup` | `Bool`   | `false`           | Whether to verify schema consistency on startup |
+| Option                     | Type     | Default                  | Description                                     |
+| -------------------------- | -------- | ------------------------ | ----------------------------------------------- |
+| `migration_table_name`     | `Symbol` | `:cql_schema_migrations` | Name of migration tracking table                |
+| `schema_path`              | `String` | `"src/schemas"`          | Path where schema files are stored              |
+| `schema_file_name`         | `String` | `"app_schema.cr"`        | Default schema file name                        |
+| `schema_constant_name`     | `Symbol` | `:AppSchema`             | Schema constant name in generated file          |
+| `schema_symbol`            | `Symbol` | `:app_schema`            | Schema symbol for internal use                  |
+| `auto_load_models`         | `Bool`   | `true`                   | Whether to automatically load model files       |
+| `enable_auto_schema_sync`  | `Bool`   | `true`                   | Enable automatic schema file synchronization    |
+| `bootstrap_on_startup`     | `Bool`   | `false`                  | Whether to bootstrap schema on first run        |
+| `verify_schema_on_startup` | `Bool`   | `false`                  | Whether to verify schema consistency on startup |
+
+### Query and Performance Settings
+
+| Option                          | Type                                  | Default                 | Description                          |
+| ------------------------------- | ------------------------------------- | ----------------------- | ------------------------------------ |
+| `enable_query_cache`            | `Bool`                                | `false`                 | Enable query result caching          |
+| `cache_ttl`                     | `Time::Span`                          | `1.hour`                | Default cache time-to-live           |
+| `enable_performance_monitoring` | `Bool`                                | `false`                 | Enable performance monitoring        |
+| `performance_config`            | `CQL::Performance::PerformanceConfig` | `PerformanceConfig.new` | Performance monitoring configuration |
+
+### Custom Configuration
+
+| Option           | Type                   | Default                    | Description                  |
+| ---------------- | ---------------------- | -------------------------- | ---------------------------- |
+| `adapter_config` | `Hash(String, String)` | `Hash(String, String).new` | Custom adapter configuration |
+
+### Composed Configuration Objects
+
+The configuration system uses composed objects for specialized settings:
+
+- `connection_pool` - Connection pooling settings
+- `ssl` - SSL/TLS configuration
+- `postgresql` - PostgreSQL-specific settings
+- `mysql` - MySQL-specific settings
+- `sqlite` - SQLite-specific settings
 
 ## Environment-Specific Configuration
 
@@ -112,10 +108,14 @@ CQL automatically applies environment-specific defaults based on the `CRYSTAL_EN
 CQL.configure do |config|
   config.environment = "development"
   config.database_url = "sqlite3://./db/development.db"
-  config.enable_sql_logging = true
   config.enable_performance_monitoring = true
-  config.pool_size = 5
+  config.connection_pool.size = 5
+  config.connection_pool.initial_size = 2
+  config.connection_pool.max_idle_size = 3
+  config.sqlite.journal_mode = "wal"
   config.auto_load_models = true
+  config.enable_auto_schema_sync = true
+  config.verify_schema_on_startup = true
 end
 ```
 
@@ -125,10 +125,18 @@ end
 CQL.configure do |config|
   config.environment = "test"
   config.database_url = "sqlite3://:memory:"
-  config.migration_table_name = "test_schema_migrations"
+  config.migration_table_name = :test_schema_migrations
   config.auto_load_models = false
-  config.enable_sql_logging = false
-  config.pool_size = 1
+  config.connection_pool.size = 1
+  config.connection_pool.initial_size = 1
+  config.connection_pool.max_idle_size = 1
+  config.sqlite.journal_mode = "memory"
+  config.schema_file_name = "test_schema.cr"
+  config.schema_constant_name = :TestSchema
+  config.schema_symbol = :test_schema
+  config.enable_auto_schema_sync = true
+  config.bootstrap_on_startup = false
+  config.verify_schema_on_startup = false
 end
 ```
 
@@ -139,10 +147,15 @@ CQL.configure do |config|
   config.environment = "production"
   config.database_url = ENV["DATABASE_URL"]
   config.auto_load_models = false
-  config.enable_sql_logging = false
-  config.pool_size = 25
-  config.checkout_timeout = 15.seconds
-  config.max_retry_attempts = 5
+  config.connection_pool.size = 25
+  config.connection_pool.initial_size = 5
+  config.connection_pool.max_idle_size = 10
+  config.connection_pool.checkout_timeout = 15.seconds
+  config.connection_pool.max_retry_attempts = 5
+  config.ssl.mode = "require"
+  config.enable_auto_schema_sync = false
+  config.verify_schema_on_startup = true
+  config.bootstrap_on_startup = false
 end
 ```
 
@@ -154,21 +167,20 @@ CQL.configure do |config|
   when "production"
     config.database_url = ENV["DATABASE_URL"]
     config.logger = Log.for("Production")
-    config.pool_size = 25
+    config.connection_pool.size = 25
     config.enable_performance_monitoring = false
   when "staging"
     config.database_url = ENV["STAGING_DATABASE_URL"]
     config.logger = Log.for("Staging")
-    config.pool_size = 15
+    config.connection_pool.size = 15
     config.enable_performance_monitoring = true
   when "test"
     config.database_url = "sqlite3://:memory:"
     config.logger = Log.for("Test")
-    config.pool_size = 1
+    config.connection_pool.size = 1
   else # development
     config.database_url = "sqlite3://./db/development.db"
     config.logger = Log.for("Development")
-    config.enable_sql_logging = true
     config.enable_performance_monitoring = true
   end
 end
@@ -182,7 +194,7 @@ Use the configuration in your schema definitions:
 # Configure CQL first
 CQL.configure do |config|
   config.database_url = "postgresql://localhost/myapp"
-  config.pool_size = 15
+  config.connection_pool.size = 15
 end
 
 # Then use configuration in schema
@@ -240,15 +252,16 @@ Configure performance monitoring through the main configuration:
 CQL.configure do |config|
   config.enable_performance_monitoring = true
 
-  # Create detailed performance configuration
-  perf_config = CQL::Performance::PerformanceConfig.new
-  perf_config.query_profiling_enabled = true
-  perf_config.n_plus_one_detection_enabled = true
-  perf_config.plan_analysis_enabled = true
-  perf_config.auto_analyze_slow_queries = true
-  perf_config.context_tracking_enabled = true
-
-  config.performance_config = perf_config
+  # Configure performance monitoring settings
+  config.performance_config.query_profiling_enabled = true
+  config.performance_config.n_plus_one_detection_enabled = true
+  config.performance_config.plan_analysis_enabled = true
+  config.performance_config.auto_analyze_slow_queries = true
+  config.performance_config.context_tracking_enabled = true
+  config.performance_config.endpoint_tracking_enabled = false
+  config.performance_config.async_processing = false
+  config.performance_config.current_endpoint = nil
+  config.performance_config.current_user_id = nil
 end
 
 # Later, when creating your schema
@@ -257,6 +270,91 @@ schema = CQL::Schema.define(:app, adapter: CQL.config.database_adapter, uri: CQL
 # Automatically setup performance monitoring using configuration
 CQL.config.setup_performance_monitoring(schema)
 ```
+
+## Database-Specific Configuration
+
+### PostgreSQL Configuration
+
+```crystal
+CQL.configure do |config|
+  config.database_url = "postgresql://localhost/myapp"
+  config.postgresql.auth_methods = "scram-sha-256,md5"
+end
+```
+
+### MySQL Configuration
+
+```crystal
+CQL.configure do |config|
+  config.database_url = "mysql://user:pass@localhost/myapp"
+  config.mysql.encoding = "utf8mb4_unicode_ci"
+end
+```
+
+### SQLite Configuration
+
+```crystal
+CQL.configure do |config|
+  config.database_url = "sqlite3://./db/app.db"
+  config.sqlite.journal_mode = "wal"
+  config.sqlite.synchronous = "normal"
+  config.sqlite.cache_size = -4000  # 4MB cache
+  config.sqlite.foreign_keys = true
+  config.sqlite.busy_timeout = 5000  # 5 seconds
+end
+```
+
+## Connection Pooling Configuration
+
+Configure connection pooling settings:
+
+```crystal
+CQL.configure do |config|
+  config.connection_pool.size = 20
+  config.connection_pool.initial_size = 5
+  config.connection_pool.max_idle_size = 10
+  config.connection_pool.checkout_timeout = 10.seconds
+  config.connection_pool.query_timeout = 30.seconds
+  config.connection_pool.max_retry_attempts = 3
+  config.connection_pool.retry_delay = 1.second
+  config.connection_pool.use_prepared_statements = true
+end
+```
+
+### Connection Pool Settings
+
+| Option                    | Type         | Default      | Description                 |
+| ------------------------- | ------------ | ------------ | --------------------------- |
+| `size`                    | `Int32`      | `10`         | Maximum pool size           |
+| `initial_size`            | `Int32`      | `1`          | Initial pool size           |
+| `max_idle_size`           | `Int32`      | `1`          | Maximum idle connections    |
+| `checkout_timeout`        | `Time::Span` | `10.seconds` | Connection checkout timeout |
+| `query_timeout`           | `Time::Span` | `30.seconds` | Query execution timeout     |
+| `max_retry_attempts`      | `Int32`      | `3`          | Maximum retry attempts      |
+| `retry_delay`             | `Time::Span` | `1.second`   | Delay between retries       |
+| `use_prepared_statements` | `Bool`       | `true`       | Use prepared statements     |
+
+## SSL Configuration
+
+Configure SSL/TLS settings for secure database connections:
+
+```crystal
+CQL.configure do |config|
+  config.ssl.mode = "require"
+  config.ssl.cert_path = "/path/to/client-cert.pem"
+  config.ssl.key_path = "/path/to/client-key.pem"
+  config.ssl.ca_path = "/path/to/ca-cert.pem"
+end
+```
+
+### SSL Settings
+
+| Option      | Type      | Default    | Description                                                        |
+| ----------- | --------- | ---------- | ------------------------------------------------------------------ |
+| `mode`      | `String`  | `"prefer"` | SSL mode (disable, allow, prefer, require, verify-ca, verify-full) |
+| `cert_path` | `String?` | `nil`      | Path to client certificate                                         |
+| `key_path`  | `String?` | `nil`      | Path to client private key                                         |
+| `ca_path`   | `String?` | `nil`      | Path to CA certificate                                             |
 
 ## Migration Workflow Integration
 
@@ -387,27 +485,6 @@ class User
 end
 ```
 
-## Configuration Helpers
-
-CQL provides helper methods for commonly accessed configuration values:
-
-```crystal
-# Instead of CQL.config.database_url
-database_url = CQL::ConfigHelpers.database_url
-
-# Instead of CQL.config.effective_logger
-logger = CQL::ConfigHelpers.logger
-
-# Instead of CQL.config.timezone
-timezone = CQL::ConfigHelpers.timezone
-
-# Instead of CQL.config.environment
-env = CQL::ConfigHelpers.environment
-
-# Instead of CQL.config.auto_load_models?
-auto_load = CQL::ConfigHelpers.auto_load_models?
-```
-
 ## Thread Safety
 
 The configuration system is fully thread-safe:
@@ -452,7 +529,7 @@ Configuration settings are validated when the configuration block completes:
 begin
   CQL.configure do |config|
     config.database_url = ""      # Invalid: empty URL
-    config.pool_size = -1         # Invalid: negative pool size
+    config.connection_pool.size = -1  # Invalid: negative pool size
     config.default_timezone = :invalid # Invalid: unsupported timezone
   end
 rescue ArgumentError => ex
@@ -464,10 +541,36 @@ end
 
 - `database_url` cannot be empty
 - `schema_path` cannot be empty
-- `migration_table_name` cannot be empty
-- `pool_size` must be positive
-- `max_retry_attempts` must be positive
+- `schema_file_name` cannot be empty
+- `schema_file_name` must end with `.cr` extension
+- `connection_pool.size` must be positive
+- `connection_pool.initial_size` must be positive
+- `connection_pool.max_idle_size` must be positive
+- `connection_pool.max_retry_attempts` must be positive
 - `default_timezone` must be `:utc` or `:local`
+- `ssl.mode` must be one of: `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`
+- `sqlite.journal_mode` must be one of: `delete`, `truncate`, `persist`, `memory`, `wal`, `off`
+- `sqlite.synchronous` must be one of: `off`, `normal`, `full`, `extra`
+- `sqlite.busy_timeout` must be non-negative
+
+### Custom Validation
+
+Add custom validators to the configuration:
+
+```crystal
+class CustomValidator < CQL::Configure::ConfigValidator
+  def validate!(config : CQL::Configure::Config) : Nil
+    if config.database_url.includes?("password123")
+      raise ArgumentError.new("Weak password detected in database URL!")
+    end
+  end
+end
+
+CQL.configure do |config|
+  config.database_url = "mysql://user:password123@localhost/test"
+  config.add_validator(CustomValidator.new)
+end
+```
 
 ## Best Practices
 
@@ -496,8 +599,8 @@ end
 ```crystal
 CQL.configure do |config|
   config.database_url = ENV["DATABASE_URL"]? || "sqlite3://./db/development.db"
-  config.pool_size = ENV["DB_POOL_SIZE"]?.try(&.to_i) || 10
-  config.enable_sql_logging = ENV["SQL_LOGGING"]? == "true"
+  config.connection_pool.size = ENV["DB_POOL_SIZE"]?.try(&.to_i) || 10
+  config.enable_performance_monitoring = ENV["PERFORMANCE_MONITORING"]? == "true"
 end
 ```
 
@@ -517,7 +620,7 @@ end
 # config/production.cr
 CQL.configure do |config|
   config.database_url = ENV["DATABASE_URL"]
-  config.pool_size = 25
+  config.connection_pool.size = 25
   config.auto_load_models = false
   config.enable_performance_monitoring = false
 end
@@ -525,7 +628,6 @@ end
 # config/development.cr
 CQL.configure do |config|
   config.database_url = "sqlite3://./db/development.db"
-  config.enable_sql_logging = true
   config.enable_performance_monitoring = true
 end
 ```
@@ -539,7 +641,7 @@ Spec.before_each do
 
   CQL.configure do |config|
     config.database_url = "sqlite3://:memory:"
-    config.migration_table_name = "test_schema_migrations"
+    config.migration_table_name = :test_schema_migrations
     config.auto_load_models = false
   end
 end
@@ -552,7 +654,7 @@ def validate_production_config
   config = CQL.config
 
   raise "DATABASE_URL required in production" if config.database_url.empty?
-  raise "Pool size too small for production" if config.pool_size < 10
+  raise "Pool size too small for production" if config.connection_pool.size < 10
   raise "Performance monitoring should be disabled in production" if config.enable_performance_monitoring?
 end
 
@@ -594,19 +696,36 @@ CQL.reset_config!
 
 Configuration object with all settings. See [Configuration Options](#configuration-options) for complete list.
 
-### CQL::ConfigHelpers
+### CQL::Configure::Config Methods
 
-Helper module providing quick access to common configuration values:
+#### Core Methods
 
-- `CQL::ConfigHelpers.database_url : String`
-- `CQL::ConfigHelpers.logger : Log`
-- `CQL::ConfigHelpers.timezone : Time::Location`
-- `CQL::ConfigHelpers.environment : String`
-- `CQL::ConfigHelpers.auto_load_models? : Bool`
-- `CQL::ConfigHelpers.schema_file_path : String`
-- `CQL::ConfigHelpers.schema_path : String`
-- `CQL::ConfigHelpers.auto_schema_sync? : Bool`
-- `CQL::ConfigHelpers.create_migrator_config : CQL::MigratorConfig`
+- `effective_database_url : String` - Get effective database URL with all parameters
+- `database_adapter : Adapter` - Get database adapter based on URL
+- `database_config : DatabaseConfig` - Get database-specific configuration
+- `effective_logger : Log` - Get the effective logger instance
+- `schema_file_path : String` - Get full schema file path
+
+#### Migration Methods
+
+- `create_migrator_config(**args) : CQL::MigratorConfig` - Create migrator configuration
+- `create_migrator_config_for_environment(env : String) : CQL::MigratorConfig` - Create environment-specific migrator config
+- `create_migrator(schema : Schema) : CQL::Migrator` - Create migrator with configuration
+- `setup_performance_monitoring(schema : Schema) : Nil` - Setup performance monitoring
+
+#### Validation Methods
+
+- `validate! : Nil` - Validate all configuration settings
+- `add_validator(validator : ConfigValidator) : Nil` - Add custom validator
+
+### CQL Schema and Migration Methods
+
+- `CQL.create_schema(name : Symbol, &block) : Schema` - Create schema with configuration
+- `CQL.create_migrator(schema : Schema, migrator_config : MigratorConfig? = nil) : Migrator` - Create migrator
+- `CQL.bootstrap_schema(schema : Schema) : Migrator` - Bootstrap schema from existing database
+- `CQL.verify_schema(schema : Schema, auto_fix : Bool = false) : Bool` - Verify schema consistency
+- `CQL.create_migrator_config(**args) : MigratorConfig` - Create migrator config
+- `CQL.create_migrator_config_for_environment(env : String) : MigratorConfig` - Create environment-specific migrator config
 
 ---
 

@@ -7,7 +7,7 @@ struct User
   getter email : String
   getter first_name : String?
   getter last_name : String?
-  getter active : Bool
+  getter? active : Bool = true
   getter created_at : Time?
   getter updated_at : Time?
 

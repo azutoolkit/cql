@@ -5,7 +5,7 @@ struct Post
   getter id : Int64?
   getter title : String
   getter content : String
-  getter published : Bool
+  getter? published : Bool = false
   property views_count : Int64
   getter user_id : Int64
   getter category_id : Int64?
