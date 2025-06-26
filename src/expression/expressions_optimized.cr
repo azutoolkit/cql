@@ -16,25 +16,6 @@ require "./filter_builder"
 require "./having_builder"
 
 module Expression
-  # Re-export key constants for backward compatibility
-  COMPARISON_OPERATORS = {
-    "==" => "=",
-    "!=" => "!=",
-    "<=" => "<=",
-    "<"  => "<",
-    ">"  => ">",
-    ">=" => ">=",
-  }
-
-  # Enums for common types
-  enum OrderDirection
-    ASC
-    DESC
-  end
-
-  enum JoinType
-    INNER
-    LEFT
-    RIGHT
-  end
+  # All types and constants are now defined in the imported modules
+  # This file serves as the main coordinator for the optimized expression system
 end

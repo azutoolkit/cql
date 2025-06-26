@@ -10,10 +10,20 @@ module Expression
   abstract class Condition < Node
   end
 
+  # Comparison operators for compile-time generation
+  COMPARISON_OPERATORS = {
+    "==" => "=",
+    "!=" => "!=",
+    "<=" => "<=",
+    "<"  => "<",
+    ">"  => ">",
+    ">=" => ">=",
+  }
+
   # Mixin for common comparison operations
   module Comparable
     # Generate comparison methods at compile time
-    {% for operator, sql_operator in COMPARISON_OPERATORS %}
+    {% for operator, sql_operator in Expression::COMPARISON_OPERATORS %}
       def {{operator.id}}(value : DB::Any) : ConditionBuilder
         compare({{sql_operator}}, value)
       end
@@ -100,5 +110,17 @@ module Expression
 
     protected abstract def compare(operator : String, value : DB::Any) : ConditionBuilder
     protected abstract def compare(operator : String, value : BaseColumn) : ConditionBuilder
+  end
+
+  # Enums for common types
+  enum OrderDirection
+    ASC
+    DESC
+  end
+
+  enum JoinType
+    INNER
+    LEFT
+    RIGHT
   end
 end
