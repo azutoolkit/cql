@@ -146,11 +146,169 @@ module Expression
     abstract def format_sum(column : String) : String
   end
 
+  # Shared implementation helpers for common dialect patterns
+  module DialectHelpers
+    # Cache for frequently used SQL fragments
+    @sql_cache : Hash(String, String) = {} of String => String
+
+    # Efficient string building with pre-allocated capacity
+    protected def build_sql(initial_capacity : Int32 = 256, &)
+      String.build(initial_capacity) do |str|
+        yield str
+      end
+    end
+
+    # Format default values efficiently with proper escaping
+    protected def format_default_value(value : DB::Any?) : String?
+      return nil if value.nil?
+
+      case value
+      when String
+        # Quote and escape string values
+        "'#{value.to_s.gsub("'", "''")}'"
+      when Bool
+        # Let subclasses override boolean representation
+        format_boolean(value)
+      when Time
+        # Let subclasses override time representation
+        format_time(value)
+      when Nil
+        "NULL"
+      else
+        # Numbers and other types can be used as-is
+        value.to_s
+      end
+    end
+
+    # Default boolean formatting - subclasses can override
+    protected def format_boolean(value : Bool) : String
+      value ? "TRUE" : "FALSE"
+    end
+
+    # Default time formatting - subclasses can override
+    protected def format_time(value : Time) : String
+      "'#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}'"
+    end
+
+    # Common column definition building pattern
+    protected def build_column_definition(
+      column_name : String,
+      column_type : String,
+      default_value : DB::Any?,
+      nullable : Bool,
+      unique : Bool
+    ) : String
+      build_sql(128) do |str|
+        str << column_name << " " << column_type
+
+        if formatted_default = format_default_value(default_value)
+          str << " DEFAULT " << formatted_default
+        end
+
+        str << " NOT NULL" unless nullable
+        str << " UNIQUE" if unique
+      end
+    end
+
+    # Common index creation pattern
+    protected def build_create_index(
+      index_name : String,
+      table_name : String,
+      columns : Array(String),
+      unique : Bool
+    ) : String
+      build_sql(128) do |str|
+        str << "CREATE "
+        str << "UNIQUE " if unique
+        str << "INDEX " << index_name << " ON " << table_name
+        str << " (" << columns.join(", ") << ")"
+      end
+    end
+
+    # Common foreign key definition pattern
+    protected def build_foreign_key_definition(
+      constraint_name : String?,
+      local_columns : Array(String),
+      references_table : String,
+      references_columns : Array(String),
+      on_delete : String,
+      on_update : String
+    ) : String
+      build_sql(256) do |str|
+        str << "CONSTRAINT #{constraint_name} " if constraint_name
+        str << "FOREIGN KEY (" << local_columns.join(", ") << ")"
+        str << " REFERENCES " << references_table
+        str << " (" << references_columns.join(", ") << ")"
+        str << " ON DELETE " << on_delete
+        str << " ON UPDATE " << on_update
+      end
+    end
+
+    # Cached SQL fragments for common operations
+    protected def cached_sql(key : String, &)
+      @sql_cache[key]? || (@sql_cache[key] = yield.to_s)
+    end
+  end
+
   # Base abstract class for all dialects, combining role-based modules.
   abstract class BaseDialect
     include GeneralDialect
     include DdlDialect
     include DmlDialect
     include QueryDialect
+    include DialectHelpers
+
+    # Common aggregate function implementations that most dialects share
+    def format_count(column : String) : String
+      "COUNT(#{column})"
+    end
+
+    def format_max(column : String) : String
+      "MAX(#{column})"
+    end
+
+    def format_min(column : String) : String
+      "MIN(#{column})"
+    end
+
+    def format_avg(column : String) : String
+      "AVG(#{column})"
+    end
+
+    def format_sum(column : String) : String
+      "SUM(#{column})"
+    end
+
+    # Common condition implementations
+    def format_like(column : String, placeholder : String) : String
+      "#{column} LIKE #{placeholder}"
+    end
+
+    def format_not_like(column : String, placeholder : String) : String
+      "#{column} NOT LIKE #{placeholder}"
+    end
+
+    def format_is_null(column : String) : String
+      "#{column} IS NULL"
+    end
+
+    def format_is_not_null(column : String) : String
+      "#{column} IS NOT NULL"
+    end
+
+    # Common constraint implementations
+    def define_unique_constraint(constraint : CQL::UniqueConstraint) : String
+      build_sql(64) do |str|
+        str << "CONSTRAINT #{constraint.name} " if constraint.name
+        str << "UNIQUE (" << constraint.columns.join(", ") << ")"
+      end
+    end
+
+    def define_check_constraint(constraint : CQL::CheckConstraint) : String
+      build_sql(128) do |str|
+        str << "CONSTRAINT #{constraint.name} " if constraint.name
+        str << "CHECK (" << constraint.condition << ")"
+      end
+    end
   end
 end

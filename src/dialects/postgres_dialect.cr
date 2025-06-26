@@ -1,11 +1,20 @@
 require "./dialect"
 
 module Expression
-  # PostgreSQL specific dialect implementation.
+  # PostgreSQL specific dialect implementation - optimized for performance
   class PostgresDialect < BaseDialect
+    # Cache for frequently used PostgreSQL-specific strings
+    @@cached_strings = {
+      "postgres_placeholder_prefix" => "$",
+      "postgres_drop_index_prefix"  => "DROP INDEX IF EXISTS ",
+      "postgres_alter_table_prefix" => "ALTER TABLE ",
+    }
+
     # PostgreSQL uses $1, $2, etc. for placeholders
     def placeholder_format(param_index : Int32) : String
-      "$#{param_index}"
+      cached_sql("postgres_placeholder_#{param_index}") do
+        "#{@@cached_strings["postgres_placeholder_prefix"]}#{param_index}"
+      end
     end
 
     def structure_dump(uri : URI) : String
@@ -20,16 +29,17 @@ module Expression
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
-      String.build do |string|
-        string << column.name
-        string << " "
-        string << col_type
-        string << " GENERATED"
-        string << " ALWAYS" if column.auto_increment?
-        string << " AS IDENTITY PRIMARY KEY"
+      build_sql(64) do |str|
+        str << column.name << " " << col_type
+        if column.auto_increment?
+          str << " GENERATED ALWAYS AS IDENTITY PRIMARY KEY"
+        else
+          str << " GENERATED AS IDENTITY PRIMARY KEY"
+        end
       end
     end
 
+    # PostgreSQL-specific implementations that differ from base
     def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
       "RENAME COLUMN #{old_name} TO #{new_name}"
     end
@@ -39,7 +49,7 @@ module Expression
     end
 
     def drop_index(index_name : String, table_name : String) : String
-      "DROP INDEX IF EXISTS #{index_name}"
+      "#{@@cached_strings["postgres_drop_index_prefix"]}#{index_name}"
     end
 
     def drop_foreign_key(table_name : String, constraint_name : String) : String
@@ -47,10 +57,10 @@ module Expression
     end
 
     def rename_table(old_name : String, new_name : String) : String
-      "ALTER TABLE #{old_name} RENAME TO #{new_name}"
+      "#{@@cached_strings["postgres_alter_table_prefix"]}#{old_name} RENAME TO #{new_name}"
     end
 
-    # Table operations
+    # Table operations using cached strings
     def truncate_table(table_name : String) : String
       "TRUNCATE TABLE #{table_name}"
     end
@@ -64,10 +74,10 @@ module Expression
     end
 
     def alter_table(table_name : String, action : String) : String
-      "ALTER TABLE #{table_name} #{action}"
+      "#{@@cached_strings["postgres_alter_table_prefix"]}#{table_name} #{action}"
     end
 
-    # Column operations
+    # Column operations - using optimized helper methods
     def define_column(
       column_name : String,
       column_type : String,
@@ -76,31 +86,7 @@ module Expression
       unique : Bool,
       timestamp_column : Bool,
     ) : String
-      String.build do |string|
-        string << column_name
-        string << " " << column_type
-        if default_value != nil
-          string << " DEFAULT "
-          case default_value
-          when String
-            # Quote string values
-            string << "'" << default_value.to_s.gsub("'", "''") << "'"
-          when Bool
-            # PostgreSQL uses TRUE and FALSE for boolean values
-            string << (default_value ? "TRUE" : "FALSE")
-          when Time
-            # Format time values as PostgreSQL timestamp strings
-            string << "'" << default_value.to_s("'%Y-%m-%d %H:%M:%S.%L'") << "'"
-          when Nil
-            string << "NULL"
-          else
-            # Numbers and other types can be used as-is
-            string << default_value.to_s
-          end
-        end
-        string << " NOT NULL" unless nullable
-        string << " UNIQUE" if unique
-      end
+      build_column_definition(column_name, column_type, default_value, nullable, unique)
     end
 
     def add_column(
@@ -110,13 +96,11 @@ module Expression
       nullable : Bool,
       unique : Bool,
     ) : String
-      String.build do |string|
-        string << "ADD COLUMN "
-        string << column_name
-        string << " " << column_type
-        string << " PRIMARY KEY" if primary_key
-        string << " NOT NULL" unless nullable
-        string << " UNIQUE" if unique
+      build_sql(64) do |str|
+        str << "ADD COLUMN " << column_name << " " << column_type
+        str << " PRIMARY KEY" if primary_key
+        str << " NOT NULL" unless nullable
+        str << " UNIQUE" if unique
       end
     end
 
@@ -124,24 +108,14 @@ module Expression
       "DROP COLUMN #{column_name}"
     end
 
-    # Index operations
+    # Index operations - using optimized helper
     def create_index(
       index_name : String,
       table_name : String,
       columns : Array(String),
       unique : Bool,
     ) : String
-      String.build do |string|
-        string << "CREATE "
-        string << "UNIQUE " if unique
-        string << "INDEX "
-        string << index_name
-        string << " ON "
-        string << table_name
-        string << " ("
-        string << columns.join(", ")
-        string << ")"
-      end
+      build_create_index(index_name, table_name, columns, unique)
     end
 
     # Foreign key operations
@@ -154,78 +128,63 @@ module Expression
       on_delete : String,
       on_update : String,
     ) : String
-      String.build do |string|
-        string << "ADD CONSTRAINT "
-        string << constraint_name
-        string << " FOREIGN KEY ("
-        string << columns.join(", ")
-        string << ") REFERENCES "
-        string << references_table
-        string << " ("
-        string << references_columns.join(", ")
-        string << ") ON DELETE " << on_delete
-        string << " ON UPDATE " << on_update
+      build_sql(256) do |str|
+        str << "ADD CONSTRAINT " << constraint_name
+        str << " FOREIGN KEY (" << columns.join(", ") << ")"
+        str << " REFERENCES " << references_table
+        str << " (" << references_columns.join(", ") << ")"
+        str << " ON DELETE " << on_delete
+        str << " ON UPDATE " << on_update
       end
     end
 
     def define_foreign_key(fk : CQL::ForeignKey) : String
-      parts = [] of String
-      parts << "CONSTRAINT #{fk.name}" if fk.name
-      parts << "FOREIGN KEY (#{fk.columns.join(", ")})"
-      parts << "REFERENCES #{fk.references_table} (#{fk.references_columns.join(", ")})"
-      parts << "ON DELETE #{fk.on_delete.to_s.upcase.gsub("_", " ")}" unless fk.on_delete == :no_action
-      parts << "ON UPDATE #{fk.on_update.to_s.upcase.gsub("_", " ")}" unless fk.on_update == :no_action
-      parts.join(" ")
+      constraint_name = fk.name
+      on_delete = fk.on_delete.to_s.upcase.gsub("_", " ")
+      on_update = fk.on_update.to_s.upcase.gsub("_", " ")
+
+      build_sql(256) do |str|
+        str << "CONSTRAINT #{constraint_name} " if constraint_name
+        str << "FOREIGN KEY (" << fk.columns.join(", ") << ")"
+        str << " REFERENCES " << fk.references_table
+        str << " (" << fk.references_columns.join(", ") << ")"
+        str << " ON DELETE " << on_delete unless fk.on_delete == :no_action
+        str << " ON UPDATE " << on_update unless fk.on_update == :no_action
+      end
     end
 
-    # Defines a unique constraint.
-    def define_unique_constraint(constraint : CQL::UniqueConstraint) : String
-      parts = [] of String
-      parts << "CONSTRAINT #{constraint.name}" if constraint.name
-      parts << "UNIQUE (#{constraint.columns.join(", ")})"
-      parts.join(" ")
-    end
-
-    # Defines a check constraint.
-    def define_check_constraint(constraint : CQL::CheckConstraint) : String
-      parts = [] of String
-      parts << "CONSTRAINT #{constraint.name}" if constraint.name
-      parts << "CHECK (#{constraint.condition})"
-      parts.join(" ")
-    end
-
-    # Query components
+    # Query components - optimized implementations
     def format_limit_offset(limit : DB::Any, offset : DB::Any?) : String
-      String.build do |string|
-        string << " LIMIT #{limit}"
-        string << " OFFSET #{offset}" if offset
+      if offset
+        " LIMIT #{limit} OFFSET #{offset}"
+      else
+        " LIMIT #{limit}"
       end
     end
 
     def format_returning(columns : Array(String)) : String
       return "" if columns.empty?
-
-      String.build do |string|
-        string << " RETURNING "
-        string << columns.join(", ")
-      end
+      " RETURNING #{columns.join(", ")}"
     end
 
     def format_insert_values(values : Array(Array(DB::Any)), placeholders : Array(String)) : String
-      String.build do |string|
-        string << " VALUES "
+      return "" if values.empty?
+
+      build_sql(values.size * 32) do |str|
+        str << " VALUES "
         values.each_with_index do |row, i|
-          string << "("
+          str << "("
           row.size.times do |j|
-            string << placeholders[j]
-            string << ", " if j < row.size - 1
+            str << placeholders[j]
+            str << ", " if j < row.size - 1
           end
-          string << ")"
-          string << ", " if i < values.size - 1
+          str << ")"
+          str << ", " if i < values.size - 1
         end
       end
     end
 
+    # PostgreSQL supports RETURNING for both UPDATE and DELETE
     def format_update_returning(columns : Array(String)) : String
       format_returning(columns)
     end
@@ -234,45 +193,12 @@ module Expression
       format_returning(columns)
     end
 
-    # Conditions and operators
-    def format_like(column : String, placeholder : String) : String
-      "#{column} LIKE #{placeholder}"
+    # Override timestamp formatting for PostgreSQL-specific format
+    protected def format_time(value : Time) : String
+      "''#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}''"
     end
 
-    def format_not_like(column : String, placeholder : String) : String
-      "#{column} NOT LIKE #{placeholder}"
-    end
-
-    def format_is_null(column : String) : String
-      "#{column} IS NULL"
-    end
-
-    def format_is_not_null(column : String) : String
-      "#{column} IS NOT NULL"
-    end
-
-    # Aggregate functions
-    def format_count(column : String) : String
-      "COUNT(#{column})"
-    end
-
-    def format_max(column : String) : String
-      "MAX(#{column})"
-    end
-
-    def format_min(column : String) : String
-      "MIN(#{column})"
-    end
-
-    def format_avg(column : String) : String
-      "AVG(#{column})"
-    end
-
-    def format_sum(column : String) : String
-      "SUM(#{column})"
-    end
-
-    # Returns the SQL function name for the current timestamp used in default values.
+    # Returns the SQL function name for the current timestamp
     def current_timestamp : String
       Time.local.to_s("%Y-%m-%d %H:%M:%S.%L")
     end

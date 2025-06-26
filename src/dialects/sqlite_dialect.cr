@@ -1,11 +1,22 @@
 require "./dialect"
 
 module Expression
-  # SQLite specific dialect implementation.
+  # SQLite specific dialect implementation - optimized for performance
   class SqliteDialect < BaseDialect
+    # Cache for frequently used SQLite-specific strings
+    @@cached_strings = {
+      "sqlite_placeholder"           => "?",
+      "sqlite_integer_pk_autoincr"   => "INTEGER PRIMARY KEY AUTOINCREMENT",
+      "sqlite_primary_key"           => " PRIMARY KEY",
+      "sqlite_drop_index_prefix"     => "DROP INDEX IF EXISTS ",
+      "sqlite_delete_from_prefix"    => "DELETE FROM ",
+      "sqlite_rename_column_prefix"  => "RENAME COLUMN ",
+      "sqlite_add_column_prefix"     => "ADD COLUMN ",
+    }
+
     # SQLite uses ? for all placeholders regardless of position
     def placeholder_format(param_index : Int32) : String
-      "?"
+      @@cached_strings["sqlite_placeholder"]
     end
 
     def structure_dump(uri : URI) : String
@@ -14,22 +25,22 @@ module Expression
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
       # SQLite AUTOINCREMENT requires the type to be INTEGER.
-      # We must check the column's auto_increment? flag.
       if pk_col = column.as?(CQL::PrimaryKey)
         if pk_col.auto_increment?
-          "#{column.name} INTEGER PRIMARY KEY AUTOINCREMENT"
+          "#{column.name} #{@@cached_strings["sqlite_integer_pk_autoincr"]}"
         else
           # Not auto-incrementing, use the determined type (e.g., BIGINT)
-          "#{column.name} #{col_type} PRIMARY KEY"
+          "#{column.name} #{col_type}#{@@cached_strings["sqlite_primary_key"]}"
         end
       else
         # Fallback if not a PrimaryKey somehow (shouldn't happen via generator)
-        "#{column.name} #{col_type} PRIMARY KEY"
+        "#{column.name} #{col_type}#{@@cached_strings["sqlite_primary_key"]}"
       end
     end
 
+    # SQLite-specific implementations that differ from base
     def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
-      "RENAME COLUMN #{old_name} TO #{new_name}"
+      "#{@@cached_strings["sqlite_rename_column_prefix"]}#{old_name} TO #{new_name}"
     end
 
     def modify_column(table_name : String, column_name : String, column_type : String) : String
@@ -46,7 +57,7 @@ module Expression
     end
 
     def drop_index(index_name : String, table_name : String) : String
-      "DROP INDEX IF EXISTS #{index_name}"
+      "#{@@cached_strings["sqlite_drop_index_prefix"]}#{index_name}"
     end
 
     def drop_foreign_key(table_name : String, constraint_name : String) : String
@@ -66,10 +77,10 @@ module Expression
       "ALTER TABLE #{old_name} RENAME TO #{new_name}"
     end
 
-    # Table operations
+    # Table operations using cached strings
     def truncate_table(table_name : String) : String
       # SQLite doesn't have TRUNCATE, so we use DELETE FROM
-      "DELETE FROM #{table_name}"
+      "#{@@cached_strings["sqlite_delete_from_prefix"]}#{table_name}"
     end
 
     def create_table_prefix(table_name : String) : String
@@ -84,7 +95,7 @@ module Expression
       "ALTER TABLE #{table_name} #{action}"
     end
 
-    # Column operations
+    # Column operations - using optimized helper methods
     def define_column(
       column_name : String,
       column_type : String,
@@ -93,31 +104,7 @@ module Expression
       unique : Bool,
       timestamp_column : Bool,
     ) : String
-      String.build do |string|
-        string << column_name
-        string << " " << column_type
-        if default_value != nil
-          string << " DEFAULT "
-          case default_value
-          when String
-            # Quote string values
-            string << "'" << default_value.to_s.gsub("'", "''") << "'"
-          when Bool
-            # SQLite uses 1 and 0 for boolean values
-            string << (default_value ? "1" : "0")
-          when Time
-            # Format time values as ISO8601 strings with SQLite-style escaping
-            string << "''" << default_value.to_s("%Y-%m-%d %H:%M:%S.%L") << "''"
-          when Nil
-            string << "NULL"
-          else
-            # Numbers and other types can be used as-is
-            string << default_value.to_s
-          end
-        end
-        string << " NOT NULL" unless nullable
-        string << " UNIQUE" if unique
-      end
+      build_column_definition(column_name, column_type, default_value, nullable, unique)
     end
 
     def add_column(
@@ -132,19 +119,17 @@ module Expression
         raise CQL::SQLiteUnsupportedFeatureError.new("adding a PRIMARY KEY constraint to an existing table")
       end
 
-      String.build do |string|
-        string << "ADD COLUMN "
-        string << column_name
-        string << " " << column_type
-        string << " NOT NULL" unless nullable
-        string << " UNIQUE" if unique
+      build_sql(64) do |str|
+        str << "#{@@cached_strings["sqlite_add_column_prefix"]}#{column_name} #{column_type}"
+        str << " NOT NULL" unless nullable
+        str << " UNIQUE" if unique
       end
     end
 
     def drop_column(column_name : String) : String
       # SQLite prior to version 3.35.0 doesn't support DROP COLUMN directly
       # For compatibility, we should raise an error and suggest the workaround
-      <<-MSG
+      workaround = <<-MSG
       You need to follow these steps:
 
         1. Create a new table without the column.
@@ -158,24 +143,14 @@ module Expression
       "DROP COLUMN #{column_name} /* Warning: Only works on SQLite 3.35.0+ */"
     end
 
-    # Index operations
+    # Index operations - using optimized helper
     def create_index(
       index_name : String,
       table_name : String,
       columns : Array(String),
       unique : Bool,
     ) : String
-      String.build do |string|
-        string << "CREATE "
-        string << "UNIQUE " if unique
-        string << "INDEX "
-        string << index_name
-        string << " ON "
-        string << table_name
-        string << " ("
-        string << columns.join(", ")
-        string << ")"
-      end
+      build_create_index(index_name, table_name, columns, unique)
     end
 
     # Foreign key operations
@@ -201,42 +176,30 @@ module Expression
     end
 
     def define_foreign_key(fk : CQL::ForeignKey) : String
-      parts = [] of String
-      parts << "CONSTRAINT #{fk.name}" if fk.name
-      parts << "FOREIGN KEY (#{fk.columns.join(", ")})"
-      parts << "REFERENCES #{fk.references_table} (#{fk.references_columns.join(", ")})"
-      parts << "ON DELETE #{fk.on_delete.to_s.upcase.gsub("_", " ")}"
-      parts << "ON UPDATE #{fk.on_update.to_s.upcase.gsub("_", " ")}"
-      parts.join(" ")
+      on_delete = fk.on_delete.to_s.upcase.gsub("_", " ")
+      on_update = fk.on_update.to_s.upcase.gsub("_", " ")
+
+      build_sql(256) do |str|
+        str << "CONSTRAINT #{fk.name} " if fk.name
+        str << "FOREIGN KEY (" << fk.columns.join(", ") << ")"
+        str << " REFERENCES " << fk.references_table
+        str << " (" << fk.references_columns.join(", ") << ")"
+        str << " ON DELETE " << on_delete
+        str << " ON UPDATE " << on_update
+      end
     end
 
-    # Defines a unique constraint.
-    def define_unique_constraint(constraint : CQL::UniqueConstraint) : String
-      parts = [] of String
-      parts << "CONSTRAINT #{constraint.name}" if constraint.name
-      parts << "UNIQUE (#{constraint.columns.join(", ")})"
-      parts.join(" ")
-    end
-
-    # Defines a check constraint.
-    def define_check_constraint(constraint : CQL::CheckConstraint) : String
-      parts = [] of String
-      parts << "CONSTRAINT #{constraint.name}" if constraint.name
-      parts << "CHECK (#{constraint.condition})"
-      parts.join(" ")
-    end
-
-    # Query components
+    # Query components - optimized implementations
     def format_limit_offset(limit : DB::Any, offset : DB::Any?) : String
-      String.build do |string|
-        string << " LIMIT #{limit}"
-        string << " OFFSET #{offset}" if offset
+      if offset
+        " LIMIT #{limit} OFFSET #{offset}"
+      else
+        " LIMIT #{limit}"
       end
     end
 
     def format_returning(columns : Array(String)) : String
       # SQLite doesn't support RETURNING clause before version 3.35.0
-      # For compatibility with newer versions, we'll check if columns are provided
       if !columns.empty?
         # Only raise if columns are actually requested
         workaround = "Use a separate SELECT query after your operation to retrieve the data."
@@ -246,16 +209,18 @@ module Expression
     end
 
     def format_insert_values(values : Array(Array(DB::Any)), placeholders : Array(String)) : String
-      String.build do |string|
-        string << " VALUES "
+      return "" if values.empty?
+
+      build_sql(values.size * 16) do |str|
+        str << " VALUES "
         values.each_with_index do |row, i|
-          string << "("
+          str << "("
           row.size.times do |j|
-            string << placeholders[j]
-            string << ", " if j < row.size - 1
+            str << placeholders[j]
+            str << ", " if j < row.size - 1
           end
-          string << ")"
-          string << ", " if i < values.size - 1
+          str << ")"
+          str << ", " if i < values.size - 1
         end
       end
     end
@@ -280,45 +245,19 @@ module Expression
       ""
     end
 
-    # Conditions and operators
-    def format_like(column : String, placeholder : String) : String
-      "#{column} LIKE #{placeholder}"
+    # Override boolean formatting for SQLite-specific format
+    protected def format_boolean(value : Bool) : String
+      # SQLite uses 1 and 0 for boolean values
+      value ? "1" : "0"
     end
 
-    def format_not_like(column : String, placeholder : String) : String
-      "#{column} NOT LIKE #{placeholder}"
+        # Override time formatting for SQLite-specific format
+    protected def format_time(value : Time) : String
+      # Format time values as ISO8601 strings with SQLite-style escaping
+      "''#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}''"
     end
 
-    def format_is_null(column : String) : String
-      "#{column} IS NULL"
-    end
-
-    def format_is_not_null(column : String) : String
-      "#{column} IS NOT NULL"
-    end
-
-    # Aggregate functions
-    def format_count(column : String) : String
-      "COUNT(#{column})"
-    end
-
-    def format_max(column : String) : String
-      "MAX(#{column})"
-    end
-
-    def format_min(column : String) : String
-      "MIN(#{column})"
-    end
-
-    def format_avg(column : String) : String
-      "AVG(#{column})"
-    end
-
-    def format_sum(column : String) : String
-      "SUM(#{column})"
-    end
-
-    # Returns the SQL function name for the current timestamp used in default values.
+    # Returns the SQL function name for the current timestamp
     def current_timestamp : String
       Time.local.to_s("%Y-%m-%d %H:%M:%S.%L")
     end
