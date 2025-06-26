@@ -2,29 +2,29 @@
 icon: zap
 ---
 
-# ⚡ Performance Optimization Guide
+# Performance Optimization Guide
 
 > **Scale your CQL application** - Master query optimization, database scaling, and performance monitoring for production-ready Crystal applications
 
 Performance is crucial for production applications. This comprehensive guide covers everything you need to know about optimizing CQL applications for speed, efficiency, and scalability at any size.
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [🎯 Performance Fundamentals](#-performance-fundamentals)
-- [🔍 Query Optimization](#-query-optimization)
-- [📊 Database Indexing](#-database-indexing)
-- [🚀 Connection Management](#-connection-management)
-- [💾 Caching Strategies](#-caching-strategies)
-- [📈 Scaling Techniques](#-scaling-techniques)
-- [🔧 Monitoring and Profiling](#-monitoring-and-profiling)
-- [⚡ Performance Patterns](#-performance-patterns)
-- [🧪 Benchmarking](#-benchmarking)
+- [Performance Fundamentals](#performance-fundamentals)
+- [Query Optimization](#query-optimization)
+- [Database Indexing](#database-indexing)
+- [Connection Management](#connection-management)
+- [Caching Strategies](#caching-strategies)
+- [Scaling Techniques](#scaling-techniques)
+- [Monitoring and Profiling](#monitoring-and-profiling)
+- [Performance Patterns](#performance-patterns)
+- [Benchmarking](#benchmarking)
 
 ---
 
-## 🎯 Performance Fundamentals
+## Performance Fundamentals
 
-### 🏗️ Architecture Overview
+### Architecture Overview
 
 Understanding CQL's performance characteristics helps you make informed optimization decisions:
 
@@ -46,7 +46,7 @@ graph TD
     style J fill:#e8f5e8
 ```
 
-### 📊 Performance Metrics That Matter
+### Performance Metrics That Matter
 
 **Query Performance:**
 
@@ -71,11 +71,11 @@ graph TD
 
 ---
 
-## 🔍 Query Optimization
+## Query Optimization
 
-### 🎯 The N+1 Query Problem
+### The N+1 Query Problem
 
-**❌ The Problem Visualization:**
+**The Problem Visualization:**
 
 ```mermaid fullWidth="true"
 sequenceDiagram
@@ -94,7 +94,7 @@ sequenceDiagram
     Note over App,DB: Total: 1001 queries! 😱
 ```
 
-**❌ The Problem:**
+**The Problem:**
 
 ```crystal
 # This generates N+1 queries (1 + N where N = number of users)
@@ -105,7 +105,7 @@ users.each do |user|
 end
 ```
 
-**✅ Solution 1: Eager Loading**
+**Solution 1: Eager Loading**
 
 ```mermaid fullWidth="true"
 sequenceDiagram
@@ -134,7 +134,7 @@ users.each do |user|
 end
 ```
 
-**✅ Solution 2: Counter Cache**
+**Solution 2: Counter Cache**
 
 ```crystal
 # Add a counter cache column
@@ -169,18 +169,18 @@ users.each do |user|
 end
 ```
 
-### 🔧 Query Optimization Techniques
+### Query Optimization Techniques
 
 **1. Use Specific Selects**
 
 ```crystal
-# ❌ Loads all columns (expensive for large tables)
+# Loads all columns (expensive for large tables)
 users = User.all
 
-# ✅ Load only needed columns
+# Load only needed columns
 users = User.select(:id, :name, :email).all
 
-# ✅ For associations, be specific too
+# For associations, be specific too
 posts_with_minimal_user_data = Post
   .joins(:user)
   .select("posts.*, users.name as author_name")
@@ -190,16 +190,16 @@ posts_with_minimal_user_data = Post
 **2. Optimize WHERE Conditions**
 
 ```crystal
-# ❌ Non-indexed column filtering
+# Non-indexed column filtering
 slow_users = User.where(description: "Developer").all
 
-# ✅ Use indexed columns first
+# Use indexed columns first
 fast_users = User.where(active: true)
                  .where(created_at: 1.month.ago..Time.utc)
                  .where(role: "admin")
                  .all
 
-# ✅ Use database functions efficiently
+# Use database functions efficiently
 recent_active = User.where("active = ? AND created_at > ?", true, 1.week.ago).all
 ```
 
@@ -225,12 +225,12 @@ graph LR
 ```
 
 ```crystal
-# ❌ OFFSET pagination (gets slower with higher page numbers)
+# OFFSET pagination (gets slower with higher page numbers)
 page = params["page"]?.try(&.to_i) || 1
 per_page = 20
 users = User.limit(per_page).offset((page - 1) * per_page).all
 
-# ✅ Cursor-based pagination (consistent performance)
+# Cursor-based pagination (consistent performance)
 last_id = params["last_id"]?.try(&.to_i64) || 0
 users = User.where { id > last_id }
            .order(:id)
@@ -244,17 +244,17 @@ next_cursor = users.last?.try(&.id)
 **4. Batch Processing**
 
 ```crystal
-# ❌ Processing all records at once (memory intensive)
+# Processing all records at once (memory intensive)
 User.all.each { |user| process_user(user) }
 
-# ✅ Process in batches
+# Process in batches
 User.find_in_batches(batch_size: 1000) do |batch|
   batch.each { |user| process_user(user) }
   # Explicit garbage collection after each batch if needed
   GC.collect if batch.size == 1000
 end
 
-# ✅ Efficient bulk operations
+# Efficient bulk operations
 # Instead of individual updates
 users.each { |user| user.update!(last_login: Time.utc) }
 
@@ -262,7 +262,7 @@ users.each { |user| user.update!(last_login: Time.utc) }
 User.where(active: true).update_all(last_login: Time.utc)
 ```
 
-### 📈 Advanced Query Patterns
+### Advanced Query Patterns
 
 **1. Subqueries for Complex Conditions**
 
@@ -294,12 +294,12 @@ top_posts_per_user = Post
 **3. Efficient Aggregations**
 
 ```crystal
-# ❌ Multiple queries for stats
+# Multiple queries for stats
 user_count = User.count
 active_count = User.where(active: true).count
 admin_count = User.where(role: "admin").count
 
-# ✅ Single query with conditional aggregation
+# Single query with conditional aggregation
 stats = User.select(
   "COUNT(*) as total_count",
   "COUNT(CASE WHEN active = true THEN 1 END) as active_count",
@@ -311,9 +311,9 @@ puts "Total: #{stats["total_count"]}, Active: #{stats["active_count"]}"
 
 ---
 
-## 📊 Database Indexing
+## Database Indexing
 
-### 🎯 Index Strategy
+### Index Strategy
 
 **1. Primary Indexes**
 
@@ -438,9 +438,9 @@ posts = Post.where("MATCH(title, content) AGAINST('crystal programming' IN NATUR
 
 ---
 
-## 🚀 Connection Management
+## Connection Management
 
-### 🔧 Connection Pool Optimization
+### Connection Pool Optimization
 
 ```mermaid fullWidth="true"
 graph TD
@@ -502,7 +502,7 @@ ProductionDB = CQL::Schema.define(
 )
 ```
 
-### 📊 Connection Pool Monitoring
+### Connection Pool Monitoring
 
 ```crystal
 # Monitor connection pool health
@@ -520,12 +520,12 @@ class ConnectionPoolMonitor
 
     # Alert if utilization is too high
     if metrics[:pool_utilization] > 80
-      puts "⚠️ High pool utilization: #{metrics[:pool_utilization]}%"
+      puts "High pool utilization: #{metrics[:pool_utilization]}%"
     end
 
     # Alert if requests are waiting
     if metrics[:waiting_requests] > 0
-      puts "⚠️ #{metrics[:waiting_requests]} requests waiting for connections"
+      puts "#{metrics[:waiting_requests]} requests waiting for connections"
     end
 
     metrics
@@ -548,9 +548,9 @@ end
 
 ---
 
-## 💾 Caching Strategies
+## Caching Strategies
 
-### 🎯 Multi-Level Caching
+### Multi-Level Caching
 
 ```mermaid fullWidth="true"
 graph TD
@@ -623,7 +623,7 @@ struct User
 end
 ```
 
-### 🔄 Query Result Caching
+### Query Result Caching
 
 ```crystal
 # Query-level caching
@@ -672,9 +672,9 @@ end
 
 ---
 
-## 📈 Scaling Techniques
+## Scaling Techniques
 
-### 🔄 Read Replicas
+### Read Replicas
 
 ```crystal
 # Configure read/write splitting
@@ -732,7 +732,7 @@ struct User
 end
 ```
 
-### 🗂️ Database Sharding
+### Database Sharding
 
 ```crystal
 # Simple sharding strategy
@@ -787,9 +787,9 @@ end
 
 ---
 
-## 🔧 Monitoring and Profiling
+## Monitoring and Profiling
 
-### 📊 Performance Monitoring
+### Performance Monitoring
 
 ```crystal
 # Performance monitoring middleware
@@ -831,7 +831,7 @@ def get_user_dashboard(user_id)
 end
 ```
 
-### 🔍 Query Profiling
+### Query Profiling
 
 ```crystal
 # Detailed query profiler
@@ -854,7 +854,7 @@ class QueryProfiler
   end
 
   private def self.log_slow_query(sql, duration)
-    puts "🐌 SLOW QUERY (#{duration.total_milliseconds.round(2)}ms): #{sql[0..200]}..."
+    puts "SLOW QUERY (#{duration.total_milliseconds.round(2)}ms): #{sql[0..200]}..."
 
     # Get query plan for analysis
     if sql.downcase.starts_with?("select")
@@ -874,13 +874,13 @@ class ProfilingAdapter < CQL::Adapter::Postgres
 end
 ```
 
-### 🧪 Load Testing
+### Load Testing
 
 ```crystal
 # Simple load testing framework
 class LoadTester
   def self.test_endpoint(name : String, iterations : Int32 = 100, concurrency : Int32 = 10, &block)
-    puts "🧪 Load testing #{name}..."
+    puts "Load testing #{name}..."
 
     channel = Channel(Float64).new
     start_time = Time.monotonic
@@ -948,9 +948,9 @@ end
 
 ---
 
-## ⚡ Performance Patterns
+## Performance Patterns
 
-### 🎯 Lazy Loading Optimization
+### Lazy Loading Optimization
 
 ```crystal
 # Smart lazy loading with batch loading
@@ -988,7 +988,7 @@ struct User
 end
 ```
 
-### 🔄 Efficient Data Processing
+### Efficient Data Processing
 
 ```crystal
 # Stream processing for large datasets
@@ -1040,9 +1040,9 @@ end
 
 ---
 
-## 🧪 Benchmarking
+## Benchmarking
 
-### 📊 Performance Benchmarks
+### Performance Benchmarks
 
 ```crystal
 # Comprehensive benchmarking suite
@@ -1050,7 +1050,7 @@ require "benchmark"
 
 class CQLBenchmarks
   def self.run_all
-    puts "🧪 CQL Performance Benchmarks\n"
+    puts "CQL Performance Benchmarks\n"
 
     setup_test_data
 
@@ -1063,7 +1063,7 @@ class CQLBenchmarks
   end
 
   def self.benchmark_queries
-    puts "📊 Query Benchmarks:"
+    puts "Query Benchmarks:"
 
     Benchmark.bm do |x|
       x.report("Simple find") { 1000.times { User.find(Random.rand(1..1000)) } }
@@ -1075,7 +1075,7 @@ class CQLBenchmarks
   end
 
   def self.benchmark_inserts
-    puts "\n📊 Insert Benchmarks:"
+    puts "\nInsert Benchmarks:"
 
     Benchmark.bm do |x|
       x.report("Single inserts") { 100.times { create_test_user } }
@@ -1109,7 +1109,7 @@ end
 CQLBenchmarks.run_all
 ```
 
-### 📈 Memory Profiling
+### Memory Profiling
 
 ```crystal
 # Memory usage tracking
@@ -1143,9 +1143,9 @@ end
 
 ---
 
-## 🎓 Performance Best Practices Summary
+## Performance Best Practices Summary
 
-### ✅ **Do This:**
+### Do This:
 
 **Query Optimization:**
 
@@ -1176,7 +1176,7 @@ end
 - Set up alerts for slow queries
 - Use APM tools in production
 
-### ❌ **Avoid This:**
+### Avoid This:
 
 - Loading all records with `all` on large tables
 - N+1 query patterns without eager loading
@@ -1188,7 +1188,7 @@ end
 
 ---
 
-> ⚡ **Performance is a journey, not a destination** - Use these techniques strategically based on your application's specific needs and bottlenecks. Always measure before and after optimizations to ensure they provide real benefits.
+> **Performance is a journey, not a destination** - Use these techniques strategically based on your application's specific needs and bottlenecks. Always measure before and after optimizations to ensure they provide real benefits.
 
 **Next Steps:**
 

@@ -24,7 +24,7 @@ crystal examples/migrator_config_example.cr
 
 ## 📁 Code Structure
 
-```
+```shell
 examples/
 ├── migrator_config_example.cr        # Main migrator configuration example
 ├── migrator_demo.db                  # Generated SQLite database

@@ -199,53 +199,31 @@ end
 Create custom validators for complex validation logic:
 
 ```crystal
-# Define a custom validator class
 class PasswordValidator < CQL::ActiveRecord::Validations::CustomValidator
-  def initialize(@record : User)
-  end
-
   def valid? : Array(CQL::ActiveRecord::Validations::Error)
     errors = [] of CQL::ActiveRecord::Validations::Error
 
-    record = @record
+    password = @record.password
 
-    # Custom validation logic
-    if !record.password.nil? && !record.password.to_s.empty?
-      if record.password_confirmation.nil? || record.password_confirmation.to_s.empty?
-        errors << CQL::ActiveRecord::Validations::Error.new(:password_confirmation, "Password confirmation is required")
-      elsif record.password != record.password_confirmation
-        errors << CQL::ActiveRecord::Validations::Error.new(:password_confirmation, "doesn't match Password")
-      end
+    # Check minimum length
+    unless password && password.size >= 8
+      errors << CQL::ActiveRecord::Validations::Error.new(:password, "Password must be at least 8 characters")
+    end
+
+    # Check for mixed case
+    unless password && password.matches?(/[a-z]/) && password.matches?(/[A-Z]/)
+      errors << CQL::ActiveRecord::Validations::Error.new(:password, "Password must contain both uppercase and lowercase letters")
+    end
+
+    # Check for numbers
+    unless password && password.matches?(/\d/)
+      errors << CQL::ActiveRecord::Validations::Error.new(:password, "Password must contain at least one number")
     end
 
     errors
   end
 end
 
-# Use the custom validator in your model
-class User
-  include CQL::ActiveRecord::Model(Int32)
-
-  property password : String?
-  @[DB::Field(ignore: true)]
-  property password_confirmation : String?
-
-  # Register the custom validator
-  use PasswordValidator
-
-  # Other validations...
-  validate :name, presence: true
-  validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
-end
-```
-
----
-
-## Complete Validation Example
-
-Here's a comprehensive example showing various validation types:
-
-```crystal
 class User
   include CQL::ActiveRecord::Model(Int32)
   db_context UserDB, :users
@@ -253,82 +231,87 @@ class User
   property id : Int32?
   property name : String
   property email : String
-  property age : Int32 = 0
   property password : String?
-  property role : String = "user"
-  property website : String?
-  @[DB::Field(ignore: true)]
-  property password_confirmation : String?
 
   # Use custom validator
   use PasswordValidator
 
-  # Built-in validations
   validate :name, presence: true, size: 2..50, message: "Name must be between 2 and 50 characters"
-  validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i, message: "Email format is invalid"
-  validate :age, gt: 0, lt: 120, message: "Age must be between 1 and 119"
-  validate :role, in: ["user", "admin", "moderator"], message: "Invalid role"
-  validate :website, match: /\Ahttps?:\/\//, message: "Website must start with http:// or https://"
 
-  def initialize(@name : String, @email : String, @age : Int32 = 0, @password : String? = nil, @password_confirmation : String? = nil)
-  end
-end
-
-# Usage example
-user = User.new(
-  name: "John Doe",
-  email: "john@example.com",
-  age: 30,
-  password: "secret123",
-  password_confirmation: "secret123"
-)
-
-if user.valid?
-  puts "User is valid and ready to save"
-  user.save!
-else
-  puts "Validation errors:"
-  user.errors.each do |error|
-    puts "- #{error.field}: #{error.message}"
+  def initialize(@name : String, @email : String, @password : String? = nil)
   end
 end
 ```
 
 ---
 
-## Integration with Model Persistence
+## Validation Best Practices
 
-Validations are automatically run during save operations:
+### 1. Use Appropriate Predicates
 
 ```crystal
-user = User.new("", "invalid-email", -5)
+# Good - specific predicates
+validate :age, gt: 0, lt: 120
+validate :email, required: true, match: EMAIL_REGEX
 
-# save returns false if validations fail
-unless user.save
-  puts "Failed to save user due to validation errors:"
-  user.errors.each { |error| puts "- #{error.message}" }
+# Avoid - overly complex custom validators for simple cases
+validate :age, custom: :validate_age_range
+```
+
+### 2. Provide Clear Error Messages
+
+```crystal
+# Good - descriptive messages
+validate :email, required: true, message: "Email address is required for account creation"
+
+# Avoid - generic messages
+validate :email, required: true, message: "Invalid"
+```
+
+### 3. Use Context-Specific Validations
+
+```crystal
+class User
+  # Validations that only apply during creation
+  validate :password, presence: true, on: :create
+
+  # Validations that only apply during updates
+  validate :current_password, presence: true, on: :update
+
+  # Validations that always apply
+  validate :email, required: true, match: EMAIL_REGEX
 end
+```
 
-# save! raises an exception if validations fail
-begin
-  user.save!
-rescue CQL::ActiveRecord::Validations::ValidationError => e
-  puts "Save failed: #{e.message}"
+### 4. Test Validations Thoroughly
+
+```crystal
+describe User do
+  it "validates required fields" do
+    user = User.new("", "", nil)
+    user.valid?.should be_false
+    user.errors.map(&.field).should contain(:name)
+    user.errors.map(&.field).should contain(:email)
+  end
+
+  it "validates email format" do
+    user = User.new("John", "invalid-email", "password")
+    user.valid?.should be_false
+    user.errors.map(&.message).should contain("Email format is invalid")
+  end
+
+  it "allows valid data" do
+    user = User.new("John Doe", "john@example.com", "password123")
+    user.valid?.should be_true
+  end
 end
 ```
 
 ---
 
-## Best Practices
+## Related Features
 
-- **Use appropriate predicates**: Choose the most specific validation for your use case
-- **Provide meaningful messages**: Custom error messages improve user experience
-- **Combine multiple predicates**: You can use multiple validations on the same field
-- **Create custom validators**: For complex business logic that doesn't fit built-in predicates
-- **Validate at the model level**: Don't rely solely on database constraints
-- **Use contexts**: Different validation rules for different scenarios (create vs update)
-- **Handle validation errors**: Always check `valid?` or handle `ValidationError` exceptions
-
----
-
-The validation system integrates seamlessly with CQL's callback system, running automatically before save operations and providing comprehensive error reporting for robust data integrity.
+- [Active Record Models](./defining-models.md) - How to define models with validations
+- [Callbacks](./callbacks.md) - Lifecycle hooks that work with validations
+- [CRUD Operations](./crud-operations.md) - How validations integrate with save operations
+- [Error Handling](./error-handling.md) - Working with validation errors

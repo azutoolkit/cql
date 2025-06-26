@@ -1,188 +1,201 @@
-# CQL Examples
+---
+icon: code
+---
 
-A comprehensive collection of examples demonstrating CQL's features, from basic configuration to advanced performance monitoring and migration workflows.
+# Examples & Tutorials
 
-## 🎯 What You'll Learn
+> **Learn by doing** - Complete, working examples to help you master CQL
 
-These examples cover the full spectrum of CQL capabilities:
+Welcome to the CQL Examples section! Here you'll find comprehensive, working examples that demonstrate real-world usage of CQL. Each example is tested, documented, and designed to help you understand how to use CQL effectively in your Crystal applications.
 
-- **Configuration Management** - Centralized database configuration
-- **Schema Definition** - Type-safe database schemas
-- **Migration Workflows** - Version-controlled schema evolution
-- **Active Record Models** - Intuitive ORM patterns
-- **Performance Monitoring** - Real-time query analysis
-- **CRUD Operations** - Complete database operations
-- **Complex Queries** - Advanced query patterns
-- **Production Patterns** - Real-world application patterns
+## What You'll Find
 
-## 📚 Example Categories
+Our examples are organized by complexity and use case to help you find exactly what you need:
 
-### 🚀 Getting Started Examples
+### Getting Started Examples
 
-| Example                                             | Description                                   | Learning Path     |
-| --------------------------------------------------- | --------------------------------------------- | ----------------- |
-| **[Configuration](configuration-example.md)**       | Database configuration and environment setup  | Basic → Advanced  |
-| **[Blog Engine](blog-engine.md)**                   | Complete blog application with all features   | Beginner → Expert |
-| **[Generated Schema](generated-schema-example.md)** | Auto-generate schemas from existing databases | Intermediate      |
+Perfect for beginners and those new to CQL:
 
-### 🔄 Migration & Schema Examples
+- **[Configuration Example](configuration-example.md)** - Database setup patterns for different environments
+- **[Blog Engine](blog-engine.md)** - Complete blog application with Active Record
+- **[Generated Schema Example](generated-schema-example.md)** - Working with existing database schemas
 
-| Example                                                               | Description                            | Learning Path         |
-| --------------------------------------------------------------------- | -------------------------------------- | --------------------- |
-| **[Migration Configuration](migration-configuration-example.md)**     | Integrated migration workflow setup    | Basic → Advanced      |
-| **[Migrator Configuration](migrator-config-example.md)**              | Advanced migrator customization        | Intermediate → Expert |
-| **[Schema Migration Workflow](schema-migration-workflow.md)**         | Complete SQLite migration system       | Intermediate          |
-| **[PostgreSQL Migration Workflow](postgresql-migration-workflow.md)** | PostgreSQL-specific migration patterns | Advanced              |
+### Migration & Schema Examples
 
-### 📊 Performance & Monitoring Examples
+Database management and schema evolution:
 
-| Example                                                         | Description                            | Learning Path         |
-| --------------------------------------------------------------- | -------------------------------------- | --------------------- |
-| **[Performance Monitoring](performance-monitoring-example.md)** | Comprehensive performance analysis     | Intermediate → Expert |
-| **[Logger Report](logger-report-example.md)**                   | Developer-friendly performance reports | Basic → Intermediate  |
+- **[Migration Configuration](migration-configuration-example.md)** - Setting up migrations for your project
+- **[Migrator Configuration](migrator-config-example.md)** - Advanced migration workflows
+- **[Schema Migration Workflow](schema-migration-workflow.md)** - End-to-end schema management
+- **[PostgreSQL Migration Workflow](postgresql-migration-workflow.md)** - PostgreSQL-specific patterns
 
-## 🎯 Learning Paths
+### Performance & Monitoring Examples
 
-### 🚀 Beginner Path
+Optimization and monitoring techniques:
 
-1. **[Configuration Example](configuration-example.md)** - Start with basic setup
+- **[Performance Monitoring](performance-monitoring-example.md)** - Query analysis and optimization
+- **[Logger Report](logger-report-example.md)** - Performance reporting and logging
+
+## Learning Paths
+
+### New to CQL? Start Here
+
+1. **[Configuration Example](configuration-example.md)** - Set up your database
 2. **[Blog Engine](blog-engine.md)** - Build a complete application
-3. **[Generated Schema](generated-schema-example.md)** - Work with existing databases
+3. **[Generated Schema Example](generated-schema-example.md)** - Work with existing databases
 
-### 🔄 Intermediate Path
+### Working with Migrations?
 
-1. **[Migration Configuration](migration-configuration-example.md)** - Learn migration workflows
-2. **[Schema Migration Workflow](schema-migration-workflow.md)** - Master SQLite migrations
-3. **[Logger Report](logger-report-example.md)** - Monitor performance during development
+1. **[Migration Configuration](migration-configuration-example.md)** - Basic migration setup
+2. **[Schema Migration Workflow](schema-migration-workflow.md)** - Complete workflow
+3. **[PostgreSQL Migration Workflow](postgresql-migration-workflow.md)** - PostgreSQL specifics
 
-### 🏭 Advanced Path
+### Optimizing Performance?
 
-1. **[Migrator Configuration](migrator-config-example.md)** - Customize migration behavior
-2. **[PostgreSQL Migration Workflow](postgresql-migration-workflow.md)** - PostgreSQL-specific features
-3. **[Performance Monitoring](performance-monitoring-example.md)** - Advanced performance analysis
+1. **[Performance Monitoring](performance-monitoring-example.md)** - Monitor your queries
+2. **[Logger Report](logger-report-example.md)** - Generate performance reports
 
-## 🔧 Quick Start
+## Example Details
 
-### Prerequisites
+### Getting Started Examples
 
-```bash
-# Install Crystal
-# Install CQL shard
-# Set up your preferred database (SQLite, PostgreSQL, MySQL)
+#### [Configuration Example](configuration-example.md)
+
+**Complexity**: Beginner
+**Time**: 15 minutes
+**What you'll learn**: Database configuration patterns for development, testing, and production environments.
+
+```crystal
+# Environment-specific database setup
+case ENV["CRYSTAL_ENV"]?
+when "production"
+  MyDB = CQL::Schema.define(
+    :production,
+    adapter: CQL::Adapter::Postgres,
+    uri: ENV["DATABASE_URL"]
+  )
+when "test"
+  MyDB = CQL::Schema.define(
+    :test,
+    adapter: CQL::Adapter::SQLite,
+    uri: "sqlite3://:memory:"
+  )
+end
 ```
 
-### Run Examples
+#### [Blog Engine](blog-engine.md)
 
-```bash
-# Configuration example
-crystal examples/configure_example.cr
+**Complexity**: Intermediate
+**Time**: 45 minutes
+**What you'll learn**: Complete Active Record application with relationships, validations, and performance monitoring.
 
-# Blog engine example
-crystal examples/blog/blog_demo.cr
+```crystal
+# Complete blog with users, posts, and comments
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context BlogDB, :users
 
-# Migration workflow example
-crystal examples/schema_migration_workflow.cr
+  has_many :posts, Post
+  has_many :comments, Comment
 
-# Performance monitoring example
-crystal examples/performance_monitoring_example.cr
+  validates :email, presence: true, uniqueness: true
+end
 ```
 
-## 📊 Example Features Matrix
+#### [Generated Schema Example](generated-schema-example.md)
 
-| Feature                    | Config | Blog | Migrations | Performance | Schema Gen |
-| -------------------------- | ------ | ---- | ---------- | ----------- | ---------- |
-| **Basic Setup**            | ✅     | ✅   | ✅         | ✅          | ✅         |
-| **Configuration**          | ✅     | ✅   | ✅         | ✅          | ✅         |
-| **Schema Definition**      | ✅     | ✅   | ✅         | ✅          | ✅         |
-| **Active Record**          | ✅     | ✅   | ✅         | ✅          | ✅         |
-| **Migrations**             | ✅     | ✅   | ✅         | ❌          | ❌         |
-| **Performance Monitoring** | ❌     | ❌   | ❌         | ✅          | ❌         |
-| **Relationships**          | ✅     | ✅   | ✅         | ✅          | ✅         |
-| **Complex Queries**        | ✅     | ✅   | ✅         | ✅          | ✅         |
-| **Production Patterns**    | ✅     | ✅   | ✅         | ✅          | ✅         |
+**Complexity**: Intermediate
+**Time**: 30 minutes
+**What you'll learn**: Working with existing database schemas and generating CQL models from them.
 
-## 🎯 Use Cases
+### Migration & Schema Examples
 
-### 🏢 Enterprise Applications
+#### [Migration Configuration](migration-configuration-example.md)
 
-- **[Configuration Example](configuration-example.md)** - Multi-environment setup
-- **[Migrator Configuration](migrator-config-example.md)** - Complex migration workflows
-- **[Performance Monitoring](performance-monitoring-example.md)** - Production monitoring
+**Complexity**: Beginner
+**Time**: 20 minutes
+**What you'll learn**: Setting up migrations for your project and managing schema changes.
 
-### 🚀 Rapid Prototyping
+#### [Schema Migration Workflow](schema-migration-workflow.md)
 
-- **[Blog Engine](blog-engine.md)** - Complete application template
-- **[Generated Schema](generated-schema-example.md)** - Work with existing databases
-- **[Logger Report](logger-report-example.md)** - Development-friendly monitoring
+**Complexity**: Intermediate
+**Time**: 35 minutes
+**What you'll learn**: Complete workflow for managing schema changes in team environments.
 
-### 🔄 Database Evolution
+#### [PostgreSQL Migration Workflow](postgresql-migration-workflow.md)
 
-- **[Migration Configuration](migration-configuration-example.md)** - Version-controlled changes
-- **[Schema Migration Workflow](schema-migration-workflow.md)** - SQLite migration patterns
-- **[PostgreSQL Migration Workflow](postgresql-migration-workflow.md)** - PostgreSQL-specific features
+**Complexity**: Intermediate
+**Time**: 40 minutes
+**What you'll learn**: PostgreSQL-specific migration patterns and optimizations.
 
-## 📚 Related Documentation
+### Performance & Monitoring Examples
 
-### Core Concepts
+#### [Performance Monitoring](performance-monitoring-example.md)
 
-- **[Schema Management](../core-concepts/schemas.md)** - Schema definition and management
-- **[Migrations](../core-concepts/migrations.md)** - Database migration system
-- **[Active Record](../core-concepts/crud-operations.md)** - ORM patterns and operations
+**Complexity**: Advanced
+**Time**: 50 minutes
+**What you'll learn**: Query analysis, N+1 detection, and performance optimization techniques.
 
-### Guides
+```crystal
+# Monitor query performance
+CQL::Performance::Monitor.start do |monitor|
+  users = User.where(active: true).all
 
-- **[Getting Started](../guides/getting-started.md)** - First steps with CQL
-- **[Configuration](../guides/configuration.md)** - Complete configuration guide
-- **[Performance Optimization](../guides/performance-optimization.md)** - Performance best practices
+  # Generate performance report
+  report = monitor.generate_report
+  puts report.to_html
+end
+```
 
-### Advanced Topics
+#### [Logger Report](logger-report-example.md)
 
-- **[Architecture Overview](../guides/architecture-overview.md)** - System architecture
-- **[Best Practices](../guides/best-practices.md)** - Development best practices
-- **[Testing Strategies](../guides/testing-strategies.md)** - Testing with CQL
+**Complexity**: Advanced
+**Time**: 30 minutes
+**What you'll learn**: Generating and customizing performance reports for your application.
 
-## 🔧 Troubleshooting
+## How to Use These Examples
 
-### Common Issues
+### Choose the Right Example
 
-1. **Database Connection** - Check configuration and database setup
-2. **Migration Errors** - Verify migration versions and dependencies
-3. **Performance Issues** - Use performance monitoring to identify bottlenecks
-4. **Schema Conflicts** - Regenerate schemas after database changes
+- **Beginner**: Start with [Configuration Example](configuration-example.md)
+- **Intermediate**: Try [Blog Engine](blog-engine.md) or [Schema Migration Workflow](schema-migration-workflow.md)
+- **Advanced**: Explore [Performance Monitoring](performance-monitoring-example.md)
 
-### Getting Help
+### Follow Along
 
-- Check the **[Troubleshooting Guide](../troubleshooting.md)**
-- Review **[FAQs](../faqs.md)** for common questions
-- Explore **[Community Resources](../guides/community.md)**
+1. **Read the overview** - Understand what the example demonstrates
+2. **Set up the environment** - Follow the prerequisites and setup steps
+3. **Run the code** - Execute the example and see it in action
+4. **Experiment** - Modify the code to explore different scenarios
+5. **Apply to your project** - Adapt the patterns to your own application
 
-## 🚀 Next Steps
+### Combine with Guides
 
-### After Examples
+- Use examples alongside the [Guides](../guides/README.md) for deeper understanding
+- Reference [Core Concepts](../core-concepts/README.md) for theoretical background
+- Check [Troubleshooting](../troubleshooting.md) if you encounter issues
 
-1. **Build Your Application** - Use examples as templates
-2. **Customize Configuration** - Adapt to your environment
-3. **Implement Monitoring** - Add performance tracking
-4. **Deploy to Production** - Follow production guidelines
+## What Makes These Examples Special
 
-### Advanced Learning
+Each example is designed to be:
 
-1. **Explore Source Code** - Study the example implementations
-2. **Read Core Documentation** - Deep dive into CQL internals
-3. **Join Community** - Connect with other CQL developers
-4. **Contribute** - Share your own examples and improvements
+- **Complete** - Full working code that you can run immediately
+- **Tested** - Verified to work with the latest CQL version
+- **Documented** - Clear explanations of what each part does
+- **Progressive** - Build complexity gradually
+- **Real-world** - Based on actual use cases and patterns
+
+## Related Resources
+
+- **[Guides](../guides/README.md)** - Detailed explanations of CQL features
+- **[Core Concepts](../core-concepts/README.md)** - Fundamental concepts and theory
+- **[Troubleshooting](../troubleshooting.md)** - Solutions to common problems
+- **[Community](../guides/community.md)** - Get help from other developers
 
 ---
 
-## 🏁 Summary
+> Don't just read the examples - run them! The best way to learn CQL is by experimenting with the code and seeing how it behaves.
 
-These examples provide a comprehensive foundation for learning and using CQL:
+> If you get stuck with an example, check the [Troubleshooting Guide](../troubleshooting.md) or ask the [Community](../guides/community.md) for help.
 
-- ✅ **Progressive Learning** - From basic setup to advanced features
-- ✅ **Real-World Patterns** - Production-ready code and practices
-- ✅ **Multiple Databases** - SQLite, PostgreSQL, and MySQL support
-- ✅ **Performance Focus** - Built-in monitoring and optimization
-- ✅ **Team Collaboration** - Migration workflows and schema management
-- ✅ **Production Ready** - Configuration, monitoring, and deployment patterns
-
-Ready to build amazing applications with CQL? Start with the examples and let your imagination guide you! 🚀
+Ready to start building? Pick an example that matches your current needs and dive in!

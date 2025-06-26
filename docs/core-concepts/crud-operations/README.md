@@ -5,27 +5,44 @@ description: >-
   and Repository patterns with type-safe, database-agnostic Crystal code.
 ---
 
-# 🔄 CRUD Operations
+# CRUD Operations
 
 > **Create, Read, Update, Delete** – The fundamental building blocks of database interactions in CQL
 
 CQL provides powerful, type-safe CRUD operations that work seamlessly across PostgreSQL, MySQL, and SQLite. Whether you prefer the **Active Record pattern** for domain-rich applications or the **Repository pattern** for data-centric architectures, CQL has you covered.
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [🚀 Quick Start](#-quick-start)
-- [🏗️ Create Operations](#️-create-operations)
-- [📖 Read Operations](#-read-operations)
-- [✏️ Update Operations](#️-update-operations)
-- [🗑️ Delete Operations](#️-delete-operations)
-- [🔄 CRUD Flow Diagram](#-crud-flow-diagram)
-- [🏛️ Repository Pattern](#️-repository-pattern)
-- [⚡ Performance Tips](#-performance-tips)
-- [🔒 Best Practices](#-best-practices)
+- [CRUD Operations](#crud-operations)
+  - [Table of Contents](#table-of-contents)
+  - [Quick Start](#quick-start)
+  - [Create Operations](#create-operations)
+    - [Instance Creation with `new` + `save`](#instance-creation-with-new--save)
+    - [Direct Creation with `create`](#direct-creation-with-create)
+    - [Find or Create](#find-or-create)
+  - [Read Operations](#read-operations)
+    - [Finding by Primary Key](#finding-by-primary-key)
+    - [Finding by Attributes](#finding-by-attributes)
+    - [Aggregations and Counting](#aggregations-and-counting)
+  - [✏️ Update Operations](#️-update-operations)
+    - [Load, Modify, and Save](#load-modify-and-save)
+    - [Bulk Updates](#bulk-updates)
+  - [Delete Operations](#delete-operations)
+    - [Individual Deletion](#individual-deletion)
+    - [Bulk Deletion](#bulk-deletion)
+  - [CRUD Flow Diagram](#crud-flow-diagram)
+  - [Repository Pattern](#repository-pattern)
+  - [Performance Tips](#performance-tips)
+    - [Efficient Queries](#efficient-queries)
+    - [Indexing Strategy](#indexing-strategy)
+  - [Best Practices](#best-practices)
+    - [Do's](#dos)
+    - [Don'ts](#donts)
+  - [Further Reading](#further-reading)
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 First, let's set up a basic model to work with:
 
@@ -52,9 +69,9 @@ end
 
 ---
 
-## 🏗️ Create Operations
+## Create Operations
 
-### 📝 Instance Creation with `new` + `save`
+### Instance Creation with `new` + `save`
 
 The most fundamental approach - create an instance and save it:
 
@@ -90,7 +107,7 @@ rescue Exception => ex
 end
 ```
 
-### 🎯 Direct Creation with `create`
+### Direct Creation with `create`
 
 Create and save in one step:
 
@@ -119,19 +136,9 @@ rescue CQL::RecordInvalid => ex
 rescue Exception => ex
   puts "💥 Creation failed: #{ex.message}"
 end
-
-# Using create (returns instance that may be invalid)
-user = User.create(name: "Eve Brown", email: "eve@example.com", age: 29)
-if user && user.persisted?
-  puts "✅ User created successfully"
-elsif user
-  puts "❌ User creation failed: #{user.errors.full_messages.join(", ")}"
-else
-  puts "🛑 Creation halted by callback"
-end
 ```
 
-### 🔍 Find or Create
+### Find or Create
 
 Avoid duplicates with `find_or_create_by`:
 
@@ -145,17 +152,13 @@ user = User.find_or_create_by(
 
 puts user.persisted? ? "📦 Found existing user" : "🆕 Created new user"
 puts "👤 User: #{user.name} (#{user.email})"
-
-# With hash syntax
-attrs = {email: "another@example.com", name: "Another User", age: 30}
-user2 = User.find_or_create_by(attrs)
 ```
 
 ---
 
-## 📖 Read Operations
+## Read Operations
 
-### 🎯 Finding by Primary Key
+### Finding by Primary Key
 
 ```crystal
 # Find by ID (returns User? - nil if not found)
@@ -173,16 +176,9 @@ begin
 rescue DB::NoResultsError
   puts "❌ No user with ID 1"
 end
-
-# Using nullable ID
-user_id : Int64? = some_method_that_returns_id
-if id = user_id
-  user = User.find(id)
-  puts "👤 User: #{user.try(&.name) || "Not found"}"
-end
 ```
 
-### 🔎 Finding by Attributes
+### Finding by Attributes
 
 ```crystal
 # Find first matching user
@@ -199,88 +195,35 @@ begin
 rescue DB::NoResultsError
   puts "❌ Required user not found!"
 end
-
-# Find all matching users
-active_users = User.find_all_by(active: true)
-puts "👥 Active users: #{active_users.size}"
-
-young_users = User.find_all_by(age: 18..25)
-puts "🧒 Young users: #{young_users.size}"
 ```
 
-### 📊 Collection Methods
+### Aggregations and Counting
 
 ```crystal
-# Get all records
-all_users = User.all
-puts "👥 Total users: #{all_users.size}"
+# Count all users
+total_users = User.count
+puts "👥 Total users: #{total_users}"
 
-# Get first and last records
-first_user = User.first
-last_user = User.last
+# Count with conditions
+active_users = User.query.where(active: true).count
+puts "✅ Active users: #{active_users}"
 
-puts "🥇 First user: #{first_user.try(&.name) || "None"}"
-puts "🥉 Last user: #{last_user.try(&.name) || "None"}"
-
-# Count records
-total_count = User.count
-active_count = User.where(active: true).count
-
-puts "📊 Total: #{total_count}, Active: #{active_count}"
-
-# Check existence
-has_users = User.exists?
-has_admins = User.exists?(email: "admin@example.com")
-
-puts "👥 Has users: #{has_users}"
-puts "👑 Has admin: #{has_admins}"
-```
-
-### 🔗 Advanced Querying
-
-```crystal
-# Chain conditions with query builder
-recent_active_users = User
-  .where(active: true)
-  .where { created_at > 1.week.ago }
-  .order(name: :asc)
-  .limit(10)
-  .all
-
-puts "🔥 Recent active users: #{recent_active_users.map(&.name).join(", ")}"
-
-# Complex queries
-adult_users = User
-  .where { age >= 18 }
-  .where { name.like("%john%") }
-  .order(age: :desc)
-  .all
-
-# Pagination
-page_users = User
-  .where(active: true)
-  .order(created_at: :desc)
-  .limit(20)
-  .offset(40)  # Page 3 (20 per page)
-  .all
-
-puts "📄 Page 3 users: #{page_users.size}"
+# Find all matching records
+all_admins = User.find_all_by(role: "admin")
+puts "👑 Found #{all_admins.size} admin users"
 ```
 
 ---
 
 ## ✏️ Update Operations
 
-### 🔄 Instance Updates
-
-The standard approach - load, modify, save:
+### Load, Modify, and Save
 
 ```crystal
-# Find and update with save
-user = User.find_by(email: "alice@example.com")
-if user
-  user.active = false
-  user.name = "Alice Smith" # Married name
+# Find and update a user
+if user = User.find_by(email: "alice@example.com")
+  user.name = "Alice Johnson-Smith"
+  user.age = 29
 
   if user.save
     puts "✅ User updated successfully"
@@ -289,412 +232,217 @@ if user
   end
 end
 
-# Using save! for updates (raises on failure)
-user = User.find_by!(email: "bob@example.com")
-user.age = 36
-user.updated_at = Time.utc
-
+# Using save! for updates
 begin
+  user = User.find_by!(email: "bob@example.com")
+  user.active = false
   user.save!
-  puts "✅ User '#{user.name}' updated successfully"
-rescue CQL::ActiveRecord::Validations::ValidationError => ex
-  puts "❌ Validation failed: #{ex.record.errors.full_messages.join(", ")}"
-rescue Exception => ex
-  puts "💥 Update failed: #{ex.message}"
-end
-```
-
-### ⚡ Direct Instance Updates
-
-Update attributes and save in one step:
-
-```crystal
-user = User.find_by!(email: "carol@example.com")
-
-# Using update! (raises on failure)
-begin
-  user.update!(
-    name: "Carol Johnson",
-    age: 43,
-    active: true
-  )
-  puts "✅ User updated successfully"
-rescue CQL::ActiveRecord::Validations::ValidationError => ex
+  puts "✅ User deactivated successfully"
+rescue CQL::RecordInvalid => ex
   puts "❌ Update failed: #{ex.record.errors.full_messages.join(", ")}"
 end
-
-# Using update (returns true/false)
-if user.update(name: "Carol Davis-Johnson")
-  puts "✅ Name updated successfully"
-else
-  puts "❌ Name update failed: #{user.errors.full_messages.join(", ")}"
-end
 ```
 
-### 🎯 Class-Level Updates
-
-Update records by ID without loading them:
+### Bulk Updates
 
 ```crystal
-# Update by ID
-begin
-  User.update!(1, name: "Updated Name", age: 30)
-  puts "✅ User ID 1 updated via class method"
-rescue DB::NoResultsError
-  puts "❌ User ID 1 not found"
-rescue CQL::ActiveRecord::Validations::ValidationError => ex
-  puts "❌ Validation failed: #{ex.record.errors.full_messages.join(", ")}"
-rescue Exception => ex
-  puts "💥 Update failed: #{ex.message}"
-end
+# Update multiple records at once
+updated_count = User.query
+  .where(active: true, age: 18..25)
+  .update_all(role: "student")
 
-# Update by ID with hash
-attrs = {name: "Hash Updated", active: false}
-User.update!(user_id, attrs)
-```
+puts "🎓 Updated #{updated_count} users to student role"
 
-### 📦 Batch Updates
-
-Update multiple records efficiently:
-
-```crystal
-# Update all records matching conditions (no validations/callbacks)
-User.update_by(
-  {active: false},           # WHERE conditions
-  {active: true, updated_at: Time.utc}  # SET values
-)
-puts "✅ Reactivated all inactive users"
-
-# Update records by multiple conditions
-User.update_by(
-  {age: 18..25, active: true},
-  {category: "young_adult"}
-)
-
-# Update ALL records (use with extreme caution!)
-# User.update_all({status: "migrated", updated_at: Time.utc})
-# puts "⚠️ Updated all users - use sparingly!"
-```
-
-### 📅 Touch Updates
-
-Update timestamp fields without changing other data:
-
-```crystal
-user = User.find!(1)
-
-# Touch updated_at
-user.touch
-puts "✅ Touched user's updated_at timestamp"
-
-# Touch specific fields
-user.touch(:last_seen_at, :updated_at)
-puts "✅ Updated last_seen_at and updated_at"
-
-# Touch multiple records
-user_ids = [1, 2, 3, 4, 5]
-User.touch_all(user_ids, :last_active_at)
-puts "✅ Touched #{user_ids.size} users' last_active_at"
+# Update with conditions
+User.query
+  .where("created_at < ?", 1.month.ago)
+  .update_all(needs_verification: true)
 ```
 
 ---
 
-## 🗑️ Delete Operations
+## Delete Operations
 
-### 🎯 Instance Deletion
-
-Delete individual records with callbacks:
+### Individual Deletion
 
 ```crystal
-user = User.find_by(email: "tobedeleted@example.com")
-if user
-  puts "🗑️ Attempting to delete user: #{user.name}"
-
-  if user.delete!
-    puts "✅ User deleted successfully"
-    puts "🔍 Destroyed? #{user.destroyed?}"
+# Find and delete a user
+if user = User.find_by(email: "inactive@example.com")
+  if user.delete
+    puts "🗑️ User deleted successfully"
   else
-    puts "❌ Deletion failed (perhaps blocked by callback)"
+    puts "❌ Failed to delete user"
   end
-else
-  puts "❌ User not found"
 end
 
-# Check if record is destroyed
-if user && user.destroyed?
-  puts "💀 User has been destroyed"
-end
-```
-
-### ⚡ Class-Level Deletion
-
-Delete records directly without instantiation (skips callbacks):
-
-```crystal
-# Delete by ID
+# Using delete! (raises on failure)
 begin
-  result = User.delete!(1)
-  puts "✅ User ID 1 deleted (#{result.rows_affected} rows affected)"
+  user = User.find_by!(email: "spam@example.com")
+  user.delete!
+  puts "🗑️ Spam user deleted"
 rescue Exception => ex
   puts "💥 Delete failed: #{ex.message}"
 end
-
-# Delete by attributes
-result = User.delete_by!(email: "spam@example.com")
-puts "🧹 Deleted spam users: #{result.rows_affected} rows"
-
-# Delete multiple users by condition
-result = User.delete_by!(active: false, age: 0..17)
-puts "🧹 Deleted inactive minors: #{result.rows_affected} rows"
-
-# Delete with multiple criteria
-result = User.delete_by!(
-  name: "Test User",
-  email: "test@example.com"
-)
-puts "🧹 Deleted test users: #{result.rows_affected} rows"
 ```
 
-### 💥 Bulk Deletion
+### Bulk Deletion
 
 ```crystal
-# Delete ALL records (use with extreme caution!)
-puts "⚠️ WARNING: This will delete ALL users!"
-# Uncomment the next line only if you're absolutely sure:
-# result = User.delete_all
-# puts "💥 Deleted all users: #{result.rows_affected} rows"
+# Delete multiple records
+deleted_count = User.query
+  .where(active: false, "last_login_at < ?", 6.months.ago)
+  .delete_all
 
-# Safer: Delete with query conditions
-User.where(created_at: ..1.year.ago)
-    .where(active: false)
-    .delete_all
-puts "🧹 Deleted old inactive users"
+puts "🗑️ Deleted #{deleted_count} inactive users"
+
+# Delete with complex conditions
+User.query
+  .where("email LIKE ?", "%@olddomain.com")
+  .delete_all
 ```
 
 ---
 
-## 🔄 CRUD Flow Diagram
+## CRUD Flow Diagram
 
-```mermaid fullWidth="true"
+```mermaid 
 graph TD
-    A[🆕 New Record] --> B{Save Method}
-    B -->|save| C{Validation}
-    B -->|save!| C
-    C -->|✅ Valid| D[💾 Persist to DB]
-    C -->|❌ Invalid| E[Return false/Raise Error]
-    D --> F[✅ Record Created]
+    A[Start] --> B{Operation Type}
 
-    G[🔍 Find Record] --> H{Find Method}
-    H -->|find| I{Record Exists?}
-    H -->|find!| I
-    I -->|✅ Yes| J[📦 Return Record]
-    I -->|❌ No| K{Strict Method?}
-    K -->|find| L[Return nil]
-    K -->|find!| M[🚨 Raise NoResultsError]
+    B -->|Create| C[new/create]
+    B -->|Read| D[find/find_by/query]
+    B -->|Update| E[load → modify → save]
+    B -->|Delete| F[find → delete]
 
-    N[✏️ Update Record] --> O{Update Method}
-    O -->|update| P{Validation}
-    O -->|update!| P
-    P -->|✅ Valid| Q[💾 Update in DB]
-    P -->|❌ Invalid| R[Return false/Raise Error]
-    Q --> S[✅ Record Updated]
+    C --> G{Validation}
+    D --> H[Return Data]
+    E --> G
+    F --> I[Remove from DB]
 
-    T[🗑️ Delete Record] --> U{Delete Method}
-    U -->|delete!| V{Callbacks Allow?}
-    U -->|Class.delete!| W[💾 Direct DB Delete]
-    V -->|✅ Yes| X[💾 Delete from DB]
-    V -->|❌ No| Y[Return false]
-    W --> Z[✅ Record Deleted]
-    X --> Z
+    G -->|Pass| J[Persist to DB]
+    G -->|Fail| K[Return Errors]
+
+    J --> L[Success]
+    K --> M[Handle Errors]
+    H --> N[Use Data]
+    I --> O[Confirm Deletion]
+
+    style A fill:#e1f5fe
+    style L fill:#c8e6c9
+    style M fill:#ffcdd2
 ```
 
 ---
 
-## 🏛️ Repository Pattern
+## Repository Pattern
 
-For data-centric applications, use the Repository pattern:
-
-```crystal
-# Set up repository
-Users = CQL::Repository(User, Int64).new(UserDB, :users)
-
-# Create
-user_id = Users.create(name: "Repo User", email: "repo@example.com", age: 30)
-puts "📦 Created user with ID: #{user_id}"
-
-# Read
-user = Users.find!(user_id)
-all_users = Users.all
-active_users = Users.find_all_by(active: true)
-user_by_email = Users.find_by(email: "repo@example.com")
-
-puts "👤 Found user: #{user.name}"
-puts "👥 Total users: #{all_users.size}"
-
-# Update
-Users.update(user_id, name: "Updated Repo User", age: 31)
-puts "✅ User updated via repository"
-
-# Batch updates
-Users.update_by({active: false}, {active: true})
-Users.update_all({category: "repository_managed"})
-
-# Delete
-Users.delete(user_id)
-puts "🗑️ User deleted via repository"
-
-# Batch deletes
-Users.delete_by(active: false)
-Users.delete_all  # Use with caution!
-
-# Utility methods
-count = Users.count
-exists = Users.exists?(email: "test@example.com")
-puts "📊 Count: #{count}, Test user exists: #{exists}"
-```
-
----
-
-## ⚡ Performance Tips
-
-### 🚀 Batch Operations
+For data-centric applications, CQL also supports the Repository pattern:
 
 ```crystal
-# ✅ Good: Batch create (if supported)
-users_data = [
-  {name: "User 1", email: "user1@example.com", age: 25},
-  {name: "User 2", email: "user2@example.com", age: 30},
-  {name: "User 3", email: "user3@example.com", age: 35}
-]
-
-# Create multiple records efficiently
-users_data.each { |data| User.create!(data) }
-
-# ✅ Good: Use batch updates for multiple records
-User.update_by({active: false}, {active: true})
-
-# ❌ Avoid: Individual updates in loops
-# User.all.each { |user| user.update!(active: true) }  # Slow!
-```
-
-### 🎯 Selective Loading
-
-```crystal
-# ✅ Good: Query only needed fields
-users = User.select(:id, :name, :email)
-            .where(active: true)
-            .limit(100)
-            .all
-
-# ✅ Good: Use pagination for large datasets
-page_size = 50
-offset = (page - 1) * page_size
-
-users = User.where(active: true)
-            .order(:created_at)
-            .limit(page_size)
-            .offset(offset)
-            .all
-
-# ✅ Good: Use exists? instead of counting for boolean checks
-has_admin = User.exists?(role: "admin")  # Fast
-# admin_count = User.where(role: "admin").count > 0  # Slower
-```
-
-### 🔍 Efficient Queries
-
-```crystal
-# ✅ Good: Use indexes for WHERE conditions
-User.where(email: "user@example.com")  # Fast if email is indexed
-
-# ✅ Good: Use find_by! when you expect one result
-user = User.find_by!(email: "unique@example.com")
-
-# ❌ Avoid: Loading all records just to get first
-# first_user = User.all.first  # Loads everything!
-first_user = User.first        # Much better
-```
-
----
-
-## 🔒 Best Practices
-
-### ✅ Validation & Error Handling
-
-```crystal
-# Always handle validation errors gracefully
-begin
-  user = User.create!(invalid_data)
-rescue CQL::ActiveRecord::Validations::ValidationError => ex
-  puts "User creation failed: #{ex.record.errors.full_messages}"
-  # Handle appropriately - show user-friendly message, etc.
-rescue Exception => ex
-  puts "Unexpected error creating user: #{ex.message}"
-  # Handle system errors
-end
-```
-
-### 🔐 Security Considerations
-
-```crystal
-# ✅ Good: Validate and sanitize input
-def create_user(params)
-  user = User.new(
-    name: params[:name]?.try(&.strip),
-    email: params[:email]?.try(&.downcase.strip),
-    age: params[:age]?.try(&.to_i)
-  )
-
-  user.save!
+# Repository interface
+abstract class UserRepository
+  abstract def find(id : Int64) : User?
+  abstract def find_by_email(email : String) : User?
+  abstract def save(user : User) : Bool
+  abstract def delete(user : User) : Bool
+  abstract def all : Array(User)
 end
 
-# ❌ Avoid: Direct mass assignment without validation
-# User.create!(params)  # Dangerous if params not validated
-```
+# Concrete implementation
+class SqlUserRepository < UserRepository
+  def find(id : Int64) : User?
+    User.find(id)
+  end
 
-### 📊 Monitoring & Logging
+  def find_by_email(email : String) : User?
+    User.find_by(email: email)
+  end
 
-```crystal
-# ✅ Good: Log important operations
-puts "Creating user: #{user.email}"
-user = User.create!(user_params)
-puts "User created successfully: ID #{user.id}"
+  def save(user : User) : Bool
+    user.save
+  end
 
-# ✅ Good: Track performance-critical operations
-start_time = Time.utc
-users = User.where(complex_conditions).all
-duration = Time.utc - start_time
-puts "Query completed in #{duration.total_milliseconds}ms, found #{users.size} users"
-```
+  def delete(user : User) : Bool
+    user.delete
+  end
 
-### 🎯 Transaction Safety
-
-```crystal
-# ✅ Good: Use transactions for multi-step operations
-UserDB.transaction do
-  user = User.create!(user_params)
-  UserProfile.create!(user_id: user.id, profile_params)
-  UserPreferences.create!(user_id: user.id, default_preferences)
-
-  puts "User onboarding completed for #{user.email}"
+  def all : Array(User)
+    User.all
+  end
 end
 ```
 
 ---
 
-## 🎓 What's Next?
+## Performance Tips
 
-Now that you've mastered CRUD operations, explore these advanced topics:
+### Efficient Queries
 
-- 🔗 **[Relationships](../relationships/)** - Model associations and joins
-- 🔍 **[Advanced Querying](../querying/)** - Complex queries and aggregations
-- ✅ **[Validations](../validations/)** - Data integrity and custom validators
-- 🔄 **[Callbacks](../callbacks/)** - Lifecycle hooks and business logic
-- 🏗️ **[Migrations](../migrations/)** - Schema evolution and versioning
-- ⚡ **[Performance](../performance/)** - Optimization and best practices
+```crystal
+# Use specific selects to reduce data transfer
+users = User.query
+  .select(:id, :name, :email)
+  .where(active: true)
+  .limit(100)
 
-Happy coding! 🚀
+# Use includes for eager loading (prevents N+1)
+posts = Post.query
+  .includes(:user, :comments)
+  .where(published: true)
+
+# Use batch operations for large datasets
+User.query.where(active: false).find_in_batches(batch_size: 1000) do |batch|
+  batch.each { |user| user.update!(needs_verification: true) }
+end
+```
+
+### Indexing Strategy
+
+```crystal
+# Ensure proper indexing for frequently queried columns
+table :users do
+  # ... columns ...
+
+  # Index frequently queried columns
+  index [:email], unique: true
+  index [:active, :created_at]
+  index [:role, :active]
+end
+```
 
 ---
 
-> 💡 **Pro Tip**: Use `save!` and `create!` in development to catch validation errors early, but handle exceptions gracefully in production code.
+## Best Practices
+
+### Do's
+
+- **Use `create!` and `save!`** for critical operations where failure should halt execution
+- **Validate data** before saving to ensure data integrity
+- **Use transactions** for multi-step operations that must succeed or fail together
+- **Handle errors gracefully** with proper exception handling
+- **Use batch operations** for large datasets to improve performance
+- **Implement proper indexing** for frequently queried columns
+
+### Don'ts
+
+- **Don't ignore validation errors** - always handle them appropriately
+- **Don't use `find!` without exception handling** in user-facing code
+- **Don't perform bulk operations** without considering performance impact
+- **Don't forget to close connections** in long-running applications
+- **Don't use raw SQL** unless absolutely necessary - CQL provides type safety
+
+---
+
+## Further Reading
+
+For detailed Active Record CRUD operations with advanced features, see:
+
+- **[Active Record CRUD Operations](../guides/active-record-with-cql/crud-operations.md)** - Comprehensive Active Record implementation
+- **[Querying & Scopes](../guides/active-record-with-cql/queryable.md)** - Advanced query building
+- **[Complex Queries](../guides/active-record-with-cql/complex-queries.md)** - Joins, aggregations, and subqueries
+- **[Transactions](../guides/active-record-with-cql/transactions.md)** - Data consistency and ACID compliance
+- **[Validations](../guides/active-record-with-cql/validations.md)** - Data validation and integrity
+
+---
+
+> 💡 **Tip**: CQL's CRUD operations are designed to be intuitive and type-safe. Start with the basic patterns and gradually explore advanced features as your application grows!
