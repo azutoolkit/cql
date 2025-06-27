@@ -7,37 +7,6 @@
 
 CQL is a powerful Object-Relational Mapping (ORM) library for the Crystal programming language. It provides a type-safe, high-performance interface for interacting with SQL databases, combining the flexibility of raw SQL with the safety and clarity of Crystal's static type system.
 
-## Table of Contents
-
-- [CQL (Crystal Query Language)](#cql-crystal-query-language)
-  - [Table of Contents](#table-of-contents)
-  - [Features](#features)
-  - [Supported Databases](#supported-databases)
-  - [Installation](#installation)
-  - [Quick Start](#quick-start)
-    - [1. Define Your Schema](#1-define-your-schema)
-    - [2. Create Models](#2-create-models)
-    - [3. Work with Your Data](#3-work-with-your-data)
-  - [Core Features](#core-features)
-    - [Type-Safe Schema Definition](#type-safe-schema-definition)
-    - [Active Record Pattern](#active-record-pattern)
-    - [Comprehensive Validations](#comprehensive-validations)
-    - [Powerful Relationships](#powerful-relationships)
-    - [Database Transactions](#database-transactions)
-    - [Schema Migrations](#schema-migrations)
-    - [Query Scopes](#query-scopes)
-    - [Schema Dump](#schema-dump)
-    - [Advanced Caching](#advanced-caching)
-    - [Performance Monitoring](#performance-monitoring)
-  - [Documentation](#documentation)
-    - [Quick Links](#quick-links)
-  - [Development](#development)
-    - [Running Tests](#running-tests)
-    - [Database Support](#database-support)
-  - [Contributing](#contributing)
-    - [Development Guidelines](#development-guidelines)
-  - [License](#license)
-
 ## Features
 
 - **🔒 Type-Safe ORM**: Leverage Crystal's static type system for compile-time safety
@@ -133,9 +102,6 @@ BlogDB.posts.create!
 
 ```crystal
 struct User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :users
-
   getter id : Int64?
   getter username : String
   getter email : String
@@ -166,9 +132,6 @@ struct User
 end
 
 struct Post
-  include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :posts
-
   getter id : Int64?
   getter title : String
   getter content : String

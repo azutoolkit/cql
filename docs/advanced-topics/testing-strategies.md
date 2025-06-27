@@ -1,38 +1,19 @@
----
-icon: flask
----
-
 # Testing Strategies
 
 > **Build confidence through comprehensive testing** - Master unit testing, integration testing, and mocking strategies for robust CQL applications
 
 Testing is essential for building reliable applications. This guide covers comprehensive testing strategies for CQL applications, from unit tests to integration tests, with practical examples and best practices.
 
-## 📋 Table of Contents
+## Testing Fundamentals
 
-* [🎯 Testing Fundamentals](testing-strategies.md#-testing-fundamentals)
-* [🏗️ Test Environment Setup](testing-strategies.md#️-test-environment-setup)
-* [🔬 Unit Testing](testing-strategies.md#-unit-testing)
-* [🔗 Integration Testing](testing-strategies.md#-integration-testing)
-* [🎭 Mocking and Stubbing](testing-strategies.md#-mocking-and-stubbing)
-* [🏭 Test Data Factories](testing-strategies.md#-test-data-factories)
-* [📊 Database Testing Patterns](testing-strategies.md#-database-testing-patterns)
-* [⚡ Performance Testing](testing-strategies.md#-performance-testing)
-* [🔄 Testing Relationships](testing-strategies.md#-testing-relationships)
-* [🎨 Testing Best Practices](testing-strategies.md#-testing-best-practices)
-
-***
-
-## 🎯 Testing Fundamentals
-
-### 🏗️ Testing Pyramid
+### Testing Pyramid
 
 CQL applications benefit from a well-structured testing pyramid:
 
 ```mermaid fullWidth="true"
 graph TD
-    A[🔬 Unit Tests] --> B[🔗 Integration Tests]
-    B --> C[🌐 End-to-End Tests]
+    A[Unit Tests] --> B[Integration Tests]
+    B --> C[End-to-End Tests]
 
     A1[Model Logic] --> A
     A2[Validations] --> A
@@ -50,19 +31,19 @@ graph TD
     style C fill:#ffebee
 ```
 
-### 📊 Test Types Overview
+### Test Types Overview
 
-| Test Type       | Speed     | Isolation | Database  | Purpose                      |
-| --------------- | --------- | --------- | --------- | ---------------------------- |
-| **Unit**        | ⚡ Fast    | 🔒 High   | ❌ Mocked  | Business logic, validations  |
-| **Integration** | 🟡 Medium | 🟡 Medium | ✅ Test DB | Database operations, queries |
-| **End-to-End**  | 🐌 Slow   | 🔓 Low    | ✅ Test DB | Full application flows       |
+| Test Type       | Speed  | Isolation | Database | Purpose                      |
+| --------------- | ------ | --------- | -------- | ---------------------------- |
+| **Unit**        | Fast   | High      | Mocked   | Business logic, validations  |
+| **Integration** | Medium | Medium    | Test DB  | Database operations, queries |
+| **End-to-End**  | Slow   | Low       | Test DB  | Full application flows       |
 
-***
+---
 
-## 🏗️ Test Environment Setup
+## Test Environment Setup
 
-### 🔧 Test Database Configuration
+### Test Database Configuration
 
 ```crystal
 # spec/spec_helper.cr
@@ -73,10 +54,8 @@ require "../src/myapp"
 TestDB = CQL::Schema.define(
   :test_db,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://:memory:",  # In-memory for fast tests
-  pool_size: 1
-) do
-  # Define your schema here or load from migrations
+  uri: "sqlite3://:memory:") do
+  # Define your schema here
   table :users do
     primary :id, Int64, auto_increment: true
     column :name, String
@@ -84,8 +63,6 @@ TestDB = CQL::Schema.define(
     column :active, Bool, default: true
     column :role, String, default: "user"
     timestamps
-
-    unique_constraint [:email]
   end
 
   table :posts do
@@ -107,10 +84,10 @@ TestDB.build
 module TestHelpers
   # Clean database between tests
   def cleanup_database
-    TestDB.query("DELETE FROM posts").commit
-    TestDB.query("DELETE FROM users").commit
+    TestDB.exec("DELETE FROM posts")
+    TestDB.exec("DELETE FROM users")
     # Reset auto-increment counters
-    TestDB.query("DELETE FROM sqlite_sequence").commit if TestDB.adapter.is_a?(CQL::Adapter::SQLite)
+    TestDB.exec("DELETE FROM sqlite_sequence") if TestDB.adapter == CQL::Adapter::SQLite
   end
 
   # Transaction rollback for faster cleanup
@@ -135,7 +112,7 @@ Spec.after_suite do
 end
 ```
 
-### 🌍 Environment-Specific Configuration
+### Environment-Specific Configuration
 
 ```crystal
 # config/test.cr
@@ -143,38 +120,35 @@ module TestConfig
   # Test-specific database settings
   DATABASE_CONFIG = {
     adapter: CQL::Adapter::SQLite,
-    uri: "sqlite3://:memory:",
-    pool_size: 1,
-    checkout_timeout: 1.second
+    uri: "sqlite3://:memory:"
   }
 
   # Use different configs for different test types
   def self.unit_test_db
-    CQL::Schema.define(:unit_test, **DATABASE_CONFIG)
+    CQL::Schema.define(:unit_test, **DATABASE_CONFIG) do
+      # Define minimal schema for unit tests
+    end
   end
 
   def self.integration_test_db
-    CQL::Schema.define(:integration_test, **DATABASE_CONFIG.merge({
-      uri: "sqlite3://./tmp/integration_test.db"
-    }))
+    CQL::Schema.define(:integration_test, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./tmp/integration_test.db") do
+      # Define full schema for integration tests
+    end
   end
 
   # Fast test data creation
   def self.enable_fast_tests
-    # Disable validations for faster setup
-    CQL::ActiveRecord::Base.skip_validations = true
-
     # Reduce bcrypt rounds for password hashing
     ENV["BCRYPT_COST"] = "1"
   end
 end
 ```
 
-***
+---
 
-## 🔬 Unit Testing
+## Unit Testing
 
-### 🎯 Testing Model Logic
+### Testing Model Logic
 
 ```crystal
 # spec/models/user_spec.cr
@@ -185,21 +159,23 @@ describe User do
     it "validates presence of name" do
       user = User.new(name: "", email: "test@example.com")
       user.valid?.should be_false
-      user.errors[:name].should contain("can't be blank")
+      user.errors.map(&.message).should contain("name must be present")
     end
 
     it "validates email format" do
       user = User.new(name: "Test", email: "invalid-email")
       user.valid?.should be_false
-      user.errors[:email].should contain("is invalid")
+      user.errors.map(&.field).should contain(:email)
     end
 
-    it "validates email uniqueness" do
-      User.create!(name: "First", email: "test@example.com")
+    it "validates email uniqueness in database context" do
+      # This requires database integration
+      existing_user = User.new(name: "First", email: "test@example.com")
+      existing_user.save!
 
       duplicate_user = User.new(name: "Second", email: "test@example.com")
-      duplicate_user.valid?.should be_false
-      duplicate_user.errors[:email].should contain("has already been taken")
+      # Would need database-level unique constraint validation
+      # This is typically tested in integration tests
     end
   end
 
@@ -210,7 +186,7 @@ describe User do
     end
 
     it "can be activated" do
-      user = User.create!(name: "Test", email: "test@example.com", active: false)
+      user = User.new(name: "Test", email: "test@example.com", active: false)
 
       user.activate!
       user.active?.should be_true
@@ -218,37 +194,17 @@ describe User do
     end
 
     it "can be deactivated with reason" do
-      user = User.create!(name: "Test", email: "test@example.com", active: true)
+      user = User.new(name: "Test", email: "test@example.com", active: true)
 
       user.deactivate!("Terms violation")
       user.active?.should be_false
       user.deactivation_reason.should eq("Terms violation")
     end
   end
-
-  describe "scopes" do
-    before_each do
-      User.create!(name: "Active User", email: "active@example.com", active: true)
-      User.create!(name: "Inactive User", email: "inactive@example.com", active: false)
-      User.create!(name: "Admin", email: "admin@example.com", role: "admin")
-    end
-
-    it "finds active users" do
-      active_users = User.active.all
-      active_users.size.should eq(2)  # Active user + Admin
-      active_users.all?(&.active?).should be_true
-    end
-
-    it "finds admins" do
-      admins = User.admins.all
-      admins.size.should eq(1)
-      admins.first.role.should eq("admin")
-    end
-  end
 end
 ```
 
-### 🧪 Testing Callbacks
+### Testing Callbacks
 
 ```crystal
 # spec/models/user_callbacks_spec.cr
@@ -262,86 +218,92 @@ describe User do
       user.email.should eq("test@example.com")
     end
 
-    it "sends welcome email after creation" do
-      # Mock the mailer
-      welcome_mailer = WelcomeMailer.new
-      WelcomeMailer.stub(:new).and_return(welcome_mailer)
-      welcome_mailer.stub(:deliver).and_return(true)
+    it "tracks callback execution order" do
+      # Using the actual callback tracking from the codebase
+      CallbackTracker.clear
 
-      user = User.create!(name: "Test", email: "test@example.com")
+      user = User.new(name: "Test", email: "test@example.com")
+      user.save!
 
-      # Verify mailer was called
-      WelcomeMailer.should have_received(:new)
-      welcome_mailer.should have_received(:deliver)
+      expected_order = [
+        "before_validation",
+        "after_validation",
+        "before_save",
+        "before_create",
+        "after_create",
+        "after_save"
+      ]
+
+      CallbackTracker.order.should eq(expected_order)
     end
 
     it "updates timestamps on save" do
-      user = User.create!(name: "Test", email: "test@example.com")
+      user = User.new(name: "Test", email: "test@example.com")
+      user.save!
+
       original_updated_at = user.updated_at
-
       sleep 0.1  # Ensure time difference
-      user.update!(name: "Updated Name")
 
+      user.touch
       user.updated_at.should be > original_updated_at
     end
   end
 end
 ```
 
-### 🎨 Testing Custom Validators
+### Testing Custom Validators
 
 ```crystal
-# spec/validators/email_validator_spec.cr
+# spec/validators/password_validator_spec.cr
 require "../spec_helper"
 
-describe EmailValidator do
-  it "validates correct email formats" do
-    valid_emails = [
-      "test@example.com",
-      "user+tag@domain.co.uk",
-      "name.surname@subdomain.example.org"
-    ]
+describe PasswordValidator do
+  it "validates password complexity" do
+    user = User.new(name: "Test", email: "test@example.com", password: "weak")
+    validator = PasswordValidator.new(user)
 
-    valid_emails.each do |email|
-      validator = EmailValidator.new
-      validator.validate(email).should be_true
-    end
+    errors = validator.valid?
+    errors.should_not be_empty
+    errors.map(&.message).should contain("Password must be at least 8 characters")
   end
 
-  it "rejects invalid email formats" do
-    invalid_emails = [
-      "invalid",
-      "@example.com",
-      "test@",
-      "test..test@example.com"
-    ]
+  it "accepts strong passwords" do
+    user = User.new(name: "Test", email: "test@example.com", password: "StrongP@ss123")
+    validator = PasswordValidator.new(user)
 
-    invalid_emails.each do |email|
-      validator = EmailValidator.new
-      validator.validate(email).should be_false
-    end
+    errors = validator.valid?
+    errors.should be_empty
   end
 end
 ```
 
-***
+---
 
-## 🔗 Integration Testing
+## Integration Testing
 
-### 🗄️ Database Integration Tests
+### Database Integration Tests
 
 ```crystal
 # spec/integration/user_persistence_spec.cr
 require "../spec_helper"
 
 describe "User Persistence" do
+  before_each do
+    TestDB.users.create!
+  end
+
+  after_each do
+    TestDB.users.drop!
+  end
+
   describe "CRUD operations" do
     it "creates and retrieves users" do
-      user = User.create!(
+      user = User.new(
         name: "John Doe",
         email: "john@example.com",
         role: "admin"
       )
+      user.save!
 
       # Verify database persistence
       user.id.should_not be_nil
@@ -355,7 +317,8 @@ describe "User Persistence" do
     end
 
     it "updates user attributes" do
-      user = User.create!(name: "Original", email: "original@example.com")
+      user = User.new(name: "Original", email: "original@example.com")
+      user.save!
 
       user.update!(name: "Updated", email: "updated@example.com")
 
@@ -366,77 +329,86 @@ describe "User Persistence" do
     end
 
     it "deletes users" do
-      user = User.create!(name: "To Delete", email: "delete@example.com")
+      user = User.new(name: "To Delete", email: "delete@example.com")
+      user.save!
       user_id = user.id!
 
       user.delete!
 
       # Verify deletion
-      User.find(user_id).should be_nil
+      User.find?(user_id).should be_nil
     end
   end
 
   describe "complex queries" do
     before_each do
       # Create test data
-      active_user = User.create!(name: "Active", email: "active@example.com", active: true)
-      inactive_user = User.create!(name: "Inactive", email: "inactive@example.com", active: false)
-      admin = User.create!(name: "Admin", email: "admin@example.com", role: "admin")
+      active_user = User.new(name: "Active", email: "active@example.com", active: true)
+      active_user.save!
 
-      # Create posts
-      active_user.posts.create!(title: "Active Post", content: "Content")
-      admin.posts.create!(title: "Admin Post", content: "Admin content", published: true)
+      inactive_user = User.new(name: "Inactive", email: "inactive@example.com", active: false)
+      inactive_user.save!
+
+      admin = User.new(name: "Admin", email: "admin@example.com", role: "admin")
+      admin.save!
+
+      # Create posts if posts table exists
+      if TestDB.tables.has_key?(:posts)
+        TestDB.posts.create!
+        active_user.posts.create!(title: "Active Post", content: "Content")
+        admin.posts.create!(title: "Admin Post", content: "Admin content", published: true)
+      end
     end
 
-    it "finds users with posts" do
-      users_with_posts = User.joins(:posts).distinct.all
-      users_with_posts.size.should eq(2)
-      users_with_posts.map(&.name).should contain("Active")
-      users_with_posts.map(&.name).should contain("Admin")
-    end
-
-    it "finds published posts with authors" do
-      published_posts = Post.join(:user).where(published: true).all
-      published_posts.size.should eq(1)
-      published_posts.first.user.name.should eq("Admin")
+    it "finds users with specific criteria" do
+      active_users = User.where(active: true).all
+      active_users.size.should be >= 2  # Active user + Admin
+      active_users.all?(&.active?).should be_true
     end
 
     it "aggregates user statistics" do
-      stats = User.select(
-        "COUNT(*) as total_users",
-        "COUNT(CASE WHEN active = 1 THEN 1 END) as active_users",
-        "COUNT(CASE WHEN role = 'admin' THEN 1 END) as admin_users"
-      ).first
+      total_users = User.count
+      active_users = User.where(active: true).count
+      admin_users = User.where(role: "admin").count
 
-      stats["total_users"].should eq(3)
-      stats["active_users"].should eq(2)  # Active user + Admin
-      stats["admin_users"].should eq(1)
+      total_users.should eq(3)
+      active_users.should eq(2)  # Active user + Admin
+      admin_users.should eq(1)
     end
   end
 end
 ```
 
-### 🔄 Transaction Testing
+### Transaction Testing
 
 ```crystal
 # spec/integration/transaction_spec.cr
 require "../spec_helper"
 
 describe "Transactions" do
+  before_each do
+    TestDB.users.create!
+  end
+
+  after_each do
+    TestDB.users.drop!
+  end
+
   it "commits successful transactions" do
     User.transaction do
-      User.create!(name: "User 1", email: "user1@example.com")
-      User.create!(name: "User 2", email: "user2@example.com")
+      User.new(name: "User 1", email: "user1@example.com").save!
+      User.new(name: "User 2", email: "user2@example.com").save!
     end
 
     User.count.should eq(2)
   end
 
   it "rolls back failed transactions" do
-    expect_raises(CQL::RecordInvalid) do
+    expect_raises(Exception) do
       User.transaction do
-        User.create!(name: "Valid User", email: "valid@example.com")
-        User.create!(name: "", email: "invalid@example.com")  # This will fail
+        User.new(name: "Valid User", email: "valid@example.com").save!
+        raise "Intentional error"
+        User.new(name: "Second User", email: "second@example.com").save!
       end
     end
 
@@ -445,27 +417,29 @@ describe "Transactions" do
   end
 
   it "handles nested transactions" do
-    User.transaction do
-      user = User.create!(name: "Outer", email: "outer@example.com")
+    User.transaction do |tx|
+      user = User.new(name: "Outer", email: "outer@example.com")
+      user.save!
 
-      User.transaction do
-        user.posts.create!(title: "Inner Post", content: "Content")
+      User.transaction(tx) do
+        if TestDB.tables.has_key?(:posts)
+          user.posts.create!(title: "Inner Post", content: "Content")
+        end
         user.update!(name: "Updated in Inner")
       end
 
-      user.reload
+      user.reload!
       user.name.should eq("Updated in Inner")
-      user.posts.count.should eq(1)
     end
   end
 end
 ```
 
-***
+---
 
-## 🎭 Mocking and Stubbing
+## Mocking and Stubbing
 
-### 🔧 Database Mocking
+### Database Mocking
 
 ```crystal
 # spec/mocks/mock_database.cr
@@ -482,7 +456,7 @@ class MockDatabase
     @results[sql] = result
   end
 
-  def query(sql : String)
+  def exec(sql : String)
     @queries << sql
     @results[sql]? || [] of NamedTuple
   end
@@ -503,41 +477,13 @@ describe "User finder" do
     )
 
     # Test your finder logic with mock
-    User.with_database(mock_db) do
-      user = User.find_by_email("test@example.com")
-      user.should_not be_nil
-    end
-
+    # This would require dependency injection in the actual implementation
     mock_db.queries.should contain("SELECT * FROM users WHERE email = ?")
   end
 end
 ```
 
-### 🎭 Service Mocking
-
-```mermaid fullWidth="true"
-sequenceDiagram
-    participant Test as Test Suite
-    participant Mock as MockEmailService
-    participant Model as User Model
-    participant Real as Real EmailService
-
-    Note over Test,Real: Service Mocking Flow
-    Test->>Mock: Create mock instance
-    Test->>Model: Stub EmailService.instance
-    Model-->>Mock: Return mock instead of real service
-
-    Test->>Model: user.save! (triggers callback)
-    Model->>Mock: send_email(user.email, "Welcome", "...")
-    Mock-->>Model: Return true (simulated success)
-    Model-->>Test: Save completed
-
-    Test->>Mock: Check sent_emails array
-    Mock-->>Test: Return captured email data
-
-    Note over Test: Assert email was sent with correct data
-    Note over Real: Real service never called! ✅
-```
+### Service Mocking
 
 ```crystal
 # spec/mocks/mock_services.cr
@@ -562,76 +508,37 @@ end
 describe "User email notifications" do
   it "sends welcome email on registration" do
     mock_email = MockEmailService.new
-    EmailService.stub(:instance).and_return(mock_email)
+    # This would require dependency injection in the actual callback
 
-    user = User.create!(name: "Test", email: "test@example.com")
+    user = User.new(name: "Test", email: "test@example.com")
+    user.save!
 
-    mock_email.sent_emails.size.should eq(1)
-    sent_email = mock_email.sent_emails.first
-    sent_email[:to].should eq("test@example.com")
-    sent_email[:subject].should contain("Welcome")
+    # Verify email was sent (if callback system supports mocking)
+    # This is a conceptual example
   end
 end
 ```
 
-### 🕰️ Time Mocking
+---
 
-```crystal
-# spec/support/time_helpers.cr
-module TimeHelpers
-  def travel_to(time : Time, &block)
-    original_now = Time.now
-    Time.stub(:now).and_return(time)
-    Time.stub(:utc).and_return(time)
+## Test Data Factories
 
-    begin
-      yield
-    ensure
-      Time.unstub(:now)
-      Time.unstub(:utc)
-    end
-  end
-
-  def travel(duration : Time::Span, &block)
-    travel_to(Time.now + duration) { yield }
-  end
-end
-
-# Usage
-describe "User session expiry" do
-  include TimeHelpers
-
-  it "expires sessions after 30 days" do
-    user = User.create!(name: "Test", email: "test@example.com")
-    session = user.create_session!
-
-    travel 31.days do
-      session.reload
-      session.expired?.should be_true
-    end
-  end
-end
-```
-
-***
-
-## 🏭 Test Data Factories
-
-### 🏗️ Simple Factory Pattern
+### Simple Factory Pattern
 
 ```crystal
 # spec/factories/user_factory.cr
 class UserFactory
   @@counter = 0
 
-  def self.build(attributes = {} of Symbol => String | Bool)
+  def self.build(attributes = {} of Symbol => String | Bool | Int32)
     @@counter += 1
 
     default_attributes = {
       name: "User #{@@counter}",
       email: "user#{@@counter}@example.com",
       active: true,
-      role: "user"
+      role: "user",
+      age: 25
     }
 
     merged_attributes = default_attributes.merge(attributes)
@@ -640,25 +547,28 @@ class UserFactory
       name: merged_attributes[:name].as(String),
       email: merged_attributes[:email].as(String),
       active: merged_attributes[:active].as(Bool),
-      role: merged_attributes[:role].as(String)
+      role: merged_attributes[:role].as(String),
+      age: merged_attributes[:age].as(Int32)
     )
   end
 
-  def self.create(attributes = {} of Symbol => String | Bool)
+  def self.create(attributes = {} of Symbol => String | Bool | Int32)
     user = build(attributes)
     user.save!
     user
   end
 
-  def self.create_with_posts(post_count = 3, user_attributes = {} of Symbol => String | Bool)
+  def self.create_with_posts(post_count = 3, user_attributes = {} of Symbol => String | Bool | Int32)
     user = create(user_attributes)
 
-    post_count.times do |i|
-      user.posts.create!(
-        title: "Post #{i + 1} by #{user.name}",
-        content: "Content for post #{i + 1}",
-        published: i.even?  # Alternate published status
-      )
+    if TestDB.tables.has_key?(:posts)
+      post_count.times do |i|
+        user.posts.create!(
+          title: "Post #{i + 1} by #{user.name}",
+          content: "Content for post #{i + 1}",
+          published: i.even?  # Alternate published status
+        )
+      end
     end
 
     user
@@ -695,112 +605,11 @@ class PostFactory
 end
 ```
 
-### 🎯 Advanced Factory with Traits
+---
 
-```mermaid fullWidth="true"
-flowchart TD
-    A[AdvancedUserFactory.create] --> B[Process Traits]
-    B --> C{Admin Trait?}
-    B --> D{Inactive Trait?}
-    B --> E{Premium Trait?}
-    B --> F{WithPosts Trait?}
+## Database Testing Patterns
 
-    C -->|Yes| C1[Set role: 'admin']
-    D -->|Yes| D1[Set active: false]
-    E -->|Yes| E1[Set plan: 'premium'<br/>Set expiry date]
-    F -->|Yes| F1[Create 3 posts]
-
-    C1 --> G[Merge Attributes]
-    D1 --> G
-    E1 --> G
-    G --> H[User.create!]
-    H --> I[Apply Post-Creation Traits]
-    F1 --> I
-    I --> J[Return User]
-
-    style A fill:#e8f5e8
-    style H fill:#fff3e0
-    style J fill:#e8f5e8
-```
-
-```crystal
-# spec/factories/advanced_user_factory.cr
-class AdvancedUserFactory
-  enum Trait
-    Admin
-    Inactive
-    WithPosts
-    Premium
-  end
-
-  def self.create(*traits, **attributes)
-    user_attributes = build_attributes(traits, attributes)
-    user = User.create!(**user_attributes)
-
-    apply_post_creation_traits(user, traits)
-    user
-  end
-
-  private def self.build_attributes(traits, custom_attributes)
-    attributes = {
-      name: "Test User",
-      email: "test#{Random.rand(10000)}@example.com",
-      active: true,
-      role: "user"
-    }
-
-    traits.each do |trait|
-      case trait
-      when .admin?
-        attributes = attributes.merge({role: "admin"})
-      when .inactive?
-        attributes = attributes.merge({active: false})
-      when .premium?
-        attributes = attributes.merge({
-          plan: "premium",
-          plan_expires_at: 1.year.from_now
-        })
-      end
-    end
-
-    attributes.merge(custom_attributes)
-  end
-
-  private def self.apply_post_creation_traits(user, traits)
-    traits.each do |trait|
-      case trait
-      when .with_posts?
-        3.times { |i| PostFactory.create(user, title: "Post #{i + 1}") }
-      end
-    end
-  end
-end
-
-# Usage
-describe "User permissions" do
-  it "allows admins to manage users" do
-    admin = AdvancedUserFactory.create(:admin)
-    regular_user = AdvancedUserFactory.create
-
-    admin.can_manage?(regular_user).should be_true
-    regular_user.can_manage?(admin).should be_false
-  end
-
-  it "shows posts for users with posts" do
-    user_with_posts = AdvancedUserFactory.create(:with_posts)
-    user_without_posts = AdvancedUserFactory.create
-
-    user_with_posts.posts.count.should eq(3)
-    user_without_posts.posts.count.should eq(0)
-  end
-end
-```
-
-***
-
-## 📊 Database Testing Patterns
-
-### 🔄 Shared Examples
+### Shared Examples
 
 ```crystal
 # spec/shared/crud_examples.cr
@@ -814,7 +623,7 @@ shared_examples "CRUD operations" do |factory_class|
 
     it "reads records" do
       record = factory_class.create
-      found = record.class.find(record.id!)
+      found = record.class.find?(record.id!)
       found.should_not be_nil
     end
 
@@ -834,7 +643,7 @@ shared_examples "CRUD operations" do |factory_class|
 
       record.delete!
 
-      record.class.find(record_id).should be_nil
+      record.class.find?(record_id).should be_nil
     end
   end
 end
@@ -849,27 +658,7 @@ describe Post do
 end
 ```
 
-### 🧹 Database Cleaning Strategies
-
-```mermaid fullWidth="true"
-graph TD
-    subgraph "Database Cleaning Strategy Decision"
-        A[Test Type?] --> B[Unit Tests]
-        A --> C[Integration Tests]
-        A --> D[System Tests]
-
-        B --> B1[No DB Cleaning<br/>Mock Everything]
-        C --> C1[Transaction Rollback<br/>⚡ Fastest]
-        D --> D1[Table Truncation<br/>🧹 Complete Reset]
-
-        C1 --> C2[BEGIN TRANSACTION<br/>Run Test<br/>ROLLBACK]
-        D1 --> D2[DELETE FROM table1<br/>DELETE FROM table2<br/>RESET sequences]
-    end
-
-    style B1 fill:#e8f5e8
-    style C1 fill:#fff3e0
-    style D1 fill:#ffebee
-```
+### Database Cleaning Strategies
 
 ```crystal
 # spec/support/database_cleaner.cr
@@ -879,7 +668,7 @@ module DatabaseCleaner
   # Strategy 1: Truncation (fastest for small datasets)
   def truncate_all_tables
     TestDB.tables.each do |table_name, _|
-      TestDB.query("DELETE FROM #{table_name}").commit
+      TestDB.exec("DELETE FROM #{table_name}")
     end
   end
 
@@ -897,7 +686,7 @@ module DatabaseCleaner
   # Strategy 3: Selective cleanup (for specific test isolation)
   def clean_tables(*table_names)
     table_names.each do |table_name|
-      TestDB.query("DELETE FROM #{table_name}").commit
+      TestDB.exec("DELETE FROM #{table_name}")
     end
   end
 end
@@ -919,11 +708,11 @@ module TestConfig
 end
 ```
 
-***
+---
 
-## ⚡ Performance Testing
+## Performance Testing
 
-### 📊 Query Performance Tests
+### Query Performance Tests
 
 ```crystal
 # spec/performance/query_performance_spec.cr
@@ -932,11 +721,18 @@ require "benchmark"
 
 describe "Query Performance" do
   before_all do
+    TestDB.users.create!
     # Create test data
     1000.times do |i|
       user = UserFactory.create(name: "User #{i}")
-      rand(0..5).times { PostFactory.create(user) }
+      if TestDB.tables.has_key?(:posts)
+        rand(0..5).times { PostFactory.create(user) }
+      end
     end
+  end
+
+  after_all do
+    TestDB.users.drop!
   end
 
   it "finds users efficiently" do
@@ -948,30 +744,19 @@ describe "Query Performance" do
     result.total.should be < 1.0  # 1 second
   end
 
-  it "avoids N+1 queries with includes" do
-    query_count = 0
-
-    # Count queries
-    original_query = TestDB.method(:query)
-    TestDB.define_method(:query) do |sql|
-      query_count += 1
-      original_query.call(sql)
-    end
-
-    # Test eager loading
-    users = User.join(:posts).limit(10).all
-    users.each { |user| user.posts.size }
-
-    # Should be 2 queries: users + posts
-    query_count.should be <= 3  # Allow some flexibility
-  end
-
   it "handles large result sets efficiently" do
     memory_before = GC.stats.heap_size
 
-    # Process in batches
-    User.find_in_batches(batch_size: 100) do |batch|
+    # Process in batches using limit/offset
+    offset = 0
+    batch_size = 100
+
+    loop do
+      batch = User.limit(batch_size).offset(offset).all
+      break if batch.empty?
+
       batch.each { |user| user.name.upcase }
+      offset += batch_size
     end
 
     memory_after = GC.stats.heap_size
@@ -983,61 +768,27 @@ describe "Query Performance" do
 end
 ```
 
-### 🔧 Load Testing
+---
 
-```crystal
-# spec/performance/load_test_spec.cr
-require "../spec_helper"
+## Testing Relationships
 
-describe "Load Testing" do
-  it "handles concurrent user creation" do
-    channel = Channel(User?).new
-    concurrent_users = 50
-
-    # Spawn concurrent operations
-    concurrent_users.times do
-      spawn do
-        begin
-          user = UserFactory.create
-          channel.send(user)
-        rescue ex
-          puts "Error creating user: #{ex.message}"
-          channel.send(nil)
-        end
-      end
-    end
-
-    # Collect results
-    successful_users = 0
-    failed_users = 0
-
-    concurrent_users.times do
-      result = channel.receive
-      if result
-        successful_users += 1
-      else
-        failed_users += 1
-      end
-    end
-
-    # Most operations should succeed
-    success_rate = successful_users.to_f / concurrent_users
-    success_rate.should be >= 0.9  # 90% success rate
-  end
-end
-```
-
-***
-
-## 🔄 Testing Relationships
-
-### 🔗 Association Testing
+### Association Testing
 
 ```crystal
 # spec/models/associations_spec.cr
 require "../spec_helper"
 
 describe "User associations" do
+  before_each do
+    TestDB.users.create!
+    TestDB.posts.create! if TestDB.tables.has_key?(:posts)
+  end
+
+  after_each do
+    TestDB.posts.drop! if TestDB.tables.has_key?(:posts)
+    TestDB.users.drop!
+  end
+
   describe "has_many :posts" do
     it "returns user's posts" do
       user = UserFactory.create
@@ -1059,16 +810,6 @@ describe "User associations" do
       post.user_id.should eq(user.id)
       user.posts.all.should contain(post)
     end
-
-    it "deletes posts when user is deleted with dependent: :destroy" do
-      user = UserFactory.create
-      post = PostFactory.create(user)
-      post_id = post.id!
-
-      user.delete!
-
-      Post.find(post_id).should be_nil
-    end
   end
 
   describe "belongs_to :user" do
@@ -1078,59 +819,15 @@ describe "User associations" do
 
       post.user.should eq(user)
     end
-
-    it "handles orphaned posts" do
-      user = UserFactory.create
-      post = PostFactory.create(user)
-      user.delete!
-
-      post.reload
-      post.user.should be_nil
-    end
-  end
-end
-
-describe "Many-to-many associations" do
-  before_each do
-    # Set up many-to-many through tags
-    TestDB.query(<<-SQL).commit
-      CREATE TABLE IF NOT EXISTS tags (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL
-      )
-    SQL
-
-    TestDB.query(<<-SQL).commit
-      CREATE TABLE IF NOT EXISTS post_tags (
-        post_id INTEGER,
-        tag_id INTEGER,
-        PRIMARY KEY (post_id, tag_id)
-      )
-    SQL
-  end
-
-  it "manages many-to-many relationships" do
-    post = PostFactory.create
-    tag1 = Tag.create!(name: "Crystal")
-    tag2 = Tag.create!(name: "Programming")
-
-    # Add tags to post
-    post.tags << tag1
-    post.tags << tag2
-
-    # Verify associations
-    post.tags.all.should contain(tag1)
-    post.tags.all.should contain(tag2)
-    tag1.posts.all.should contain(post)
   end
 end
 ```
 
-***
+---
 
-## 🎨 Testing Best Practices
+## Testing Best Practices
 
-### ✅ **Do This:**
+### **Do This:**
 
 **Test Organization:**
 
@@ -1154,12 +851,12 @@ end
 **Clear Test Names:**
 
 ```crystal
-# ✅ Descriptive test names
+# Good - Descriptive test names
 it "sends welcome email after successful registration"
 it "prevents duplicate email addresses across users"
 it "calculates subscription expiry based on plan duration"
 
-# ❌ Vague test names
+# Bad - Vague test names
 it "works correctly"
 it "tests email"
 it "validates user"
@@ -1168,71 +865,66 @@ it "validates user"
 **Test Data Management:**
 
 ```crystal
-# ✅ Use factories for consistent test data
-user = UserFactory.create(:admin, name: "Custom Name")
+# Good - Use factories for consistent test data
+user = UserFactory.create(name: "Custom Name", role: "admin")
 
-# ✅ Create minimal data for each test
+# Good - Create minimal data for each test
 it "validates email format" do
   user = User.new(name: "Test", email: "invalid")
   # Only test what's needed
 end
 
-# ❌ Don't rely on external data
+# Bad - Don't rely on external data
 user = User.find(1)  # Brittle - user might not exist
 ```
 
 **Assertions:**
 
 ```crystal
-# ✅ Specific assertions
-user.errors[:email].should contain("is invalid")
+# Good - Specific assertions
+user.errors.map(&.field).should contain(:email)
 users.map(&.name).should eq(["Alice", "Bob", "Charlie"])
 
-# ❌ Vague assertions
+# Bad - Vague assertions
 user.valid?.should be_false  # Why is it invalid?
 users.empty?.should be_false  # How many users?
 ```
 
-### ❌ **Avoid This:**
+### **Avoid This:**
 
 **Database Pollution:**
 
 ```crystal
-# ❌ Don't let tests affect each other
+# Bad - Don't let tests affect each other
 it "creates user" do
-  User.create!(name: "Test", email: "test@example.com")
+  User.new(name: "Test", email: "test@example.com").save!
 end
 
 it "finds user by email" do
-  User.find_by_email("test@example.com")  # Depends on previous test
+  User.where(email: "test@example.com").first  # Depends on previous test
 end
 ```
 
 **Slow Tests:**
 
 ```crystal
-# ❌ Don't create unnecessary data
+# Bad - Don't create unnecessary data
 it "validates email format" do
   user = UserFactory.create_with_posts(100)  # Overkill for email validation
-end
-
-# ❌ Don't use real external services
-it "sends email" do
-  EmailService.send_real_email("test@example.com")  # Slow and unreliable
 end
 ```
 
 **Brittle Tests:**
 
 ```crystal
-# ❌ Don't test implementation details
+# Bad - Don't test implementation details
 it "calls save method" do
   user = User.new(name: "Test", email: "test@example.com")
   user.should receive(:save)
   user.register!
 end
 
-# ✅ Test behavior instead
+# Good - Test behavior instead
 it "persists user on registration" do
   user = User.new(name: "Test", email: "test@example.com")
   user.register!
@@ -1240,89 +932,41 @@ it "persists user on registration" do
 end
 ```
 
-***
+---
 
-## 🎯 Testing Checklist
+## Testing Checklist
 
-### 📋 Model Testing Checklist
+### Model Testing Checklist
 
-* [ ] **Validations** - All validation rules tested
-* [ ] **Callbacks** - Before/after hooks verified
-* [ ] **Scopes** - Named scopes return correct data
-* [ ] **Business Logic** - Domain methods work correctly
-* [ ] **Associations** - Relationships function properly
-* [ ] **Edge Cases** - Boundary conditions handled
+- [ ] **Validations** - All validation rules tested
+- [ ] **Callbacks** - Before/after hooks verified
+- [ ] **Business Logic** - Domain methods work correctly
+- [ ] **Associations** - Relationships function properly
+- [ ] **Edge Cases** - Boundary conditions handled
 
-### 📋 Integration Testing Checklist
+### Integration Testing Checklist
 
-* [ ] **CRUD Operations** - Create, read, update, delete work
-* [ ] **Complex Queries** - Joins, aggregations, subqueries
-* [ ] **Transactions** - Rollback and commit behavior
-* [ ] **Database Constraints** - Foreign keys, unique constraints
-* [ ] **Performance** - No N+1 queries, reasonable response times
+- [ ] **CRUD Operations** - Create, read, update, delete work
+- [ ] **Complex Queries** - Joins, aggregations, subqueries
+- [ ] **Transactions** - Rollback and commit behavior
+- [ ] **Database Constraints** - Foreign keys, unique constraints
+- [ ] **Performance** - No N+1 queries, reasonable response times
 
-### 📋 Test Quality Checklist
+### Test Quality Checklist
 
-* [ ] **Independent** - Tests don't depend on each other
-* [ ] **Isolated** - Each test has clean state
-* [ ] **Fast** - Unit tests run quickly
-* [ ] **Reliable** - Tests pass consistently
-* [ ] **Maintainable** - Easy to understand and update
-* [ ] **Comprehensive** - High test coverage
+- [ ] **Independent** - Tests don't depend on each other
+- [ ] **Isolated** - Each test has clean state
+- [ ] **Fast** - Unit tests run quickly
+- [ ] **Reliable** - Tests pass consistently
+- [ ] **Maintainable** - Easy to understand and update
+- [ ] **Comprehensive** - Good test coverage
 
-***
+---
 
-## 🚀 Advanced Testing Patterns
-
-### 🎭 Contract Testing
-
-```crystal
-# spec/contracts/user_contract_spec.cr
-# Test the contract between User and external services
-
-describe "User Service Contract" do
-  it "conforms to API expectations" do
-    user = UserFactory.create
-
-    # Test serialization contract
-    json = user.to_json
-    parsed = JSON.parse(json)
-
-    # Verify required fields are present
-    parsed["id"].should_not be_nil
-    parsed["name"].should be_a(String)
-    parsed["email"].should be_a(String)
-    parsed["created_at"].should_not be_nil
-  end
-end
-```
-
-### 🔄 Property-Based Testing
-
-```crystal
-# spec/property/user_properties_spec.cr
-require "quickcheck"
-
-describe "User Properties" do
-  it "always generates valid users with factory" do
-    QuickCheck.check do |qc|
-      # Generate random valid attributes
-      name = qc.ascii_string(1, 50)
-      email = "#{qc.ascii_string(1, 20)}@example.com"
-
-      user = UserFactory.build(name: name, email: email)
-      user.valid?.should be_true
-    end
-  end
-end
-```
-
-***
-
-> 🧪 **Testing is not about finding bugs, it's about preventing them** - Comprehensive testing strategies help you build confidence in your code and catch issues before they reach production.
+> **Testing is not about finding bugs, it's about preventing them** - Comprehensive testing strategies help you build confidence in your code and catch issues before they reach production.
 
 **Next Steps:**
 
-* [**Security Guide →**](security-guide.md) - Secure your tested code
-* [**Performance Guide →**](broken-reference) - Test performance optimizations
-* [**Deployment Guide →**](../guides/deployment-guide.md) - Test in production-like environments
+- [**Security Guide →**](security-guide.md) - Secure your tested code
+- [**Performance Guide →**](performance-optimization.md) - Test performance optimizations
+- [**Best Practices →**](../guides/best-practices.md) - Apply testing best practices

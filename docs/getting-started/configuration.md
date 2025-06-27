@@ -2,21 +2,6 @@
 
 The CQL::Configure module provides a centralized, thread-safe way to configure all fundamental settings of the CQL library. This guide covers how to use the configuration system effectively in your Crystal applications.
 
-## Table of Contents
-
-* [Quick Start](configuration.md#quick-start)
-* [Configuration Options](configuration.md#configuration-options)
-* [Environment-Specific Configuration](configuration.md#environment-specific-configuration)
-* [Integration with Schema Definition](configuration.md#integration-with-schema-definition)
-* [Performance Monitoring Configuration](configuration.md#performance-monitoring-configuration)
-* [Database-Specific Configuration](configuration.md#database-specific-configuration)
-* [Connection Pooling Configuration](configuration.md#connection-pooling-configuration)
-* [SSL Configuration](configuration.md#ssl-configuration)
-* [Thread Safety](configuration.md#thread-safety)
-* [Validation](configuration.md#validation)
-* [Best Practices](configuration.md#best-practices)
-* [API Reference](configuration.md#api-reference)
-
 ## Quick Start
 
 ### Basic Configuration
@@ -92,11 +77,11 @@ puts CQL.config.effective_logger
 
 The configuration system uses composed objects for specialized settings:
 
-* `connection_pool` - Connection pooling settings
-* `ssl` - SSL/TLS configuration
-* `postgresql` - PostgreSQL-specific settings
-* `mysql` - MySQL-specific settings
-* `sqlite` - SQLite-specific settings
+- `connection_pool` - Connection pooling settings
+- `ssl` - SSL/TLS configuration
+- `postgresql` - PostgreSQL-specific settings
+- `mysql` - MySQL-specific settings
+- `sqlite` - SQLite-specific settings
 
 ## Environment-Specific Configuration
 
@@ -539,19 +524,19 @@ end
 
 ### Validation Rules
 
-* `database_url` cannot be empty
-* `schema_path` cannot be empty
-* `schema_file_name` cannot be empty
-* `schema_file_name` must end with `.cr` extension
-* `connection_pool.size` must be positive
-* `connection_pool.initial_size` must be positive
-* `connection_pool.max_idle_size` must be positive
-* `connection_pool.max_retry_attempts` must be positive
-* `default_timezone` must be `:utc` or `:local`
-* `ssl.mode` must be one of: `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`
-* `sqlite.journal_mode` must be one of: `delete`, `truncate`, `persist`, `memory`, `wal`, `off`
-* `sqlite.synchronous` must be one of: `off`, `normal`, `full`, `extra`
-* `sqlite.busy_timeout` must be non-negative
+- `database_url` cannot be empty
+- `schema_path` cannot be empty
+- `schema_file_name` cannot be empty
+- `schema_file_name` must end with `.cr` extension
+- `connection_pool.size` must be positive
+- `connection_pool.initial_size` must be positive
+- `connection_pool.max_idle_size` must be positive
+- `connection_pool.max_retry_attempts` must be positive
+- `default_timezone` must be `:utc` or `:local`
+- `ssl.mode` must be one of: `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`
+- `sqlite.journal_mode` must be one of: `delete`, `truncate`, `persist`, `memory`, `wal`, `off`
+- `sqlite.synchronous` must be one of: `off`, `normal`, `full`, `extra`
+- `sqlite.busy_timeout` must be non-negative
 
 ### Custom Validation
 
@@ -684,7 +669,7 @@ config = CQL.config
 puts config.database_url
 ```
 
-### CQL.reset\_config!
+### CQL.reset_config!
 
 Resets configuration to defaults (useful for testing):
 
@@ -700,47 +685,47 @@ Configuration object with all settings. See [Configuration Options](configuratio
 
 #### Core Methods
 
-* `effective_database_url : String` - Get effective database URL with all parameters
-* `database_adapter : Adapter` - Get database adapter based on URL
-* `database_config : DatabaseConfig` - Get database-specific configuration
-* `effective_logger : Log` - Get the effective logger instance
-* `schema_file_path : String` - Get full schema file path
+- `effective_database_url : String` - Get effective database URL with all parameters
+- `database_adapter : Adapter` - Get database adapter based on URL
+- `database_config : DatabaseConfig` - Get database-specific configuration
+- `effective_logger : Log` - Get the effective logger instance
+- `schema_file_path : String` - Get full schema file path
 
 #### Migration Methods
 
-* `create_migrator_config(**args) : CQL::MigratorConfig` - Create migrator configuration
-* `create_migrator_config_for_environment(env : String) : CQL::MigratorConfig` - Create environment-specific migrator config
-* `create_migrator(schema : Schema) : CQL::Migrator` - Create migrator with configuration
-* `setup_performance_monitoring(schema : Schema) : Nil` - Setup performance monitoring
+- `create_migrator_config(**args) : CQL::MigratorConfig` - Create migrator configuration
+- `create_migrator_config_for_environment(env : String) : CQL::MigratorConfig` - Create environment-specific migrator config
+- `create_migrator(schema : Schema) : CQL::Migrator` - Create migrator with configuration
+- `setup_performance_monitoring(schema : Schema) : Nil` - Setup performance monitoring
 
 #### Validation Methods
 
-* `validate! : Nil` - Validate all configuration settings
-* `add_validator(validator : ConfigValidator) : Nil` - Add custom validator
+- `validate! : Nil` - Validate all configuration settings
+- `add_validator(validator : ConfigValidator) : Nil` - Add custom validator
 
 ### CQL Schema and Migration Methods
 
-* `CQL.create_schema(name : Symbol, &block) : Schema` - Create schema with configuration
-* `CQL.create_migrator(schema : Schema, migrator_config : MigratorConfig? = nil) : Migrator` - Create migrator
-* `CQL.bootstrap_schema(schema : Schema) : Migrator` - Bootstrap schema from existing database
-* `CQL.verify_schema(schema : Schema, auto_fix : Bool = false) : Bool` - Verify schema consistency
-* `CQL.create_migrator_config(**args) : MigratorConfig` - Create migrator config
-* `CQL.create_migrator_config_for_environment(env : String) : MigratorConfig` - Create environment-specific migrator config
+- `CQL.create_schema(name : Symbol, &block) : Schema` - Create schema with configuration
+- `CQL.create_migrator(schema : Schema, migrator_config : MigratorConfig? = nil) : Migrator` - Create migrator
+- `CQL.bootstrap_schema(schema : Schema) : Migrator` - Bootstrap schema from existing database
+- `CQL.verify_schema(schema : Schema, auto_fix : Bool = false) : Bool` - Verify schema consistency
+- `CQL.create_migrator_config(**args) : MigratorConfig` - Create migrator config
+- `CQL.create_migrator_config_for_environment(env : String) : MigratorConfig` - Create environment-specific migrator config
 
-***
+---
 
 ## Examples
 
 For complete usage examples, see:
 
-* `examples/configure_example.cr` - Basic configuration examples
-* `examples/configure_migration_example.cr` - Migration workflow integration examples
+- `examples/configure_example.cr` - Basic configuration examples
+- `examples/configure_migration_example.cr` - Migration workflow integration examples
 
 ## Related Guides
 
-* [Getting Started](getting-started.md)
-* [Schema Definition](../foundation/schemas.md)
-* [Migrations](../foundation/migrations.md)
-* [Integrated Migration Workflow](../active-record-with-cql/integrated-migration-workflow.md)
-* [Performance Monitoring](../advanced-topics/performance-tools.md)
-* [Testing Strategies](../advanced-topics/testing-strategies.md)
+- [Getting Started](getting-started.md)
+- [Schema Definition](../foundation/schemas.md)
+- [Migrations](../foundation/migrations.md)
+- [Integrated Migration Workflow](../active-record-with-cql/integrated-migration-workflow.md)
+- [Performance Monitoring](../advanced-topics/performance-tools.md)
+- [Testing Strategies](../advanced-topics/testing-strategies.md)

@@ -10,15 +10,15 @@ Security is paramount in production applications. This guide covers essential se
 
 ## 📋 Table of Contents
 
-* [🛡️ SQL Injection Prevention](security-guide.md#️-sql-injection-prevention)
-* [🔐 Authentication & Authorization](security-guide.md#-authentication--authorization)
-* [🔒 Data Protection](security-guide.md#-data-protection)
-* [🚫 Input Validation](security-guide.md#-input-validation)
-* [🔑 Database Security](security-guide.md#-database-security)
-* [📊 Auditing & Monitoring](security-guide.md#-auditing--monitoring)
-* [✅ Security Checklist](security-guide.md#-security-checklist)
+- [🛡️ SQL Injection Prevention](security-guide.md#️-sql-injection-prevention)
+- [🔐 Authentication & Authorization](security-guide.md#-authentication--authorization)
+- [🔒 Data Protection](security-guide.md#-data-protection)
+- [🚫 Input Validation](security-guide.md#-input-validation)
+- [🔑 Database Security](security-guide.md#-database-security)
+- [📊 Auditing & Monitoring](security-guide.md#-auditing--monitoring)
+- [✅ Security Checklist](security-guide.md#-security-checklist)
 
-***
+---
 
 ## 🛡️ SQL Injection Prevention
 
@@ -28,18 +28,17 @@ CQL automatically protects against SQL injection through parameterized queries:
 
 ```crystal
 # ✅ Safe - CQL automatically parameterizes
-user = User.where(email: user_input).first
+user = User.where(email: user_input).first?
 users = User.where("created_at > ?", date_input).all
 
-# ✅ Safe - Active Record methods use parameters
-User.find_by(email: user_input)
+# ✅ Safe - Query builder methods use parameters
 User.where(id: [1, 2, 3]).all
 
 # ⚠️ Dangerous - Raw SQL with string interpolation
-User.query("SELECT * FROM users WHERE email = '#{user_input}'")  # DON'T DO THIS
+schema.exec("SELECT * FROM users WHERE email = '#{user_input}'")  # DON'T DO THIS
 
 # ✅ Safe - Raw SQL with parameters
-User.query("SELECT * FROM users WHERE email = ?", [user_input])
+schema.exec_query("SELECT * FROM users WHERE email = ?", [user_input])
 ```
 
 ### 🔧 Safe Dynamic Queries
@@ -88,7 +87,7 @@ class UserQuery
 end
 ```
 
-***
+---
 
 ## 🔐 Authentication & Authorization
 
@@ -125,6 +124,7 @@ require "crypto/bcrypt/password"
 
 struct User
   include CQL::ActiveRecord::Model(Int64)
+  db_context schema: UserDB, table: :users
 
   property id : Int64?
   property email : String
@@ -138,10 +138,14 @@ struct User
   # Virtual password attribute
   property password : String = ""
 
-  validates :email, presence: true, uniqueness: true, format: EMAIL_REGEX
-  validates :password, length: {minimum: 12}, confirmation: true, on: :create
+  # CQL validations
+  validate :email, presence: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validate :password, size: 12..128, message: "Password must be between 12 and 128 characters"
 
-  before_save :hash_password, if: :password_changed?
+  before_save :hash_password
+
+  def initialize(@email : String, @password : String = "", @role : String = "user")
+  end
 
   def authenticate(password : String) : Bool
     return false if account_locked?
@@ -177,7 +181,7 @@ struct User
       self.locked_at = Time.utc
     end
 
-    save
+    save!
   end
 
   private def reset_failed_attempts
@@ -299,6 +303,7 @@ end
 # Secure session model
 struct UserSession
   include CQL::ActiveRecord::Model(String)  # UUID primary key
+  db_context schema: UserDB, table: :user_sessions
 
   property id : String = UUID.random.to_s
   property user_id : Int64
@@ -307,22 +312,21 @@ struct UserSession
   property expires_at : Time
   property last_activity : Time = Time.utc
 
-  belongs_to :user, User
+  belongs_to :user, User, foreign_key: :user_id
 
   # Security configurations
   SESSION_LIFETIME = 24.hours
   ACTIVITY_TIMEOUT = 2.hours
 
+  def initialize(@user_id : Int64, @ip_address : String, @user_agent : String)
+    @expires_at = SESSION_LIFETIME.from_now
+  end
+
   def self.create_for_user(user : User, ip : String, user_agent : String)
     # Clean up old sessions
     cleanup_expired_sessions(user)
 
-    create!(
-      user_id: user.id!,
-      ip_address: ip,
-      user_agent: user_agent,
-      expires_at: SESSION_LIFETIME.from_now
-    )
+    new(user.id!, ip, user_agent).tap(&.save!)
   end
 
   def valid? : Bool
@@ -353,7 +357,7 @@ struct UserSession
 end
 ```
 
-***
+---
 
 ## 🔒 Data Protection
 
@@ -450,24 +454,30 @@ module PersonalDataCompliance
       )
 
       # Anonymize related records
-      user.profiles.each(&.anonymize!)
-      user.orders.each(&.anonymize_addresses!)
+      user.profiles.each(&.anonymize!) if user.responds_to?(:profiles)
+      user.orders.each(&.anonymize_addresses!) if user.responds_to?(:orders)
     end
   end
 
   def delete_user_data(user : User)
     User.transaction do
       # Delete all user data in correct order (foreign keys)
-      user.sessions.delete_all
-      user.orders.delete_all
-      user.profiles.delete_all
+      if user.responds_to?(:sessions)
+        user.sessions.delete_all
+      end
+      if user.responds_to?(:orders)
+        user.orders.delete_all
+      end
+      if user.responds_to?(:profiles)
+        user.profiles.delete_all
+      end
       user.delete!
     end
   end
 end
 ```
 
-***
+---
 
 ## 🚫 Input Validation
 
@@ -476,32 +486,31 @@ end
 ```crystal
 # Secure validation patterns
 struct User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: UserDB, table: :users
+
+  property id : Int64?
+  property name : String
+  property email : String
+  property age : Int32 = 0
+
   # Email validation with security considerations
-  validates :email,
-    presence: true,
-    length: {maximum: 254},  # RFC 5321 limit
-    format: /\A[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\z/,
-    uniqueness: {case_insensitive: true}
+  validate :email, presence: true, size: 1..254  # RFC 5321 limit
+  validate :email, match: /\A[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\z/
 
   # Password security requirements
-  validates :password,
-    length: {minimum: 12, maximum: 128},
-    format: {
-      with: /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/,
-      message: "must contain uppercase, lowercase, number, and special character"
-    }
+  validate :password, size: 12..128, message: "Password must be between 12 and 128 characters"
 
   # Prevent malicious content
-  validates :name,
-    length: {minimum: 1, maximum: 100},
-    format: {
-      without: /<script|javascript:|data:|vbscript:/i,
-      message: "contains prohibited content"
-    }
+  validate :name, size: 1..100
+  validate :name, exclude: ["<script", "javascript:", "data:", "vbscript:"], message: "Contains prohibited content"
 
   # Custom security validations
   validate :no_sql_injection_patterns
   validate :rate_limit_creation
+
+  def initialize(@name : String, @email : String, @age : Int32 = 0)
+  end
 
   private def no_sql_injection_patterns
     suspicious_patterns = [
@@ -518,7 +527,7 @@ struct User
 
       suspicious_patterns.each do |pattern|
         if field.matches?(pattern)
-          errors.add(:base, "Suspicious content detected")
+          errors << CQL::ActiveRecord::Validations::Error.new(:base, "Suspicious content detected")
           break
         end
       end
@@ -526,13 +535,13 @@ struct User
   end
 
   private def rate_limit_creation
-    if new_record?
+    if id.nil? # new record
       recent_count = User.where("created_at > ?", 1.hour.ago)
                         .where(email: email)
                         .count
 
       if recent_count > 0
-        errors.add(:email, "Too many accounts created recently")
+        errors << CQL::ActiveRecord::Validations::Error.new(:email, "Too many accounts created recently")
       end
     end
   end
@@ -569,10 +578,18 @@ end
 
 # Usage in models
 struct Post
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: BlogDB, table: :posts
+
+  property id : Int64?
   property title : String
   property content : String
+  property user_id : Int64
 
   before_save :sanitize_content
+
+  def initialize(@title : String, @content : String, @user_id : Int64)
+  end
 
   private def sanitize_content
     self.title = ContentSecurity.sanitize_for_display(title)
@@ -581,7 +598,7 @@ struct Post
 end
 ```
 
-***
+---
 
 ## 🔑 Database Security
 
@@ -594,32 +611,23 @@ module DatabaseSecurity
     {
       # Use SSL/TLS for connections
       uri: "#{ENV["DATABASE_URL"]}?sslmode=require&sslcert=client-cert.pem&sslkey=client-key.pem",
-
-      # Connection pool limits
-      pool_size: 20,
-      checkout_timeout: 5.seconds,
-
-      # Security timeouts
-      query_timeout: 30.seconds,
-      idle_timeout: 5.minutes,
-
-      # Connection validation
-      retry_attempts: 3,
-      retry_delay: 1.second
+      adapter: CQL::Adapter::Postgres
     }
   end
 
-  def self.validate_connection_security
-    # Check SSL is enabled
-    result = DB.query_one("SHOW ssl", as: String)
-    unless result == "on"
-      raise SecurityError.new("SSL not enabled on database connection")
-    end
+  def self.validate_connection_security(schema : CQL::Schema)
+    # Check SSL is enabled (PostgreSQL example)
+    if schema.adapter == CQL::Adapter::Postgres
+      result = schema.exec_query("SHOW ssl", as: String)
+      unless result == "on"
+        raise SecurityError.new("SSL not enabled on database connection")
+      end
 
-    # Verify connection encryption
-    ssl_info = DB.query_one("SELECT ssl_cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid()", as: String?)
-    if ssl_info.nil? || ssl_info.empty?
-      raise SecurityError.new("Database connection is not encrypted")
+      # Verify connection encryption
+      ssl_info = schema.exec_query("SELECT ssl_cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid()", as: String?)
+      if ssl_info.nil? || ssl_info.empty?
+        raise SecurityError.new("Database connection is not encrypted")
+      end
     end
   end
 end
@@ -647,7 +655,7 @@ REVOKE ALL ON pg_catalog FROM app_user;
 REVOKE ALL ON information_schema FROM app_user;
 ```
 
-***
+---
 
 ## 📊 Auditing & Monitoring
 
@@ -657,6 +665,7 @@ REVOKE ALL ON information_schema FROM app_user;
 # Audit trail for sensitive operations
 struct AuditLog
   include CQL::ActiveRecord::Model(Int64)
+  db_context schema: AuditDB, table: :audit_logs
 
   property id : Int64?
   property user_id : Int64?
@@ -669,17 +678,22 @@ struct AuditLog
   property user_agent : String
   property created_at : Time?
 
+  def initialize(@action : String, @resource_type : String, @resource_id : String, @ip_address : String, @user_agent : String, @user_id : Int64? = nil)
+  end
+
   def self.log_action(user : User?, action : String, resource, ip : String, user_agent : String, old_values = nil, new_values = nil)
-    create!(
-      user_id: user.try(&.id),
+    audit_log = new(
       action: action,
       resource_type: resource.class.to_s,
       resource_id: resource.id.to_s,
-      old_values: old_values.try(&.to_json) || "{}",
-      new_values: new_values.try(&.to_json) || "{}",
       ip_address: ip,
-      user_agent: user_agent
+      user_agent: user_agent,
+      user_id: user.try(&.id)
     )
+
+    audit_log.old_values = old_values.try(&.to_json) || "{}"
+    audit_log.new_values = new_values.try(&.to_json) || "{}"
+    audit_log.save!
   end
 end
 
@@ -745,13 +759,13 @@ module SecurityMonitor
   extend self
 
   def log_suspicious_activity(event_type : String, details : Hash(String, String), user : User? = nil)
-    SecurityEvent.create!(
+    SecurityEvent.new(
       event_type: event_type,
       user_id: user.try(&.id),
       details: details.to_json,
       ip_address: Current.ip_address,
       severity: calculate_severity(event_type)
-    )
+    ).save!
 
     # Alert if high severity
     if high_severity_event?(event_type)
@@ -782,72 +796,89 @@ module SecurityMonitor
       "export_type" => "user_data"
     }, user)
   end
+
+  private def calculate_severity(event_type : String) : String
+    case event_type
+    when "failed_login"
+      "low"
+    when "privilege_escalation"
+      "high"
+    when "data_export"
+      "medium"
+    else
+      "low"
+    end
+  end
+
+  private def high_severity_event?(event_type : String) : Bool
+    ["privilege_escalation", "suspicious_query", "data_breach"].includes?(event_type)
+  end
 end
 ```
 
-***
+---
 
 ## ✅ Security Checklist
 
 ### 🔐 Application Security
 
-* [ ] **SQL Injection Prevention**
-  * [ ] Use parameterized queries for all database interactions
-  * [ ] Validate and sanitize all user inputs
-  * [ ] Whitelist allowed values for dynamic queries
-  * [ ] Never use string interpolation in SQL
-* [ ] **Authentication & Authorization**
-  * [ ] Strong password requirements (12+ characters, complexity)
-  * [ ] Secure password hashing (bcrypt with high cost)
-  * [ ] Account lockout after failed attempts
-  * [ ] Role-based access control implemented
-  * [ ] Session management with timeouts
-* [ ] **Data Protection**
-  * [ ] Encrypt sensitive data at rest
-  * [ ] Use HTTPS/TLS for all connections
-  * [ ] Implement data anonymization/deletion
-  * [ ] Handle personal data compliance (GDPR)
+- [ ] **SQL Injection Prevention**
+  - [ ] Use parameterized queries for all database interactions
+  - [ ] Validate and sanitize all user inputs
+  - [ ] Whitelist allowed values for dynamic queries
+  - [ ] Never use string interpolation in SQL
+- [ ] **Authentication & Authorization**
+  - [ ] Strong password requirements (12+ characters, complexity)
+  - [ ] Secure password hashing (bcrypt with high cost)
+  - [ ] Account lockout after failed attempts
+  - [ ] Role-based access control implemented
+  - [ ] Session management with timeouts
+- [ ] **Data Protection**
+  - [ ] Encrypt sensitive data at rest
+  - [ ] Use HTTPS/TLS for all connections
+  - [ ] Implement data anonymization/deletion
+  - [ ] Handle personal data compliance (GDPR)
 
 ### 🗄️ Database Security
 
-* [ ] **Connection Security**
-  * [ ] SSL/TLS enabled for database connections
-  * [ ] Dedicated database user with minimal permissions
-  * [ ] Connection pooling properly configured
-  * [ ] Query timeouts implemented
-* [ ] **Access Control**
-  * [ ] Database users have minimal required permissions
-  * [ ] No shared database accounts
-  * [ ] Regular credential rotation
-  * [ ] Network access restrictions
+- [ ] **Connection Security**
+  - [ ] SSL/TLS enabled for database connections
+  - [ ] Dedicated database user with minimal permissions
+  - [ ] Connection pooling properly configured
+  - [ ] Query timeouts implemented
+- [ ] **Access Control**
+  - [ ] Database users have minimal required permissions
+  - [ ] No shared database accounts
+  - [ ] Regular credential rotation
+  - [ ] Network access restrictions
 
 ### 📊 Monitoring & Auditing
 
-* [ ] **Audit Logging**
-  * [ ] All sensitive operations logged
-  * [ ] Audit logs tamper-proof
-  * [ ] Regular audit log review
-  * [ ] Long-term audit log retention
-* [ ] **Security Monitoring**
-  * [ ] Failed login attempt tracking
-  * [ ] Privilege escalation detection
-  * [ ] Suspicious query pattern detection
-  * [ ] Real-time security alerts
+- [ ] **Audit Logging**
+  - [ ] All sensitive operations logged
+  - [ ] Audit logs tamper-proof
+  - [ ] Regular audit log review
+  - [ ] Long-term audit log retention
+- [ ] **Security Monitoring**
+  - [ ] Failed login attempt tracking
+  - [ ] Privilege escalation detection
+  - [ ] Suspicious query pattern detection
+  - [ ] Real-time security alerts
 
 ### 🔧 Development Security
 
-* [ ] **Code Security**
-  * [ ] Security code reviews
-  * [ ] Dependency vulnerability scanning
-  * [ ] Secrets management (no hardcoded credentials)
-  * [ ] Regular security testing
-* [ ] **Environment Security**
-  * [ ] Separate environments (dev/staging/prod)
-  * [ ] Production data not used in development
-  * [ ] Environment variable security
-  * [ ] Regular security updates
+- [ ] **Code Security**
+  - [ ] Security code reviews
+  - [ ] Dependency vulnerability scanning
+  - [ ] Secrets management (no hardcoded credentials)
+  - [ ] Regular security testing
+- [ ] **Environment Security**
+  - [ ] Separate environments (dev/staging/prod)
+  - [ ] Production data not used in development
+  - [ ] Environment variable security
+  - [ ] Regular security updates
 
-***
+---
 
 ## 🚀 Advanced Security Patterns
 
@@ -875,6 +906,19 @@ module ZeroTrustAccess
       resource.user_id == user.id || resource.public? || user.can?(Permission::ReadAllPosts)
     else
       user.admin?  # Conservative default
+    end
+  end
+
+  private def self.map_action_to_permission(action : String) : Permission
+    case action
+    when "read"
+      Permission::ReadUsers
+    when "write", "update"
+      Permission::WriteUsers
+    when "delete"
+      Permission::DeleteUsers
+    else
+      Permission::AdminAccess
     end
   end
 end
@@ -956,12 +1000,12 @@ module ThreatDetection
 end
 ```
 
-***
+---
 
 > 🔐 **Security is not a feature, it's a foundation** - Implement security measures from the beginning of your project, not as an afterthought. Regular security reviews and updates are essential for maintaining protection.
 
 **Next Steps:**
 
-* [**Performance Guide →**](broken-reference) - Secure performance patterns
-* [**Testing Guide →**](testing-strategies.md) - Test your security measures
-* [**Deployment Guide →**](../guides/deployment-guide.md) - Secure deployment practices
+- [**Performance Guide →**](performance-optimization.md) - Secure performance patterns
+- [**Testing Guide →**](testing-strategies.md) - Test your security measures
+- [**Best Practices →**](../guides/best-practices.md) - Secure development practices
