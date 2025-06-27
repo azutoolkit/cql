@@ -6,7 +6,6 @@ require "log"
 require "ulid"
 require "uuid"
 require "colorize"
-require "tallboy"
 
 require "./expression"
 require "./exceptions"
