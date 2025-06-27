@@ -1,3 +1,7 @@
+---
+icon: flask
+---
+
 # Testing Strategies
 
 > **Build confidence through comprehensive testing** - Master unit testing, integration testing, and mocking strategies for robust CQL applications
@@ -39,7 +43,7 @@ graph TD
 | **Integration** | Medium | Medium    | Test DB  | Database operations, queries |
 | **End-to-End**  | Slow   | Low       | Test DB  | Full application flows       |
 
----
+***
 
 ## Test Environment Setup
 
@@ -144,7 +148,7 @@ module TestConfig
 end
 ```
 
----
+***
 
 ## Unit Testing
 
@@ -277,7 +281,7 @@ describe PasswordValidator do
 end
 ```
 
----
+***
 
 ## Integration Testing
 
@@ -435,7 +439,7 @@ describe "Transactions" do
 end
 ```
 
----
+***
 
 ## Mocking and Stubbing
 
@@ -519,7 +523,7 @@ describe "User email notifications" do
 end
 ```
 
----
+***
 
 ## Test Data Factories
 
@@ -605,7 +609,7 @@ class PostFactory
 end
 ```
 
----
+***
 
 ## Database Testing Patterns
 
@@ -708,7 +712,7 @@ module TestConfig
 end
 ```
 
----
+***
 
 ## Performance Testing
 
@@ -768,7 +772,7 @@ describe "Query Performance" do
 end
 ```
 
----
+***
 
 ## Testing Relationships
 
@@ -823,7 +827,7 @@ describe "User associations" do
 end
 ```
 
----
+***
 
 ## Testing Best Practices
 
@@ -932,41 +936,41 @@ it "persists user on registration" do
 end
 ```
 
----
+***
 
 ## Testing Checklist
 
 ### Model Testing Checklist
 
-- [ ] **Validations** - All validation rules tested
-- [ ] **Callbacks** - Before/after hooks verified
-- [ ] **Business Logic** - Domain methods work correctly
-- [ ] **Associations** - Relationships function properly
-- [ ] **Edge Cases** - Boundary conditions handled
+* [ ] **Validations** - All validation rules tested
+* [ ] **Callbacks** - Before/after hooks verified
+* [ ] **Business Logic** - Domain methods work correctly
+* [ ] **Associations** - Relationships function properly
+* [ ] **Edge Cases** - Boundary conditions handled
 
 ### Integration Testing Checklist
 
-- [ ] **CRUD Operations** - Create, read, update, delete work
-- [ ] **Complex Queries** - Joins, aggregations, subqueries
-- [ ] **Transactions** - Rollback and commit behavior
-- [ ] **Database Constraints** - Foreign keys, unique constraints
-- [ ] **Performance** - No N+1 queries, reasonable response times
+* [ ] **CRUD Operations** - Create, read, update, delete work
+* [ ] **Complex Queries** - Joins, aggregations, subqueries
+* [ ] **Transactions** - Rollback and commit behavior
+* [ ] **Database Constraints** - Foreign keys, unique constraints
+* [ ] **Performance** - No N+1 queries, reasonable response times
 
 ### Test Quality Checklist
 
-- [ ] **Independent** - Tests don't depend on each other
-- [ ] **Isolated** - Each test has clean state
-- [ ] **Fast** - Unit tests run quickly
-- [ ] **Reliable** - Tests pass consistently
-- [ ] **Maintainable** - Easy to understand and update
-- [ ] **Comprehensive** - Good test coverage
+* [ ] **Independent** - Tests don't depend on each other
+* [ ] **Isolated** - Each test has clean state
+* [ ] **Fast** - Unit tests run quickly
+* [ ] **Reliable** - Tests pass consistently
+* [ ] **Maintainable** - Easy to understand and update
+* [ ] **Comprehensive** - Good test coverage
 
----
+***
 
 > **Testing is not about finding bugs, it's about preventing them** - Comprehensive testing strategies help you build confidence in your code and catch issues before they reach production.
 
 **Next Steps:**
 
-- [**Security Guide →**](security-guide.md) - Secure your tested code
-- [**Performance Guide →**](performance-optimization.md) - Test performance optimizations
-- [**Best Practices →**](../guides/best-practices.md) - Apply testing best practices
+* [**Security Guide →**](security-guide.md) - Secure your tested code
+* [**Performance Guide →**](performance-optimization.md) - Test performance optimizations
+* [**Best Practices →**](../guides/best-practices.md) - Apply testing best practices

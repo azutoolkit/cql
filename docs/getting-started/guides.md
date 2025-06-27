@@ -1,3 +1,7 @@
+---
+icon: book
+---
+
 # Guides Overview
 
 Welcome to the CQL Guides section! Here you'll find practical, focused documentation to help you use CQL (Crystal Query Language) effectively in your Crystal projects.
@@ -8,40 +12,40 @@ Our guides are organized to help you progress from basic concepts to advanced te
 
 ### Getting Started
 
-- [**Getting Started Guide**](getting-started.md) - Build your first CQL application
-- [**Configuration**](configuration.md) - Set up CQL for all environments
-- [**Architecture Overview**](architecture-overview.md) - Understand how CQL works
+* [**Getting Started Guide**](getting-started.md) - Build your first CQL application
+* [**Configuration**](configuration.md) - Set up CQL for all environments
+* [**Architecture Overview**](architecture-overview.md) - Understand how CQL works
 
 ### Active Record with CQL
 
-- [**Active Record Overview**](../active-record-with-cql/active-record-with-cql.md) - Complete guide to the Active Record pattern
-- [**Defining Models**](../active-record-with-cql/defining-models.md) - Create your first models
-- [**CRUD Operations**](../active-record-with-cql/crud-operations.md) - Create, read, update, delete
-- [**Querying & Scopes**](../active-record-with-cql/queryable.md) - Find what you need
-- [**Relationships**](../active-record-with-cql/relations/) - Connect your data
-- [**Validations**](../active-record-with-cql/validations.md) - Ensure data quality
-- [**Callbacks**](../active-record-with-cql/callbacks.md) - Hook into model lifecycle
-- [**Transactions**](../active-record-with-cql/transactions.md) - Maintain data consistency
+* [**Active Record Overview**](../active-record-with-cql/active-record-with-cql.md) - Complete guide to the Active Record pattern
+* [**Defining Models**](../active-record-with-cql/defining-models.md) - Create your first models
+* [**CRUD Operations**](../active-record-with-cql/crud-operations.md) - Create, read, update, delete
+* [**Querying & Scopes**](../active-record-with-cql/queryable.md) - Find what you need
+* [**Relationships**](../active-record-with-cql/relations/) - Connect your data
+* [**Validations**](../active-record-with-cql/validations.md) - Ensure data quality
+* [**Callbacks**](../active-record-with-cql/callbacks.md) - Hook into model lifecycle
+* [**Transactions**](../active-record-with-cql/transactions.md) - Maintain data consistency
 
 ### Database Management
 
-- [**Migrations**](../database-management/migrations.md) - Version control your database
-- [**Migration Best Practices**](../database-management/handling-migrations.md) - Follow proven patterns
-- [**Migration Guide**](../database-management/migration-guide.md) - Transition from other ORMs
-- [**Schema Dump**](../database-management/schema-dump.md) - Export and import schemas
+* [**Migrations**](../database-management/migrations.md) - Version control your database
+* [**Migration Best Practices**](../database-management/handling-migrations.md) - Follow proven patterns
+* [**Migration Guide**](../database-management/migration-guide.md) - Transition from other ORMs
+* [**Schema Dump**](../database-management/schema-dump.md) - Export and import schemas
 
 ### Advanced Topics
 
-- [**Performance Optimization**](../advanced-topics/performance-optimization.md) - Make your queries fast
-- [**Performance Monitoring**](../advanced-topics/performance-tools.md) - Query analysis and N+1 detection
-- [**Security Guide**](../advanced-topics/security-guide.md) - Secure database operations
-- [**Testing Strategies**](../advanced-topics/testing-strategies.md) - Test your database code
+* [**Performance Optimization**](../advanced-topics/performance-optimization.md) - Make your queries fast
+* [**Performance Monitoring**](../advanced-topics/performance-tools.md) - Query analysis and N+1 detection
+* [**Security Guide**](../advanced-topics/security-guide.md) - Secure database operations
+* [**Testing Strategies**](../advanced-topics/testing-strategies.md) - Test your database code
 
 ### Best Practices & Comparison
 
-- [**Best Practices**](best-practices.md) - Follow proven patterns
-- [**Feature Comparison**](feature-comparison.md) - See how CQL compares to other ORMs
-- [**Community**](../help-and-resources/community.md) - Connect with other developers
+* [**Best Practices**](best-practices.md) - Follow proven patterns
+* [**Feature Comparison**](feature-comparison.md) - See how CQL compares to other ORMs
+* [**Community**](../help-and-resources/community.md) - Connect with other developers
 
 ## Learning Paths
 
@@ -70,25 +74,25 @@ Our guides are organized to help you progress from basic concepts to advanced te
 
 ## How to Use These Guides
 
-- **Start with the basics** - If you're new to CQL, begin with [Getting Started](getting-started.md)
-- **Follow the learning paths** - Use the paths above to guide your learning
-- **Use the sidebar** - Navigate between related topics easily
-- **Check examples** - See [Examples](../examples-and-tutorials/examples.md) for working code samples
-- **Get help** - Visit [Troubleshooting](../help-and-resources/troubleshooting.md) or [Community](../help-and-resources/community.md) if you get stuck
+* **Start with the basics** - If you're new to CQL, begin with [Getting Started](getting-started.md)
+* **Follow the learning paths** - Use the paths above to guide your learning
+* **Use the sidebar** - Navigate between related topics easily
+* **Check examples** - See [Examples](../examples-and-tutorials/examples.md) for working code samples
+* **Get help** - Visit [Troubleshooting](../help-and-resources/troubleshooting.md) or [Community](../help-and-resources/community.md) if you get stuck
 
 ## What Makes These Guides Special
 
 Each guide is designed to be:
 
-- **Self-contained** - Complete examples and explanations
-- **Practical** - Real-world scenarios and code samples
-- **Progressive** - Build on previous knowledge
-- **Tested** - All examples work with the latest CQL version
-- **Crystal-focused** - Tailored for Crystal developers
+* **Self-contained** - Complete examples and explanations
+* **Practical** - Real-world scenarios and code samples
+* **Progressive** - Build on previous knowledge
+* **Tested** - All examples work with the latest CQL version
+* **Crystal-focused** - Tailored for Crystal developers
 
 Whether you're building your first Crystal app with CQL or looking to master advanced features, these guides are your go-to resource for effective CQL development.
 
----
+***
 
 > Don't try to read everything at once! Pick a learning path that matches your experience level and goals, then work through it systematically.
 
