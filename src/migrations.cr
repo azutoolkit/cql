@@ -109,8 +109,8 @@ module CQL
 
       # Convert CamelCase to snake_case with better formatting
       class_name
-        .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2")  # Handle acronyms like "XMLParser" -> "XML_Parser"
-        .gsub(/([a-z])([A-Z])/, "\\1_\\2")        # Handle regular camelCase
+        .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2") # Handle acronyms like "XMLParser" -> "XML_Parser"
+        .gsub(/([a-z])([A-Z])/, "\\1_\\2")       # Handle regular camelCase
         .downcase
     end
 
@@ -426,12 +426,12 @@ module CQL
       return if m.empty?
 
       # Calculate dynamic column widths
-      status_width = 6  # Reduced from 8 for better fit
-      version_width = [7, m.map(&.version.to_s.size).max? || 7].max
-      name_width = [20, m.map(&.name.size).max? || 20].max
+      status_width = 6 # Reduced from 8 for better fit
+      version_width = [7, m.max_of?(&.version.to_s.size) || 7].max
+      name_width = [20, m.max_of?(&.name.size) || 20].max
 
       # Ensure reasonable limits
-      name_width = [name_width, 45].min  # Reduced max width
+      name_width = [name_width, 45].min # Reduced max width
 
       # Table header
       puts
@@ -443,10 +443,10 @@ module CQL
       m.each do |migration|
         # Format migration name (truncate if too long)
         formatted_name = if migration.name.size > name_width
-                          migration.name[0, name_width - 3] + "..."
-                        else
-                          migration.name.ljust(name_width)
-                        end
+                           migration.name[0, name_width - 3] + "..."
+                         else
+                           migration.name.ljust(name_width)
+                         end
 
         # Center status within exact width
         formatted_status = status.center(status_width)
