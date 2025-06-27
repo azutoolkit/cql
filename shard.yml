@@ -9,8 +9,7 @@ dependencies:
     github: SuperPaintman/ulid
   db:
     github: crystal-lang/crystal-db
-  tallboy:
-    github: epoch/tallboy
+
   redis:
     github: stefanwille/crystal-redis
     version: ~> 2.8
