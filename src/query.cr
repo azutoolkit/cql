@@ -6,6 +6,7 @@ require "./insert"
 require "./update"
 require "./delete"
 require "./merge_query"
+require "./cache/request_query_cache"
 
 module CQL
   # The `Query` class is responsible for building SQL queries in a structured manner.
@@ -79,9 +80,11 @@ module CQL
     def all(as as_kind)
       query, params = to_sql
 
-      CQL::Performance.benchmark(query, params) do
-        @schema.exec_query do |conn|
-          conn.query_all(query, args: params, as: as_kind)
+      CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
+        CQL::Performance.benchmark(query, params) do
+          @schema.exec_query do |conn|
+            conn.query_all(query, args: params, as: as_kind)
+          end
         end
       end
     end
@@ -118,8 +121,10 @@ module CQL
     def first(as as_kind)
       query, params = to_sql
       limit(1)
-      @schema.exec_query do |conn|
-        conn.query_one?(query, args: params, as: as_kind)
+      CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
+        @schema.exec_query do |conn|
+          conn.query_one?(query, args: params, as: as_kind)
+        end
       end
     end
 
@@ -152,8 +157,10 @@ module CQL
     # ```
     def get(as as_kind)
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.query_one?(query, args: params, as: as_kind)
+      CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
+        @schema.exec_query do |conn|
+          conn.query_one?(query, args: params, as: as_kind)
+        end
       end
     end
 

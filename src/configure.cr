@@ -2,20 +2,40 @@ require "log"
 require "mutex"
 require "./migrations"
 require "./performance"
+require "./cache/*"
 require "./configure/*"
 
 module CQL
-  # Centralized configuration management for CQL library using SOLID principles
+  # 🚀 Developer-friendly centralized configuration for CQL
   #
-  # This module provides a thread-safe, extensible way to configure all fundamental
-  # settings of the CQL library from one centralized place.
+  # Quick setup for different environments:
   #
-  # **Example** Basic configuration
+  # **Development** (auto-configured)
   # ```
   # CQL.configure do |config|
-  #   config.database_url = "postgresql://localhost/myapp"
-  #   config.logger = Log.for("MyApp")
-  #   config.default_timezone = :utc
+  #   config.db = "postgresql://localhost/myapp"
+  #   config.log_level = :debug
+  # end
+  # ```
+  #
+  # **Production**
+  # ```
+  # CQL.configure do |config|
+  #   config.db = ENV["DATABASE_URL"]
+  #   config.env = "production"
+  #   config.pool_size = 25
+  #   config.monitor_performance = true
+  #   config.cache.on = true
+  # end
+  # ```
+  #
+  # **Quick caching setup**
+  # ```
+  # CQL.configure do |config|
+  #   config.db = "postgresql://localhost/myapp"
+  #   config.cache.on = true
+  #   config.cache.ttl = 30.minutes
+  #   config.cache.memory_size = 2000
   # end
   # ```
   module Configure
@@ -23,69 +43,125 @@ module CQL
     @@config_mutex = Mutex.new
     @@config_instance : Config? = nil
 
-    # Main configuration class with single responsibility
+    # 🎯 Main configuration class - optimized for developer experience
     class Config
-      # Core settings
-      property database_url : String = "sqlite3://./db/development.db"
+      # === 🔌 DATABASE CONNECTION ===
+      # Primary database connection URL
+      property db : String = "sqlite3://./db/development.db"
+
+      # Environment (auto-detects from CRYSTAL_ENV)
+      property env : String = ENV["CRYSTAL_ENV"]? || "development"
+
+      # Timezone for date/time operations
+      property timezone : Symbol = :utc
+
+      # Custom database adapter settings
+      property adapter_options : Hash(String, String) = Hash(String, String).new
+
+      # === 📋 LOGGING ===
+      # Main application logger
       property logger : Log = Log.for("cql.*")
-      property default_timezone : Symbol = :utc
-      property environment : String = ENV["CRYSTAL_ENV"]? || "development"
-      # Migration and Schema Management
-      property migration_table_name : Symbol = :cql_schema_migrations
-      property schema_path : String = "src/schemas"
-      property schema_file_name : String = "app_schema.cr"
-      property schema_constant_name : Symbol = :AppSchema
-      property schema_symbol : Symbol = :app_schema
-      property? auto_load_models : Bool = true
-      property? enable_auto_schema_sync : Bool = true
-      property? bootstrap_on_startup : Bool = false
-      property? verify_schema_on_startup : Bool = false
 
-      # Query and Performance settings
-      property? enable_query_cache : Bool = false
-      property cache_ttl : Time::Span = 1.hour
-      property? enable_performance_monitoring : Bool = false
-      property performance_config : CQL::Performance::PerformanceConfig = CQL::Performance::PerformanceConfig.new
+      # Shortcut for log level (maps to logger.level)
+      property log_level : Log::Severity = Log::Severity::Info
 
-      # Custom adapter configuration
-      property adapter_config : Hash(String, String) = Hash(String, String).new
+      # === 🗂️ SCHEMA & MIGRATIONS ===
+      # Directory containing schema files
+      property schema_dir : String = "src/schemas"
 
-      # Composed configuration objects
-      getter connection_pool : ConnectionPoolConfig = ConnectionPoolConfig.new
+      # Main schema file name
+      property schema_file : String = "app_schema.cr"
+
+      # Schema class name in Crystal code
+      property schema_class : Symbol = :AppSchema
+
+      # Schema instance symbol
+      property schema_name : Symbol = :app_schema
+
+      # Database table for tracking migrations
+      property migrations_table : Symbol = :schema_migrations
+
+      # === ⚡ BEHAVIOR FLAGS ===
+      # Auto-load model files on startup
+      property auto_load : Bool = true
+
+      # Keep schema file in sync with database
+      property auto_sync : Bool = true
+
+      # Create schema from existing database on first run
+      property bootstrap : Bool = false
+
+      # Verify schema matches database on startup
+      property verify_schema : Bool = false
+
+      # === 📊 PERFORMANCE ===
+      # Enable query performance monitoring
+      property monitor_performance : Bool = false
+
+      # Detailed performance configuration
+      property performance : CQL::Performance::PerformanceConfig = CQL::Performance::PerformanceConfig.new
+
+      # === 💾 CACHE SYSTEM ===
+      # Centralized cache configuration (use config.cache.* to configure)
+      getter cache : CacheConfig = CacheConfig.new
+
+      # === 🔗 CONNECTION POOL ===
+      # Number of database connections in pool
+      property pool_size : Int32 = 10
+
+      # Detailed connection pool settings
+      getter pool : ConnectionPoolConfig = ConnectionPoolConfig.new
+
+      # === 🔐 SECURITY ===
+      # SSL/TLS configuration
       getter ssl : SSLConfig = SSLConfig.new
-      getter postgresql : PostgreSQLConfig = PostgreSQLConfig.new
+
+      # === 🗄️ DATABASE-SPECIFIC SETTINGS ===
+      getter postgres : PostgreSQLConfig = PostgreSQLConfig.new
       getter mysql : MySQLConfig = MySQLConfig.new
       getter sqlite : SQLiteConfig = SQLiteConfig.new
 
-      # Validators and strategies
+      # === 🛡️ VALIDATION ===
       @validators = [BasicConfigValidator.new] of ConfigValidator
 
       def initialize
-        setup_default_logger
-        apply_environment_defaults
+        setup_smart_defaults
+        sync_pool_size
+        apply_environment_config
       end
 
-      # Validation using composite pattern
-      def validate! : Nil
-        @validators.each(&.validate!(self))
-        connection_pool.validate!
-        ssl.validate!
-        database_config.validate!
+      # === 🔍 HELPER METHODS (more memorable syntax) ===
+
+      # Check if auto-loading is enabled
+      def auto_load? : Bool
+        @auto_load
       end
 
-      # Get effective database URL using Builder pattern
-      def effective_database_url : String
-        DatabaseURLBuilder.new(database_url)
-          .with_connection_pool(connection_pool)
-          .with_ssl(ssl)
-          .with_database_config(database_config)
-          .with_adapter_config(adapter_config)
-          .build
+      # Check if auto-sync is enabled
+      def auto_sync? : Bool
+        @auto_sync
       end
 
-      # Get database adapter based on URL
-      def database_adapter : Adapter
-        case database_url
+      # Check if bootstrap is enabled
+      def bootstrap? : Bool
+        @bootstrap
+      end
+
+      # Check if schema verification is enabled
+      def verify_schema? : Bool
+        @verify_schema
+      end
+
+      # Check if performance monitoring is enabled
+      def monitor_performance? : Bool
+        @monitor_performance
+      end
+
+      # === 🎯 SMART GETTERS ===
+
+      # Get the database adapter type
+      def adapter : Adapter
+        case db
         when .starts_with?("postgresql://"), .starts_with?("postgres://")
           Adapter::Postgres
         when .starts_with?("mysql://")
@@ -93,107 +169,111 @@ module CQL
         when .starts_with?("sqlite3://")
           Adapter::SQLite
         else
-          raise ArgumentError.new("Unsupported database URL format: #{database_url}")
+          raise ArgumentError.new("Unsupported database URL: #{db}")
         end
+      end
+
+      # Get the effective logger with proper level
+      def effective_logger : Log
+        @logger.level = @log_level
+        @logger
+      end
+
+      # Get full path to schema file
+      def schema_path : String
+        File.join(schema_dir, schema_file)
       end
 
       # Get database-specific configuration
-      def database_config : DatabaseConfig
-        case database_adapter
-        when Adapter::Postgres
-          postgresql
-        when Adapter::MySql
-          mysql
-        when Adapter::SQLite
-          sqlite
+      def db_config : DatabaseConfig
+        case adapter
+        when Adapter::Postgres then postgres
+        when Adapter::MySql    then mysql
+        when Adapter::SQLite   then sqlite
         else
-          raise ArgumentError.new("Unsupported adapter: #{database_adapter}")
+          raise ArgumentError.new("Unsupported adapter: #{adapter}")
         end
       end
 
-      # Get the effective logger
-      def effective_logger : Log
-        @logger || Log.for("CQL")
+      # Get complete database URL with all settings applied
+      def full_db_url : String
+        DatabaseURLBuilder.new(db)
+          .with_connection_pool(pool)
+          .with_ssl(ssl)
+          .with_database_config(db_config)
+          .with_adapter_config(adapter_options)
+          .build
       end
 
-      # Configure performance monitoring if enabled
-      def setup_performance_monitoring(schema : Schema) : Nil
-        return unless enable_performance_monitoring?
+      # === 🔧 VALIDATION ===
 
-        Performance.setup(schema) do |config|
-          config.query_profiling_enabled = performance_config.query_profiling_enabled?
-          config.n_plus_one_detection_enabled = performance_config.n_plus_one_detection_enabled?
-          config.plan_analysis_enabled = performance_config.plan_analysis_enabled?
-          config.auto_analyze_slow_queries = performance_config.auto_analyze_slow_queries?
-          config.context_tracking_enabled = performance_config.context_tracking_enabled?
-          config.endpoint_tracking_enabled = performance_config.endpoint_tracking_enabled?
-          config.async_processing = performance_config.async_processing?
-          config.current_endpoint = performance_config.current_endpoint?
-          config.current_user_id = performance_config.current_user_id?
-        end
+      def validate! : Nil
+        @validators.each(&.validate!(self))
+        pool.validate!
+        ssl.validate!
+        db_config.validate!
+        cache.validate!
       end
 
-      # Migration and Schema Integration Methods
+      # === 🏗️ FACTORY METHODS ===
 
-      def schema_file_path : String
-        File.join(schema_path, schema_file_name)
-      end
-
-      # Consolidated migrator config creation with optional parameters
-      def create_migrator_config(
-        schema_file_path : String? = nil,
+      # Create migrator configuration
+      def migrator_config(
+        schema_path : String? = nil,
+        schema_class : Symbol? = nil,
         schema_name : Symbol? = nil,
-        schema_symbol : Symbol? = nil,
-        migration_table_name : Symbol? = nil,
+        migrations_table : Symbol? = nil,
         auto_sync : Bool? = nil,
       ) : CQL::MigratorConfig
         CQL::MigratorConfig.new(
-          schema_file_path: schema_file_path || self.schema_file_path,
-          schema_name: schema_name || self.schema_constant_name,
-          schema_symbol: schema_symbol || self.schema_symbol,
-          migration_table_name: migration_table_name || self.migration_table_name,
-          auto_sync: auto_sync.nil? ? enable_auto_schema_sync? : auto_sync
+          schema_file_path: schema_path || self.schema_path,
+          schema_name: schema_class || self.schema_class,
+          schema_symbol: schema_name || self.schema_name,
+          migration_table_name: migrations_table || self.migrations_table,
+          auto_sync: auto_sync.nil? ? self.auto_sync : auto_sync
         )
       end
 
-      def create_migrator_config_for_environment(env : String) : CQL::MigratorConfig
-        case env
+      # Create environment-specific migrator config
+      def migrator_config_for(environment : String) : CQL::MigratorConfig
+        case environment
         when "production"
-          create_migrator_config(
-            schema_file_path: File.join(schema_path, "production_schema.cr"),
-            schema_name: :ProductionSchema,
-            schema_symbol: :production_schema,
-            migration_table_name: :cql_schema_migrations,
+          migrator_config(
+            schema_path: File.join(schema_dir, "production_schema.cr"),
+            schema_class: :ProductionSchema,
+            schema_name: :production_schema,
+            migrations_table: :schema_migrations,
             auto_sync: false
           )
         when "test"
-          create_migrator_config(
-            schema_file_path: File.join(schema_path, "test_schema.cr"),
-            schema_name: :TestSchema,
-            schema_symbol: :test_schema,
-            migration_table_name: :test_schema_migrations,
+          migrator_config(
+            schema_path: File.join(schema_dir, "test_schema.cr"),
+            schema_class: :TestSchema,
+            schema_name: :test_schema,
+            migrations_table: :test_migrations,
             auto_sync: true
           )
         when "development"
-          create_migrator_config(auto_sync: true)
+          migrator_config(auto_sync: true)
         else
-          create_migrator_config
+          migrator_config
         end
       end
 
-      def create_migrator(schema : Schema) : CQL::Migrator
-        migrator_config = create_migrator_config
-        migrator = schema.migrator(migrator_config)
+      # Create a configured migrator
+      def build_migrator(schema : Schema) : CQL::Migrator
+        config = migrator_config
+        migrator = schema.migrator(config)
 
-        # Handle startup options
-        if bootstrap_on_startup?
-          effective_logger.info { "Bootstrapping schema from existing database..." }
+        # Handle startup behaviors
+        if bootstrap?
+          effective_logger.info { "🚀 Bootstrapping schema from database..." }
           migrator.bootstrap_schema
-        elsif verify_schema_on_startup?
+        elsif verify_schema?
           unless migrator.verify_schema_consistency
-            effective_logger.warn { "Schema file is out of sync with database" }
-            if enable_auto_schema_sync?
-              effective_logger.info { "Auto-updating schema file..." }
+            effective_logger.warn { "⚠️  Schema file is out of sync with database" }
+            if auto_sync?
+              effective_logger.info { "🔄 Auto-updating schema file..." }
               migrator.update_schema_file
             end
           end
@@ -202,27 +282,92 @@ module CQL
         migrator
       end
 
+      # === 📈 PERFORMANCE SETUP ===
+
+      def setup_performance_monitoring(schema : Schema) : Nil
+        return unless monitor_performance?
+
+        Performance.setup(schema) do |config|
+          config.query_profiling_enabled = performance.query_profiling_enabled?
+          config.n_plus_one_detection_enabled = performance.n_plus_one_detection_enabled?
+          config.plan_analysis_enabled = performance.plan_analysis_enabled?
+          config.auto_analyze_slow_queries = performance.auto_analyze_slow_queries?
+          config.context_tracking_enabled = performance.context_tracking_enabled?
+          config.endpoint_tracking_enabled = performance.endpoint_tracking_enabled?
+          config.async_processing = performance.async_processing?
+          config.current_endpoint = performance.current_endpoint
+          config.current_user_id = performance.current_user_id
+        end
+      end
+
+      # === 💾 CACHE SETUP ===
+
+      def setup_cache_system : Nil
+        return unless cache.on?
+
+        effective_logger.info { "💾 Setting up CQL cache system..." }
+        cache.setup_cache_system
+        effective_logger.info { "✅ CQL cache system ready" }
+      end
+
+      # Create memory cache with current settings
+      def build_memory_cache : CQL::Cache::MemoryCache
+        CQL::Cache::MemoryCache.new(cache.memory_size)
+      end
+
+      # Create fragment cache with current settings
+      def build_fragment_cache : CQL::Cache::FragmentCache
+        memory_cache = build_memory_cache
+        strategy = cache.create_invalidation_strategy
+        config = cache.create_cache_interface_config
+        CQL::Cache::FragmentCache.new(memory_cache, strategy, config)
+      end
+
+      # Get cache statistics
+      def cache_stats : Hash(String, String | Int32 | Int64 | Float64 | Bool)
+        cache.cache_statistics
+      end
+
+      # Get cache performance summary
+      def cache_summary : String
+        cache.performance_summary
+      end
+
+      # Reset cache statistics
+      def reset_cache! : Nil
+        cache.reset_cache_statistics
+      end
+
+      # === 🔧 UTILITIES ===
+
       # Add custom validator
       def add_validator(validator : ConfigValidator) : Nil
         @validators << validator
       end
 
-      private def setup_default_logger
-        @logger = case environment
-                  when "production"
-                    Log.for("CQL::Production")
-                  when "test"
-                    Log.for("CQL::Test")
-                  else
-                    Log.for("CQL::Development")
-                  end
+      private def setup_smart_defaults
+        @logger = Log.for("CQL::#{env.capitalize}")
+        @logger.level = case env
+                        when "production" then Log::Severity::Info
+                        when "test"       then Log::Severity::Error
+                        else                   Log::Severity::Debug
+                        end
+        @log_level = @logger.level
       end
 
-      private def apply_environment_defaults
-        strategy = EnvironmentStrategyFactory.create(environment)
+      private def sync_pool_size
+        # Keep pool_size and pool.size in sync
+        pool.size = @pool_size
+      end
+
+      private def apply_environment_config
+        strategy = EnvironmentStrategyFactory.create(env)
         strategy.apply(self)
+        sync_pool_size # Re-sync after environment changes
       end
     end
+
+    # === 🔄 CONFIGURATION MANAGEMENT ===
 
     # Get the current configuration instance (thread-safe)
     def self.current : Config
@@ -246,27 +391,44 @@ module CQL
     end
   end
 
-  # Main configuration method for CQL
+  # === 🎯 MAIN CONFIGURATION METHOD ===
   #
-  # **Example** Basic usage
+  # **Quick Development Setup**
   # ```
-  # CQL.configure do |config|
-  #   config.database_url = "postgresql://localhost/myapp"
-  #   config.logger = Log.for("MyApp")
-  #   config.default_timezone = :utc
-  #   config.auto_load_models = true
+  # CQL.configure do |c|
+  #   c.db = "postgresql://localhost/myapp"
+  #   c.log_level = :debug
+  #   c.auto_sync = true
   # end
   # ```
   #
-  # **Example** Production configuration
+  # **Production Ready**
   # ```
-  # CQL.configure do |config|
-  #   config.database_url = ENV["DATABASE_URL"]
-  #   config.logger = Log.for("Production")
-  #   config.environment = "production"
-  #   config.connection_pool.size = 25
-  #   config.enable_performance_monitoring = false
-  #   config.auto_load_models = false
+  # CQL.configure do |c|
+  #   c.db = ENV["DATABASE_URL"]
+  #   c.env = "production"
+  #   c.pool_size = 25
+  #   c.monitor_performance = true
+  #   c.auto_sync = false
+  #
+  #   # Enable caching
+  #   c.cache.on = true
+  #   c.cache.ttl = 1.hour
+  #   c.cache.memory_size = 5000
+  # end
+  # ```
+  #
+  # **Caching Focus**
+  # ```
+  # CQL.configure do |c|
+  #   c.db = "postgresql://localhost/myapp"
+  #
+  #   # Quick cache setup
+  #   c.cache.on = true
+  #   c.cache.ttl = 30.minutes
+  #   c.cache.memory_size = 2000
+  #   c.cache.request_cache = true
+  #   c.cache.fragments = true
   # end
   # ```
   def self.configure(& : Configure::Config ->)
@@ -286,41 +448,42 @@ module CQL
     Configure.reset!
   end
 
-  # Schema and Migration Methods
+  # === 🗂️ SCHEMA & MIGRATION HELPERS ===
 
-  # Create a schema with automatic migration support
-  def self.create_schema(name : Symbol, &block) : Schema
-    schema = Schema.define(name, config.database_url, config.database_adapter, &block)
+  # Create a schema with smart defaults
+  def self.build_schema(name : Symbol, &block) : Schema
+    schema = Schema.define(name, config.db, config.adapter, &block)
 
-    # Setup performance monitoring if enabled
-    config.setup_performance_monitoring(schema) if config.enable_performance_monitoring?
+    # Auto-setup based on configuration
+    config.setup_performance_monitoring(schema) if config.monitor_performance?
+    config.setup_cache_system if config.cache.on?
 
     schema
   end
 
-  # Create a migrator using centralized configuration
-  def self.create_migrator(schema : Schema, migrator_config : MigratorConfig? = nil) : Migrator
-    if migrator_config
-      schema.migrator(migrator_config)
+  # Create a migrator using current configuration
+  def self.build_migrator(schema : Schema, custom_config : MigratorConfig? = nil) : Migrator
+    if custom_config
+      schema.migrator(custom_config)
     else
-      config.create_migrator(schema)
+      config.build_migrator(schema)
     end
   end
 
-  # Bootstrap schema from existing database
+  # Quick schema bootstrap from existing database
   def self.bootstrap_schema(schema : Schema) : Migrator
-    migrator = create_migrator(schema)
+    migrator = build_migrator(schema)
     migrator.bootstrap_schema
     migrator
   end
 
-  # Verify and optionally fix schema consistency
+  # Verify schema consistency with auto-fix option
   def self.verify_schema(schema : Schema, auto_fix : Bool = false) : Bool
-    migrator = create_migrator(schema)
+    migrator = build_migrator(schema)
     consistent = migrator.verify_schema_consistency
 
-    if !consistent && auto_fix && config.enable_auto_schema_sync?
-      config.effective_logger.info { "Auto-fixing schema inconsistency..." }
+    if !consistent && auto_fix && config.auto_sync?
+      config.effective_logger.info { "🔧 Auto-fixing schema..." }
       migrator.update_schema_file
       true
     else
@@ -328,13 +491,75 @@ module CQL
     end
   end
 
-  # Delegate migrator config creation to the config object
-  def self.create_migrator_config(**args) : MigratorConfig
-    config.create_migrator_config(**args)
+  # Create migrator configuration
+  def self.migrator_config(**args) : MigratorConfig
+    config.migrator_config(**args)
   end
 
-  # Create environment-specific MigratorConfig
-  def self.create_migrator_config_for_environment(env : String) : MigratorConfig
-    config.create_migrator_config_for_environment(env)
+  # Create environment-specific migrator configuration
+  def self.migrator_config_for(env : String) : MigratorConfig
+    config.migrator_config_for(env)
+  end
+
+  # === 💾 CACHE HELPERS ===
+
+  # Quick cache enable/disable
+  def self.cache_on(enabled : Bool = true) : Nil
+    config.cache.on = enabled
+    config.setup_cache_system if enabled
+  end
+
+  # Check if cache is enabled
+  def self.cache_on? : Bool
+    config.cache.on?
+  end
+
+  # Get cache statistics
+  def self.cache_stats : Hash(String, String | Int32 | Int64 | Float64 | Bool)
+    config.cache_stats
+  end
+
+  # Get cache performance summary
+  def self.cache_summary : String
+    config.cache_summary
+  end
+
+  # Reset cache statistics
+  def self.reset_cache! : Nil
+    config.reset_cache!
+  end
+
+  # Create memory cache instance
+  def self.memory_cache : CQL::Cache::MemoryCache
+    config.build_memory_cache
+  end
+
+  # Create fragment cache instance
+  def self.fragment_cache : CQL::Cache::FragmentCache
+    config.build_fragment_cache
+  end
+
+  # === 🌐 REQUEST-SCOPED CACHING ===
+
+  # Start request-scoped caching
+  def self.start_request_cache(request_id : String? = nil) : Nil
+    return unless config.cache.on? && config.cache.request_cache?
+    CQL::Cache::RequestQueryCacheHelper.start_request(request_id)
+  end
+
+  # End request-scoped caching
+  def self.end_request_cache : Nil
+    return unless config.cache.on? && config.cache.request_cache?
+    CQL::Cache::RequestQueryCacheHelper.end_request
+  end
+
+  # Execute block with request-scoped caching
+  def self.with_request_cache(request_id : String? = nil, &)
+    start_request_cache(request_id)
+    begin
+      yield
+    ensure
+      end_request_cache
+    end
   end
 end

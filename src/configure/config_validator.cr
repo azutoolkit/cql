@@ -6,16 +6,24 @@ module CQL::Configure
 
   class BasicConfigValidator < ConfigValidator
     def validate!(config : Config) : Nil
-      raise ArgumentError.new("database_url cannot be empty") if config.database_url.empty?
-      raise ArgumentError.new("schema_path cannot be empty") if config.schema_path.empty?
-      raise ArgumentError.new("schema_file_name cannot be empty") if config.schema_file_name.empty?
+      # === 🔌 DATABASE VALIDATION ===
+      raise ArgumentError.new("db (database_url) cannot be empty") if config.db.empty?
 
-      unless [:utc, :local].includes?(config.default_timezone)
-        raise ArgumentError.new("default_timezone must be :utc or :local")
+      # === 🗂️ SCHEMA VALIDATION ===
+      raise ArgumentError.new("schema_dir cannot be empty") if config.schema_dir.empty?
+      raise ArgumentError.new("schema_file cannot be empty") if config.schema_file.empty?
+
+      unless [:utc, :local].includes?(config.timezone)
+        raise ArgumentError.new("timezone must be :utc or :local")
       end
 
-      unless config.schema_file_name.ends_with?(".cr")
-        raise ArgumentError.new("schema_file_name must end with .cr extension")
+      unless config.schema_file.ends_with?(".cr")
+        raise ArgumentError.new("schema_file must end with .cr extension")
+      end
+
+      # === 🔗 CONNECTION POOL VALIDATION ===
+      if config.pool_size <= 0
+        raise ArgumentError.new("pool_size must be positive")
       end
     end
   end

@@ -3,18 +3,39 @@ require "digest/md5"
 require "db"
 require "./cache_stats"
 require "./cache_entry"
+require "./cache_store"
+require "./request_query_cache"
+require "./middleware"
 
 module CQL
   module Cache
-    # Query cache for storing and retrieving query results
+    # Enhanced Query cache for storing and retrieving query results
+    # Now supports multiple cache backends (Memory, Redis) via CacheStore
     class Cache
-      @@cache = {} of String => CacheEntry
       @@enabled = true
       @@default_ttl = 1.hour
       @@default_cache_name = "cql"
+      @@cache_store : CacheInterface?
 
       # Cache statistics
       @@stats = CacheStats.new
+
+      # Configure cache store
+      def self.configure(config : CacheStoreConfig)
+        CacheStore.configure(config)
+        @@cache_store = nil # Reset to pick up new configuration
+      end
+
+      # Configure from environment variables
+      def self.configure_from_env
+        CacheStore.configure_from_env
+        @@cache_store = nil
+      end
+
+      # Get the cache store instance
+      private def self.cache_store : CacheInterface
+        @@cache_store ||= CacheStore.instance
+      end
 
       # Set default cache name
       # - **@param** name [String] The default cache name to use
@@ -52,17 +73,14 @@ module CQL
         start_time = Time.monotonic
         @@stats.total_requests += 1
 
-        # Check if cached and not expired
-        if cached_entry = @@cache[key]?
-          if cached_entry.expired?
-            @@cache.delete(key)
-          else
-            cached_entry.increment_access_count
-            @@stats.hits += 1
-            @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
-            # For complex results, we don't deserialize from JSON to avoid issues
-            # Instead, we just return the yielded result (cache disabled for complex objects)
-            return yield
+        # Check if cached
+        if cached_value = cache_store.get(key)
+          @@stats.hits += 1
+          @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
+          begin
+            return JSON.parse(cached_value)
+          rescue JSON::ParseException
+            # If cached data is malformed, fall through to execute block
           end
         end
 
@@ -76,9 +94,9 @@ module CQL
         execution_time = Time.monotonic - execution_start
         @@stats.total_execution_time += execution_time.total_seconds
 
-        # For now, we disable actual caching of complex objects to avoid serialization issues
-        # We just track statistics and return the result
-        # In the future, this could be enhanced to cache simple result types
+        # Cache the result
+        cache_value = serialize_for_cache(result)
+        cache_store.set(key, cache_value, ttl)
 
         result
       end
@@ -88,7 +106,7 @@ module CQL
       # - **@return** [Bool] True if the query result is cached
       def self.cached?(cache_key : String) : Bool
         return false unless @@enabled
-        has_key?(cache_key)
+        cache_store.exists?(cache_key)
       end
 
       # Cache a query result using a block
@@ -105,15 +123,14 @@ module CQL
 
         cache_key = generate_cache_key(cache_name, params)
 
-        # Check if cached and not expired
-        if cached_entry = @@cache[cache_key]?
-          if cached_entry.expired?
-            @@cache.delete(cache_key)
-          else
-            cached_entry.increment_access_count
-            @@stats.hits += 1
-            @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
-            return JSON.parse(cached_entry.value)
+        # Check if cached
+        if cached_value = cache_store.get(cache_key)
+          @@stats.hits += 1
+          @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
+          begin
+            return JSON.parse(cached_value)
+          rescue JSON::ParseException
+            # If cached data is malformed, fall through to execute block
           end
         end
 
@@ -128,8 +145,7 @@ module CQL
         @@stats.total_execution_time += execution_time.total_seconds
 
         cache_value = serialize_for_cache(result)
-        expires_at = Time.utc.to_unix + ttl.total_seconds.to_i64
-        @@cache[cache_key] = CacheEntry.new(cache_value, expires_at)
+        cache_store.set(cache_key, cache_value, ttl)
 
         result
       end
@@ -173,14 +189,31 @@ module CQL
         start_time = Time.monotonic
         @@stats.total_requests += 1
 
-        if cached_entry = @@cache[key]?
-          if cached_entry.expired?
-            @@cache.delete(key)
-          else
-            cached_entry.increment_access_count
-            @@stats.hits += 1
-            @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
-            return JSON.parse(cached_entry.value).as_a
+        if cached_value = cache_store.get(key)
+          @@stats.hits += 1
+          @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
+          begin
+            parsed = JSON.parse(cached_value).as_a
+            return parsed.map do |item|
+              case item
+              when .as_s?
+                item.as_s.as(DB::Any)
+              when .as_i?
+                item.as_i.as(DB::Any)
+              when .as_i64?
+                item.as_i64.as(DB::Any)
+              when .as_f?
+                item.as_f.as(DB::Any)
+              when .as_bool?
+                item.as_bool.as(DB::Any)
+              else
+                nil.as(DB::Any)
+              end
+            end
+          rescue JSON::ParseException
+            @@stats.hits -= 1
+            @@stats.misses += 1
+            return nil
           end
         end
 
@@ -196,42 +229,26 @@ module CQL
       def self.set(key : String, value : Array(DB::Any), ttl : Time::Span = @@default_ttl)
         return unless @@enabled
         cache_value = serialize_for_cache(value)
-        expires_at = Time.utc.to_unix + ttl.total_seconds.to_i64
-        @@cache[key] = CacheEntry.new(cache_value, expires_at)
+        cache_store.set(key, cache_value, ttl)
       end
 
-      # Check if a key exists in the cache and is not expired
+      # Check if a key exists in the cache
       # - **@param** key [String] The cache key
-      # - **@return** [Bool] True if the key exists and is not expired
+      # - **@return** [Bool] True if the key exists
       def self.has_key?(key : String) : Bool
         return false unless @@enabled
-
-        if cached_entry = @@cache[key]?
-          if cached_entry.expired?
-            @@cache.delete(key)
-          else
-            return true
-          end
-        end
-        false
+        cache_store.exists?(key)
       end
 
-      # Get the current cache size (excluding expired entries)
-      # - **@return** [Int32] The number of valid cached entries
+      # Get the current cache size
+      # - **@return** [Int32] The number of cached entries
       def self.size : Int32
-        cleanup_expired_entries
-        @@cache.size
+        cache_store.size
       end
 
       # Clear all cached entries
       def self.clear
-        @@cache.clear
-      end
-
-      # Clean up expired cache entries
-      def self.cleanup_expired_entries
-        expired_keys = @@cache.select { |_, entry| entry.expired? }.keys
-        expired_keys.each { |key| @@cache.delete(key) }
+        cache_store.clear
       end
 
       # Enable or disable caching
@@ -267,19 +284,10 @@ module CQL
       # Get detailed cache statistics as a hash
       # - **@return** [Hash] Detailed statistics
       def self.statistics : Hash
-        cleanup_expired_entries
+        # Merge our stats with cache store stats
+        cache_store_stats = cache_store.stats
 
-        # Calculate memory usage estimate (rough calculation)
-        memory_usage = @@cache.values.sum(&.value.bytesize)
-
-        # Get most accessed entries
-        most_accessed = @@cache.values
-          .sort_by!(&.access_count)
-          .reverse!
-          .first(5)
-          .map { |entry| {access_count: entry.access_count, age: Time.utc.to_unix - entry.created_at} }
-
-        {
+        base_stats = {
           "enabled"                   => @@enabled,
           "total_requests"            => @@stats.total_requests,
           "hits"                      => @@stats.hits,
@@ -291,11 +299,13 @@ module CQL
           "total_cache_time_ms"       => (@@stats.total_cache_time * 1000).round(2),
           "total_execution_time_ms"   => (@@stats.total_execution_time * 1000).round(2),
           "uptime_seconds"            => @@stats.uptime.total_seconds.to_i,
-          "cache_size"                => @@cache.size,
-          "memory_usage_bytes"        => memory_usage,
-          "most_accessed_entries"     => most_accessed,
+          "cache_size"                => cache_store.size,
           "default_ttl_seconds"       => @@default_ttl.total_seconds.to_i,
+          "cache_store_type"          => cache_store_stats["type"]? || "unknown",
         }
+
+        # Merge cache store specific stats
+        base_stats.merge(cache_store_stats)
       end
 
       # Reset cache statistics
@@ -311,25 +321,32 @@ module CQL
         String.build do |io|
           io << "=== CQL Query Cache Performance Summary ===\n"
           io << "Status: #{stats["enabled"] ? "Enabled" : "Disabled"}\n"
+          io << "Cache Store: #{stats["cache_store_type"]}\n"
           io << "Uptime: #{stats["uptime_seconds"]} seconds\n"
           io << "Total Requests: #{stats["total_requests"]}\n"
           io << "Cache Hits: #{stats["hits"]} (#{stats["hit_rate"]}%)\n"
           io << "Cache Misses: #{stats["misses"]} (#{stats["miss_rate"]}%)\n"
           io << "Cache Size: #{stats["cache_size"]} entries\n"
-          io << "Memory Usage: #{stats["memory_usage_bytes"]} bytes\n"
+
+          if memory_usage = stats["memory_usage_bytes"]?
+            io << "Memory Usage: #{memory_usage} bytes\n"
+          end
+
+          if redis_memory = stats["redis_memory_usage_bytes"]?
+            io << "Redis Memory Usage: #{redis_memory} bytes\n"
+          end
+
           io << "Average Cache Time: #{stats["average_cache_time_ms"]} ms\n"
           io << "Average Execution Time: #{stats["average_execution_time_ms"]} ms\n"
           io << "Total Cache Time: #{stats["total_cache_time_ms"]} ms\n"
           io << "Total Execution Time: #{stats["total_execution_time_ms"]} ms\n"
           io << "Default TTL: #{stats["default_ttl_seconds"]} seconds\n"
-
-          if most_accessed = stats["most_accessed_entries"].as(Array)
-            io << "\nMost Accessed Entries:\n"
-            most_accessed.each_with_index do |entry, index|
-              io << "  #{index + 1}. Access Count: #{entry["access_count"]}, Age: #{entry["age"]} seconds\n"
-            end
-          end
         end
+      end
+
+      # Direct access to underlying cache store for advanced usage
+      def self.cache_store : CacheInterface
+        cache_store
       end
     end
   end

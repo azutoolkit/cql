@@ -104,7 +104,14 @@ module CQL
 
     # Default implementation, can be overridden
     def self.name
-      super.gsub(/([A-Z])/, " \\1").strip.gsub(" ", "_").downcase
+      # Extract just the class name without module namespacing
+      class_name = super.split("::").last? || super
+
+      # Convert CamelCase to snake_case with better formatting
+      class_name
+        .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2")  # Handle acronyms like "XMLParser" -> "XML_Parser"
+        .gsub(/([a-z])([A-Z])/, "\\1_\\2")        # Handle regular camelCase
+        .downcase
     end
 
     # Class method to access the migration version
@@ -416,17 +423,43 @@ module CQL
     end
 
     private def print_table(m : Array(MigrationRecord), status : String = "✔".colorize.green.to_s)
-      records = m.map { |migration| [status, migration.name, migration.version] }
-      table = Tallboy.table do
-        columns do
-          add "", width: 3, align: :center
-          add "Migration"
-          add "Version"
-        end
-        header
-        rows records
+      return if m.empty?
+
+      # Calculate dynamic column widths
+      status_width = 6  # Reduced from 8 for better fit
+      version_width = [7, m.map(&.version.to_s.size).max? || 7].max
+      name_width = [20, m.map(&.name.size).max? || 20].max
+
+      # Ensure reasonable limits
+      name_width = [name_width, 45].min  # Reduced max width
+
+      # Table header
+      puts
+      puts "┌#{"─" * (status_width + 2)}┬#{"─" * (name_width + 2)}┬#{"─" * (version_width + 2)}┐"
+      puts "│ #{"Status".center(status_width)} │ #{"Migration".ljust(name_width)} │ #{"Version".rjust(version_width)} │"
+      puts "├#{"─" * (status_width + 2)}┼#{"─" * (name_width + 2)}┼#{"─" * (version_width + 2)}┤"
+
+      # Table rows
+      m.each do |migration|
+        # Format migration name (truncate if too long)
+        formatted_name = if migration.name.size > name_width
+                          migration.name[0, name_width - 3] + "..."
+                        else
+                          migration.name.ljust(name_width)
+                        end
+
+        # Center status within exact width
+        formatted_status = status.center(status_width)
+
+        # Right-align version numbers for better readability
+        formatted_version = migration.version.to_s.rjust(version_width)
+
+        puts "│ #{formatted_status} │ #{formatted_name} │ #{formatted_version} │"
       end
-      puts table
+
+      # Table footer
+      puts "└#{"─" * (status_width + 2)}┴#{"─" * (name_width + 2)}┴#{"─" * (version_width + 2)}┘"
+      puts
     end
 
     private def build_migration_record(migration : BaseMigration.class) : MigrationRecord

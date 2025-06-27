@@ -2,7 +2,7 @@ name: cql
 version: 0.0.383
 authors:
   - Elias Perez <eperez@justworks.com>
-crystal: '>= 1.12.2'
+crystal: ">= 1.12.2"
 license: MIT
 dependencies:
   ulid:
@@ -11,6 +11,9 @@ dependencies:
     github: crystal-lang/crystal-db
   tallboy:
     github: epoch/tallboy
+  redis:
+    github: stefanwille/crystal-redis
+    version: ~> 2.8
 development_dependencies:
   ameba:
     github: crystal-ameba/ameba
