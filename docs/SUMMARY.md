@@ -3,6 +3,7 @@
 - [README](README.md)
 - [Introduction](introduction.md)
 - [Installation](installation.md)
+- [Quick Reference](reference-and-utilities/quick-reference.md)
 
 ## Foundation
 
@@ -69,15 +70,10 @@
 
 ## Caching & Performance
 
-- [💾 Caching Guide](caching-and-performance/caching-guide.md)
+- [Caching Guide](caching-and-performance/caching-guide.md)
 - [Centralized Cache Configuration](caching-and-performance/centralized-cache-configuration.md)
 - [Per-Request Query Caching](caching-and-performance/per-request-query-caching.md)
 - [Redis Cache Configuration](caching-and-performance/redis-cache-configuration.md)
-
-## Reference & Utilities
-
-- [🚀 Quick Reference](reference-and-utilities/quick-reference.md)
-- [🎯 Modern Configuration](reference-and-utilities/modern-configuration.md)
 
 ## Examples & Tutorials
 

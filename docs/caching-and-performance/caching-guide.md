@@ -1,4 +1,4 @@
-# 💾 CQL Caching Guide
+# CQL Caching Guide
 
 CQL provides powerful, multi-layered caching that dramatically improves application performance. This guide shows you how to set up and use all caching features effectively.
 
