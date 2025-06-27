@@ -164,11 +164,11 @@ class MockUser
     @cache_version = (@cache_version || 1) + 1
   end
 
-  def with_cache_tags(tags, &block)
+  def with_cache_tags(tags, &)
     yield
   end
 
-  def without_cache(&block)
+  def without_cache(&)
     yield
   end
 end

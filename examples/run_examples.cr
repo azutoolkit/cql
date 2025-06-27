@@ -427,7 +427,7 @@ class ExampleRunner
 
     return unless gets.try(&.strip).try(&.downcase) == "y"
 
-    categories = @examples.map(&.category).uniq.sort
+    categories = @examples.map(&.category).uniq!.sort!
 
     categories.each do |category|
       puts "\n" + "=" * 60
@@ -525,33 +525,27 @@ class ExampleRunner
   end
 
   private def redis_available? : Bool
-    begin
-      Process.run("redis-cli", ["ping"], output: Process::Redirect::Close, error: Process::Redirect::Close).success?
-    rescue
-      false
-    end
+    Process.run("redis-cli", ["ping"], output: Process::Redirect::Close, error: Process::Redirect::Close).success?
+  rescue
+    false
   end
 
   private def postgres_available? : Bool
+    # Check if pg_isready is available and working
+    Process.run("pg_isready", output: Process::Redirect::Close, error: Process::Redirect::Close).success?
+  rescue
+    # Fallback: try to connect to default database
     begin
-      # Check if pg_isready is available and working
-      Process.run("pg_isready", output: Process::Redirect::Close, error: Process::Redirect::Close).success?
+      Process.run("psql", ["-c", "SELECT 1;"], output: Process::Redirect::Close, error: Process::Redirect::Close).success?
     rescue
-      # Fallback: try to connect to default database
-      begin
-        Process.run("psql", ["-c", "SELECT 1;"], output: Process::Redirect::Close, error: Process::Redirect::Close).success?
-      rescue
-        false
-      end
+      false
     end
   end
 
   private def sqlite_available? : Bool
-    begin
-      Process.run("sqlite3", ["--version"], output: Process::Redirect::Close, error: Process::Redirect::Close).success?
-    rescue
-      false
-    end
+    Process.run("sqlite3", ["--version"], output: Process::Redirect::Close, error: Process::Redirect::Close).success?
+  rescue
+    false
   end
 end
 

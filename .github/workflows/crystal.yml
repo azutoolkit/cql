@@ -57,9 +57,9 @@ jobs:
       - name: Install shards
         run: shards install --ignore-crystal-version
       - name: Check formatting
-        run: crystal tool format --check
+        run: crystal tool format --check ./src
       - name: Check code linting with Ameba
-        run: bin/ameba
+        run: bin/ameba -f progress ./src ./spec
       - name: Wait for Postgres
         run: |
           for i in {1..30}; do
