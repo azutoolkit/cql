@@ -877,6 +877,20 @@ module CQL
       # Create Expression::Column with String alias
       col_expr = Expression::Column.new(column, alias_name: col_alias_str)
 
+      # Explicitly handle Range types for BETWEEN
+      case value
+      when Range(Int32, Int32)
+        return Expression::Between.new(col_expr, value.begin.as(DB::Any), value.end.as(DB::Any))
+      when Range(Int64, Int64)
+        return Expression::Between.new(col_expr, value.begin.as(DB::Any), value.end.as(DB::Any))
+      when Range(Float32, Float32)
+        return Expression::Between.new(col_expr, value.begin.as(DB::Any), value.end.as(DB::Any))
+      when Range(Float64, Float64)
+        return Expression::Between.new(col_expr, value.begin.as(DB::Any), value.end.as(DB::Any))
+      when Range(Time, Time)
+        return Expression::Between.new(col_expr, value.begin.as(DB::Any), value.end.as(DB::Any))
+      end
+
       # Handle array values for IN conditions
       if value.is_a?(Array)
         Expression::InCondition.new(col_expr, value)
@@ -885,20 +899,80 @@ module CQL
       end
     end
 
-    private def get_expression(field : Symbol | String, value : String | Array(String))
-      # find_column handles String field, finds BaseColumn
+    # Handles Array(DB::Any) for IN conditions
+    private def get_expression(field : Symbol | String, value : Array(DB::Any))
       column = find_column(field)
-      # find_alias_for_table returns String alias
       col_alias_str = find_alias_for_table(column.table.not_nil!)
-      # Create Expression::Column with String alias
       col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::InCondition.new(col_expr, value)
+    end
 
-      # Handle array values for IN conditions
-      if value.is_a?(Array)
-        Expression::InCondition.new(col_expr, value)
-      else
-        Expression::Compare.new(col_expr, "=", value.as(DB::Any))
-      end
+    # Handles Array(String) for IN conditions
+    private def get_expression(field : Symbol | String, value : Array(String))
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::InCondition.new(col_expr, value)
+    end
+
+    # Fallback for Array(T) for IN conditions
+    private def get_expression(field : Symbol | String, value : Array)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      # Convert all elements to DB::Any
+      db_any_values = value.map(&.as(DB::Any))
+      Expression::InCondition.new(col_expr, db_any_values)
+    end
+
+    # Explicit overloads for scalar types
+    private def get_expression(field : Symbol | String, value : String)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::Compare.new(col_expr, "=", value)
+    end
+
+    private def get_expression(field : Symbol | String, value : Int32)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::Compare.new(col_expr, "=", value)
+    end
+
+    private def get_expression(field : Symbol | String, value : Int64)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::Compare.new(col_expr, "=", value)
+    end
+
+    private def get_expression(field : Symbol | String, value : Float32)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::Compare.new(col_expr, "=", value)
+    end
+
+    private def get_expression(field : Symbol | String, value : Float64)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::Compare.new(col_expr, "=", value)
+    end
+
+    private def get_expression(field : Symbol | String, value : Bool)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::Compare.new(col_expr, "=", value)
+    end
+
+    private def get_expression(field : Symbol | String, value : Time)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      Expression::Compare.new(col_expr, "=", value)
     end
 
     private def build_group_by
