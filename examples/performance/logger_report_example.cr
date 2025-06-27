@@ -1,6 +1,6 @@
 require "db"
-require "../src/cql"
-require "../src/performance"
+require "../../src/cql"
+require "../../src/performance"
 
 # Example: Using the LoggerReportGenerator for development debugging
 #

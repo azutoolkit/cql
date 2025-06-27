@@ -1,5 +1,8 @@
 require "../../src/cql"
 require "./models/*"
+require "../utilities/beautify"
+
+include Beautify
 
 # =============================================================================
 # SEEDING DATA
@@ -8,7 +11,8 @@ require "./models/*"
 module BlogDemo
   module Seeders
     def self.seed_data
-      puts "\n🌱 Seeding Database"
+      section("Seeding Database")
+
       # Create users
       john = User.create!(
         username: "john_doe",
@@ -24,13 +28,15 @@ module BlogDemo
         last_name: "Smith"
       )
 
-      puts "✅ Created #{User.count} users"
+      success("Created #{User.count} users")
+      database_operation("Users", "john_doe, jane_smith")
 
       # Create categories
       tech_cat = Category.create!(name: "Technology", slug: "tech")
       lifestyle_cat = Category.create!(name: "Lifestyle", slug: "lifestyle")
 
-      puts "✅ Created #{Category.count} categories"
+      success("Created #{Category.count} categories")
+      database_operation("Categories", "Technology, Lifestyle")
 
       # Create posts
       crystal_post = Post.create!(
@@ -60,7 +66,10 @@ module BlogDemo
         views_count: 0_i64
       )
 
-      puts "✅ Created #{Post.count} posts (#{Post.where(published: true).count} published)"
+      success("Created #{Post.count} posts (#{Post.where(published: true).count} published)")
+      bullet_point("Getting Started with Crystal - 150 views")
+      bullet_point("10 Productivity Tips for Developers - 89 views")
+      bullet_point("Advanced Crystal Patterns (draft)")
 
       # Create comments
       Comment.create!(
@@ -75,7 +84,15 @@ module BlogDemo
         user_id: john.id.not_nil!
       )
 
-      puts "✅ Created #{Comment.count} comments"
+      success("Created #{Comment.count} comments")
+
+      configuration_block("Seeded Data Summary", {
+        "Users"      => User.count,
+        "Categories" => Category.count,
+        "Posts"      => Post.count,
+        "Comments"   => Comment.count,
+      })
+
       {
         users:      {john: john, jane: jane},
         categories: {tech: tech_cat, lifestyle: lifestyle_cat},

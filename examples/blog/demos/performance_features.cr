@@ -1,5 +1,8 @@
 require "../../../src/cql"
 require "../models/*"
+require "../../utilities/beautify"
+
+include Beautify
 
 # =============================================================================
 # PERFORMANCE FEATURES DEMO
@@ -8,23 +11,23 @@ require "../models/*"
 module BlogDemo
   module Demos
     def self.performance_features
-      puts "\n⚡ Performance Features"
+      section("Performance Features")
 
       # Batch processing
-      puts "\nBatch Processing:"
+      sub_header("Batch Processing")
       post_count = 0
       Post.find_each(batch_size: 2) do |_|
         post_count += 1
       end
-      puts "  Processed #{post_count} posts in batches"
+      performance("Processed #{post_count} posts in batches of 2")
 
       # Pluck for efficient data extraction
-      puts "\nEfficient Data Extraction:"
+      sub_header("Efficient Data Extraction")
       post_titles = Post.where(published: true).pluck(:title, as: String)
-      puts "  Post titles: #{post_titles.join(", ")}"
+      database_operation("Post titles", post_titles.join(", "))
 
       user_emails = User.pluck(:email)
-      puts "  User emails: #{user_emails.join(", ")}"
+      database_operation("User emails", user_emails.join(", "))
     end
   end
 end

@@ -1,33 +1,51 @@
 require "sqlite3"
 require "../../src/cql"
 require "../../src/performance"
+require "../utilities/beautify"
 
-# Configure CQL immediately after requiring it
-puts "🚀 CQL Blog Application Demo"
-puts "=" * 40
+include Beautify
 
-puts "\n📋 Configuration"
+# 📝 Blog Demo - Updated for New Configuration API
+# Demonstrating the new developer-friendly configuration syntax
 
+puts "=== 📝 CQL Blog Demo ==="
+
+# Configure CQL with new syntax
 CQL.configure do |config|
-  config.database_url = "sqlite3://examples/blog/blog.db"
-  config.logger = Log.for("cql.*")
-  config.environment = "development"
-  config.sqlite.journal_mode = "wal"
-  config.sqlite.foreign_keys = true
-  config.migration_table_name = :cql_schema_migrations
-  config.schema_path = "./examples/blog/schemas"
-  config.schema_file_name = "app_schema.cr"
-  config.schema_constant_name = :BlogDB
-  config.schema_symbol = :app_schema
-  config.auto_load_models = true
-  config.enable_auto_schema_sync = true
-  config.bootstrap_on_startup = true
-  config.verify_schema_on_startup = true
-  config.enable_performance_monitoring = true
+  config.db = "sqlite3://examples/blog/blog.db"
+  config.env = "development"
+  config.logger = Log.for("BlogDemo")
+  config.migrations_table = :cql_schema_migrations
+  config.schema_dir = "./examples/blog/schemas"
+  config.schema_file = "app_schema.cr"
+  config.schema_class = :BlogDB
+  config.auto_load = true
+  config.auto_sync = true
+  config.bootstrap = true
+  config.verify_schema = true
+  config.monitor_performance = true
 end
 
-puts "✅ Configuration complete"
-puts "  Database: #{CQL.config.database_url}"
+puts "✅ Blog demo configuration applied"
+
+# Display effective configuration
+puts "\n📊 Configuration Summary:"
+config_summary = {
+  "Database"               => CQL.config.db,
+  "Environment"            => CQL.config.env,
+  "Auto Load"              => CQL.config.auto_load?,
+  "Auto Sync"              => CQL.config.auto_sync?,
+  "Performance Monitoring" => CQL.config.monitor_performance?,
+  "Bootstrap"              => CQL.config.bootstrap?,
+  "Verify Schema"          => CQL.config.verify_schema?,
+}
+config_summary.each { |key, value| puts "  #{key}: #{value}" }
+
+puts "\n🚀 Blog demo ready!"
+puts "Schema directory: #{CQL.config.schema_dir}"
+puts "Schema file: #{CQL.config.schema_file}"
+puts "Schema class: #{CQL.config.schema_class}"
+puts "Migrations table: #{CQL.config.migrations_table}"
 
 module BlogDemo
   def self.run
@@ -44,43 +62,48 @@ module BlogDemo
     BlogDemo::Demos.performance_features
     BlogDemo::Demos.statistics_and_reporting(BlogDB)
 
-    puts "\n🎉 Demo Complete!"
+    demo_complete("Blog Application Demo")
 
     total_records = User.count + Category.count + Post.count + Comment.count
-    puts "\nSummary:"
-    puts "  Total records created: #{total_records}"
-    puts "  Database file: examples/blog/blog_demo.db"
 
-    puts "\n🚀 CQL Features Demonstrated:"
-    puts "  ✅ Configuration management"
-    puts "  ✅ Schema definition with relationships"
-    puts "  ✅ Database migrations"
-    puts "  ✅ Active Record models"
-    puts "  ✅ CRUD operations"
-    puts "  ✅ Complex queries and joins"
-    puts "  ✅ Aggregations and statistics"
-    puts "  ✅ Relationship navigation"
-    puts "  ✅ Performance optimizations"
-    puts "  ✅ Raw SQL capabilities"
-    puts "  ✅ Performance monitoring and reporting"
+    summary_box("Demo Summary", [
+      "Total records created: #{total_records}",
+      "Database file: examples/blog/blog_demo.db",
+      "Performance monitoring: enabled",
+    ])
 
-    puts "\n📊 Performance Monitoring Features:"
-    puts "  ✅ Real-time query performance tracking"
-    puts "  ✅ N+1 query detection"
-    puts "  ✅ Slow query identification"
-    puts "  ✅ Beautiful developer-friendly reports"
-    puts "  ✅ Performance recommendations"
-    puts "  ✅ Query pattern analysis"
+    feature_list("CQL Features Demonstrated", [
+      "Configuration management",
+      "Schema definition with relationships",
+      "Database migrations",
+      "Active Record models",
+      "CRUD operations",
+      "Complex queries and joins",
+      "Aggregations and statistics",
+      "Relationship navigation",
+      "Performance optimizations",
+      "Raw SQL capabilities",
+      "Performance monitoring and reporting",
+    ])
 
-    puts "\n💡 This demonstrates CQL as a production-ready ORM with advanced performance monitoring!"
-    puts "=" * 40
+    feature_list("Performance Monitoring Features", [
+      "Real-time query performance tracking",
+      "N+1 query detection",
+      "Slow query identification",
+      "Beautiful developer-friendly reports",
+      "Performance recommendations",
+      "Query pattern analysis",
+    ])
+
+    status_indicator(:success, "This demonstrates CQL as a production-ready ORM with advanced performance monitoring!")
+    separator()
   end
 
   def self.run_migrations
-    puts "\n📝 Step 1: Running Migrations"
+    step(1, "Running Migrations")
     migrator = CQL.config.create_migrator(BlogDB)
     migrator.up
-    puts "✅ Migrations applied successfully"
+    success("Migrations applied successfully")
   end
 end
 
@@ -90,5 +113,6 @@ require "./migrations/*"
 require "./seeders"
 require "./models/*"
 require "./demos/*"
+
 # Run the demo
 BlogDemo.run

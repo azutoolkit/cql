@@ -6,7 +6,7 @@
 # with automatic schema synchronization to maintain an up-to-date AppSchema.cr file.
 
 require "pg"
-require "../src/cql"
+require "../../src/cql"
 
 # Step 1: Define Base Schema Connection
 # This is your main schema connection - tables will be managed by migrations

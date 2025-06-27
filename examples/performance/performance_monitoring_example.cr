@@ -1,15 +1,18 @@
 # CQL Performance Monitoring Example
 # This example demonstrates how to use Query Plan Analysis, N+1 Detection, and Query Profiling
 
-require "../src/cql"
-require "../src/performance/interfaces"
-require "../src/performance/event_system"
-require "../src/performance/analyzers/query_plan_analyzer"
-require "../src/performance/detectors/n_plus_one_detector"
-require "../src/performance/profilers/query_profiler"
-require "../src/performance/reports/report_generators"
-require "../src/performance/performance_monitor"
+require "../../src/cql"
+require "../../src/performance/interfaces"
+require "../../src/performance/event_system"
+require "../../src/performance/analyzers/query_plan_analyzer"
+require "../../src/performance/detectors/n_plus_one_detector"
+require "../../src/performance/profilers/query_profiler"
+require "../../src/performance/reports/report_generators"
+require "../../src/performance/performance_monitor"
 require "sqlite3"
+require "../utilities/beautify"
+
+include Beautify
 
 # 1. Define your schema
 AcmeDB = CQL::Schema.define(:acme_db, "sqlite3://./examples/performance_example.db", CQL::Adapter::SQLite) do
@@ -98,7 +101,9 @@ struct Comment
 end
 
 # 3. Setup Performance Monitoring
-puts "Setting up CQL Performance Monitoring..."
+header("CQL Performance Monitoring Example")
+
+section("Setting up Performance Monitoring")
 
 # Create configuration
 config = CQL::Performance::PerformanceConfig.new
@@ -115,10 +120,10 @@ monitor.initialize_with_schema(AcmeDB, config)
 # Set as global monitor
 CQL::Performance.monitor = monitor
 
-puts "Performance monitoring initialized!"
+success("Performance monitoring initialized!")
 
 # 4. Create the database and sample data
-puts "Creating database and sample data..."
+section("Creating Database and Sample Data")
 
 begin
   AcmeDB.build
@@ -176,20 +181,23 @@ begin
     ).commit
   end
 
-  puts "Sample data created successfully!"
+  success("Sample data created successfully!")
+  configuration_block("Sample Data", {
+    "Users"    => users.size,
+    "Posts"    => posts_data.size,
+    "Comments" => comments_data.size,
+  })
 rescue ex
-  puts "Database setup error: #{ex.message}"
+  error("Database setup error: #{ex.message}")
 end
 
 # 5. Demonstrate Performance Monitoring Features
-
-puts "\n" + "="*60
-puts "DEMONSTRATING PERFORMANCE MONITORING FEATURES"
-puts "="*60
+separator("═", 60)
+header("DEMONSTRATING PERFORMANCE MONITORING FEATURES")
+separator("═", 60)
 
 # 5.1 Query Plan Analysis
-puts "\n1. QUERY PLAN ANALYSIS"
-puts "-" * 30
+step(1, "Query Plan Analysis")
 
 # Set context for tracking
 monitor.set_context(endpoint: "/api/users", user_id: "demo_user")
@@ -198,17 +206,16 @@ monitor.set_context(endpoint: "/api/users", user_id: "demo_user")
 simple_query = "SELECT * FROM users WHERE name = 'Alice Smith'"
 
 if plan = monitor.analyze_query_plan(simple_query)
-  puts "Query Plan for: #{simple_query}"
+  info("Query Plan for: #{simple_query}")
   puts plan.summary if plan.responds_to?(:summary)
 else
-  puts "Query plan analysis not available for SQLite"
+  warning("Query plan analysis not available for SQLite")
 end
 
 # 5.2 Query Profiling - Execute some queries to generate data
-puts "\n2. QUERY PROFILING"
-puts "-" * 20
+step(2, "Query Profiling")
 
-puts "Executing queries for profiling..."
+info("Executing queries for profiling...")
 
 # Set different contexts to demonstrate endpoint tracking
 monitor.set_context(endpoint: "/api/users", user_id: "user_123")
@@ -222,7 +229,7 @@ monitor.set_context(endpoint: "/api/users", user_id: "user_123")
   # Manually trigger monitoring for demo
   monitor.after_query("SELECT id, name, email FROM users", [] of DB::Any, execution_time, users.size.to_i64)
 
-  puts "Fetched #{users.size} users (iteration #{i + 1})"
+  database_operation("Fetched users", "#{users.size} users (iteration #{i + 1})")
 end
 
 monitor.set_context(endpoint: "/api/posts", user_id: "user_456")
@@ -240,14 +247,13 @@ monitor.set_context(endpoint: "/api/posts", user_id: "user_456")
   # Manually trigger monitoring for demo
   monitor.after_query("SELECT posts.id, posts.title, users.name FROM posts JOIN users ON posts.user_id = users.id", [] of DB::Any, execution_time, posts.size.to_i64)
 
-  puts "Fetched #{posts.size} posts with user names (iteration #{i + 1})"
+  database_operation("Fetched posts with user names", "#{posts.size} posts (iteration #{i + 1})")
 end
 
 # 5.3 N+1 Query Detection
-puts "\n3. N+1 QUERY DETECTION"
-puts "-" * 25
+step(3, "N+1 Query Detection")
 
-puts "Demonstrating N+1 query pattern..."
+info("Demonstrating N+1 query pattern...")
 
 # This will trigger N+1 queries - one query to get posts, then one query per post to get user
 monitor.set_context(endpoint: "/api/posts_with_users", user_id: "user_789")
@@ -259,7 +265,7 @@ execution_time = Time.monotonic - start_time
 # Trigger the parent query monitoring
 monitor.after_query("SELECT id, user_id, title FROM posts", [] of DB::Any, execution_time, posts.size.to_i64)
 
-puts "Fetched #{posts.size} posts"
+database_operation("Fetched posts", "#{posts.size} posts")
 
 # Start relation loading to track N+1 pattern
 monitor.start_relation_loading("user", "Post")
@@ -274,60 +280,62 @@ posts.each do |post|
   # Trigger monitoring for the repeated query
   monitor.after_query("SELECT id, name FROM users WHERE id = ?", [post[:user_id].as(DB::Any)], execution_time, 1_i64)
 
-  puts "Post '#{post[:title]}' by #{user.try(&.[:name]) || "Unknown"}"
+  bullet_point("Post '#{post[:title]}' by #{user.try(&.[:name]) || "Unknown"}")
 end
 
 # End relation loading
 monitor.end_relation_loading
 
 # 5.4 Generate Performance Reports
-puts "\n" + "="*60
-puts "PERFORMANCE REPORTS"
-puts "="*60
+separator("═", 60)
+header("PERFORMANCE REPORTS")
+separator("═", 60)
 
 # Comprehensive report
-puts "\n--- COMPREHENSIVE PERFORMANCE REPORT ---"
+sub_header("Comprehensive Performance Report")
 puts monitor.generate_comprehensive_report
 
 # Individual reports
-puts "\n--- N+1 DETECTION REPORT ---"
+sub_header("N+1 Detection Report")
 puts monitor.n_plus_one_report
 
-puts "\n--- QUERY PROFILING REPORT ---"
+sub_header("Query Profiling Report")
 puts monitor.profiling_report
 
 # 5.5 Performance Metrics Summary
-puts "\n--- PERFORMANCE METRICS SUMMARY ---"
+sub_header("Performance Metrics Summary")
 metrics = monitor.metrics_summary
-puts "Total Queries: #{metrics.total_queries}"
-puts "Slow Queries: #{metrics.slow_queries}"
-puts "N+1 Patterns: #{metrics.n_plus_one_patterns}"
-puts "Average Query Time: #{metrics.avg_query_time.round(2)}ms"
-puts "Monitoring Enabled: #{metrics.monitoring_enabled}"
-puts "Uptime: #{metrics.uptime.total_seconds.round(2)} seconds"
+configuration_block("Performance Metrics", {
+  "Total Queries"      => metrics.total_queries,
+  "Slow Queries"       => metrics.slow_queries,
+  "N+1 Patterns"       => metrics.n_plus_one_patterns,
+  "Average Query Time" => "#{metrics.avg_query_time.round(2)}ms",
+  "Monitoring Enabled" => metrics.monitoring_enabled?,
+  "Uptime"             => "#{metrics.uptime.total_seconds.round(2)} seconds",
+})
 
 # 6. Advanced Features
-puts "\n" + "="*60
-puts "ADVANCED FEATURES"
-puts "="*60
+separator("═", 60)
+header("ADVANCED FEATURES")
+separator("═", 60)
 
 # Generate HTML report
-puts "\nGenerating HTML performance report..."
+info("Generating HTML performance report...")
 html_report = monitor.generate_comprehensive_report("html")
 File.write("performance_report.html", html_report)
-puts "HTML report saved to 'performance_report.html'"
+file_operation("HTML report saved", "performance_report.html", :created)
 
 # Generate JSON report
-puts "\nGenerating JSON performance report..."
+info("Generating JSON performance report...")
 json_report = monitor.generate_comprehensive_report("json")
 File.write("performance_report.json", json_report)
-puts "JSON report saved to 'performance_report.json'"
+file_operation("JSON report saved", "performance_report.json", :created)
 
 # Configuration management
-puts "\nDemonstrating configuration management..."
+info("Demonstrating configuration management...")
 monitor.configure do |cfg|
   cfg.query_profiling_enabled = false # Temporarily disable profiling
-  puts "Query profiling disabled"
+  warning("Query profiling disabled")
 end
 
 # Test a query with profiling disabled
@@ -338,24 +346,29 @@ monitor.after_query("SELECT id, name FROM users", [] of DB::Any, execution_time,
 
 monitor.configure do |cfg|
   cfg.query_profiling_enabled = true # Re-enable profiling
-  puts "Query profiling re-enabled"
+  success("Query profiling re-enabled")
 end
 
 # Demonstrate component access for advanced usage
-puts "\nDemonstrating advanced component access..."
-puts "Event bus type: #{monitor.event_bus.class}"
-puts "Query profiler stats: #{monitor.query_profiler.statistics.size} patterns tracked"
-puts "N+1 detector issues: #{monitor.n_plus_one_detector.issues.size} issues detected"
+sub_header("Advanced Component Access")
+database_operation("Event bus type", monitor.event_bus.class.to_s)
+database_operation("Query profiler stats", "#{monitor.query_profiler.statistics.size} patterns tracked")
+database_operation("N+1 detector issues", "#{monitor.n_plus_one_detector.issues.size} issues detected")
 
-puts "\n" + "="*60
-puts "PERFORMANCE MONITORING DEMO COMPLETE"
-puts "="*60
-puts "Check the generated HTML and JSON reports for detailed analysis."
-puts "In a real application, you would integrate this into your web framework"
-puts "to track performance across different endpoints and users."
-puts "\nNew Architecture Benefits Demonstrated:"
-puts "- Event-driven processing with Observer pattern"
-puts "- Strategy pattern for database-specific analysis"
-puts "- Factory pattern for report generation"
-puts "- Dependency injection for testability"
-puts "- SOLID principles for maintainability"
+separator("═", 60)
+header("PERFORMANCE MONITORING DEMO COMPLETE")
+separator("═", 60)
+
+feature_list("Demo Results", [
+  "Check the generated HTML and JSON reports for detailed analysis",
+  "In a real application, you would integrate this into your web framework",
+  "to track performance across different endpoints and users",
+])
+
+feature_list("New Architecture Benefits Demonstrated", [
+  "Event-driven processing with Observer pattern",
+  "Strategy pattern for database-specific analysis",
+  "Factory pattern for report generation",
+  "Dependency injection for testability",
+  "SOLID principles for maintainability",
+])

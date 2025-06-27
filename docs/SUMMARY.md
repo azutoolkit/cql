@@ -61,19 +61,19 @@
 - [Migration Guide](database-management/migration-guide.md)
 - [Schema Dump](database-management/schema-dump.md)
 
-## Advanced Topics
-
-- [Performance Optimization](advanced-topics/performance-optimization.md)
-- [Performance Tools](advanced-topics/performance-tools.md)
-- [Testing Strategies](advanced-topics/testing-strategies.md)
-- [Security Guide](advanced-topics/security-guide.md)
-
 ## Caching & Performance
 
 - [Caching Guide](caching-and-performance/caching-guide.md)
 - [Centralized Cache Configuration](caching-and-performance/centralized-cache-configuration.md)
 - [Per-Request Query Caching](caching-and-performance/per-request-query-caching.md)
 - [Redis Cache Configuration](caching-and-performance/redis-cache-configuration.md)
+
+## Advanced Topics
+
+- [Performance Optimization](advanced-topics/performance-optimization.md)
+- [Performance Tools](advanced-topics/performance-tools.md)
+- [Testing Strategies](advanced-topics/testing-strategies.md)
+- [Security Guide](advanced-topics/security-guide.md)
 
 ## Examples & Tutorials
 
