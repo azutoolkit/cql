@@ -107,6 +107,30 @@ abstract class ApplicationAction < Lucky::Action
 end
 ```
 
+#### Azu
+
+The [Azu framework](https://github.com/azutoolkit/azu) is a Crystal application development toolkit with expressive, elegant syntax. CQL integrates seamlessly with Azu through multiple approaches:
+
+```crystal
+require "cql/cache/middleware"
+
+# Option 1: HTTP Handler (Recommended)
+app = Azu::Application.new
+app.use CQL::Cache::Middleware::Azu::Handler.new
+
+# Option 2: Controller Integration
+class ApplicationController < Azu::Controller
+  include CQL::Cache::Middleware::Azu::Controller
+end
+
+# Option 3: Manual Hooks
+app.before { |ctx| CQL::Cache::Middleware::Azu.before_request(ctx) }
+app.after { |ctx| CQL::Cache::Middleware::Azu.after_request(ctx) }
+
+# Option 4: Convenience Setup
+CQL::Cache::Middleware::Azu.setup!(app)
+```
+
 #### Any Framework
 
 ```crystal
@@ -353,6 +377,131 @@ class UsersController
     end
   end
 end
+```
+
+### Azu Framework Application
+
+```crystal
+require "azu"
+require "cql"
+require "cql/cache/middleware"
+
+# Configure CQL with caching for Azu
+CQL.configure do |c|
+  c.db = ENV["DATABASE_URL"]
+  c.cache.on = true
+  c.cache.ttl = 30.minutes          # Web app with moderate caching
+  c.cache.request_cache = true      # Enable per-request caching
+  c.cache.fragments = true          # Enable fragment caching
+  c.cache.key_prefix = "azu_app"
+
+  # Use Redis in production for multi-instance deployments
+  if ENV["CRYSTAL_ENV"] == "production"
+    c.cache.store = "redis"
+    c.cache.redis_url = ENV["REDIS_URL"]
+    c.cache.memory_size = 10000
+  end
+end
+
+# Create Azu application with caching middleware
+app = Azu::Application.new
+app.use CQL::Cache::Middleware::Azu::Handler.new
+
+# Base controller with caching utilities
+abstract class ApplicationController < Azu::Controller
+  include CQL::Cache::Middleware::Azu::Controller
+
+  # Helper method for fragment caching
+  def cache_fragment(name : String, **options, &block)
+    fragment_cache = CQL.fragment_cache
+    fragment_cache.cache_fragment(
+      fragment_name: name,
+      params: options.to_h.transform_values(&.to_s),
+      ttl: 15.minutes,
+      &block
+    )
+  end
+end
+
+# Example controller with advanced caching
+class ProductsController < ApplicationController
+  # Cache expensive product listings
+  def index
+    cache_key = "products_index_#{params[:category]?}_#{params[:page]?}"
+
+    products_json = cache_fragment(cache_key) do
+      products = Product.active
+      products = products.where(category: params[:category]) if params[:category]?
+      products = products.page(params[:page]?.try(&.to_i) || 1)
+
+      # This query will be cached per-request
+      {
+        products: products.map(&.to_json),
+        total: products.total_count,
+        page: params[:page]?.try(&.to_i) || 1
+      }.to_json
+    end
+
+    render json: products_json
+  end
+
+  # Cache individual product with related data
+  def show
+    product_id = params[:id]
+
+    product_json = cache_fragment("product_#{product_id}") do
+      product = Product.find(product_id)
+      reviews = product.reviews.includes(:user).limit(10)
+
+      {
+        product: product.to_json,
+        reviews: reviews.map(&.to_json),
+        related_products: product.related_products.limit(5).map(&.to_json)
+      }.to_json
+    end
+
+    render json: product_json
+  end
+end
+
+# Example of invalidating cache after updates
+class AdminProductsController < ApplicationController
+  def update
+    product = Product.find(params[:id])
+
+    if product.update(product_params)
+      # Invalidate related caches
+      fragment_cache = CQL.fragment_cache
+      fragment_cache.invalidate_tags([
+        "product:#{product.id}",
+        "category:#{product.category}",
+        "products_index"
+      ])
+
+      render json: {status: "success", product: product.to_json}
+    else
+      render json: {status: "error", errors: product.errors}
+    end
+  end
+end
+
+# Configure routes
+app.routes do
+  get "/products", ProductsController, :index
+  get "/products/:id", ProductsController, :show
+  put "/admin/products/:id", AdminProductsController, :update
+end
+
+# Add performance monitoring for cache
+app.after do |ctx|
+  if ENV["CRYSTAL_ENV"] == "development"
+    stats = CQL.cache_stats
+    ctx.response.headers["X-Cache-Stats"] = "hits:#{stats["hits"]},misses:#{stats["misses"]}"
+  end
+end
+
+# Start the server
+app.listen(3000)
 ```
 
 ## Performance Tips
