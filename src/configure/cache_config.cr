@@ -204,32 +204,19 @@ module CQL
 
       # === 📊 STATISTICS & MONITORING ===
 
-      # Get comprehensive cache statistics
+            # Get comprehensive cache statistics
       def cache_statistics : Hash(String, String | Int32 | Int64 | Float64 | Bool)
-        return {"enabled" => false} unless on?
+        return {"enabled" => false.as(String | Int32 | Int64 | Float64 | Bool)} unless on?
 
-        stats = {
-          "enabled"               => on?,
-          "ttl_seconds"           => ttl.total_seconds.to_i,
-          "key_prefix"            => key_prefix,
-          "memory_enabled"        => memory?,
-          "request_cache_enabled" => request_cache?,
-          "fragments_enabled"     => fragments?,
-          "invalidation_strategy" => invalidation,
-          "stats_enabled"         => stats?,
-        }
-
-        # Add main cache statistics if available
-        if on?
-          main_cache_stats = CQL::Cache::Cache.statistics
-          stats.merge!(main_cache_stats.transform_keys { |k| "main_#{k}" })
-
-          # Add request cache statistics if available
-          if request_cache?
-            request_cache_stats = CQL::Cache::RequestQueryCacheHelper.stats
-            stats.merge!(request_cache_stats.transform_keys { |k| "request_#{k}" })
-          end
-        end
+        stats = {} of String => String | Int32 | Int64 | Float64 | Bool
+        stats["enabled"] = on?
+        stats["ttl_seconds"] = ttl.total_seconds.to_i
+        stats["key_prefix"] = key_prefix
+        stats["memory_enabled"] = memory?
+        stats["request_cache_enabled"] = request_cache?
+        stats["fragments_enabled"] = fragments?
+        stats["invalidation_strategy"] = invalidation
+        stats["stats_enabled"] = stats?
 
         stats
       end

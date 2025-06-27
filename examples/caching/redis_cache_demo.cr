@@ -1,4 +1,8 @@
+require "redis"
 require "../../src/cql"
+require "../../src/cache/cache_store"
+require "../../src/cache/redis_cache"
+require "../../src/cache/memory_cache"
 
 # Redis Cache Demo for CQL
 # This example demonstrates how to configure and use Redis as the cache backend
@@ -12,23 +16,23 @@ ENV["CQL_REDIS_URL"] = "redis://localhost:6379/1"
 ENV["CQL_CACHE_PREFIX"] = "myapp"
 ENV["CQL_CACHE_TTL"] = "3600" # 1 hour in seconds
 
-CQL::Cache::Cache.configure_from_env
+CQL::Cache::CacheStore.configure_from_env
 puts "✓ Cache configured from environment variables"
 
 # Test basic operations
 puts "\n2. Testing basic cache operations:"
-cache = CQL::Cache::Cache
 
-# Store some data
-cache.set("user:1", ["John", "Doe", 25])
-cache.set("user:2", ["Jane", "Smith", 30])
+# Store some data (as JSON strings since cache stores strings)
+CQL::Cache::GlobalCache.set("user:1", ["John", "Doe", 25].to_json)
+CQL::Cache::GlobalCache.set("user:2", ["Jane", "Smith", 30].to_json)
 
 # Retrieve data
-user1 = cache.get("user:1")
+user1_json = CQL::Cache::GlobalCache.get("user:1", String)
+user1 = user1_json ? JSON.parse(user1_json) : nil
 puts "✓ Retrieved user:1: #{user1}"
 
 # Check if key exists
-exists = cache.has_key?("user:1")
+exists = CQL::Cache::GlobalCache.exists?("user:1")
 puts "✓ Key 'user:1' exists: #{exists}"
 
 # Method 2: Programmatic configuration
@@ -41,22 +45,20 @@ config = CQL::Cache::CacheStoreConfig.new(
   redis_pool_size: 10
 )
 
-CQL::Cache::Cache.configure(config)
+CQL::Cache::CacheStore.configure(config)
 puts "✓ Cache reconfigured programmatically"
 
 # Test with new configuration
-cache.set("product:1", ["Laptop", 999.99, "Electronics"])
-product = cache.get("product:1")
+CQL::Cache::GlobalCache.set("product:1", ["Laptop", 999.99, "Electronics"].to_json)
+product_json = CQL::Cache::GlobalCache.get("product:1", String)
+product = product_json ? JSON.parse(product_json) : nil
 puts "✓ Retrieved product:1: #{product}"
 
 # Method 3: Using CacheStore factory directly
 puts "\n4. Using CacheStore factory:"
 
 # Create a Redis cache instance
-redis_cache = CQL::Cache::CacheStore.create("redis",
-  redis_url: "redis://localhost:6379/3",
-  key_prefix: "direct"
-)
+redis_cache = CQL::Cache::CacheStore.create("redis", "direct", "redis://localhost:6379/3")
 
 # Use the cache instance directly
 redis_cache.set("session:abc123", "user_data_here", 15.minutes)
@@ -140,18 +142,18 @@ memory_config = CQL::Cache::CacheStoreConfig.new(
 )
 memory_cache = CQL::Cache::CacheStore.create(memory_config)
 
-# Test with Redis cache
+# Test with Redis cache (create new instance for comparison)
 redis_config = CQL::Cache::CacheStoreConfig.new(
   type: CQL::Cache::CacheStoreType::Redis,
   redis_url: "redis://localhost:6379/5"
 )
-redis_cache = CQL::Cache::CacheStore.create(redis_config)
+redis_cache_perf = CQL::Cache::CacheStore.create(redis_config)
 
 # Benchmark both
-operations = 100
-test_data = "x" * 1000 # 1KB of data
+operations = 50  # Reduced for demo
+test_data = "x" * 100 # 100 bytes of data
 
-puts "  Testing #{operations} operations with 1KB data..."
+puts "  Testing #{operations} operations with #{test_data.size} bytes of data..."
 
 # Memory cache test
 memory_start = Time.monotonic
@@ -164,8 +166,8 @@ memory_time = Time.monotonic - memory_start
 # Redis cache test
 redis_start = Time.monotonic
 operations.times do |i|
-  redis_cache.set("test:#{i}", test_data)
-  redis_cache.get("test:#{i}")
+  redis_cache_perf.set("test:#{i}", test_data)
+  redis_cache_perf.get("test:#{i}")
 end
 redis_time = Time.monotonic - redis_start
 
@@ -175,7 +177,7 @@ puts "  Redis cache: #{redis_time.total_milliseconds.round(2)}ms"
 # Show statistics
 puts "\n9. Cache statistics:"
 memory_stats = memory_cache.stats
-redis_stats = redis_cache.stats
+redis_stats = redis_cache_perf.stats
 
 puts "Memory Cache Stats:"
 memory_stats.each { |k, v| puts "  #{k}: #{v}" }
@@ -186,23 +188,26 @@ redis_stats.each { |k, v| puts "  #{k}: #{v}" }
 # Test Redis-specific features
 puts "\n10. Redis-specific features:"
 begin
-  if redis_cache.responds_to?(:ping)
-    ping_result = redis_cache.as(CQL::Cache::RedisCache).ping
+  if redis_cache_perf.is_a?(CQL::Cache::RedisCache)
+    ping_result = redis_cache_perf.ping
     puts "✓ Redis ping: #{ping_result}"
-  end
 
-  if redis_cache.responds_to?(:connection_info)
-    connection_info = redis_cache.as(CQL::Cache::RedisCache).connection_info
-    puts "✓ Redis connection info available: #{!connection_info.empty?}"
+    connection_info = redis_cache_perf.connection_info
+    puts "✓ Redis connection info: #{connection_info}"
+  else
+    puts "✓ Cache instance is not a direct RedisCache (wrapped by CacheStore)"
+    # Try to access underlying Redis cache if wrapped
+    puts "✓ Redis-specific features available through CacheInterface"
   end
-rescue
-  puts "✓ Redis-specific features not available for this cache type"
+rescue e : Exception
+  puts "✓ Redis-specific features not directly accessible: #{e.message}"
 end
 
 # Clean up
 puts "\n11. Cleaning up:"
 memory_cache.clear
 redis_cache.clear
+redis_cache_perf.clear
 puts "✓ All caches cleared"
 
 puts "\n=== Demo completed successfully! ==="
@@ -212,3 +217,5 @@ puts "- Use REDIS_URL environment variable for connection"
 puts "- Configure appropriate TTL values for your use case"
 puts "- Monitor cache hit rates and memory usage"
 puts "- Use tag-based invalidation for complex cache patterns"
+puts "- Store complex data as JSON strings for compatibility"
+puts "- Use connection pooling for high-concurrency applications"

@@ -101,7 +101,7 @@ module BlogDemo
 
   def self.run_migrations
     step(1, "Running Migrations")
-    migrator = CQL.config.create_migrator(BlogDB)
+    migrator = BlogDB.migrator
     migrator.up
     success("Migrations applied successfully")
   end

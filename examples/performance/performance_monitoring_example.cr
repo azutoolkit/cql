@@ -20,7 +20,7 @@ AcmeDB = CQL::Schema.define(:acme_db, "sqlite3://./examples/performance_example.
     primary :id, Int32, auto_increment: true
     column :name, String
     column :email, String
-    column :created_at, Time, default: Time.utc
+    timestamp :created_at
   end
 
   table :posts do
@@ -28,7 +28,7 @@ AcmeDB = CQL::Schema.define(:acme_db, "sqlite3://./examples/performance_example.
     column :user_id, Int32
     column :title, String
     column :content, String
-    column :created_at, Time, default: Time.utc
+    timestamp :created_at
     foreign_key :user_id, :users, :id, on_delete: :cascade
   end
 
@@ -37,7 +37,7 @@ AcmeDB = CQL::Schema.define(:acme_db, "sqlite3://./examples/performance_example.
     column :post_id, Int32
     column :user_id, Int32
     column :content, String
-    column :created_at, Time, default: Time.utc
+    timestamp :created_at
     foreign_key :post_id, :posts, :id, on_delete: :cascade
     foreign_key :user_id, :users, :id, on_delete: :cascade
   end
@@ -52,13 +52,13 @@ struct User
   getter id : Int32?
   getter name : String
   getter email : String
-  getter created_at : Time
+  getter created_at : Time?
 
   # Relationships
   has_many :posts, Post, foreign_key: :user_id
   has_many :comments, Comment, foreign_key: :user_id
 
-  def initialize(@name : String, @email : String, @created_at : Time = Time.utc)
+  def initialize(@name : String, @email : String, @created_at : Time? = nil)
   end
 end
 
@@ -71,13 +71,13 @@ struct Post
   getter user_id : Int32
   getter title : String
   getter content : String
-  getter created_at : Time
+  getter created_at : Time?
 
   # Relationships
   belongs_to :user, User, :user_id
   has_many :comments, Comment, foreign_key: :post_id
 
-  def initialize(@user_id : Int32, @title : String, @content : String, @created_at : Time = Time.utc)
+  def initialize(@user_id : Int32, @title : String, @content : String, @created_at : Time? = nil)
   end
 end
 
@@ -90,13 +90,13 @@ struct Comment
   getter post_id : Int32
   getter user_id : Int32
   getter content : String
-  getter created_at : Time
+  getter created_at : Time?
 
   # Relationships
   belongs_to :post, Post, :post_id
   belongs_to :user, User, :user_id
 
-  def initialize(@post_id : Int32, @user_id : Int32, @content : String, @created_at : Time = Time.utc)
+  def initialize(@post_id : Int32, @user_id : Int32, @content : String, @created_at : Time? = nil)
   end
 end
 
@@ -129,10 +129,11 @@ begin
   AcmeDB.build
 
   # Create some sample users
+  current_time = Time.utc
   users = [
-    User.new("Alice Smith", "alice@example.com"),
-    User.new("Bob Johnson", "bob@example.com"),
-    User.new("Carol Williams", "carol@example.com"),
+    User.new("Alice Smith", "alice@example.com", current_time),
+    User.new("Bob Johnson", "bob@example.com", current_time),
+    User.new("Carol Williams", "carol@example.com", current_time),
   ]
 
   user_ids = [] of Int32
@@ -159,7 +160,7 @@ begin
       user_id: post_data[:user_id],
       title: post_data[:title],
       content: post_data[:content],
-      created_at: Time.utc
+      created_at: current_time
     ).last_insert_id
     post_ids << result.to_i32
   end
@@ -177,7 +178,7 @@ begin
       post_id: comment_data[:post_id],
       user_id: comment_data[:user_id],
       content: comment_data[:content],
-      created_at: Time.utc
+      created_at: current_time
     ).commit
   end
 

@@ -1,7 +1,9 @@
+require "sqlite3"
 require "../../src/cql"
 require "../../src/cache/fragment_cache"
 require "../../src/cache/invalidation_strategies"
 require "../../src/cache/memory_cache"
+require "../../src/cache/cache_interface"
 require "../utilities/beautify"
 
 include Beautify
@@ -94,7 +96,7 @@ class AdvancedCachingDemo
     # Demo 6: Complex query caching
     demo_complex_query_caching
 
-    # Demo 8: Cache performance monitoring
+    # Demo 7: Cache performance monitoring
     demo_cache_performance
 
     demo_complete("Advanced Caching Demo")
@@ -125,7 +127,8 @@ class AdvancedCachingDemo
     # Create fragment cache
     cache = CQL::Cache::MemoryCache.new
     strategy = CQL::Cache::TimestampInvalidation.new(max_age: 1.hour)
-    fragment_cache = CQL::Cache::FragmentCache.new(cache, strategy)
+    config = CQL::Cache::CacheConfig.new(default_ttl: 1.hour, key_prefix: "demo")
+    fragment_cache = CQL::Cache::FragmentCache.new(cache, strategy, config)
 
     # Cache expensive computation
     cache_key = "expensive_computation"
@@ -135,13 +138,13 @@ class AdvancedCachingDemo
     info("Performing expensive computation (first call)...")
     start_time = Time.monotonic
     result = fragment_cache.cache_fragment(cache_key, params, tags) do
-      sleep(0.1) # Simulate expensive operation
+      sleep(0.1.seconds) # Simulate expensive operation
       sum = (1..1000).sum
       "Result: #{sum}"
     end
     first_call_time = Time.monotonic - start_time
 
-    database_operation("First call result", result)
+    database_operation("First call result", result.to_s)
     performance("First call time: #{execution_time(first_call_time)}")
 
     # Second call should be cached
@@ -151,7 +154,7 @@ class AdvancedCachingDemo
     end
     second_call_time = Time.monotonic - start_time
 
-    database_operation("Second call result", cached_result)
+    database_operation("Second call result", cached_result.to_s)
     performance("Second call time: #{execution_time(second_call_time)} (cached)")
 
     # Test cache invalidation by tags
@@ -164,30 +167,31 @@ class AdvancedCachingDemo
 
     cache = CQL::Cache::MemoryCache.new
     strategy = CQL::Cache::TimestampInvalidation.new(max_age: 2.seconds)
-    fragment_cache = CQL::Cache::FragmentCache.new(cache, strategy)
+    config = CQL::Cache::CacheConfig.new(default_ttl: 2.seconds, key_prefix: "demo")
+    fragment_cache = CQL::Cache::FragmentCache.new(cache, strategy, config)
 
     # Cache a value
     cache_key = "timestamp_test"
     result1 = fragment_cache.cache_with_key(cache_key) do
       "Cached at #{Time.utc}"
     end
-    database_operation("Cached value", result1)
+    database_operation("Cached value", result1.to_s)
 
     # Immediately try to get it (should be cached)
     result2 = fragment_cache.cache_with_key(cache_key) do
       "New value at #{Time.utc}"
     end
-    database_operation("Immediate retrieval", result2)
+    database_operation("Immediate retrieval", result2.to_s)
 
     # Wait for cache to expire
     info("Waiting 3 seconds for cache to expire...")
-    sleep(3)
+    sleep(3.seconds)
 
     # Try again (should generate new value)
     result3 = fragment_cache.cache_with_key(cache_key) do
       "New value at #{Time.utc}"
     end
-    database_operation("After expiration", result3)
+    database_operation("After expiration", result3.to_s)
   end
 
   private def self.demo_version_invalidation
@@ -195,7 +199,8 @@ class AdvancedCachingDemo
 
     cache = CQL::Cache::MemoryCache.new
     strategy = CQL::Cache::VersionInvalidation.new
-    fragment_cache = CQL::Cache::FragmentCache.new(cache, strategy)
+    config = CQL::Cache::CacheConfig.new(default_ttl: 1.hour, key_prefix: "demo")
+    fragment_cache = CQL::Cache::FragmentCache.new(cache, strategy, config)
 
     cache_key = "version_test"
 
@@ -203,7 +208,7 @@ class AdvancedCachingDemo
     result1 = fragment_cache.cache_with_key(cache_key) do
       "Version 1 data"
     end
-    database_operation("Initial cache", result1)
+    database_operation("Initial cache", result1.to_s)
 
     # Increment version (simulating data change)
     new_version = strategy.increment_version(cache_key)
@@ -213,7 +218,7 @@ class AdvancedCachingDemo
     result2 = fragment_cache.cache_with_key(cache_key) do
       "Version 2 data"
     end
-    database_operation("After version increment", result2)
+    database_operation("After version increment", result2.to_s)
   end
 
   private def self.demo_transaction_aware_invalidation
@@ -250,7 +255,8 @@ class AdvancedCachingDemo
 
     cache = CQL::Cache::MemoryCache.new
     strategy = CQL::Cache::TimestampInvalidation.new
-    fragment_cache = CQL::Cache::FragmentCache.new(cache, strategy)
+    config = CQL::Cache::CacheConfig.new(default_ttl: 1.hour, key_prefix: "demo")
+    fragment_cache = CQL::Cache::FragmentCache.new(cache, strategy, config)
 
     # Cache multiple related fragments
     fragments = [
@@ -275,7 +281,7 @@ class AdvancedCachingDemo
     # Check what remains
     fragments.each do |fragment|
       cached = fragment_cache.cache_with_key(fragment[:key]) { "REGENERATED: #{fragment[:data]}" }
-      status = cached.starts_with?("REGENERATED") ? "invalidated" : "cached"
+      status = cached.to_s.starts_with?("REGENERATED") ? "invalidated" : "cached"
       bullet_point("#{fragment[:key]}: #{status}")
     end
   end
@@ -342,16 +348,16 @@ class AdvancedCachingDemo
     # Display comprehensive statistics
     stats = cache.stats
     configuration_block("Cache Statistics", {
-      "Type"         => stats["type"],
-      "Size"         => "#{stats["size"]}/#{stats["max_size"]}",
+      "Type"         => stats["type"].to_s,
+      "Size"         => "#{stats["size"]}/#{stats["max_size"] || "unlimited"}",
       "Memory usage" => "#{stats["memory_usage_bytes"]} bytes",
       "Hits"         => "#{stats["hits"]} (#{stats["hit_rate_percent"]}%)",
-      "Misses"       => stats["misses"],
-      "Sets"         => stats["sets"],
-      "Deletes"      => stats["deletes"],
-      "Evictions"    => stats["evictions"],
-      "Tags"         => stats["tags_count"],
-      "Versions"     => stats["versions_count"],
+      "Misses"       => stats["misses"].to_s,
+      "Sets"         => stats["sets"].to_s,
+      "Deletes"      => stats["deletes"].to_s,
+      "Evictions"    => stats["evictions"].to_s,
+      "Tags"         => stats["tags_count"].to_s,
+      "Versions"     => stats["versions_count"].to_s,
     })
 
     status_indicator(:info, "Tag invalidation removed #{invalidated} entries")

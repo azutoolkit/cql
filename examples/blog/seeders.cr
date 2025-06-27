@@ -13,6 +13,12 @@ module BlogDemo
     def self.seed_data
       section("Seeding Database")
 
+      # Clear existing data to avoid duplicates
+      Comment.delete_all
+      Post.delete_all
+      Category.delete_all
+      User.delete_all
+
       # Create users
       john = User.create!(
         username: "john_doe",
