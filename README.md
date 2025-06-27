@@ -27,7 +27,8 @@ CQL is a powerful Object-Relational Mapping (ORM) library for the Crystal progra
     - [Schema Migrations](#schema-migrations)
     - [Query Scopes](#query-scopes)
     - [Schema Dump](#schema-dump)
-  - [Advanced Features](#advanced-features)
+    - [Advanced Caching](#advanced-caching)
+    - [Performance Monitoring](#performance-monitoring)
   - [Documentation](#documentation)
     - [Quick Links](#quick-links)
   - [Development](#development)
@@ -51,7 +52,8 @@ CQL is a powerful Object-Relational Mapping (ORM) library for the Crystal progra
 - **💾 Transaction Support**: Full ACID transaction support with nested transactions (savepoints)
 - **🔐 Optimistic Locking**: Built-in support for optimistic concurrency control
 - **🎯 Query Scopes**: Reusable query scopes for common filtering patterns
-- **🚀 N+1 Query Prevention**: Intelligent association loading to prevent performance issues
+- **🚀 Advanced Caching**: Multi-layer caching with Redis and memory cache support
+- **📊 Performance Monitoring**: Built-in query profiling and N+1 detection
 - **🌐 Multi-Database**: Support for PostgreSQL, MySQL, and SQLite
 - **🔑 Flexible Primary Keys**: Support for Int32, Int64, UUID, and ULID primary keys
 
@@ -69,7 +71,7 @@ Add CQL and your database driver to your `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.266"
+    version: "~> 0.0.374"
 
   # Choose your database driver:
   pg: # For PostgreSQL
@@ -95,25 +97,27 @@ require "cql"
 require "sqlite3"  # or "pg" or "mysql"
 
 # Define your database schema
-AppDB = CQL::Schema.define(
-  :app_database,
+BlogDB = CQL::Schema.define(
+  :blog_database,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://db/app.db"
+  uri: "sqlite3://db/blog.db"
 ) do
   table :users do
-    primary :id, Int32
-    column :name, String
-    column :email, String
-    column :active, Bool, default: true
+    primary :id, Int64
+    text :username
+    text :email
+    text :first_name, null: true
+    text :last_name, null: true
+    boolean :active, default: "1"
     timestamps
   end
 
   table :posts do
-    primary :id, Int32
-    column :title, String
-    column :body, String
-    column :published, Bool, default: false
-    column :user_id, Int32, null: true
+    primary :id, Int64
+    text :title
+    text :content
+    boolean :published, default: "0"
+    bigint :user_id
     timestamps
 
     foreign_key [:user_id], references: :users, references_columns: [:id]
@@ -121,55 +125,66 @@ AppDB = CQL::Schema.define(
 end
 
 # Create tables
-AppDB.users.create!
-AppDB.posts.create!
+BlogDB.users.create!
+BlogDB.posts.create!
 ```
 
 ### 2. Create Models
 
 ```crystal
-class User
-  include CQL::ActiveRecord::Model(Int32)
-  db_context AppDB, :users
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context BlogDB, :users
 
-  property id : Int32?
-  property name : String
-  property email : String
-  property active : Bool = true
-  property created_at : Time?
-  property updated_at : Time?
+  getter id : Int64?
+  getter username : String
+  getter email : String
+  getter first_name : String?
+  getter last_name : String?
+  getter? active : Bool = true
+  getter created_at : Time?
+  getter updated_at : Time?
 
   # Validations
-  validate :name, presence: true, size: 2..50
+  validate :username, presence: true, size: 2..50
   validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
 
   # Relationships
-  has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
+  has_many :posts, Post, foreign_key: :user_id
 
-  def initialize(@name : String, @email : String)
+  def initialize(@username : String, @email : String,
+                 @first_name : String? = nil, @last_name : String? = nil)
+  end
+
+  def full_name
+    if first_name && last_name
+      "#{first_name} #{last_name}"
+    else
+      username
+    end
   end
 end
 
-class Post
-  include CQL::ActiveRecord::Model(Int32)
-  db_context AppDB, :posts
+struct Post
+  include CQL::ActiveRecord::Model(Int64)
+  db_context BlogDB, :posts
 
-  property id : Int32?
-  property title : String
-  property body : String
-  property published : Bool = false
-  property user_id : Int32?
-  property created_at : Time?
-  property updated_at : Time?
+  getter id : Int64?
+  getter title : String
+  getter content : String
+  getter? published : Bool = false
+  getter user_id : Int64
+  getter created_at : Time?
+  getter updated_at : Time?
 
   # Validations
   validate :title, presence: true, size: 1..100
-  validate :body, presence: true
+  validate :content, presence: true
 
   # Relationships
-  belongs_to :user, User, :user_id, optional: true
+  belongs_to :user, User, :user_id
 
-  def initialize(@title : String, @body : String, @user_id : Int32? = nil)
+  def initialize(@title : String, @content : String, @user_id : Int64)
   end
 end
 ```
@@ -178,7 +193,7 @@ end
 
 ```crystal
 # Create a new user
-user = User.new("Alice Johnson", "alice@example.com")
+user = User.new("alice_j", "alice@example.com", "Alice", "Johnson")
 if user.save
   puts "User created with ID: #{user.id}"
 else
@@ -186,21 +201,21 @@ else
 end
 
 # Find users
-alice = User.find_by(email: "alice@example.com")
-all_active_users = User.where(active: true).all
+alice = User.find_by(username: "alice_j")
+active_users = User.where(active: true).all
 
 # Create associated records
-post = user.posts.create(title: "My First Post", body: "Hello, World!")
+post = user.posts.create(title: "My First Post", content: "Hello, World!")
 
 # Use transactions for complex operations
 User.transaction do |tx|
-  user = User.create!(name: "Bob", email: "bob@example.com")
-  post = user.posts.create!(title: "Bob's Post", body: "Content here")
+  user = User.create!(username: "bob", email: "bob@example.com")
+  post = user.posts.create!(title: "Bob's Post", content: "Content here")
 
   # If anything fails, everything rolls back automatically
 end
 
-# Advanced querying
+# Advanced querying with joins
 published_posts = Post.where(published: true)
                      .joins(:user)
                      .where(users: {active: true})
@@ -214,13 +229,12 @@ published_posts = Post.where(published: true)
 ### Type-Safe Schema Definition
 
 ```crystal
-AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
+BlogDB = CQL::Schema.define(:blog, adapter: CQL::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
   table :products do
     primary :id, UUID                    # UUID primary keys
-    column :name, String
-    column :price, Float64
-    column :metadata, JSON::Any          # JSON columns
-    column :tags, Array(String)          # Array columns (PostgreSQL)
+    text :name
+    decimal :price
+    text :metadata                       # JSON columns
     timestamps
 
     index :name, unique: true
@@ -232,18 +246,17 @@ end
 ### Active Record Pattern
 
 ```crystal
-class Product
+struct Product
   include CQL::ActiveRecord::Model(UUID)
-  db_context AppDB, :products
+  db_context BlogDB, :products
 
-  property id : UUID?
-  property name : String
-  property price : Float64
-  property metadata : JSON::Any
-  property created_at : Time?
-  property updated_at : Time?
+  getter id : UUID?
+  getter name : String
+  getter price : Float64
+  getter created_at : Time?
+  getter updated_at : Time?
 
-  def initialize(@name : String, @price : Float64, @metadata = JSON::Any.new({}))
+  def initialize(@name : String, @price : Float64)
   end
 end
 
@@ -251,8 +264,8 @@ end
 product = Product.create!(name: "Laptop", price: 999.99)
 
 # Read
-product = Product.find(product.id)
-products = Product.where("price < ?", 1000).order(:name).all
+product = Product.find(product.id.not_nil!)
+products = Product.where("price < ?", 1000.0).order(:name).all
 
 # Update
 product.price = 899.99
@@ -265,21 +278,21 @@ product.destroy!
 ### Comprehensive Validations
 
 ```crystal
-class User
-  include CQL::ActiveRecord::Model(Int32)
+struct User
+  include CQL::ActiveRecord::Model(Int64)
 
   # Built-in validations
   validate :name, presence: true, size: 2..50
   validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
   validate :age, gt: 0, lt: 120
-  validate :role, in: ["user", "admin", "moderator"]
+  validate :password_confirmation, confirmation: :password
 
-  # Custom validations
+  # Custom validators
   use CustomPasswordValidator
 end
 
 # Check validity
-user = User.new("", "invalid-email", -5)
+user = User.new("", "invalid-email")
 unless user.valid?
   user.errors.each { |error| puts "#{error.field}: #{error.message}" }
 end
@@ -288,24 +301,23 @@ end
 ### Powerful Relationships
 
 ```crystal
-class User
-  has_one :profile, UserProfile, dependent: :destroy
-  has_many :posts, Post, foreign_key: :author_id
-  has_many :comments, Comment, dependent: :destroy
+struct User
+  has_one :profile, UserProfile
+  has_many :posts, Post, foreign_key: :user_id
+  has_many :comments, Comment
 end
 
-class Post
-  belongs_to :author, User, :author_id
-  has_many :comments, Comment, dependent: :destroy
+struct Post
+  belongs_to :user, User, :user_id
+  has_many :comments, Comment
   many_to_many :tags, Tag, join_through: :post_tags
 end
 
 # Work with associations efficiently (avoids N+1 queries)
-user = User.find(1)
-user.posts.create(title: "New Post", body: "Content")
-user.posts_count                    # Efficient count without loading
-user.posts_any?                     # Check existence without loading
-user.profile.update!(bio: "Updated bio")
+user = User.find(1.to_i64)
+user.posts.create(title: "New Post", content: "Content")
+user.posts.size                         # Efficient count without loading
+user.posts.any?                         # Check existence without loading
 ```
 
 ### Database Transactions
@@ -313,8 +325,8 @@ user.profile.update!(bio: "Updated bio")
 ```crystal
 # Simple transactions
 User.transaction do |tx|
-  user = User.create!(name: "John", email: "john@example.com")
-  user.posts.create!(title: "First Post", body: "Hello!")
+  user = User.create!(username: "john", email: "john@example.com")
+  user.posts.create!(title: "First Post", content: "Hello!")
 
   # Automatic rollback on exceptions
   raise "Error!" if some_condition  # Everything rolls back
@@ -322,7 +334,7 @@ end
 
 # Nested transactions (savepoints)
 User.transaction do |outer_tx|
-  user = User.create!(name: "Alice", email: "alice@example.com")
+  user = User.create!(username: "alice", email: "alice@example.com")
 
   User.transaction(outer_tx) do |inner_tx|
     # This can be rolled back independently
@@ -363,24 +375,23 @@ class AddEmailToUsers < CQL::Migration(20240102120000)
 end
 
 # Run migrations
-migrator = CQL::Migrator.new(AppDB)
+migrator = CQL::Migrator.new(BlogDB)
 migrator.up           # Apply all pending migrations
 migrator.down(1)      # Rollback last migration
-migrator.print_applied_migrations  # Show status
 ```
 
 ### Query Scopes
 
 ```crystal
-class Post
+struct Post
   scope :published, ->{ where(published: true) }
   scope :recent, ->{ where("created_at > ?", 1.week.ago).order(created_at: :desc) }
-  scope :by_author, ->(author_id : Int32) { where(author_id: author_id) }
+  scope :by_user, ->(user_id : Int64) { where(user_id: user_id) }
 end
 
 # Use scopes
 recent_posts = Post.published.recent.limit(10).all
-author_posts = Post.by_author(user.id).published.all
+user_posts = Post.by_user(user.id.not_nil!).published.all
 ```
 
 ### Schema Dump
@@ -396,24 +407,62 @@ dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://legacy_app.db")
 dumper.dump_to_file("src/schemas/legacy_schema.cr", :LegacyDB, :legacy_db)
 
 # Generated schema uses proper CQL methods:
-# integer :user_id          # instead of column :user_id, Int32
 # text :name               # instead of column :name, String
+# integer :user_id         # instead of column :user_id, Int32
 # timestamps               # instead of individual created_at/updated_at
 
 dumper.close
 ```
 
-## Advanced Features
+### Advanced Caching
 
-- **Schema Dump**: Reverse-engineer existing databases into idiomatic CQL schema definitions
-- **Optimistic Locking**: Prevent concurrent update conflicts with version-based locking
-- **Lifecycle Callbacks**: `before_save`, `after_create`, `before_destroy`, and more
-- **N+1 Query Prevention**: Automatic JOIN-based queries and smart association loading
-- **Connection Pooling**: Efficient database connection management
-- **Multi-Database**: Work with multiple databases simultaneously
-- **Raw SQL**: Execute raw SQL when needed with full type safety
-- **Database Introspection**: Runtime schema inspection capabilities
-- **Query Caching**: Built-in query result caching for improved performance
+```crystal
+# Configure multi-layer caching
+cache_config = CQL::Cache::CacheConfig.new(
+  enabled: true,
+  ttl: 1.hour,
+  max_size: 10_000
+)
+
+# Memory cache for high-speed access
+memory_cache = CQL::Cache::MemoryCache.new(max_size: 1000)
+
+# Redis cache for distributed applications
+redis_cache = CQL::Cache::RedisCache.new("redis://localhost:6379")
+
+# Fragment caching for expensive operations
+fragment_cache = CQL::Cache::FragmentCache.new(memory_cache)
+
+result = fragment_cache.cache_fragment("expensive_query", {"user_id" => user.id}) do
+  # Expensive database operation
+  User.joins(:posts).where(active: true).complex_calculation
+end
+
+# Tag-based invalidation
+fragment_cache.invalidate_tags(["user:#{user.id}"])
+```
+
+### Performance Monitoring
+
+```crystal
+# Enable performance monitoring
+monitor = CQL::Performance::PerformanceMonitor.new
+
+# Monitor query execution
+monitor.on_query_executed do |event|
+  if event.duration > 100.milliseconds
+    puts "Slow query detected: #{event.sql} (#{event.duration}ms)"
+  end
+end
+
+# N+1 query detection
+detector = CQL::Performance::NPlusOneDetector.new
+detector.analyze_queries(queries) # Automatically detects N+1 patterns
+
+# Generate performance reports
+report_generator = CQL::Performance::Reports::HTMLReportGenerator.new
+report_generator.generate_report(monitor.events, "performance_report.html")
+```
 
 ## Documentation
 
@@ -436,6 +485,8 @@ The complete documentation is available in the [docs](./docs) directory:
 - **[Callbacks](./docs/guides/active-record-with-cql/callbacks.md)** - Lifecycle hooks and callbacks
 - **[Scopes](./docs/guides/active-record-with-cql/scopes.md)** - Reusable query methods
 - **[Optimistic Locking](./docs/guides/active-record-with-cql/optimistic-locking.md)** - Concurrency control
+- **[Advanced Caching](./docs/guides/advanced-caching-architecture.md)** - Multi-layer caching strategies
+- **[Performance Monitoring](./docs/guides/performance-optimization.md)** - Query profiling and optimization
 - **[Core Concepts](./docs/core-concepts/README.md)** - Understanding CQL's architecture
 - **[Patterns](./docs/core-concepts/patterns/README.md)** - Active Record, Repository, and more
 - **[Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
@@ -456,6 +507,7 @@ crystal spec
 
 # Run specific test files
 crystal spec spec/patterns/active_record/relations/
+crystal spec spec/cache/
 ```
 
 ### Database Support

@@ -1,200 +1,188 @@
----
-icon: life-ring
----
+# Troubleshooting CQL
 
-# 🚨 Troubleshooting CQL
+Quick solutions for common issues when working with CQL.
 
-> **Quick Solutions & Debugging Guide** - Get back on track fast with common issues and their fixes
+## Setup & Installation Issues
 
-This comprehensive troubleshooting guide covers the most common issues you might encounter while working with CQL, along with step-by-step solutions, debugging tips, and best practices to prevent problems.
+### Shard Installation Fails
 
-## 📋 Quick Reference
-
-- [🔧 Setup & Installation Issues](#-setup--installation-issues)
-- [📊 Database Connection Problems](#-database-connection-problems)
-- [🏗️ Schema & Migration Issues](#️-schema--migration-issues)
-- [🔍 Query & Model Issues](#-query--model-issues)
-- [⚠️ Runtime Errors](#️-runtime-errors)
-- [⚡ Performance Issues](#-performance-issues)
-- [🛠️ Development Tips](#️-development-tips)
-
----
-
-## 🔧 Setup & Installation Issues
-
-### ❌ Issue: Shard Installation Fails
-
-```
-Error: Failed to resolve dependencies of 'my-app', try updating incompatible shards or use --ignore-crystal-version as a workaround
-```
+**Error:** `Failed to resolve dependencies`
 
 **Solution:**
 
-1. **Check Crystal version compatibility:**
-
-   ```bash
-   crystal --version
-   # Ensure you're using a supported Crystal version (0.36.0+)
-   ```
-
-2. **Update your `shard.yml`:**
-
+1. Check Crystal version compatibility: `crystal --version`
+2. Update `shard.yml` with compatible version:
    ```yaml
    dependencies:
      cql:
        github: azutoolkit/cql
-       version: "~> 1.0" # Use the latest compatible version
+       version: "~> 1.0"
    ```
+3. Install with: `shards install`
 
-3. **Install with version override if needed:**
-   ```bash
-   shards install --ignore-crystal-version
-   ```
+### Database Driver Not Found
 
-### ❌ Issue: Database Driver Not Found
+**Error:** `can't load file 'pg'`
 
-```
-Error: can't load file 'pg' (compile-time require)
-```
-
-**Solution:**
-Add the appropriate database driver to your `shard.yml`:
+**Solution:** Add the database driver to `shard.yml`:
 
 ```yaml
 dependencies:
-  # For PostgreSQL
+  # PostgreSQL
   pg:
     github: will/crystal-pg
-
-  # For MySQL
+  # MySQL
   mysql:
     github: crystal-lang/crystal-mysql
-
-  # For SQLite
+  # SQLite
   sqlite3:
     github: crystal-lang/crystal-sqlite3
 ```
 
----
+## Database Connection Problems
 
-## 📊 Database Connection Problems
+### Connection Refused
 
-### ❌ Issue: Connection Refused
-
-```
-Error: Connection refused (Errno)
-```
-
-**Debugging Steps:**
-
-1. **Verify database is running:**
-
-   ```bash
-   # PostgreSQL
-   sudo systemctl status postgresql
-   # or
-   pg_isready -h localhost -p 5432
-
-   # MySQL
-   sudo systemctl status mysql
-   # or
-   mysqladmin ping -h localhost
-   ```
-
-2. **Check connection string:**
-
-   ```crystal
-   # ✅ Correct format
-   uri: "postgres://username:password@localhost:5432/database_name"
-   uri: "mysql://username:password@localhost:3306/database_name"
-   uri: "sqlite3:///path/to/database.db"
-
-   # ❌ Common mistakes
-   uri: "postgres://localhost:5432/database_name"  # Missing credentials
-   uri: "postgresql://..."  # Wrong protocol name
-   ```
-
-3. **Test connection manually:**
-   ```crystal
-   # Test connection
-   begin
-     DB.open("postgres://user:pass@localhost/dbname") do |db|
-       result = db.scalar("SELECT 1")
-       puts "✅ Connection successful: #{result}"
-     end
-   rescue ex
-     puts "❌ Connection failed: #{ex.message}"
-   end
-   ```
-
-### ❌ Issue: Authentication Failed
-
-```
-Error: FATAL: password authentication failed for user "username"
-```
+**Error:** `Connection refused (Errno)`
 
 **Solutions:**
 
-1. **Verify credentials:**
+1. Verify database is running:
 
    ```bash
-   # Test PostgreSQL connection
-   psql -h localhost -U username -d database_name
+   # PostgreSQL
+   pg_isready -h localhost -p 5432
 
-   # Test MySQL connection
+   # MySQL
+   mysqladmin ping -h localhost
+   ```
+
+2. Check connection string format:
+
+   ```crystal
+   # Correct
+   "postgres://username:password@localhost:5432/database"
+   "mysql://username:password@localhost:3306/database"
+   "sqlite3:///path/to/database.db"
+   ```
+
+3. Test connection manually:
+   ```crystal
+   begin
+     DB.open("postgres://user:pass@localhost/dbname") do |db|
+       result = db.scalar("SELECT 1")
+       puts "Connection successful: #{result}"
+     end
+   rescue ex
+     puts "Connection failed: #{ex.message}"
+   end
+   ```
+
+### Authentication Failed
+
+**Error:** `password authentication failed`
+
+**Solutions:**
+
+1. Test credentials manually:
+
+   ```bash
+   psql -h localhost -U username -d database_name
    mysql -h localhost -u username -p database_name
    ```
 
-2. **Check environment variables:**
+2. Use environment variables:
 
    ```crystal
-   # Use environment variables for sensitive data
    uri: ENV["DATABASE_URL"]? || "postgres://localhost:5432/myapp_dev"
    ```
 
-3. **Create database user if needed:**
+3. Create database user if needed:
 
    ```sql
    -- PostgreSQL
-   CREATE USER myapp_user WITH PASSWORD 'mypassword';
+   CREATE USER myapp_user WITH PASSWORD 'password';
    GRANT ALL PRIVILEGES ON DATABASE myapp_dev TO myapp_user;
 
    -- MySQL
-   CREATE USER 'myapp_user'@'localhost' IDENTIFIED BY 'mypassword';
+   CREATE USER 'myapp_user'@'localhost' IDENTIFIED BY 'password';
    GRANT ALL PRIVILEGES ON myapp_dev.* TO 'myapp_user'@'localhost';
    ```
 
----
+## Schema & Migration Issues
 
-## 🏗️ Schema & Migration Issues
+### Column Not Found Error
 
-### ❌ Issue: `NoMethodError` when querying
+**Error:** `undefined method 'name' for #<NamedTuple(id: Int64)>`
 
+**Solution:** Ensure schema matches database:
+
+```crystal
+# Complete schema definition
+table :users do
+  primary :id, Int64
+  column :name, String
+  column :email, String
+  timestamps
+end
 ```
-Error: undefined method 'name' for #<NamedTuple(id: Int64)>
+
+Verify with: `crystal run db/migrate.cr`
+
+### Migration Fails - Column Exists
+
+**Error:** `column "email" already exists`
+
+**Solution:** Check before adding columns:
+
+```crystal
+class AddEmailToUsers < CQL::Migration
+  def up
+    unless column_exists?(:users, :email)
+      alter_table :users do
+        add_column :email, String
+      end
+    end
+  end
+end
 ```
 
-**Root Cause:** Querying columns that don't exist in your schema definition.
+## Query & Model Issues
 
-**Solution:**
+### Type Mismatch Errors
 
-1. **Verify schema definition:**
+**Error:** `no overload matches 'User#new'`
 
-   ```crystal
-   # ❌ Missing column
-   table :users do
-     primary :id, Int64
-     # Missing: column :name, String
-   end
+**Solution:** Use proper type casting:
 
-   # ✅ Complete definition
-   table :users do
-     primary :id, Int64
-     column :name, String
-     column :email, String
-     timestamps
-   end
-   ```
+```crystal
+# Safe casting
+user = User.new(
+  name: params["name"]?.try(&.as(String)) || "",
+  email: params["email"]?.try(&.as(String)) || "",
+  age: params["age"]?.try(&.as(String).to_i?) || 0
+)
+```
+
+### Records Not Found
+
+**Error:** `DB::NoResultsError`
+
+```crystal
+# ❌ Missing column
+table :users do
+  primary :id, Int64
+  # Missing: column :name, String
+end
+
+# ✅ Complete definition
+table :users do
+  primary :id, Int64
+  column :name, String
+  column :email, String
+  timestamps
+end
+```
 
 2. **Check if migration was run:**
 

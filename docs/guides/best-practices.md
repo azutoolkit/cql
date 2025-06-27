@@ -1,40 +1,24 @@
-# 🎯 CQL Best Practices
+# CQL Best Practices
 
-_Essential guidelines for building robust, performant, and maintainable applications with CQL_
+Essential guidelines for building robust, performant, and maintainable CQL applications.
 
----
+## Database Design
 
-## 📋 Overview
+### Schema Design
 
-This guide covers proven patterns and practices for:
-
-- **Database Design** - Schema and relationship patterns
-- **Model Architecture** - Clean, maintainable model design
-- **Query Optimization** - Fast, efficient database queries
-- **Error Handling** - Robust error management
-- **Testing** - Comprehensive testing strategies
-- **Security** - Protection against common vulnerabilities
-- **Performance** - Scaling and optimization techniques
-
----
-
-## 🏗️ Database Design Best Practices
-
-### 1. Schema Design
-
-#### ✅ Use Appropriate Data Types
+#### Use Appropriate Data Types
 
 ```crystal
 class User
   include CQL::ActiveRecord::Model(Int64)
   db_context schema: UserDB, table: :users
 
-  # ✅ Good: Use specific, appropriate types
+  # ✅ Good: Specific, appropriate types
   property id : Int64 = 0
   property email : String              # Not String | Nil if always required
   property age : Int32                 # Not String for numeric data
-  property balance : Float64           # Use Float64 for currency (or consider BigDecimal)
-  property active : Bool = true        # Explicit boolean, not String
+  property balance : Float64           # Use Float64 for currency
+  property active : Bool = true        # Explicit boolean
   property created_at : Time = Time.utc
 
   # ✅ Use union types only when truly optional
@@ -43,13 +27,10 @@ class User
 end
 ```
 
-#### ❌ Common Schema Mistakes
+#### Common Schema Mistakes
 
 ```crystal
 class User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context schema: UserDB, table: :users
-
   # ❌ Avoid: Overly generic types
   property data : String               # Should be structured
   property settings : String           # Use JSON column or separate table
@@ -63,46 +44,44 @@ class User
 end
 ```
 
-### 2. Indexing Strategy
+### Indexing Strategy
 
 ```crystal
 class UserSchema < CQL::Schema(UserDB)
   table :users do |t|
     t.integer :id, primary: true, auto_increment: true
-    t.string :email, null: false, index: {unique: true}        # ✅ Unique index for lookups
-    t.string :username, null: false, index: {unique: true}     # ✅ Another unique field
-    t.string :first_name, null: false, index: true             # ✅ Index for searches
-    t.string :last_name, null: false, index: true              # ✅ Index for searches
-    t.integer :age, index: true                                # ✅ Index for range queries
-    t.boolean :active, default: true, index: true              # ✅ Index for filtering
-    t.string :status, index: true                              # ✅ Index for status queries
-    t.timestamp :created_at, null: false, index: true          # ✅ Index for date ranges
+    t.string :email, null: false, index: {unique: true}
+    t.string :username, null: false, index: {unique: true}
+    t.string :first_name, null: false, index: true
+    t.string :last_name, null: false, index: true
+    t.integer :age, index: true
+    t.boolean :active, default: true, index: true
+    t.timestamp :created_at, null: false, index: true
     t.timestamp :updated_at, null: false
 
-    # ✅ Composite indexes for common query patterns
-    t.index([:last_name, :first_name])                         # Name searches
-    t.index([:active, :created_at])                            # Active users by date
-    t.index([:status, :updated_at])                            # Status changes by date
+    # Composite indexes for common query patterns
+    t.index([:last_name, :first_name])
+    t.index([:active, :created_at])
+    t.index([:status, :updated_at])
   end
 end
 ```
 
-### 3. Relationship Design
-
-#### ✅ Clear Relationship Patterns
+### Relationship Design
 
 ```crystal
 class User
   include CQL::ActiveRecord::Model(Int64)
   db_context schema: UserDB, table: :users
+
   property id : Int64 = 0
   property name : String
   property email : String
 
   # ✅ Clear, descriptive relationships
-  has_many :posts, Post, foreign_key: :author_id           # Use descriptive foreign key
-  has_many :comments, Comment, foreign_key: :commenter_id  # Avoid ambiguous names
-  has_one :profile, UserProfile, foreign_key: :user_id     # Clear ownership
+  has_many :posts, Post, foreign_key: :author_id
+  has_many :comments, Comment, foreign_key: :commenter_id
+  has_one :profile, UserProfile, foreign_key: :user_id
 
   # ✅ Many-to-many with join table
   has_many :user_roles, UserRole, foreign_key: :user_id
@@ -111,24 +90,20 @@ end
 
 class Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context schema: UserDB, table: :users
+
   property id : Int64 = 0
   property title : String
   property content : String
-  property author_id : Int64                               # ✅ Explicit foreign key property
+  property author_id : Int64
 
-  belongs_to :author, User, foreign_key: :author_id       # ✅ Use descriptive alias
+  belongs_to :author, User, foreign_key: :author_id
   has_many :comments, Comment, foreign_key: :post_id
 end
 ```
 
----
+## Model Architecture
 
-## 🏛️ Model Architecture Best Practices
-
-### 1. Model Organization
-
-#### ✅ Single Responsibility Principle
+### Single Responsibility Principle
 
 ```crystal
 # ✅ Good: User model focused on user-specific logic
@@ -173,9 +148,7 @@ class UserPreference
 end
 ```
 
-### 2. Validation Patterns
-
-#### ✅ Comprehensive Validation
+### Validation Patterns
 
 ```crystal
 class User
@@ -222,9 +195,7 @@ class User
 end
 ```
 
-### 3. Callback Patterns
-
-#### ✅ Focused Callbacks
+### Callback Patterns
 
 ```crystal
 class User
@@ -267,31 +238,11 @@ class User
     end
   end
 end
-
-# ❌ Avoid: Heavy business logic in callbacks
-class User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context schema: UserDB, table: :users
-
-  after_create :setup_user_account  # ❌ Too much responsibility
-
-  private def setup_user_account
-    # ❌ This should be in a service object
-    UserProfile.create!(user_id: self.id)
-    UserPreferences.create!(user_id: self.id)
-    NotificationSettings.create!(user_id: self.id)
-    # ... many more operations
-  end
-end
 ```
 
----
+## Query Optimization
 
-## 🚀 Query Optimization Best Practices
-
-### 1. Efficient Query Patterns
-
-#### ✅ Use Specific Queries
+### Efficient Query Patterns
 
 ```crystal
 # ✅ Good: Only load what you need
@@ -302,9 +253,9 @@ users = User.select(:id, :name, :email)
            .all
 
 # ✅ Good: Use appropriate query methods
-user = User.find_by!(email: "user@example.com")  # When you expect one result
-users = User.where(age: 25..35).all              # When you expect multiple
-count = User.where(active: true).count           # When you only need the count
+user = User.find_by!(email: "user@example.com")
+users = User.where(age: 25..35).all
+count = User.where(active: true).count
 
 # ✅ Good: Efficient joins
 posts_with_authors = Post.join(:author)
@@ -313,7 +264,7 @@ posts_with_authors = Post.join(:author)
                         .all
 ```
 
-#### ❌ Inefficient Query Patterns
+#### Inefficient Query Patterns
 
 ```crystal
 # ❌ Bad: Loading unnecessary data
@@ -333,7 +284,7 @@ posts.each do |post|
 end
 ```
 
-### 2. Pagination Best Practices
+### Pagination Best Practices
 
 ```crystal
 # ✅ Good: Limit-offset pagination for small datasets
@@ -373,7 +324,7 @@ class UsersController
 end
 ```
 
-### 3. Batch Processing
+### Batch Processing
 
 ```crystal
 # ✅ Good: Process records in batches
@@ -400,11 +351,9 @@ def deactivate_inactive_users
 end
 ```
 
----
+## Security Best Practices
 
-## 🛡️ Security Best Practices
-
-### 1. SQL Injection Prevention
+### SQL Injection Prevention
 
 ```crystal
 # ✅ Good: Use parameterized queries (CQL handles this automatically)
@@ -415,19 +364,15 @@ end
 def find_users_by_age_range(min_age : Int32, max_age : Int32)
   User.where { (age >= min_age) & (age <= max_age) }.all  # ✅ Safe
 end
-
-# ❌ Never do this (not possible in CQL, but good to know)
-# def find_users_by_name(name : String)
-#   User.query("SELECT * FROM users WHERE name = '#{name}'")  # ❌ SQL injection risk
-# end
 ```
 
-### 2. Input Validation
+### Input Validation
 
 ```crystal
 class User
   include CQL::ActiveRecord::Model(Int64)
   db_context schema: UserDB, table: :users
+
   property id : Int64 = 0
   property email : String
   property role : String = "user"
@@ -452,7 +397,7 @@ class User
 end
 ```
 
-### 3. Mass Assignment Protection
+### Mass Assignment Protection
 
 ```crystal
 class UsersController
@@ -480,359 +425,146 @@ class UsersController
     user.update!(allowed_params)
     render_success(user)
   end
-
-  # ❌ Bad: Allow all parameters (if CQL supported this)
-  # def create
-  #   user = User.create!(params)  # ❌ Dangerous mass assignment
-  # end
 end
 ```
 
----
+## Performance Guidelines
 
-## 🧪 Testing Best Practices
-
-### 1. Model Testing
+### Use Appropriate Indexes
 
 ```crystal
-require "spec"
+# ✅ Index frequently queried columns
+table :users do
+  column :email, String, index: {unique: true}
+  column :status, String, index: true
+  column :created_at, Time, index: true
 
+  # Composite indexes for common query patterns
+  index [:status, :created_at]
+  index [:active, :last_login]
+end
+```
+
+### Avoid N+1 Queries
+
+```crystal
+# ❌ Bad: N+1 queries
+posts = Post.all
+posts.each { |post| puts post.user.name }
+
+# ✅ Good: Eager loading
+posts = Post.join(:user).all
+posts.each { |post| puts post.user.name }
+
+# ✅ Good: Preload associations
+posts = Post.includes(:user).all
+posts.each { |post| puts post.user.name }
+```
+
+### Use Database-Level Operations
+
+```crystal
+# ✅ Good: Database-level aggregations
+user_count = User.where(active: true).count
+total_revenue = Order.where(status: "completed").sum(:amount)
+
+# ❌ Bad: Application-level aggregations
+users = User.where(active: true).all
+user_count = users.size  # Loads all records unnecessarily
+```
+
+## Error Handling
+
+### Use Appropriate Exception Types
+
+```crystal
+class UserService
+  def find_user!(id : Int64)
+    User.find(id) || raise CQL::RecordNotFound.new("User not found")
+  end
+
+  def create_user(attributes)
+    user = User.new(**attributes)
+
+    if user.valid?
+      user.save!
+    else
+      raise CQL::RecordInvalid.new(user.errors)
+    end
+  end
+end
+```
+
+### Transaction Error Handling
+
+```crystal
+def transfer_credits(from_user : User, to_user : User, amount : Int32)
+  User.transaction do
+    from_user.decrement!(:credits, amount)
+    to_user.increment!(:credits, amount)
+
+    CreditTransfer.create!(
+      from_user: from_user,
+      to_user: to_user,
+      amount: amount
+    )
+  end
+rescue CQL::RecordInvalid => ex
+  # Handle validation errors
+  log_error("Credit transfer failed: #{ex.message}")
+  raise
+rescue CQL::DatabaseError => ex
+  # Handle database errors
+  log_error("Database error during credit transfer: #{ex.message}")
+  raise
+end
+```
+
+## Testing Guidelines
+
+### Use Appropriate Test Database
+
+```crystal
+# Test configuration
+TestDB = CQL::Schema.define(
+  :test,
+  adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3://:memory:"  # Fast in-memory database
+)
+
+# Clean database between tests
+Spec.before_each do
+  TestDB.tables.each { |name, _| TestDB.query("DELETE FROM #{name}").commit }
+end
+```
+
+### Test Factory Pattern
+
+```crystal
+module UserFactory
+  def self.build(attributes = {} of Symbol => String | Int32 | Bool)
+    defaults = {
+      :name => "Test User",
+      :email => "test@example.com",
+      :active => true
+    }
+
+    User.new(**defaults.merge(attributes))
+  end
+
+  def self.create!(attributes = {} of Symbol => String | Int32 | Bool)
+    build(attributes).tap(&.save!)
+  end
+end
+
+# Usage in tests
 describe User do
-  before_each do
-    UserDB.users.create!
-  end
-
-  after_each do
-    UserDB.users.drop!
-  end
-
-  describe "validations" do
-    it "validates email format" do
-      user = User.new(name: "Test", email: "invalid-email", age: 25)
-      user.valid?.should be_false
-      user.errors[:email].should_not be_empty
-    end
-
-    it "validates password complexity" do
-      user = User.new(
-        name: "Test",
-        email: "test@example.com",
-        age: 25,
-        password: "simple"
-      )
-
-      user.valid?.should be_false
-      user.errors[:password].should contain("must contain uppercase letter")
-    end
-
-    it "validates uniqueness of email" do
-      User.create!(name: "First", email: "test@example.com", age: 25, password: "Password123!")
-
-      duplicate = User.new(name: "Second", email: "test@example.com", age: 30, password: "Password123!")
-      duplicate.valid?.should be_false
-      duplicate.errors[:email].should contain("has already been taken")
-    end
-  end
-
-  describe "callbacks" do
-    it "normalizes email before save" do
-      user = User.create!(
-        name: "Test",
-        email: "  TEST@EXAMPLE.COM  ",
-        age: 25,
-        password: "Password123!"
-      )
-
-      user.email.should eq("test@example.com")
-    end
-  end
-
-  describe "relationships" do
-    it "has many posts" do
-      user = User.create!(name: "Author", email: "author@example.com", age: 30, password: "Password123!")
-      post1 = Post.create!(title: "Post 1", content: "Content 1", author_id: user.id)
-      post2 = Post.create!(title: "Post 2", content: "Content 2", author_id: user.id)
-
-      user.posts.size.should eq(2)
-      user.posts.map(&.title).should contain("Post 1")
-      user.posts.map(&.title).should contain("Post 2")
-    end
+  it "validates email presence" do
+    user = UserFactory.build(email: "")
+    user.valid?.should be_false
+    user.errors[:email].should contain("can't be blank")
   end
 end
 ```
 
-### 2. Integration Testing
-
-```crystal
-describe "User workflow" do
-  before_each do
-    UserDB.users.create!
-  end
-
-  after_each do
-    UserDB.users.drop!
-  end
-
-  it "creates user with profile and preferences" do
-    # Test complete user creation workflow
-    user = User.create!(
-      name: "John Doe",
-      email: "john@example.com",
-      age: 30,
-      password: "SecurePassword123!"
-    )
-
-    # Verify user was created
-    user.persisted?.should be_true
-    user.id.should_not be_nil
-
-    # Create related records
-    profile = UserProfile.create!(
-      user_id: user.id,
-      bio: "Software developer",
-      website: "https://johndoe.com"
-    )
-
-    preferences = UserPreference.create!(
-      user_id: user.id,
-      theme: "dark",
-      notifications: true
-    )
-
-    # Verify relationships work
-    user.profile.should_not be_nil
-    user.profile.not_nil!.bio.should eq("Software developer")
-
-    user.preference.should_not be_nil
-    user.preference.not_nil!.theme.should eq("dark")
-  end
-end
-```
-
-### 3. Performance Testing
-
-```crystal
-require "benchmark"
-
-describe "Performance tests" do
-  before_each do
-    UserDB.users.create!
-
-    # Create test data
-    100.times do |i|
-      User.create!(
-        name: "User #{i}",
-        email: "user#{i}@example.com",
-        age: (18..65).sample,
-        password: "Password123!"
-      )
-    end
-  end
-
-  after_each do
-    UserDB.users.drop!
-  end
-
-  it "performs queries efficiently" do
-    # Test query performance
-    time = Benchmark.measure do
-      100.times do
-        User.where(age: 25..35).limit(10).all
-      end
-    end
-
-    # Should complete 100 queries in reasonable time
-    time.total.should be < 1.0  # Less than 1 second
-  end
-
-  it "handles large result sets efficiently" do
-    memory_before = GC.stats.heap_size
-
-    users = User.all
-    users.size.should eq(100)
-
-    memory_after = GC.stats.heap_size
-    memory_used = memory_after - memory_before
-
-    # Should use reasonable amount of memory
-    memory_used.should be < 1_000_000  # Less than 1MB for 100 users
-  end
-end
-```
-
----
-
-## 📊 Performance Monitoring
-
-### 1. Query Performance Monitoring
-
-```crystal
-# Create a performance logger
-class QueryPerformanceLogger
-  def self.log_slow_query(query : String, duration : Time::Span)
-    if duration > 100.milliseconds
-      puts "SLOW QUERY (#{duration.total_milliseconds}ms): #{query}"
-    end
-  end
-end
-
-# Monitor queries in your application
-module QueryMonitoring
-  def self.time_query(query : String, &block)
-    start_time = Time.utc
-    result = yield
-    end_time = Time.utc
-    duration = end_time - start_time
-
-    QueryPerformanceLogger.log_slow_query(query, duration)
-    result
-  end
-end
-
-# Usage example
-def find_active_users
-  QueryMonitoring.time_query("User.where(active: true)") do
-    User.where(active: true).all
-  end
-end
-```
-
-### 2. Memory Usage Monitoring
-
-```crystal
-class MemoryMonitor
-  def self.check_usage(operation : String)
-    gc_stats_before = GC.stats
-    yield
-    gc_stats_after = GC.stats
-
-    heap_growth = gc_stats_after.heap_size - gc_stats_before.heap_size
-
-    if heap_growth > 10_000_000  # 10MB
-      puts "HIGH MEMORY USAGE in #{operation}: #{heap_growth} bytes"
-    end
-  end
-end
-
-# Usage
-MemoryMonitor.check_usage("bulk user creation") do
-  1000.times do |i|
-    User.create!(name: "User #{i}", email: "user#{i}@example.com", age: 25, password: "Password123!")
-  end
-end
-```
-
----
-
-## 🎯 Code Organization
-
-### 1. Directory Structure
-
-```
-src/
-├── models/
-│   ├── user.cr
-│   ├── post.cr
-│   ├── comment.cr
-│   └── concerns/
-│       ├── auditable.cr
-│       └── sluggable.cr
-├── schemas/
-│   ├── user_schema.cr
-│   ├── blog_schema.cr
-│   └── base_schema.cr
-├── repositories/
-│   ├── user_repository.cr
-│   └── post_repository.cr
-├── services/
-│   ├── user_service.cr
-│   └── email_service.cr
-└── validators/
-    ├── email_validator.cr
-    └── password_validator.cr
-```
-
-### 2. Shared Concerns
-
-```crystal
-# src/models/concerns/auditable.cr
-module Auditable
-  def self.included(base)
-    base.extend(ClassMethods)
-  end
-
-  module ClassMethods
-    def auditable(user_field : Symbol = :user_id)
-      property created_by : Int64?
-      property updated_by : Int64?
-      property created_at : Time = Time.utc
-      property updated_at : Time = Time.utc
-
-      before_save :set_audit_fields
-    end
-  end
-
-  private def set_audit_fields
-    now = Time.utc
-
-    if new_record?
-      self.created_at = now
-      self.created_by = current_user_id
-    end
-
-    self.updated_at = now
-    self.updated_by = current_user_id
-  end
-
-  private def current_user_id
-    # Get current user ID from context
-    RequestContext.current_user_id
-  end
-end
-
-# Usage in models
-class Post
-  include CQL::ActiveRecord::Model(Int64)
-  db_context schema: UserDB, table: :users
-  include Auditable
-  auditable(:author_id)
-
-  property id : Int64 = 0
-  property title : String
-  property content : String
-end
-```
-
----
-
-## 🎓 Summary
-
-### Key Takeaways
-
-1. **Type Safety First**: Leverage Crystal's type system for better code quality
-2. **Database Design**: Plan your schema carefully with proper indexes and relationships
-3. **Query Optimization**: Use specific queries, avoid N+1 problems, implement proper pagination
-4. **Security**: Validate inputs, prevent SQL injection, protect against mass assignment
-5. **Testing**: Write comprehensive tests for models, validations, and performance
-6. **Monitoring**: Track query performance and memory usage
-7. **Code Organization**: Use clear structure and shared concerns for maintainability
-
-### Quick Reference Checklist
-
-- [ ] Use appropriate data types for all properties
-- [ ] Add indexes for commonly queried fields
-- [ ] Implement comprehensive validations
-- [ ] Use efficient query patterns
-- [ ] Test all model functionality
-- [ ] Monitor performance in production
-- [ ] Organize code with clear separation of concerns
-- [ ] Follow security best practices
-
----
-
-**Continue Learning:**
-
-- 📚 **[Performance Optimization](performance-optimization.md)** - Advanced optimization techniques
-- 🔒 **[Security Guide](security-guide.md)** - Comprehensive security practices
-- 🧪 **[Testing Strategies](testing-strategies.md)** - Advanced testing approaches
-- 🏗️ **[Architecture Guide](architecture-overview.md)** - Understanding CQL's architecture
+This guide provides the essential best practices for building maintainable, performant CQL applications.
