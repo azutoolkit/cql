@@ -2,7 +2,7 @@
 icon: arrow-right-to-arc
 ---
 
-# Introduction to CQL
+# Introduction
 
 > **Crystal Query Language** - A powerful, type-safe ORM that brings the elegance of Crystal to database interactions
 
@@ -12,11 +12,11 @@ Welcome to **CQL (Crystal Query Language)** - the modern Object-Relational Mappi
 
 CQL is a **type-safe, high-performance ORM** that leverages Crystal's static type system and macro capabilities to provide:
 
-- **Compile-time Safety** - Catch errors before they reach production
-- **High Performance** - Zero-cost abstractions with macro-generated code
-- **Developer Experience** - Intuitive API that feels natural to Crystal developers
-- **Flexibility** - Support for multiple patterns (Active Record, Repository, Data Mapper)
-- **Multi-Database** - Works seamlessly with PostgreSQL, MySQL, and SQLite
+* **Compile-time Safety** - Catch errors before they reach production
+* **High Performance** - Zero-cost abstractions with macro-generated code
+* **Developer Experience** - Intuitive API that feels natural to Crystal developers
+* **Flexibility** - Support for multiple patterns (Active Record, Repository, Data Mapper)
+* **Multi-Database** - Works seamlessly with PostgreSQL, MySQL, and SQLite
 
 ```crystal
 # Clean, type-safe database interactions
@@ -245,26 +245,26 @@ Now that you understand what CQL is and what it offers, here's how to proceed:
 
 ### New to CQL? Start Here
 
-1. **[Installation](installation.md)** - Get CQL running in your project
-2. **[Core Concepts](core-concepts/README.md)** - Master the fundamentals
-3. **[Getting Started](guides/getting-started.md)** - Build your first application
-4. **[Active Record with CQL](guides/active-record-with-cql/README.md)** - Learn the most popular pattern
+1. [**Installation**](installation.md) - Get CQL running in your project
+2. [**Core Concepts**](foundation/core-concepts.md) - Master the fundamentals
+3. [**Getting Started**](getting-started/getting-started.md) - Build your first application
+4. [**Active Record with CQL**](active-record-with-cql/active-record-with-cql.md) - Learn the most popular pattern
 
 ### Coming from Another ORM?
 
-1. **[Feature Comparison](guides/feature-comparison.md)** - See how CQL compares
-2. **[Migration Guide](guides/migration-guide.md)** - Transition smoothly
-3. **[Architecture Overview](guides/architecture-overview.md)** - Understand the design
-4. **[Best Practices](guides/best-practices.md)** - Follow proven patterns
+1. [**Feature Comparison**](getting-started/feature-comparison.md) - See how CQL compares
+2. [**Migration Guide**](database-management/migration-guide.md) - Transition smoothly
+3. [**Architecture Overview**](getting-started/architecture-overview.md) - Understand the design
+4. [**Best Practices**](getting-started/best-practices.md) - Follow proven patterns
 
 ### Ready to Build?
 
-1. **[Configuration](guides/configuration.md)** - Set up for your environment
-2. **[Examples](examples/README.md)** - See CQL in action
-3. **[Performance Optimization](guides/performance-optimization.md)** - Make it fast
-4. **[Security Guide](guides/security-guide.md)** - Keep it secure
+1. [**Configuration**](getting-started/configuration.md) - Set up for your environment
+2. [**Examples**](examples-and-tutorials/examples.md) - See CQL in action
+3. [**Performance Optimization**](advanced-topics/performance-optimization.md) - Make it fast
+4. [**Security Guide**](advanced-topics/security-guide.md) - Keep it secure
 
----
+***
 
 > Built for Crystal developers, by Crystal developers - CQL brings together the performance and safety of Crystal with the power and flexibility of modern ORM design.
 

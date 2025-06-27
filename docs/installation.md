@@ -2,7 +2,7 @@
 icon: gear
 ---
 
-# ⚙️ Installation Guide
+# Installation
 
 > **Get CQL up and running** - Complete setup guide for Crystal Query Language with PostgreSQL, MySQL, and SQLite
 
@@ -10,23 +10,24 @@ Welcome to CQL! This comprehensive installation guide will walk you through sett
 
 ## 📋 Table of Contents
 
-- [🎯 Prerequisites](#-prerequisites)
-- [🚀 Quick Start](#-quick-start)
-- [📦 Detailed Installation](#-detailed-installation)
-- [🗄️ Database Setup](#️-database-setup)
-- [🔧 Environment Configuration](#-environment-configuration)
-- [✅ Verification](#-verification)
-- [🐳 Docker Development Setup](#-docker-development-setup)
-- [🚨 Troubleshooting](#-troubleshooting)
-- [🎓 Next Steps](#-next-steps)
+* [🎯 Prerequisites](installation.md#-prerequisites)
+* [🚀 Quick Start](installation.md#-quick-start)
+* [📦 Detailed Installation](installation.md#-detailed-installation)
+* [🗄️ Database Setup](installation.md#️-database-setup)
+* [🔧 Environment Configuration](installation.md#-environment-configuration)
+* [✅ Verification](installation.md#-verification)
+* [🐳 Docker Development Setup](installation.md#-docker-development-setup)
+* [🚨 Troubleshooting](installation.md#-troubleshooting)
+* [🎓 Next Steps](installation.md#-next-steps)
 
----
+***
 
 ## 🎯 Prerequisites
 
 Before installing CQL, ensure you have the following requirements:
 
 ### 💎 Crystal Language
+
 ```bash
 # Check your Crystal version
 crystal --version
@@ -34,25 +35,27 @@ crystal --version
 ```
 
 **Installation:**
-- **macOS**: `brew install crystal`
-- **Ubuntu/Debian**: Follow [Crystal installation guide](https://crystal-lang.org/install/)
-- **Windows**: Use WSL with Ubuntu setup
+
+* **macOS**: `brew install crystal`
+* **Ubuntu/Debian**: Follow [Crystal installation guide](https://crystal-lang.org/install/)
+* **Windows**: Use WSL with Ubuntu setup
 
 ### 🗄️ Database Server
 
 Choose one or more databases for your project:
 
-| Database | Recommended For | Installation |
-|----------|----------------|--------------|
-| **SQLite** | Development, Testing, Small Apps | Built into most systems |
-| **PostgreSQL** | Production, Advanced Features | `brew install postgresql` |
-| **MySQL** | Legacy Systems, Specific Requirements | `brew install mysql` |
+| Database       | Recommended For                       | Installation              |
+| -------------- | ------------------------------------- | ------------------------- |
+| **SQLite**     | Development, Testing, Small Apps      | Built into most systems   |
+| **PostgreSQL** | Production, Advanced Features         | `brew install postgresql` |
+| **MySQL**      | Legacy Systems, Specific Requirements | `brew install mysql`      |
 
----
+***
 
 ## 🚀 Quick Start
 
 ### 1. **Create a New Crystal Project**
+
 ```bash
 # Create new project
 crystal init app myapp
@@ -60,6 +63,7 @@ cd myapp
 ```
 
 ### 2. **Add CQL to `shard.yml`**
+
 ```yaml
 dependencies:
   cql:
@@ -72,11 +76,13 @@ dependencies:
 ```
 
 ### 3. **Install Dependencies**
+
 ```bash
 shards install
 ```
 
 ### 4. **Create Basic Setup**
+
 ```crystal
 # src/myapp.cr
 require "cql"
@@ -117,12 +123,13 @@ puts "✅ CQL is working! Created user: #{user.name}"
 ```
 
 ### 5. **Run Your Application**
+
 ```bash
 crystal run src/myapp.cr
 # Output: ✅ CQL is working! Created user: Alice
 ```
 
----
+***
 
 ## 📦 Detailed Installation
 
@@ -163,6 +170,7 @@ crystal: ">= 1.12.2"
 ```
 
 ### Step 2: Install Dependencies
+
 ```bash
 # Install all dependencies
 shards install
@@ -203,7 +211,7 @@ require "./config/database"
 puts "CQL loaded successfully!"
 ```
 
----
+***
 
 ## 🗄️ Database Setup
 
@@ -255,6 +263,7 @@ end
 ```
 
 **Connection String Examples:**
+
 ```crystal
 # Production with SSL
 "postgresql://user:pass@prod-server:5432/myapp_prod?sslmode=require"
@@ -294,6 +303,7 @@ end
 ```
 
 **Connection String Examples:**
+
 ```crystal
 # Production
 "mysql://user:pass@prod-server:3306/myapp_prod?charset=utf8mb4"
@@ -354,6 +364,7 @@ end
 ```
 
 **File Locations:**
+
 ```bash
 # Development
 ./db/development.db
@@ -365,7 +376,7 @@ end
 /var/data/myapp/production.db
 ```
 
----
+***
 
 ## 🔧 Environment Configuration
 
@@ -475,7 +486,7 @@ module ProductionConfig
 end
 ```
 
----
+***
 
 ## ✅ Verification
 
@@ -524,6 +535,7 @@ end
 ```
 
 Run the test:
+
 ```bash
 crystal run test_connection.cr
 ```
@@ -587,7 +599,7 @@ rescue ex
 end
 ```
 
----
+***
 
 ## 🐳 Docker Development Setup
 
@@ -634,6 +646,7 @@ networks:
 ```
 
 **Setup Commands:**
+
 ```bash
 # Start services
 docker-compose up -d
@@ -738,13 +751,14 @@ echo "✅ Development environment ready!"
 echo "Database URL: $DATABASE_URL"
 ```
 
----
+***
 
 ## 🚨 Troubleshooting
 
 ### 🔍 Common Issues and Solutions
 
 #### ❌ **"Crystal version too old"**
+
 ```bash
 # Error: CQL requires Crystal 1.12.2 or higher
 crystal --version
@@ -755,6 +769,7 @@ brew upgrade crystal  # macOS
 ```
 
 #### ❌ **"Database driver not found"**
+
 ```bash
 # Error: can't load file 'pg'
 # Solution: Add database driver to shard.yml
@@ -767,6 +782,7 @@ dependencies:
 ```
 
 #### ❌ **"Connection refused"**
+
 ```bash
 # Error: Connection refused (Errno)
 # Solution: Check if database server is running
@@ -783,6 +799,7 @@ sudo systemctl start mysql
 ```
 
 #### ❌ **"Permission denied"**
+
 ```sql
 -- Error: permission denied for database
 -- Solution: Grant proper permissions
@@ -799,6 +816,7 @@ FLUSH PRIVILEGES;
 ```
 
 #### ❌ **"Table doesn't exist"**
+
 ```crystal
 # Error: relation "users" does not exist
 # Solution: Build your schema first
@@ -810,6 +828,7 @@ AppDB.users.create!
 ```
 
 #### ❌ **"SSL connection required"**
+
 ```crystal
 # Error: SSL connection required
 # Solution: Add SSL parameters to connection string
@@ -844,38 +863,41 @@ AppDB = CQL::Schema.define(
 
 If you're still having issues:
 
-1. **Check the [Troubleshooting Guide](troubleshooting.md)** for more detailed solutions
-2. **Review [Frequently Asked Questions](faqs.md)**
+1. **Check the** [**Troubleshooting Guide**](help-and-resources/troubleshooting.md) for more detailed solutions
+2. **Review** [**Frequently Asked Questions**](help-and-resources/faqs.md)
 3. **Search existing issues** on [GitHub](https://github.com/azutoolkit/cql/issues)
 4. **Create a new issue** with:
-   - Crystal version (`crystal --version`)
-   - CQL version (from `shard.yml`)
-   - Database type and version
-   - Full error message
-   - Minimal reproduction code
+   * Crystal version (`crystal --version`)
+   * CQL version (from `shard.yml`)
+   * Database type and version
+   * Full error message
+   * Minimal reproduction code
 
----
+***
 
 ## 🎓 Next Steps
 
 Congratulations! You now have CQL installed and configured. Here's what to explore next:
 
 ### 🏁 **Immediate Next Steps**
-1. **[Getting Started Guide](guides/getting-started.md)** - Build your first CQL application
-2. **[Core Concepts](core-concepts/README.md)** - Understand CQL fundamentals
-3. **[Schema Definition](core-concepts/schemas.md)** - Learn to design your database structure
+
+1. [**Getting Started Guide**](getting-started/getting-started.md) - Build your first CQL application
+2. [**Core Concepts**](broken-reference) - Understand CQL fundamentals
+3. [**Schema Definition**](foundation/schemas.md) - Learn to design your database structure
 
 ### 🏗️ **Build Your First App**
-1. **[Define Models](guides/active-record-with-cql/defining-models.md)** - Create your data models
-2. **[CRUD Operations](core-concepts/crud-operations/README.md)** - Master database interactions
-3. **[Validations](guides/active-record-with-cql/validations.md)** - Add data validation rules
-4. **[Relationships](guides/active-record-with-cql/relations/README.md)** - Connect your models
+
+1. [**Define Models**](active-record-with-cql/defining-models.md) - Create your data models
+2. [**CRUD Operations**](broken-reference) - Master database interactions
+3. [**Validations**](active-record-with-cql/validations.md) - Add data validation rules
+4. [**Relationships**](active-record-with-cql/relations/) - Connect your models
 
 ### 🚀 **Advanced Topics**
-1. **[Migrations](core-concepts/migrations.md)** - Manage schema changes
-2. **[Transactions](guides/active-record-with-cql/transactions.md)** - Ensure data consistency
-3. **[Performance Optimization](guides/performance/)** - Scale your application
-4. **[Testing](guides/testing/)** - Test your CQL code
+
+1. [**Migrations**](foundation/migrations.md) - Manage schema changes
+2. [**Transactions**](active-record-with-cql/transactions.md) - Ensure data consistency
+3. [**Performance Optimization**](guides/performance/) - Scale your application
+4. [**Testing**](guides/testing/) - Test your CQL code
 
 ### 🎯 **Quick Start Project**
 
@@ -938,7 +960,7 @@ post = user.posts.create!(title: "Hello CQL!", content: "My first post with CQL"
 puts "Created post: #{post.title} by #{user.name}"
 ```
 
----
+***
 
 > 🎉 **You're all set!** CQL is now installed and ready to power your Crystal applications with type-safe, high-performance database interactions.
 
