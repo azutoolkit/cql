@@ -204,7 +204,7 @@ module CQL
 
       # === 📊 STATISTICS & MONITORING ===
 
-            # Get comprehensive cache statistics
+      # Get comprehensive cache statistics
       def cache_statistics : Hash(String, String | Int32 | Int64 | Float64 | Bool)
         return {"enabled" => false.as(String | Int32 | Int64 | Float64 | Bool)} unless on?
 

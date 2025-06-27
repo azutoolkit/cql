@@ -150,7 +150,7 @@ redis_config = CQL::Cache::CacheStoreConfig.new(
 redis_cache_perf = CQL::Cache::CacheStore.create(redis_config)
 
 # Benchmark both
-operations = 50  # Reduced for demo
+operations = 50       # Reduced for demo
 test_data = "x" * 100 # 100 bytes of data
 
 puts "  Testing #{operations} operations with #{test_data.size} bytes of data..."
