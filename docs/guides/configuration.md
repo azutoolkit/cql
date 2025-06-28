@@ -60,6 +60,12 @@ The configuration system is organized into logical sections for better developer
 | `monitor_performance` | `Bool`              | `false` | Enable query performance monitoring |
 | `performance`         | `PerformanceConfig` | -       | Detailed performance settings       |
 
+### 🎨 SQL Logging
+
+| Property      | Type           | Default | Description                          |
+| ------------- | -------------- | ------- | ------------------------------------ |
+| `sql_logging` | `SQLLogConfig` | -       | Beautiful SQL log formatter settings |
+
 ### 🔗 Connection Pool
 
 | Property    | Type                   | Default | Description                    |
@@ -81,6 +87,12 @@ CQL.configure do |c|
   c.auto_sync = true
   c.verify_schema = true
   c.log_level = :debug
+
+  # Beautiful SQL logging (auto-enabled in development)
+  c.sql_logging.colorize_output = true
+  c.sql_logging.include_parameters = true
+  c.sql_logging.pretty_format = true
+  c.sql_logging.slow_query_threshold = 10.milliseconds
 end
 ```
 
@@ -106,6 +118,14 @@ CQL.configure do |c|
   c.auto_sync = false
   c.verify_schema = true
   c.log_level = :info
+
+  # Enable SQL logging for production monitoring
+  c.sql_logging.enabled = true
+  c.sql_logging.colorize_output = false # No colors in log files
+  c.sql_logging.async_processing = true
+  c.sql_logging.batch_size = 100
+  c.sql_logging.slow_query_threshold = 200.milliseconds
+  c.sql_logging.background_error_reporting = true
 end
 ```
 
@@ -131,6 +151,101 @@ CQL.configure do |c|
   c.cache.invalidation = "transaction_aware"
 end
 ```
+
+## 🎨 SQL Logging Configuration
+
+Enable beautiful SQL logging with async processing and automatic debug level activation:
+
+```crystal
+CQL.configure do |c|
+  c.db = "postgresql://localhost/myapp"
+
+  # Enable beautiful SQL logging
+  c.sql_logging.enabled = true
+  c.sql_logging.colorize_output = true
+  c.sql_logging.include_parameters = true
+  c.sql_logging.pretty_format = true
+
+  # Async processing for performance
+  c.sql_logging.async_processing = true
+  c.sql_logging.batch_size = 50
+  c.sql_logging.batch_timeout = 2.seconds
+
+  # Performance thresholds
+  c.sql_logging.slow_query_threshold = 100.milliseconds
+  c.sql_logging.very_slow_threshold = 1.second
+
+  # Background error reporting
+  c.sql_logging.background_error_reporting = true
+  c.sql_logging.error_report_interval = 30.seconds
+end
+```
+
+### Automatic Activation
+
+SQL logging automatically activates in two scenarios:
+
+1. **Debug Log Level** - When `log_level` is set to `:debug`, SQL logging automatically enables:
+
+```crystal
+CQL.configure do |c|
+  c.db = "postgresql://localhost/myapp"
+  c.log_level = :debug  # SQL logging auto-enabled
+end
+```
+
+2. **Explicit Configuration** - When explicitly enabled via `c.sql_logging.enabled = true`:
+
+```crystal
+CQL.configure do |c|
+  c.db = "postgresql://localhost/myapp"
+  c.log_level = :info  # Regular logging
+  c.sql_logging.enabled = true  # Explicitly enable SQL logging
+end
+```
+
+### Integration with CQL Queries
+
+The SQL logging integrates seamlessly with all CQL query operations:
+
+```crystal
+# All these operations will log beautifully when enabled
+schema.exec("INSERT INTO users (name) VALUES (?)", ["Alice"])
+users = schema.query.from(:users).where(active: true).all(as: {String})
+User.create(name: "Bob", email: "bob@example.com")
+Post.where(published: true).order_by(:created_at).limit(10).to_a
+```
+
+### Example Output
+
+When enabled, you'll see beautiful SQL logs like:
+
+```
+✅ SQL 25.0ms (15 rows) [UserController#index]
+SELECT users.name, users.email, posts.title
+  FROM users
+  INNER JOIN posts ON users.id = posts.user_id
+  WHERE users.active = $1
+    AND posts.published = $2
+  ORDER BY posts.created_at DESC
+  LIMIT 10
+📊 Parameters: [true, true]
+────────────────────────────────────────────────────────────────────────────────
+```
+
+Features include:
+
+- **Performance indicators**: ✅ (fast), ⚠️ (slow), 🐌 (very slow), ❌ (error)
+- **Color-coded execution times**: Green/Yellow/Magenta/Red based on performance
+- **SQL syntax highlighting**: Keywords, functions, and parameters colored
+- **Parameter display**: Clear parameter values with truncation for large values
+- **Context tracking**: Controller/action or custom context information
+
+> 📚 **Learn More**: For detailed information about SQL logging features and integration, see:
+>
+> - [SQL Log Integration Quick Start](sql-log-integration-quick-start.md) - Get started quickly
+> - [SQL Log Formatter](sql-log-formatter.md) - Complete formatter guide
+> - [SQL Log Formatter Integration](sql-log-formatter-integration.md) - Advanced integration
 
 ## 🔧 Advanced Configuration
 
@@ -167,6 +282,7 @@ puts config.auto_sync?           # true/false
 puts config.monitor_performance? # true/false
 puts config.bootstrap?           # true/false
 puts config.cache.on?            # true/false
+puts config.sql_logging?         # true/false
 
 # Get computed values
 puts config.adapter              # :postgres, :mysql, :sqlite

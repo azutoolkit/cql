@@ -7,6 +7,7 @@ require "./analyzers/query_plan_analyzer"
 require "./detectors/n_plus_one_detector"
 require "./profilers/query_profiler"
 require "./reports/report_generators"
+require "./sql_log_formatter"
 
 module CQL::Performance
   Log = CQL.config.logger
@@ -301,7 +302,7 @@ module CQL::Performance
       end
     end
 
-    private def build_context : String?
+    def build_context : String?
       return nil unless @config.context_tracking_enabled?
 
       context_parts = [] of String
@@ -357,6 +358,30 @@ module CQL::Performance
     monitor.end_relation_loading
   end
 
+  def self.current_context : String?
+    monitor.try(&.build_context)
+  rescue
+    nil
+  end
+
+  # SQL Logger instance for beautiful query logging
+  @@sql_logger : CQL::Performance::SQLLogFormatter?
+
+  def self.sql_logger : CQL::Performance::SQLLogFormatter
+    @@sql_logger ||= CQL::Performance::SQLLogFormatter.new
+  end
+
+  def self.sql_logger=(logger : CQL::Performance::SQLLogFormatter) : Nil
+    @@sql_logger = logger
+  end
+
+  # Setup performance monitoring with a schema
+  def self.setup(schema : Schema, & : PerformanceConfig ->)
+    config = PerformanceConfig.new
+    yield config
+    initialize_monitor(schema, config)
+  end
+
   # Benchmark a block of code with performance monitoring
   #
   # **Example**
@@ -387,10 +412,53 @@ module CQL::Performance
                         nil
                       end
       after_query(sql, params, execution_time, rows_affected)
+
+      # Beautiful SQL logging integration
+      log_sql_query(sql, params, execution_time, rows_affected)
     rescue ex
       Log.debug { "Performance monitoring error (after): #{ex.message}" }
     end
 
     result
+  end
+
+  # Log SQL query using the beautiful SQL log formatter
+  private def self.log_sql_query(sql : String, params : Array(DB::Any), execution_time : Time::Span, rows_affected : Int64?)
+    # Check if SQL logging should be enabled
+    should_log = false
+
+    begin
+      # Check if explicitly enabled via configuration
+      if CQL::Configure.configured?
+        config = CQL.config
+        should_log = config.sql_logging?
+
+        # Also enable if log level is debug
+        if !should_log && config.log_level <= ::Log::Severity::Debug
+          should_log = true
+        end
+      end
+    rescue
+      # If CQL config is not available, check environment for debug logging
+      if ENV["CRYSTAL_ENV"]? == "development" || ENV["CQL_DEBUG"]? == "true"
+        should_log = true
+      end
+    end
+
+    return unless should_log
+
+    # Log using the SQL formatter
+    begin
+      CQL::Performance.sql_logger.log_sql(
+        sql: sql,
+        params: params,
+        execution_time: execution_time,
+        context: current_context,
+        rows_affected: rows_affected
+      )
+    rescue ex
+      # Don't let SQL logging errors affect the application
+      Log.debug { "SQL logging error: #{ex.message}" }
+    end
   end
 end

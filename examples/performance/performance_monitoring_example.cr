@@ -100,10 +100,37 @@ struct Comment
   end
 end
 
-# 3. Setup Performance Monitoring
+# 3. Setup Performance Monitoring with SQL Logging
 header("CQL Performance Monitoring Example")
 
-section("Setting up Performance Monitoring")
+section("Setting up Performance Monitoring & SQL Logging")
+
+# Configure CQL with both performance monitoring and SQL logging
+CQL.configure do |config|
+  # Enable performance monitoring
+  config.monitor_performance = true
+  config.performance.query_profiling_enabled = true
+  config.performance.n_plus_one_detection_enabled = true
+  config.performance.plan_analysis_enabled = true
+  config.performance.auto_analyze_slow_queries = true
+  config.performance.context_tracking_enabled = true
+
+  # Enable beautiful SQL logging
+  config.sql_logging.enabled = true
+  config.sql_logging.colorize_output = true
+  config.sql_logging.include_execution_time = true
+  config.sql_logging.include_parameters = true
+  config.sql_logging.include_row_count = true
+  config.sql_logging.pretty_format = true
+  config.sql_logging.async_processing = false  # Sync for demo visibility
+  config.sql_logging.slow_query_threshold = 0.milliseconds  # Log all queries for demo
+
+  # Set log level to show SQL logs
+  config.log_level = Log::Severity::Debug
+end
+
+# Enable colorization for beautiful SQL output
+CQL::Performance.force_enable_colors!
 
 # Create configuration
 config = CQL::Performance::PerformanceConfig.new
@@ -120,7 +147,23 @@ monitor.initialize_with_schema(AcmeDB, config)
 # Set as global monitor
 CQL::Performance.monitor = monitor
 
+# Set up SQL logging and subscribe to the event bus
+sql_logger = CQL::Performance::SQLLogFormatter.new(CQL.config.sql_logging)
+CQL::Performance.sql_logger = sql_logger
+
+# Subscribe SQL logger to the performance monitor's event bus
+monitor.event_bus.subscribe(sql_logger)
+
 success("Performance monitoring initialized!")
+success("Beautiful SQL logging enabled!")
+
+# Verify SQL logging is properly integrated
+if sql_logger = CQL::Performance.sql_logger
+  info("SQL Logger Status: #{sql_logger.enabled? ? "Enabled" : "Disabled"}")
+  info("SQL Logger Stats: #{sql_logger.stats}")
+else
+  warning("SQL Logger not found - integration may not be working")
+end
 
 # 4. Create the database and sample data
 section("Creating Database and Sample Data")
@@ -192,12 +235,22 @@ rescue ex
   error("Database setup error: #{ex.message}")
 end
 
-# 5. Demonstrate Performance Monitoring Features
+# 5. Demonstrate Performance Monitoring Features with SQL Logging
 separator("═", 60)
-header("DEMONSTRATING PERFORMANCE MONITORING FEATURES")
+header("DEMONSTRATING PERFORMANCE MONITORING & SQL LOGGING")
 separator("═", 60)
 
-# 5.1 Query Plan Analysis
+info("All queries will now show beautiful SQL logs with performance indicators!")
+info("Watch for colorized SQL output with timing and parameters...")
+puts
+
+# Demonstration query to show SQL logging
+info("Executing demonstration query to show SQL logging...")
+demo_users = AcmeDB.query.from(:users).where(name: "Alice Smith").all({id: Int32, name: String, email: String})
+success("Query executed - check the SQL log output above!")
+puts
+
+# 6.1 Query Plan Analysis
 step(1, "Query Plan Analysis")
 
 # Set context for tracking
@@ -213,7 +266,7 @@ else
   warning("Query plan analysis not available for SQLite")
 end
 
-# 5.2 Query Profiling - Execute some queries to generate data
+# 6.2 Query Profiling - Execute some queries to generate data
 step(2, "Query Profiling")
 
 info("Executing queries for profiling...")
@@ -251,7 +304,7 @@ monitor.set_context(endpoint: "/api/posts", user_id: "user_456")
   database_operation("Fetched posts with user names", "#{posts.size} posts (iteration #{i + 1})")
 end
 
-# 5.3 N+1 Query Detection
+# 6.3 N+1 Query Detection
 step(3, "N+1 Query Detection")
 
 info("Demonstrating N+1 query pattern...")
@@ -287,7 +340,33 @@ end
 # End relation loading
 monitor.end_relation_loading
 
-# 5.4 Generate Performance Reports
+# 6.4 SQL Logging Integration Demonstration
+step(4, "SQL Logging Integration")
+
+info("Demonstrating SQL logging statistics and manual logging...")
+
+# Show SQL logging statistics
+sql_stats = CQL::Performance.sql_logger.stats
+configuration_block("SQL Logging Statistics", {
+  "Processed Queries" => sql_stats["processed"],
+  "Error Count"       => sql_stats["errors"],
+  "Batch Count"       => sql_stats["batches"],
+  "Uptime (seconds)"  => sql_stats["uptime_seconds"],
+})
+
+# Manual SQL logging for custom operations
+info("Logging custom operation manually...")
+CQL::Performance.sql_logger.log_sql(
+  sql: "CUSTOM ANALYTICS QUERY: Daily active users calculation",
+  params: ["2024-01-01", Time.utc.to_s].map(&.as(DB::Any)),
+  execution_time: 250.milliseconds,
+  context: "analytics/daily_report",
+  rows_affected: 5000_i64
+)
+
+success("Manual SQL log entry created!")
+
+# 6.5 Generate Performance Reports
 separator("═", 60)
 header("PERFORMANCE REPORTS")
 separator("═", 60)
@@ -303,7 +382,7 @@ puts monitor.n_plus_one_report
 sub_header("Query Profiling Report")
 puts monitor.profiling_report
 
-# 5.5 Performance Metrics Summary
+# 6.6 Performance Metrics Summary
 sub_header("Performance Metrics Summary")
 metrics = monitor.metrics_summary
 configuration_block("Performance Metrics", {
@@ -315,7 +394,7 @@ configuration_block("Performance Metrics", {
   "Uptime"             => "#{metrics.uptime.total_seconds.round(2)} seconds",
 })
 
-# 6. Advanced Features
+# 7. Advanced Features
 separator("═", 60)
 header("ADVANCED FEATURES")
 separator("═", 60)
@@ -373,3 +452,27 @@ feature_list("New Architecture Benefits Demonstrated", [
   "Dependency injection for testability",
   "SOLID principles for maintainability",
 ])
+
+separator("═", 60)
+header("SQL LOGGING INTEGRATION HIGHLIGHTS")
+separator("═", 60)
+
+feature_list("SQL Logging Features Demonstrated", [
+  "✅ Automatic integration with performance monitoring through events",
+  "🎨 Beautiful, colorized SQL output with syntax highlighting",
+  "⏱️  Execution time tracking with performance indicators",
+  "📊 Parameter logging for debugging queries",
+  "🔧 Manual logging capabilities for custom operations",
+  "📈 Real-time statistics and monitoring",
+  "🚀 Zero-configuration integration with existing queries",
+])
+
+info("Integration Flow:")
+puts "Query Execution → Performance Monitor → QueryExecutionEvent → SQL Formatter → Beautiful Logs"
+
+configuration_block("Benefits of Combined Monitoring", {
+  "Performance Analysis" => "Query profiling, N+1 detection, slow query identification",
+  "Beautiful Logging"    => "Syntax highlighting, timing, parameters, error handling",
+  "Developer Experience" => "Easy setup, automatic integration, comprehensive insights",
+  "Production Ready"     => "Async processing, batch handling, configurable thresholds",
+})

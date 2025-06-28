@@ -154,6 +154,38 @@ class ExampleRunner
       "performance"
     )
 
+    @examples << Example.new(
+      "Beautiful SQL Log Formatter",
+      "performance/sql_log_formatter_example.cr",
+      "Beautiful SQL logging with async pipeline, batch processing, and background error reporting",
+      ["Crystal 1.16.3+"],
+      "performance"
+    )
+
+    @examples << Example.new(
+      "SQL Log Integration Demo",
+      "performance/sql_integration_example.cr",
+      "Complete integration guide showing how SQLLogEntry works with query execution through event-driven architecture",
+      ["Crystal 1.16.3+", "SQLite3"],
+      "performance"
+    )
+
+    @examples << Example.new(
+      "Simple SQL Log Demo",
+      "performance/simple_sql_log_demo.cr",
+      "Standalone demo showing beautiful SQL log output with syntax highlighting and performance indicators",
+      ["Crystal 1.16.3+"],
+      "performance"
+    )
+
+    @examples << Example.new(
+      "SQL Log Demo",
+      "performance/sql_log_demo.cr",
+      "Basic SQL log formatter demo with colorized output and formatting examples",
+      ["Crystal 1.16.3+"],
+      "performance"
+    )
+
     # Framework Integration Examples
     @examples << Example.new(
       "Azu Framework Integration",

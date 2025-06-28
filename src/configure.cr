@@ -2,6 +2,7 @@ require "log"
 require "mutex"
 require "./migrations"
 require "./performance"
+require "./performance/sql_log_formatter"
 require "./cache/*"
 require "./configure/*"
 
@@ -101,6 +102,10 @@ module CQL
       # Detailed performance configuration
       property performance : CQL::Performance::PerformanceConfig = CQL::Performance::PerformanceConfig.new
 
+      # === 🎨 SQL LOGGING ===
+      # Beautiful SQL log formatter configuration
+      getter sql_logging : CQL::Performance::SQLLogConfig = CQL::Performance::SQLLogConfig.new
+
       # === 💾 CACHE SYSTEM ===
       # Centralized cache configuration (use config.cache.* to configure)
       getter cache : CacheConfig = CacheConfig.new
@@ -155,6 +160,11 @@ module CQL
       # Check if performance monitoring is enabled
       def monitor_performance? : Bool
         @monitor_performance
+      end
+
+      # Check if SQL logging is enabled
+      def sql_logging? : Bool
+        sql_logging.should_log?
       end
 
       # === 🎯 SMART GETTERS ===
@@ -298,6 +308,23 @@ module CQL
           config.current_endpoint = performance.current_endpoint
           config.current_user_id = performance.current_user_id
         end
+      end
+
+      # === 🎨 SQL LOGGING SETUP ===
+
+      def setup_sql_logging : Nil
+        return unless sql_logging?
+
+        effective_logger.info { "🎨 Setting up beautiful SQL logging..." }
+        sql_logger = CQL::Performance::SQLLogFormatter.new(sql_logging)
+        CQL::Performance.sql_logger = sql_logger
+
+        # Subscribe to the performance monitoring event bus if it exists
+        if monitor_performance? && Performance.monitor
+          Performance.monitor.event_bus.subscribe(sql_logger)
+        end
+
+        effective_logger.info { "✅ SQL logging ready - #{sql_logging.async_processing? ? "async" : "sync"} mode" }
       end
 
       # === 💾 CACHE SETUP ===
@@ -457,6 +484,7 @@ module CQL
     # Auto-setup based on configuration
     config.setup_performance_monitoring(schema) if config.monitor_performance?
     config.setup_cache_system if config.cache.on?
+    config.setup_sql_logging if config.sql_logging?
 
     schema
   end
