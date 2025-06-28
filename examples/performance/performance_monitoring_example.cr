@@ -122,8 +122,8 @@ CQL.configure do |config|
   config.sql_logging.include_parameters = true
   config.sql_logging.include_row_count = true
   config.sql_logging.pretty_format = true
-  config.sql_logging.async_processing = false  # Sync for demo visibility
-  config.sql_logging.slow_query_threshold = 0.milliseconds  # Log all queries for demo
+  config.sql_logging.async_processing = false              # Sync for demo visibility
+  config.sql_logging.slow_query_threshold = 0.milliseconds # Log all queries for demo
 
   # Set log level to show SQL logs
   config.log_level = Log::Severity::Debug

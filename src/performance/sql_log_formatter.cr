@@ -115,8 +115,8 @@ module CQL::Performance
 
       # Multiline SQL formatting for better readability
       normalized_sql = sql
-        .gsub(/\s+/, " ")  # Normalize whitespace first
-        .strip             # Remove leading/trailing whitespace
+        .gsub(/\s+/, " ") # Normalize whitespace first
+        .strip            # Remove leading/trailing whitespace
 
       # Add line breaks for better readability
       formatted_result = normalized_sql
@@ -541,7 +541,7 @@ module CQL::Performance
     end
 
     private def flush_current_batch : Void
-      return unless @current_batch && !@current_batch.not_nil!.empty?
+      return if !@current_batch || @current_batch.not_nil!.empty?
 
       begin
         @batch_queue.send(@current_batch.not_nil!)
@@ -669,4 +669,3 @@ module CQL::Performance
     Colorize.enabled = true
   end
 end
-
