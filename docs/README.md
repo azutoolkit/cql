@@ -8,19 +8,18 @@ icon: database
 
 _Build fast, reliable database applications with compile-time safety and exceptional performance._
 
-[![Performance](https://img.shields.io/badge/Performance-4x_Faster-green)](#-why-cql) [![Type Safety](https://img.shields.io/badge/Type_Safety-Compile_Time-blue)](#-type-safety-at-compile-time) [![Memory](https://img.shields.io/badge/Memory-75%25_Less-orange)](#-performance-that-matters)
+[![Type Safety](https://img.shields.io/badge/Type_Safety-Compile_Time-blue)](#-type-safety-at-compile-time) [![Database Support](https://img.shields.io/badge/Databases-PostgreSQL%20%7C%20MySQL%20%7C%20SQLite-green)](#-database-support)
 
 ---
 
 ## ✨ What Makes CQL Special?
 
-CQL brings **enterprise-grade performance** and **compile-time safety** to Crystal applications. Unlike traditional ORMs that check for errors at runtime, CQL validates your queries, relationships, and data access patterns **before your code even runs**.
+CQL brings **compile-time safety** and **performance optimization** to Crystal applications. Unlike traditional ORMs that check for errors at runtime, CQL validates your queries, relationships, and data access patterns **before your code even runs**.
 
 ```crystal
 # Type-safe queries that catch errors at compile time ✅
-users = User.where(age: 25..35)       # ✅ Type checked
-           .where(active: true)       # ✅ Validates column exists
-           .order(name: :asc)         # ✅ Validates sort direction
+users = User.where(active: true)      # ✅ Type checked
+           .order(created_at: :desc)  # ✅ Validates column exists
            .limit(10)                 # ✅ Validates parameter type
            .all
 
@@ -33,33 +32,33 @@ users = User.where(age: 25..35)       # ✅ Type checked
 
 ## 🎯 Key Features & Benefits
 
-### ⚡ **Performance That Matters**
+### ⚡ **Performance Optimized**
 
-- **4x Faster** than ActiveRecord and Eloquent
-- **75% Less Memory** usage than Ruby/PHP ORMs
-- **Compile-time Optimizations** eliminate runtime overhead
-- **Zero-allocation Queries** for maximum throughput
+- **Zero-allocation Queries** through Crystal's compile-time optimizations
+- **Connection Pooling** built-in for high-concurrency applications
+- **Query Caching** with multiple cache backends (Memory, Redis)
+- **N+1 Query Detection** and performance monitoring tools
 
 ### 🔒 **Type Safety at Compile Time**
 
 - **Catch Bugs Early** - Invalid queries fail at compile time
 - **IDE Support** - Full autocompletion and refactoring
 - **Relationship Safety** - No more runtime association errors
-- **Query Validation** - SQL is validated before deployment
+- **Query Validation** - SQL structure validated before deployment
 
 ### 🏗️ **Developer Experience**
 
-- **Familiar ActiveRecord-style API** - Easy migration from Rails
-- **Automatic Migrations** - Schema changes sync automatically
+- **ActiveRecord-style API** - Familiar patterns for Rails developers
+- **Automatic Schema Management** - Migrations with rollback support
 - **Rich Query DSL** - Expressive and readable database queries
 - **Built-in Validations** - Data integrity without boilerplate
 
 ### 🌐 **Production Ready**
 
-- **PostgreSQL, MySQL, SQLite** support
-- **Connection Pooling** built-in
+- **PostgreSQL, MySQL, SQLite** support through Crystal DB drivers
 - **Transaction Management** with rollback safety
-- **Performance Monitoring** and N+1 query detection
+- **Performance Monitoring** and query analysis tools
+- **Multiple Design Patterns** - Active Record, Repository, Data Mapper support
 
 ---
 
@@ -97,7 +96,7 @@ crystal examples/run_examples.cr
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.266
+    version: ~> 0.0.395
   pg: # PostgreSQL driver
     github: will/crystal-pg
     version: ~> 0.26.0
@@ -106,13 +105,29 @@ dependencies:
 ### 2. **Define Your Schema**
 
 ```crystal
-# Set up your database connection
-AppDB = CQL::Schema.define(
-  :app_db,
+# Set up your database schema
+BlogDB = CQL::Schema.define(
+  :blog_schema,
   adapter: CQL::Adapter::Postgres,
   uri: ENV["DATABASE_URL"]
 ) do
-  # Tables defined through migrations
+  table :users do
+    primary :id, Int64
+    text :name
+    text :email
+    boolean :active, default: "1"
+    timestamps
+  end
+
+  table :posts do
+    primary :id, Int64
+    text :title
+    text :content
+    bigint :user_id
+    boolean :published, default: "0"
+    timestamps
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+  end
 end
 ```
 
@@ -121,23 +136,23 @@ end
 ```crystal
 struct User
   include CQL::ActiveRecord::Model(Int64)
-  db_context AppDB, :users
+  db_context BlogDB, :users
 
-  property id : Int64?
-  property name : String
-  property email : String
-  property active : Bool = false
-  property created_at : Time?
-  property updated_at : Time?
+  getter id : Int64?
+  getter name : String
+  getter email : String
+  getter active : Bool = true
+  getter created_at : Time?
+  getter updated_at : Time?
 
   # Type-safe relationships
   has_many :posts, Post, foreign_key: :user_id
 
   # Built-in validations
-  validate :name, presence: true, size: (2..50)
+  validate :name, presence: true, size: 2..50
   validate :email, presence: true, match: /@/
 
-  def initialize(@name : String, @email : String)
+  def initialize(@name : String, @email : String, @active : Bool = true)
   end
 end
 ```
@@ -146,38 +161,32 @@ end
 
 ```crystal
 # Create records with validation
-user = User.new(name: "Alice", email: "alice@example.com")
-user.save # Returns true/false based on validations
+user = User.create!(name: "Alice", email: "alice@example.com")
 
 # Type-safe queries
 active_users = User.where(active: true)
-                  .where { created_at > 30.days.ago }
-                  .order(name: :asc)
+                  .order(created_at: :desc)
                   .limit(50)
                   .all
 
-# Work with relationships (no N+1 queries!)
-users_with_posts = User.join(:posts)
-                      .where { posts.published.eq(true) }
-                      .all
+# Work with relationships
+user = User.find!(1)
+posts = user.posts.all
 
-puts "Found #{users_with_posts.size} active authors"
+puts "User #{user.name} has #{posts.size} posts"
 ```
 
 ---
 
-## 📊 Performance Comparison
+## 📊 Database Support
 
-**Real-world benchmarks** (1M records, complex queries):
+**Supported databases with their Crystal DB drivers:**
 
-| Operation         | CQL   | ActiveRecord | Eloquent | Improvement     |
-| ----------------- | ----- | ------------ | -------- | --------------- |
-| **Simple SELECT** | 0.8ms | 3.2ms        | 4.1ms    | **4x faster**   |
-| **Complex JOIN**  | 2.1ms | 8.7ms        | 12.3ms   | **4-6x faster** |
-| **Bulk INSERT**   | 15ms  | 89ms         | 124ms    | **6-8x faster** |
-| **Memory Usage**  | 12MB  | 48MB         | 67MB     | **75% less**    |
-
-_"We migrated our Rails API to Crystal + CQL and saw **response times drop from 200ms to 45ms** while handling 3x more concurrent users."_ - Production user
+| Database       | Driver    | Connection String Example             |
+| -------------- | --------- | ------------------------------------- |
+| **PostgreSQL** | `pg`      | `postgres://user:pass@localhost/mydb` |
+| **MySQL**      | `mysql`   | `mysql://user:pass@localhost/mydb`    |
+| **SQLite**     | `sqlite3` | `sqlite3://./database.db`             |
 
 ---
 
@@ -189,22 +198,24 @@ _"We migrated our Rails API to Crystal + CQL and saw **response times drop from 
 # Define relationships with type safety
 struct Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context AppDB, :posts
+  db_context BlogDB, :posts
 
-  property id : Int64?
-  property title : String
-  property user_id : Int64
-  property category_id : Int64?
+  getter id : Int64?
+  getter title : String
+  getter content : String
+  getter user_id : Int64
+  getter published : Bool = false
 
   belongs_to :user, User, foreign_key: :user_id
-  belongs_to :category, Category, foreign_key: :category_id, optional: true
   has_many :comments, Comment, foreign_key: :post_id
+
+  def initialize(@title : String, @content : String, @user_id : Int64)
+  end
 end
 
 # Work with relationships efficiently
 post = Post.find!(1)
 author = post.user                    # Type: User
-category = post.category              # Type: Category?
 comments = post.comments.all          # Type: Array(Comment)
 ```
 
@@ -212,18 +223,19 @@ comments = post.comments.all          # Type: Array(Comment)
 
 ```crystal
 # Complex queries with full type safety
-reports = Post.where { published.eq(true) }
-             .where { created_at >= 1.month.ago }
-             .join(:user) { |j| j.user.active.eq(true) }
-             .join(:category) { |j| j.category.name.in(["Tech", "Science"]) }
-             .group(:category_id)
-             .having { count(id) > 10 }
-             .order(created_at: :desc)
-             .limit(100)
-             .all
+recent_posts = Post.where(published: true)
+                  .where { users.created_at >= 1.month.ago }
+                  .order(created_at: :desc)
+                  .limit(100)
+                  .all
 
-# Raw SQL when you need it (still type-safe!)
-User.query("SELECT * FROM users WHERE complex_function(?) = ?", param1, param2)
+# Use the CQL Query builder for complex joins
+posts_with_authors = BlogDB.query
+  .from(:posts)
+  .join(:users) { |j| j.posts.user_id.eq(j.users.id) }
+  .where{ posts.published: true }
+  .select(posts: [:title, :content], users: [:name])
+  .all({title: String, content: String, name: String})
 ```
 
 ### **Automatic Schema Management**
@@ -236,18 +248,49 @@ class CreateUsers < CQL::Migration(1)
       primary :id, Int64, auto_increment: true
       text :name, null: false
       text :email, null: false
-      boolean :active, default: false
+      boolean :active, default: true
       timestamps
     end
 
     schema.alter :users do
       create_index :idx_users_email, [:email], unique: true
     end
+
+    schema.users.create!
   end
 
   def down
-    schema.drop :users
+    schema.users.drop!
   end
+end
+```
+
+### **Built-in Validations**
+
+```crystal
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context BlogDB, :users
+
+  # ... properties ...
+
+  # Comprehensive validation support
+  validate :name, presence: true, size: 2..50
+  validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validate :age, gt: 0, lt: 120
+  validate :password_confirmation, confirmation: :password
+  validate :terms, accept: true
+
+  def initialize(@name : String, @email : String)
+  end
+end
+
+# Validate before saving
+user = User.new(name: "Alice", email: "alice@example.com")
+if user.valid?
+  user.save!
+else
+  puts user.errors.messages
 end
 ```
 
@@ -257,24 +300,24 @@ end
 
 ### **✅ For High-Performance Applications**
 
-- APIs serving millions of requests
-- Real-time applications
-- Data-intensive processing
+- APIs serving high request volumes
+- Real-time applications requiring low latency
+- Data-intensive processing applications
 - Microservices architecture
 
 ### **✅ For Enterprise Development**
 
-- Large team collaboration
-- Long-term maintenance
-- Complex business logic
-- Compliance requirements
+- Large team collaboration with type safety
+- Long-term maintenance requirements
+- Complex business logic with data integrity
+- Compliance and audit requirements
 
 ### **✅ For Modern Development**
 
 - Type-safe development practices
-- DevOps and CI/CD pipelines
-- Container-based deployment
-- Cloud-native architecture
+- DevOps and CI/CD pipeline integration
+- Container-based deployment strategies
+- Cloud-native architecture patterns
 
 ---
 
@@ -285,7 +328,7 @@ end
 | **New to CQL?**                                                              | **Migrating?**                                        |
 | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
 | 🎮 [Interactive Examples](../examples/) (`crystal examples/run_examples.cr`) | 🔄 [From ActiveRecord](guides/migration-guide.md)     |
-| 📖 [Installation](installation.md)                                           | 🔄 [From Eloquent](guides/migration-guide.md)         |
+| 📖 [Installation](installation.md)                                           | 🔄 [From Other ORMs](guides/migration-guide.md)       |
 | 🎯 [Getting Started](guides/getting-started.md)                              | ⚖️ [Feature Comparison](guides/feature-comparison.md) |
 | 🏗️ [First Application](guides/active-record-with-cql/)                       | 📚 [Complete Examples](../examples/)                  |
 
@@ -318,7 +361,7 @@ crystal examples/run_examples.cr
 # Or install CQL and start building
 shards install
 
-# Your next high-performance application awaits! 🚀
+# Your next type-safe application awaits! 🚀
 ```
 
 **👉 [Try Interactive Examples →](../examples/) • [Start with Installation →](installation.md)**
