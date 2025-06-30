@@ -200,7 +200,9 @@ module CQL
       end
 
       class ValidationError < Exception
-        def initialize(@errors : Array(Error))
+        @errors : Array(Error)
+
+        def initialize(@errors : Array(Error) = [] of Error)
         end
 
         def message
