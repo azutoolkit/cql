@@ -82,14 +82,14 @@ module CQL
 
     getter id : Int32
     getter name : String
-    getter version : Int32
+    getter version : Int64
     getter? created_at : Time?
     getter? updated_at : Time?
 
     def initialize(
       @id : Int32,
       @name : String,
-      @version : Int32,
+      @version : Int64,
       @created_at = Time.local,
       @updated_at = Time.local,
     )
@@ -97,29 +97,17 @@ module CQL
   end
 
   abstract class BaseMigration
-    @@version : Int32 = 0 # Initialize with a default value
+    @@version : Int64 = 0 # Initialize with a default value
 
     abstract def up
     abstract def down
 
-    # Default implementation, can be overridden
-    def self.name
-      # Extract just the class name without module namespacing
-      class_name = super.split("::").last? || super
-
-      # Convert CamelCase to snake_case with better formatting
-      class_name
-        .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2") # Handle acronyms like "XMLParser" -> "XML_Parser"
-        .gsub(/([a-z])([A-Z])/, "\\1_\\2")       # Handle regular camelCase
-        .downcase
-    end
-
     # Class method to access the migration version
     # Subclasses MUST define @@version
-    def self.version : Int32
+    def self.version : Int64
       @@version
     rescue ex : Exception
-      raise NotImplementedError.new("#{self.name} must define @@version as Int32")
+      raise NotImplementedError.new("#{self.name} must define @@version as Int64")
     end
   end
 
@@ -128,7 +116,7 @@ module CQL
       getter schema : CQL::Schema
 
       CQL::Migrator.migrations << {{@type}}
-      def self.version : Int32
+      def self.version : Int64
         V
       end
 
@@ -179,7 +167,7 @@ module CQL
 
     # Represents a migration record.
     # @field id [Int32] the migration record id
-    # @field name [String] the migration name
+    # @field name [String] the migration.name
     # @field version [Int32] the migration version
     # @field created_at [Time] the creation time
     # @field updated_at [Time] the update time
@@ -357,7 +345,7 @@ module CQL
     # ```
     # migrator.down_to(1)
     # ```
-    def down_to(version : Int32)
+    def down_to(version : Int64)
       index = sorted_migrations.index { |migration| migration.version == version }
       down(index ? index + 1 : 0) if index
     end
@@ -368,7 +356,7 @@ module CQL
     # ```
     # migrator.up_to(1)
     # ```
-    def up_to(version : Int32)
+    def up_to(version : Int64)
       index = sorted_migrations.index { |migration| migration.version == version }
       up(index ? index + 1 : 0) if index
     end
@@ -441,12 +429,8 @@ module CQL
 
       # Table rows
       m.each do |migration|
-        # Format migration name (truncate if too long)
-        formatted_name = if migration.name.size > name_width
-                           migration.name[0, name_width - 3] + "..."
-                         else
-                           migration.name.ljust(name_width)
-                         end
+        # Format migration.name (truncate if too long)
+        formatted_name = migration.name
 
         # Center status within exact width
         formatted_status = status.center(status_width)
@@ -463,7 +447,7 @@ module CQL
     end
 
     private def build_migration_record(migration : BaseMigration.class) : MigrationRecord
-      MigrationRecord.new(0, migration.name, migration.version)
+      MigrationRecord.new(0, migration.name, migration.version.to_i64)
     end
 
     private def sorted_migrations
@@ -475,7 +459,7 @@ module CQL
       schema.table @config.migration_table_name do
         primary :id, Int32
         column :name, String
-        column :version, Int32, index: true, unique: true
+        column :version, Int64, index: true, unique: true
         # Don't use timestamps macro for SQLite compatibility
         column :created_at, String, null: true
         column :updated_at, String, null: true

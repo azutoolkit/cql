@@ -1,4 +1,4 @@
-class CreateUsersMigration < CQL::Migration(123456789)
+class CreateUsersMigration < CQL::Migration(20250705001401)
   def up
     schema.users.create!
   end

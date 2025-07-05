@@ -1,4 +1,4 @@
-class AlterUsersMigration < CQL::Migration(987654321)
+class AlterUsersMigration < CQL::Migration(20250705001402)
   def up
     schema.alter :users do
       add_column :phone, String

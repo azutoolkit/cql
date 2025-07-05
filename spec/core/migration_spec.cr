@@ -236,13 +236,13 @@ describe CQL::Migration do
 
   describe "Migration versioning and naming" do
     it "has correct migration versions" do
-      CreateUsersMigration.version.should eq(123456789)
-      AlterUsersMigration.version.should eq(987654321)
+      CreateUsersMigration.version.should eq(20250705001401)
+      AlterUsersMigration.version.should eq(20250705001402)
     end
 
     it "generates migration names correctly" do
-      CreateUsersMigration.name.should eq("create_users_migration")
-      AlterUsersMigration.name.should eq("alter_users_migration")
+      CreateUsersMigration.name.should eq("CreateUsersMigration")
+      AlterUsersMigration.name.should eq("AlterUsersMigration")
     end
   end
 
@@ -323,8 +323,8 @@ end
 describe CQL::BaseMigration do
   it "requires version to be defined" do
     # Test that version is properly accessible
-    CreateUsersMigration.version.should be_a(Int32)
-    AlterUsersMigration.version.should be_a(Int32)
+    CreateUsersMigration.version.should be_a(Int64)
+    AlterUsersMigration.version.should be_a(Int64)
   end
 
   it "implements required abstract methods" do

@@ -5,7 +5,7 @@ AppSchema = CQL::Schema.define(
   table :cql_schema_migrations do
     primary :id, Int32
     text :name
-    integer :version
+    bigint :version
     timestamps
   end
 
@@ -17,4 +17,5 @@ AppSchema = CQL::Schema.define(
     text :phone, null: true
     timestamps
   end
+
 end
