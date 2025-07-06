@@ -72,4 +72,32 @@ describe CQL::Insert do
 
     insert_query.should eq({output, [1]})
   end
+
+  it "inserts and gets the last inserted id" do
+    Northwind.users.drop! rescue nil
+    Northwind.users.create!
+
+    result = Northwind.insert.into(:users)
+      .values(name: "John", email: "john@example.com", age: 20)
+      .commit
+
+    result.last_insert_id.should eq(1)
+
+    Northwind.users.drop!
+  end
+
+  it "inserts multiple records and gets the last inserted id" do
+    Northwind.users.drop! rescue nil
+    Northwind.users.create!
+
+    result = Northwind.insert.into(:users)
+      .values(
+        [{:name => "John", :email => "john@doe.com", :age => 30},
+         {:name => "Jane", :email => "jane@doe.com", :age => 30}])
+      .commit
+
+    result.last_insert_id.should eq(2)
+
+    Northwind.users.drop!
+  end
 end
