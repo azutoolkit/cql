@@ -205,7 +205,7 @@ describe CQL::ActiveRecord::Updateable do
         updated_user = TestUser.find!(id)
         updated_user.name.should eq("Jane Doe")
         updated_user.email.should eq("john@example.com") # Should remain unchanged
-        updated_user.age.should eq(25) # Should remain unchanged
+        updated_user.age.should eq(25)                   # Should remain unchanged
       end
     end
   end
@@ -398,7 +398,7 @@ describe CQL::ActiveRecord::Updateable do
         updated_user = TestUser.find!(id)
         updated_user.name.should eq("Jane Doe")
         updated_user.email.should eq("john@example.com") # Should remain unchanged
-        updated_user.age.should eq(25) # Should remain unchanged
+        updated_user.age.should eq(25)                   # Should remain unchanged
       end
     end
 
@@ -431,7 +431,7 @@ describe CQL::ActiveRecord::Updateable do
         user = TestUser.new("John Doe", "john@example.com", 25, "password123", "password123")
         user.save!
 
-        result = user.update!(name: "Jane Doe", age: 30)
+        user.update!(name: "Jane Doe", age: 30)
 
         # Local instance should be updated
         user.name.should eq("Jane Doe")
@@ -473,7 +473,7 @@ describe CQL::ActiveRecord::Updateable do
         user = TestUser.new("John Doe", "john@example.com", 25, "password123", "password123")
         user.save!
 
-        result = user.update!({:name => "Jane Doe", :age => 30})
+        user.update!({:name => "Jane Doe", :age => 30})
 
         # Local instance should be updated
         user.name.should eq("Jane Doe")
