@@ -77,11 +77,11 @@ describe CQL::Insert do
     Northwind.users.drop! rescue nil
     Northwind.users.create!
 
-    result = Northwind.insert.into(:users)
+    last_id = Northwind.insert.into(:users)
       .values(name: "John", email: "john@example.com", age: 20)
-      .commit
+      .last_insert_id
 
-    result.last_insert_id.should eq(1)
+      last_id.should eq(1)
 
     Northwind.users.drop!
   end
@@ -90,13 +90,13 @@ describe CQL::Insert do
     Northwind.users.drop! rescue nil
     Northwind.users.create!
 
-    result = Northwind.insert.into(:users)
+    last_id = Northwind.insert.into(:users)
       .values(
         [{:name => "John", :email => "john@doe.com", :age => 30},
          {:name => "Jane", :email => "jane@doe.com", :age => 30}])
-      .commit
+      .last_insert_id
 
-    result.last_insert_id.should eq(2)
+    last_id.should eq(2)
 
     Northwind.users.drop!
   end
