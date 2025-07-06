@@ -51,23 +51,58 @@ module CQL
 
     # Inserts and gets the last inserted ID from the database
     # Works with SQLite, PostgreSQL and MySQL.
-    # - **@return** [Int64] The last inserted ID
+    #
+    # **Important Requirements:**
+    # - The table must have an auto-generated primary key:
+    #   - SQLite: `INTEGER PRIMARY KEY` (with or without `AUTOINCREMENT`)
+    #   - MySQL: Column with `AUTO_INCREMENT` attribute
+    #   - PostgreSQL: `SERIAL`, `BIGSERIAL`, or `GENERATED AS IDENTITY`
+    # - This method must be called immediately after the insert
+    # - Uses the same database connection for both operations
+    # - Will return 0 or raise an error if no auto-generated key exists
+    #
+    # **Database-specific behavior:**
+    # - PostgreSQL: Uses `RETURNING id` clause in the INSERT statement
+    # - MySQL: Executes insert, then queries `LAST_INSERT_ID()`
+    # - SQLite: Executes insert, then queries `last_insert_rowid()`
+    #
+    # - **@param** type [PrimaryKeyType] The type to cast the ID to (default: Int64)
+    # - **@return** [Int64 | Int32 | UUID | ULID] The last inserted ID
     #
     # **Example** Getting the last inserted ID
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).last_insert_id
+    # # Ensure your table has an auto-increment primary key:
+    # # primary :id, Int64, auto_increment: true
+    #
+    # user_id = insert
+    #   .into(:users)
+    #   .values(name: "John", age: 30)
+    #   .last_insert_id
+    #
+    # puts user_id # => 1 (or next available ID)
     # ```
     def last_insert_id(as type : PrimaryKeyType = Int64)
-      if adapter.postgres?
-        # Reset to ensure nothing else but the :id is returned
+      case adapter
+      when .postgres?
+        # PostgreSQL: Use RETURNING clause to get the inserted ID
         @back = Array(Expression::Column).new
         query, params = back(:id).to_sql
         @schema.exec_query do |conn|
           conn.query_one(query, args: params, as: type)
         end
+      when .my_sql?, .sqlite?
+        # MySQL and SQLite: Execute insert first, then query for last ID
+        self.commit
+        if sql = @schema.gen.dialect.last_insert_id_query
+          @schema.exec_query do |conn|
+            conn.query_one(sql, as: type)
+          end
+        else
+          raise "Dialect does not support last_insert_id_query"
+        end
       else
-        self.commit.last_insert_id
+        raise "Unsupported adapter for last_insert_id: #{adapter}"
       end
     end
 

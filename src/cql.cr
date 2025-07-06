@@ -132,5 +132,20 @@ module CQL
         raise "Unsupported adapter: #{self}"
       end
     end
+
+    # Check if this adapter is for PostgreSQL
+    def postgres? : Bool
+      self == Postgres
+    end
+
+    # Check if this adapter is for MySQL
+    def my_sql? : Bool
+      self == MySql
+    end
+
+    # Check if this adapter is for SQLite
+    def sqlite? : Bool
+      self == SQLite
+    end
   end
 end

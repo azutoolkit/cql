@@ -36,11 +36,10 @@ module CQL
           insertable_attrs = attrs.dup
           insertable_attrs.delete(:id)
 
-          # Fallback for non-PostgreSQL
+          # Get the last insert ID (handles commit internally)
           pk_id = CQL::Insert.new(schema)
             .into(table_name)
             .values(insertable_attrs)
-            .commit
             .last_insert_id # Int64
 
           actual_pk = if Pk.is_a?(Int32.class)
@@ -69,11 +68,10 @@ module CQL
           fields.each { |key, value| fields_hash[key] = value.as(DB::Any) }
           fields_hash.delete(:id)
 
-          # Fallback for non-PostgreSQL
+          # Get the last insert ID (handles commit internally)
           pk_id = CQL::Insert.new(schema)
             .into(table_name)
             .values(fields_hash)
-            .commit
             .last_insert_id # Int64
 
           actual_pk = if Pk.is_a?(Int32.class)
@@ -99,12 +97,11 @@ module CQL
           attrs = record.attributes
           attrs.delete(:id)
 
-          # Create the record
+          # Get the last insert ID (handles commit internally)
           id = CQL::Insert
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
             .values(attrs)
-            .commit
             .last_insert_id
 
           new_id = if Pk.is_a?(Int32.class)
@@ -133,7 +130,6 @@ module CQL
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
             .values(**fields)
-            .commit
             .last_insert_id
 
           id = if Pk.is_a?(Int32.class)

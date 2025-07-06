@@ -111,6 +111,9 @@ module Expression
 
     # Formats the RETURNING clause specifically for DELETE statements.
     abstract def format_delete_returning(columns : Array(String)) : String
+
+    # Returns SQL to retrieve last inserted ID for databases that don't support RETURNING
+    abstract def last_insert_id_query : String?
   end
 
   # Handles query-specific formatting, including conditions, operators, and functions.

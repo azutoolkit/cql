@@ -204,5 +204,10 @@ module Expression
     def current_timestamp : String
       Time.local.to_s("%Y-%m-%d %H:%M:%S.%L")
     end
+
+    # MySQL uses LAST_INSERT_ID() to get the last inserted ID
+    def last_insert_id_query : String?
+      "SELECT LAST_INSERT_ID()"
+    end
   end
 end

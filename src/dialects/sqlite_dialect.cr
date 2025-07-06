@@ -258,5 +258,10 @@ module Expression
     def current_timestamp : String
       Time.local.to_s("%Y-%m-%d %H:%M:%S.%L")
     end
+
+    # SQLite uses last_insert_rowid() to get the last inserted ID
+    def last_insert_id_query : String?
+      "SELECT last_insert_rowid()"
+    end
   end
 end

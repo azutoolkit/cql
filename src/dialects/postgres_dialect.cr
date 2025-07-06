@@ -202,5 +202,10 @@ module Expression
     def current_timestamp : String
       Time.local.to_s("%Y-%m-%d %H:%M:%S.%L")
     end
+
+    # PostgreSQL uses RETURNING clause, so no separate query is needed
+    def last_insert_id_query : String?
+      nil
+    end
   end
 end

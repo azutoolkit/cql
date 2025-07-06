@@ -7,6 +7,7 @@ module Expression
     @dialect : BaseDialect
     getter params : Array(DB::Any) = [] of DB::Any
     getter query : String = ""
+    getter dialect : BaseDialect
 
     def initialize(@adapter : CQL::Adapter = CQL::Adapter::SQLite)
       @dialect = @adapter.dialect
