@@ -3,10 +3,6 @@ require "../spec_helper"
 describe CQL::Migration do
   migrator = Northwind.migrator
 
-  after_all do
-    File.delete("spec/support/db/northwind.db")
-  end
-
   it "has a migration" do
     CQL::Migrator.migrations.size.should eq(2)
   end
