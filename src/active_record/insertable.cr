@@ -73,7 +73,6 @@ module CQL
           pk_id = CQL::Insert.new(schema)
             .into(table_name)
             .values(fields_hash)
-            .commit
             .last_insert_id # Int64
 
           actual_pk = if Pk.is_a?(Int32.class)
@@ -104,7 +103,6 @@ module CQL
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
             .values(attrs)
-            .commit
             .last_insert_id
 
           new_id = if Pk.is_a?(Int32.class)
@@ -133,7 +131,6 @@ module CQL
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
             .values(**fields)
-            .commit
             .last_insert_id
 
           id = if Pk.is_a?(Int32.class)
