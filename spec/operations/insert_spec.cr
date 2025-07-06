@@ -81,7 +81,7 @@ describe CQL::Insert do
       .values(name: "John", email: "john@example.com", age: 20)
       .last_insert_id
 
-      last_id.should eq(1)
+    last_id.should eq(1)
 
     Northwind.users.drop!
   end
