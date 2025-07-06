@@ -4,7 +4,7 @@ class TestUser
 
   db_context schema: UserDB, table: :users
 
-  property name : String
+  property name : String?
   property email : String
   property age : Int32 = 0
   property password : String? = nil

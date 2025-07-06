@@ -86,11 +86,13 @@ module CQL
         # User.update(1, bob)
         # ```
         def self.update!(record : {{@type.id}})
+          attrs = record.attributes
+
           # Update the record
           CQL::Update
             .new({{@type.id}}.schema)
             .table({{@type.id}}.table)
-            .set(record.attributes)
+            .set(attrs)
             .where(id: record.id!)
             .commit
 
