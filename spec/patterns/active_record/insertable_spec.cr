@@ -104,12 +104,12 @@ describe CQL::ActiveRecord::Insertable do
       it "ignores id in attributes hash" do
         user = InsertableUser.create!(
           {
-            :id => 999_i64,
-            :name => "Jane Doe",
-            :email => "jane@example.com",
-            :active => true,
+            :id         => 999_i64,
+            :name       => "Jane Doe",
+            :email      => "jane@example.com",
+            :active     => true,
             :created_at => Time.utc,
-            :updated_at => Time.utc
+            :updated_at => Time.utc,
           } of Symbol => DB::Any
         )
 
@@ -295,11 +295,11 @@ describe CQL::ActiveRecord::Insertable do
 
     it "works with hash attributes" do
       attrs = {
-        :email => "hashuser@example.com",
-        :name => "Hash User",
-        :active => true,
+        :email      => "hashuser@example.com",
+        :name       => "Hash User",
+        :active     => true,
         :created_at => Time.utc,
-        :updated_at => Time.utc
+        :updated_at => Time.utc,
       } of Symbol => DB::Any
 
       user = InsertableUser.find_or_create_by(attrs)
@@ -346,7 +346,7 @@ describe CQL::ActiveRecord::Insertable do
       end
 
       # All should have unique IDs
-      ids = users.map { |u| u.id.not_nil! }
+      ids = users.map(&.id.not_nil!)
       ids.uniq.size.should eq(ids.size)
     end
   end
@@ -365,16 +365,16 @@ describe CQL::ActiveRecord::Insertable do
         updated_at: Time.utc
       )
 
-     begin
+      begin
         # Create a user
         InsertableUser.create!(
-            name: "Unique User",
-            email: "unique@example.com",
-            active: true,
-            age: 30,
-            created_at: Time.utc,
-            updated_at: Time.utc
-          )
+          name: "Unique User",
+          email: "unique@example.com",
+          active: true,
+          age: 30,
+          created_at: Time.utc,
+          updated_at: Time.utc
+        )
       rescue ex
         ex.should be_a(SQLite3::Exception)
         ex.message.should eq("UNIQUE constraint failed: insertable_spec_users.email")
