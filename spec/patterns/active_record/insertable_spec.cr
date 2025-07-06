@@ -264,12 +264,12 @@ describe CQL::ActiveRecord::Insertable do
 
       # Try to find or create with same email
       found = InsertableUser.find_or_create_by(
-        email: "existing@example.com",
-        active: true,
-        name: "Existing User",
-        age: 30,
-        created_at: Time.utc,
-        updated_at: Time.utc
+        email: existing.email,
+        active: existing.active,
+        name: existing.name,
+        age: existing.age,
+        created_at: existing.created_at,
+        updated_at: existing.updated_at
       )
 
       found.id.should eq(existing.id)

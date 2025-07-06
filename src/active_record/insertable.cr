@@ -13,11 +13,19 @@ module CQL
         # user = User.find_or_create_by(email: "user@example.com")
         # ```
         def self.find_or_create_by(**attributes) : {{@type.id}}
-          find_by(**attributes) || create!(**attributes)
+          if found = find_by(**attributes)
+            found
+          else
+            create!(**attributes)
+          end
         end
 
         def self.find_or_create_by(attributes : Hash(Symbol, DB::Any)) : {{@type.id}}
-          find_by(attributes) || create!(attributes)
+          if found = find_by(attributes)
+            found
+          else
+            create!(attributes)
+          end
         end
 
         # Create a new record with given attributes
