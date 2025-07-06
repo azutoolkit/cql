@@ -88,6 +88,9 @@ module CQL
         def self.update!(record : {{@type.id}})
           attrs = record.attributes
 
+          # Remove the ID from the attributes
+          attrs.delete(:id)
+
           # Update the record
           CQL::Update
             .new({{@type.id}}.schema)
@@ -112,6 +115,10 @@ module CQL
           where_attrs : Hash(Symbol, DB::Any),
           update_attrs : Hash(Symbol, DB::Any)
         )
+
+          # Remove the ID from the attributes
+          update_attrs.delete(:id)
+
           CQL::Update
             .new({{@type.id}}.schema)
             .table({{@type.id}}.table)
