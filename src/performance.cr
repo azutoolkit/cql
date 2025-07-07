@@ -69,7 +69,7 @@ module CQL
         CQL.enable_sql_logging do |config|
           config.enabled = true
           config.colorize_output = true
-          config.async_processing = false  # Use sync processing for immediate SQL output
+          config.async_processing = false # Use sync processing for immediate SQL output
         end
 
         # Subscribe SQL logger to performance monitor events

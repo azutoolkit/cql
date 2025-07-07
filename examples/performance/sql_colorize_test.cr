@@ -44,10 +44,10 @@ puts "Executing: SELECT e.*, u.name, u.email FROM events e JOIN users u ON e.use
 # Show configuration status
 info("SQL Logging Configuration:")
 configuration_block("Configuration", {
-  "SQL Logging Enabled" => CQL.config.sql_logging?,
+  "SQL Logging Enabled"  => CQL.config.sql_logging?,
   "Colorization Enabled" => CQL.config.sql_logging_colorize,
-  "Async Processing" => CQL.config.sql_logging_async,
-  "Log Level" => CQL.config.log_level.to_s,
+  "Async Processing"     => CQL.config.sql_logging_async,
+  "Log Level"            => CQL.config.log_level.to_s,
 })
 
 success("SQL logging integration test completed!")

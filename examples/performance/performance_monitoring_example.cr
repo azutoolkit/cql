@@ -113,7 +113,7 @@ CQL.configure do |config|
   config.monitor_performance = true
   config.sql_logging = true
   config.sql_logging_colorize = true
-  config.sql_logging_async = false  # Sync for demo visibility
+  config.sql_logging_async = false # Sync for demo visibility
 
   # Set log level to show SQL logs
   config.log_level = Log::Severity::Debug
@@ -311,10 +311,10 @@ info("Demonstrating SQL logging statistics and manual logging...")
 
 # Show SQL logging configuration
 configuration_block("SQL Logging Configuration", {
-  "SQL Logging Enabled" => CQL.config.sql_logging?,
+  "SQL Logging Enabled"  => CQL.config.sql_logging?,
   "Colorization Enabled" => CQL.config.sql_logging_colorize,
-  "Async Processing" => CQL.config.sql_logging_async,
-  "Log Level" => CQL.config.log_level.to_s,
+  "Async Processing"     => CQL.config.sql_logging_async,
+  "Log Level"            => CQL.config.log_level.to_s,
 })
 
 # Note: SQL logging is now automatic and integrated

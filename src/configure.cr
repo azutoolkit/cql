@@ -25,7 +25,7 @@ module CQL
   #   config.db = ENV["DATABASE_URL"]
   #   config.env = "production"
   #   config.pool_size = 25
-  #   config.monitor_performance = true  # Opt-in for production
+  #   config.monitor_performance = true # Opt-in for production
   # end
   # ```
   #
@@ -33,8 +33,8 @@ module CQL
   # ```
   # CQL.configure do |config|
   #   config.db = "postgresql://localhost/myapp"
-  #   config.performance_report_interval = 2.minutes  # More frequent reports
-  #   config.sql_logging_async = true                 # Async SQL logging
+  #   config.performance_report_interval = 2.minutes # More frequent reports
+  #   config.sql_logging_async = true                # Async SQL logging
   # end
   # ```
   module Configure
@@ -98,16 +98,16 @@ module CQL
       property monitor_performance : Bool = false
 
       # Performance monitoring options (simple on/off switches)
-      property performance_auto_report : Bool = true        # Auto-report in development
-      property performance_report_interval : Time::Span = 5.minutes  # Report frequency
+      property performance_auto_report : Bool = true                # Auto-report in development
+      property performance_report_interval : Time::Span = 5.minutes # Report frequency
 
       # === 🎨 SQL LOGGING ===
       # Enable beautiful SQL logging (auto-enabled in development)
       property sql_logging : Bool = false
 
       # SQL logging options
-      property sql_logging_colorize : Bool = true     # Colorize SQL output
-      property sql_logging_async : Bool = false       # Use async logging (not recommended for dev)
+      property sql_logging_colorize : Bool = true # Colorize SQL output
+      property sql_logging_async : Bool = false   # Use async logging (not recommended for dev)
 
       # === 💾 CACHE SYSTEM ===
       # Centralized cache configuration (use config.cache.* to configure)
@@ -451,9 +451,9 @@ module CQL
   #   c.db = ENV["DATABASE_URL"]
   #   c.env = "production"
   #   c.pool_size = 25
-  #   c.monitor_performance = true    # Opt-in for production
-  #   c.sql_logging = false          # Disable SQL logging
-  #   c.cache.on = true              # Enable caching
+  #   c.monitor_performance = true # Opt-in for production
+  #   c.sql_logging = false        # Disable SQL logging
+  #   c.cache.on = true            # Enable caching
   # end
   # ```
   #
@@ -462,7 +462,7 @@ module CQL
   # CQL.configure do |c|
   #   c.db = "postgresql://localhost/myapp"
   #   c.monitor_performance = true
-  #   c.performance_report_interval = 1.minute  # Frequent reports
+  #   c.performance_report_interval = 1.minute # Frequent reports
   #   c.sql_logging_colorize = false           # Disable colors
   # end
   # ```

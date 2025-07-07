@@ -56,7 +56,7 @@ module CQL::Performance
     @start_time : Time
     @auto_reporting : Bool = false
     @last_report_time : Time
-    @report_threshold : Int32 = 100  # Report after every 100 queries
+    @report_threshold : Int32 = 100 # Report after every 100 queries
 
     def initialize(@config : PerformanceConfig = PerformanceConfig.new)
       @start_time = Time.utc
