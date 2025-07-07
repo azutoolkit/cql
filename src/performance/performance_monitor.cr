@@ -381,13 +381,11 @@ module CQL::Performance
     end
 
     private def generate_and_log_report : Void
-      begin
-        # Generate comprehensive report using logger format
-        report = generate_comprehensive_report("logger")
-        @last_report_time = Time.utc
-      rescue ex
-        Log.error { "Failed to generate performance report: #{ex.message}" }
-      end
+      # Generate comprehensive report using logger format
+      generate_comprehensive_report("logger")
+      @last_report_time = Time.utc
+    rescue ex
+      Log.error { "Failed to generate performance report: #{ex.message}" }
     end
   end
 
