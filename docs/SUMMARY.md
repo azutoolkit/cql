@@ -71,9 +71,6 @@
 ## Advanced Topics
 
 - [Performance Optimization](advanced-topics/performance-optimization.md)
-- [Performance Tools](advanced-topics/performance-tools.md)
-- [SQL Log Formatter](guides/sql-log-formatter.md)
-- [SQL Log Formatter Integration](guides/sql-log-formatter-integration.md)
 - [Testing Strategies](advanced-topics/testing-strategies.md)
 - [Security Guide](advanced-topics/security-guide.md)
 

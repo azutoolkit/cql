@@ -107,63 +107,27 @@ section("Setting up Performance Monitoring & SQL Logging")
 
 # Configure CQL with both performance monitoring and SQL logging
 CQL.configure do |config|
-  # Enable performance monitoring
-  config.monitor_performance = true
-  config.performance.query_profiling_enabled = true
-  config.performance.n_plus_one_detection_enabled = true
-  config.performance.plan_analysis_enabled = true
-  config.performance.auto_analyze_slow_queries = true
-  config.performance.context_tracking_enabled = true
+  config.db = "sqlite3://./examples/performance_example.db"
 
-  # Enable beautiful SQL logging
-  config.sql_logging.enabled = true
-  config.sql_logging.colorize_output = true
-  config.sql_logging.include_execution_time = true
-  config.sql_logging.include_parameters = true
-  config.sql_logging.include_row_count = true
-  config.sql_logging.pretty_format = true
-  config.sql_logging.async_processing = false              # Sync for demo visibility
-  config.sql_logging.slow_query_threshold = 0.milliseconds # Log all queries for demo
+  # Enable performance monitoring and SQL logging
+  config.monitor_performance = true
+  config.sql_logging = true
+  config.sql_logging_colorize = true
+  config.sql_logging_async = false  # Sync for demo visibility
 
   # Set log level to show SQL logs
   config.log_level = Log::Severity::Debug
 end
 
-# Enable colorization for beautiful SQL output
-CQL::Performance.force_enable_colors!
-
-# Create configuration
-config = CQL::Performance::PerformanceConfig.new
-config.query_profiling_enabled = true
-config.n_plus_one_detection_enabled = true
-config.plan_analysis_enabled = true
-config.auto_analyze_slow_queries = true
-config.context_tracking_enabled = true
-
-# Initialize monitor with schema and configuration
-monitor = CQL::Performance::PerformanceMonitor.new(config)
-monitor.initialize_with_schema(AcmeDB, config)
-
-# Set as global monitor
-CQL::Performance.monitor = monitor
-
-# Set up SQL logging and subscribe to the event bus
-sql_logger = CQL::Performance::SQLLogFormatter.new(CQL.config.sql_logging)
-CQL::Performance.sql_logger = sql_logger
-
-# Subscribe SQL logger to the performance monitor's event bus
-monitor.event_bus.subscribe(sql_logger)
+# Performance monitoring and SQL logging are automatically set up
+# No manual configuration needed - everything is handled by CQL
 
 success("Performance monitoring initialized!")
 success("Beautiful SQL logging enabled!")
 
 # Verify SQL logging is properly integrated
-if sql_logger = CQL::Performance.sql_logger
-  info("SQL Logger Status: #{sql_logger.enabled? ? "Enabled" : "Disabled"}")
-  info("SQL Logger Stats: #{sql_logger.stats}")
-else
-  warning("SQL Logger not found - integration may not be working")
-end
+info("SQL Logging Status: #{CQL.config.sql_logging? ? "Enabled" : "Disabled"}")
+info("Performance Monitoring Status: #{CQL.config.monitor_performance? ? "Enabled" : "Disabled"}")
 
 # 4. Create the database and sample data
 section("Creating Database and Sample Data")
@@ -254,12 +218,12 @@ puts
 step(1, "Query Plan Analysis")
 
 # Set context for tracking
-monitor.set_context(endpoint: "/api/users", user_id: "demo_user")
+CQL::Performance.monitor.set_context(endpoint: "/api/users", user_id: "demo_user")
 
 # Analyze a query plan
 simple_query = "SELECT * FROM users WHERE name = 'Alice Smith'"
 
-if plan = monitor.analyze_query_plan(simple_query)
+if plan = CQL::Performance.monitor.analyze_query_plan(simple_query)
   info("Query Plan for: #{simple_query}")
   puts plan.summary if plan.responds_to?(:summary)
 else
@@ -272,7 +236,7 @@ step(2, "Query Profiling")
 info("Executing queries for profiling...")
 
 # Set different contexts to demonstrate endpoint tracking
-monitor.set_context(endpoint: "/api/users", user_id: "user_123")
+CQL::Performance.monitor.set_context(endpoint: "/api/users", user_id: "user_123")
 
 # Execute various queries and monitor them
 5.times do |i|
@@ -281,12 +245,12 @@ monitor.set_context(endpoint: "/api/users", user_id: "user_123")
   execution_time = Time.monotonic - start_time
 
   # Manually trigger monitoring for demo
-  monitor.after_query("SELECT id, name, email FROM users", [] of DB::Any, execution_time, users.size.to_i64)
+  CQL::Performance.monitor.after_query("SELECT id, name, email FROM users", [] of DB::Any, execution_time, users.size.to_i64)
 
   database_operation("Fetched users", "#{users.size} users (iteration #{i + 1})")
 end
 
-monitor.set_context(endpoint: "/api/posts", user_id: "user_456")
+CQL::Performance.monitor.set_context(endpoint: "/api/posts", user_id: "user_456")
 
 # Execute more complex queries
 3.times do |i|
@@ -299,7 +263,7 @@ monitor.set_context(endpoint: "/api/posts", user_id: "user_456")
   execution_time = Time.monotonic - start_time
 
   # Manually trigger monitoring for demo
-  monitor.after_query("SELECT posts.id, posts.title, users.name FROM posts JOIN users ON posts.user_id = users.id", [] of DB::Any, execution_time, posts.size.to_i64)
+  CQL::Performance.monitor.after_query("SELECT posts.id, posts.title, users.name FROM posts JOIN users ON posts.user_id = users.id", [] of DB::Any, execution_time, posts.size.to_i64)
 
   database_operation("Fetched posts with user names", "#{posts.size} posts (iteration #{i + 1})")
 end
@@ -310,19 +274,19 @@ step(3, "N+1 Query Detection")
 info("Demonstrating N+1 query pattern...")
 
 # This will trigger N+1 queries - one query to get posts, then one query per post to get user
-monitor.set_context(endpoint: "/api/posts_with_users", user_id: "user_789")
+CQL::Performance.monitor.set_context(endpoint: "/api/posts_with_users", user_id: "user_789")
 
 start_time = Time.monotonic
 posts = AcmeDB.query.from(:posts).all({id: Int32, user_id: Int32, title: String})
 execution_time = Time.monotonic - start_time
 
 # Trigger the parent query monitoring
-monitor.after_query("SELECT id, user_id, title FROM posts", [] of DB::Any, execution_time, posts.size.to_i64)
+CQL::Performance.monitor.after_query("SELECT id, user_id, title FROM posts", [] of DB::Any, execution_time, posts.size.to_i64)
 
 database_operation("Fetched posts", "#{posts.size} posts")
 
 # Start relation loading to track N+1 pattern
-monitor.start_relation_loading("user", "Post")
+CQL::Performance.monitor.start_relation_loading("user", "Post")
 
 # This loop will trigger N+1 pattern detection
 posts.each do |post|
@@ -332,39 +296,32 @@ posts.each do |post|
   execution_time = Time.monotonic - start_time
 
   # Trigger monitoring for the repeated query
-  monitor.after_query("SELECT id, name FROM users WHERE id = ?", [post[:user_id].as(DB::Any)], execution_time, 1_i64)
+  CQL::Performance.monitor.after_query("SELECT id, name FROM users WHERE id = ?", [post[:user_id].as(DB::Any)], execution_time, 1_i64)
 
   bullet_point("Post '#{post[:title]}' by #{user.try(&.[:name]) || "Unknown"}")
 end
 
 # End relation loading
-monitor.end_relation_loading
+CQL::Performance.monitor.end_relation_loading
 
 # 6.4 SQL Logging Integration Demonstration
 step(4, "SQL Logging Integration")
 
 info("Demonstrating SQL logging statistics and manual logging...")
 
-# Show SQL logging statistics
-sql_stats = CQL::Performance.sql_logger.stats
-configuration_block("SQL Logging Statistics", {
-  "Processed Queries" => sql_stats["processed"],
-  "Error Count"       => sql_stats["errors"],
-  "Batch Count"       => sql_stats["batches"],
-  "Uptime (seconds)"  => sql_stats["uptime_seconds"],
+# Show SQL logging configuration
+configuration_block("SQL Logging Configuration", {
+  "SQL Logging Enabled" => CQL.config.sql_logging?,
+  "Colorization Enabled" => CQL.config.sql_logging_colorize,
+  "Async Processing" => CQL.config.sql_logging_async,
+  "Log Level" => CQL.config.log_level.to_s,
 })
 
-# Manual SQL logging for custom operations
-info("Logging custom operation manually...")
-CQL::Performance.sql_logger.log_sql(
-  sql: "CUSTOM ANALYTICS QUERY: Daily active users calculation",
-  params: ["2024-01-01", Time.utc.to_s].map(&.as(DB::Any)),
-  execution_time: 250.milliseconds,
-  context: "analytics/daily_report",
-  rows_affected: 5000_i64
-)
+# Note: SQL logging is now automatic and integrated
+info("SQL logging is automatically handled by the performance monitor")
+info("All queries executed through CQL will be automatically logged")
 
-success("Manual SQL log entry created!")
+success("SQL logging configuration verified!")
 
 # 6.5 Generate Performance Reports
 separator("═", 60)
@@ -373,18 +330,18 @@ separator("═", 60)
 
 # Comprehensive report
 sub_header("Comprehensive Performance Report")
-puts monitor.generate_comprehensive_report
+puts CQL::Performance.monitor.generate_comprehensive_report
 
 # Individual reports
 sub_header("N+1 Detection Report")
-puts monitor.n_plus_one_report
+puts CQL::Performance.monitor.n_plus_one_report
 
 sub_header("Query Profiling Report")
-puts monitor.profiling_report
+puts CQL::Performance.monitor.profiling_report
 
 # 6.6 Performance Metrics Summary
 sub_header("Performance Metrics Summary")
-metrics = monitor.metrics_summary
+metrics = CQL::Performance.monitor.metrics_summary
 configuration_block("Performance Metrics", {
   "Total Queries"      => metrics.total_queries,
   "Slow Queries"       => metrics.slow_queries,
@@ -401,19 +358,19 @@ separator("═", 60)
 
 # Generate HTML report
 info("Generating HTML performance report...")
-html_report = monitor.generate_comprehensive_report("html")
+html_report = CQL::Performance.monitor.generate_comprehensive_report("html")
 File.write("performance_report.html", html_report)
 file_operation("HTML report saved", "performance_report.html", :created)
 
 # Generate JSON report
 info("Generating JSON performance report...")
-json_report = monitor.generate_comprehensive_report("json")
+json_report = CQL::Performance.monitor.generate_comprehensive_report("json")
 File.write("performance_report.json", json_report)
 file_operation("JSON report saved", "performance_report.json", :created)
 
 # Configuration management
 info("Demonstrating configuration management...")
-monitor.configure do |cfg|
+CQL::Performance.monitor.configure do |cfg|
   cfg.query_profiling_enabled = false # Temporarily disable profiling
   warning("Query profiling disabled")
 end
@@ -422,18 +379,18 @@ end
 start_time = Time.monotonic
 users = AcmeDB.query.from(:users).all({id: Int32, name: String})
 execution_time = Time.monotonic - start_time
-monitor.after_query("SELECT id, name FROM users", [] of DB::Any, execution_time, users.size.to_i64)
+CQL::Performance.monitor.after_query("SELECT id, name FROM users", [] of DB::Any, execution_time, users.size.to_i64)
 
-monitor.configure do |cfg|
+CQL::Performance.monitor.configure do |cfg|
   cfg.query_profiling_enabled = true # Re-enable profiling
   success("Query profiling re-enabled")
 end
 
 # Demonstrate component access for advanced usage
 sub_header("Advanced Component Access")
-database_operation("Event bus type", monitor.event_bus.class.to_s)
-database_operation("Query profiler stats", "#{monitor.query_profiler.statistics.size} patterns tracked")
-database_operation("N+1 detector issues", "#{monitor.n_plus_one_detector.issues.size} issues detected")
+database_operation("Event bus type", CQL::Performance.monitor.event_bus.class.to_s)
+database_operation("Query profiler stats", "#{CQL::Performance.monitor.query_profiler.statistics.size} patterns tracked")
+database_operation("N+1 detector issues", "#{CQL::Performance.monitor.n_plus_one_detector.issues.size} issues detected")
 
 separator("═", 60)
 header("PERFORMANCE MONITORING DEMO COMPLETE")
@@ -468,7 +425,7 @@ feature_list("SQL Logging Features Demonstrated", [
 ])
 
 info("Integration Flow:")
-puts "Query Execution → Performance Monitor → QueryExecutionEvent → SQL Formatter → Beautiful Logs"
+puts "Query Execution → CQL Performance Monitor → Automatic SQL Logging → Beautiful Output"
 
 configuration_block("Benefits of Combined Monitoring", {
   "Performance Analysis" => "Query profiling, N+1 detection, slow query identification",

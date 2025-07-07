@@ -430,8 +430,11 @@ module CQL::Performance
   end
 
   # Beautiful SQL Log Formatter - Main class
-  class SQLLogFormatter < EventListener
+  class SQLLogFormatter < Performance::EventListener
     Log = ::Log.for(self)
+
+    # Dedicated SQL logger that always outputs when SQL logging is enabled
+    SQLLog = ::Log.for("cql.sql")
 
     @config : SQLLogConfig
     @current_batch : SQLLogBatch?
@@ -448,6 +451,9 @@ module CQL::Performance
       if @config.colorize_output? && !Colorize.enabled?
         Colorize.enabled = true
       end
+
+      # Configure dedicated SQL logger to always output when SQL logging is enabled
+      configure_sql_logger if @config.enabled?
 
       start_async_processing if @config.async_processing?
     end
@@ -493,6 +499,21 @@ module CQL::Performance
     # Configuration management
     def configure(& : SQLLogConfig ->)
       yield @config
+
+      # Reconfigure SQL logger if enabled state changed
+      if @config.enabled?
+        configure_sql_logger
+      else
+        # Reset SQL logger to default when disabled
+        SQLLog.backend = nil
+      end
+
+      # Handle async processing toggle
+      if @config.async_processing? && !@processing
+        start_async_processing
+      elsif !@config.async_processing? && @processing
+        stop_async_processing
+      end
     end
 
     def enabled? : Bool
@@ -555,15 +576,35 @@ module CQL::Performance
     end
 
     private def log_entry_immediately(entry : SQLLogEntry) : Void
-      case entry.log_level
-      when .error?
-        Log.error { entry.to_beautiful_string(@config) }
-      when .warn?
-        Log.warn { entry.to_beautiful_string(@config) }
-      when .info?
-        Log.info { entry.to_beautiful_string(@config) }
+      # When SQL logging is enabled, use dedicated SQL logger
+      # This logger is configured to always output regardless of global log level
+      if @config.enabled?
+        output = entry.to_beautiful_string(@config)
+
+        # Use appropriate log level for the SQL logger
+        case entry.log_level
+        when .error?
+          SQLLog.error { output }
+        when .warn?
+          SQLLog.warn { output }
+        when .info?
+          SQLLog.info { output }
+        else
+          SQLLog.debug { output }
+        end
       else
-        Log.debug { entry.to_beautiful_string(@config) }
+        # Fallback to standard logging when SQL logging is disabled
+        # This maintains compatibility with existing log level behavior
+        case entry.log_level
+        when .error?
+          Log.error { entry.to_beautiful_string(@config) }
+        when .warn?
+          Log.warn { entry.to_beautiful_string(@config) }
+        when .info?
+          Log.info { entry.to_beautiful_string(@config) }
+        else
+          Log.debug { entry.to_beautiful_string(@config) }
+        end
       end
     end
 
@@ -627,6 +668,21 @@ module CQL::Performance
           flush_current_batch if @current_batch
         end
       end
+    end
+
+    private def configure_sql_logger : Void
+      # Configure the SQL logger to always output to console
+      # This creates a dedicated backend for SQL logs that bypasses level filtering
+      backend = ::Log::IOBackend.new(STDOUT)
+      backend.formatter = ::Log::Formatter.new do |entry, io|
+        # Simply output the message without any formatting
+        # The message is already beautifully formatted by SQLLogEntry
+        io << entry.message
+      end
+
+      # Set up the SQL logger with DEBUG level to capture all queries
+      SQLLog.backend = backend
+      SQLLog.level = ::Log::Severity::Debug
     end
   end
 

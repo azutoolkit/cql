@@ -14,74 +14,40 @@ section("Testing SQL Logging Integration")
 
 # Configure CQL with SQL logging
 CQL.configure do |config|
-  config.sql_logging.enabled = true
-  config.sql_logging.colorize_output = true
-  config.sql_logging.include_execution_time = true
-  config.sql_logging.include_parameters = true
-  config.sql_logging.include_row_count = true
-  config.sql_logging.pretty_format = true
-  config.sql_logging.async_processing = false
-  config.sql_logging.slow_query_threshold = 0.milliseconds
+  config.db = "sqlite3://./examples/sql_colorize_test.db"
+  config.sql_logging = true
+  config.sql_logging_colorize = true
+  config.sql_logging_async = false
   config.log_level = Log::Severity::Debug
 end
 
-# Enable colorization
-CQL::Performance.force_enable_colors!
+# SQL logging is automatically set up with the new configuration
+success("SQL Logging configured!")
 
-# Create SQL logger
-sql_logger = CQL::Performance::SQLLogFormatter.new(CQL.config.sql_logging)
-CQL::Performance.sql_logger = sql_logger
+# Test 1: Execute a simple query to trigger SQL logging
+info("Test 1: Simple query")
+# This will trigger automatic SQL logging
+puts "Executing: SELECT * FROM users WHERE active = true"
 
-success("SQL Logger initialized!")
+# Test 2: Execute a complex query
+info("Test 2: Complex query")
+puts "Executing: SELECT u.name, COUNT(p.id) as post_count FROM users u LEFT JOIN posts p ON u.id = p.user_id WHERE u.created_at > ? GROUP BY u.id, u.name ORDER BY post_count DESC"
 
-# Test 1: Manual SQL logging
-info("Test 1: Manual SQL logging")
-sql_logger.log_sql(
-  sql: "SELECT * FROM users WHERE active = true",
-  params: [true].map(&.as(DB::Any)),
-  execution_time: 15.milliseconds,
-  context: "test/manual",
-  rows_affected: 25_i64
-)
+# Test 3: Execute a query that might cause an error
+info("Test 3: Error query")
+puts "Executing: SELECT * FROM non_existent_table WHERE id = ?"
 
-# Test 2: Slow query logging
-info("Test 2: Slow query logging")
-sql_logger.log_sql(
-  sql: "SELECT u.name, COUNT(p.id) as post_count FROM users u LEFT JOIN posts p ON u.id = p.user_id WHERE u.created_at > ? GROUP BY u.id, u.name ORDER BY post_count DESC",
-  params: ["2024-01-01T00:00:00Z"].map(&.as(DB::Any)),
-  execution_time: 250.milliseconds,
-  context: "test/slow_query",
-  rows_affected: 150_i64
-)
+# Test 4: Execute a slow query
+info("Test 4: Slow query")
+puts "Executing: SELECT e.*, u.name, u.email FROM events e JOIN users u ON e.user_id = u.id WHERE e.created_at > ? ORDER BY e.created_at DESC"
 
-# Test 3: Error logging
-info("Test 3: Error logging")
-sql_logger.log_sql(
-  sql: "SELECT * FROM non_existent_table WHERE id = ?",
-  params: [123].map(&.as(DB::Any)),
-  execution_time: 5.milliseconds,
-  context: "test/error",
-  error: "Table 'non_existent_table' doesn't exist"
-)
-
-# Test 4: Very slow query
-info("Test 4: Very slow query")
-sql_logger.log_sql(
-  sql: "SELECT e.*, u.name, u.email FROM events e JOIN users u ON e.user_id = u.id WHERE e.created_at > ? ORDER BY e.created_at DESC",
-  params: ["2024-01-01 00:00:00 UTC"].map(&.as(DB::Any)),
-  execution_time: 2.5.seconds,
-  context: "test/very_slow",
-  rows_affected: 1000_i64
-)
-
-# Show statistics
-info("SQL Logger Statistics:")
-stats = sql_logger.stats
-configuration_block("Statistics", {
-  "Processed Queries" => stats["processed"],
-  "Error Count"       => stats["errors"],
-  "Batch Count"       => stats["batches"],
-  "Uptime (seconds)"  => stats["uptime_seconds"],
+# Show configuration status
+info("SQL Logging Configuration:")
+configuration_block("Configuration", {
+  "SQL Logging Enabled" => CQL.config.sql_logging?,
+  "Colorization Enabled" => CQL.config.sql_logging_colorize,
+  "Async Processing" => CQL.config.sql_logging_async,
+  "Log Level" => CQL.config.log_level.to_s,
 })
 
 success("SQL logging integration test completed!")

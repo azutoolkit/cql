@@ -1,373 +1,364 @@
-# 🚀 CQL Quick Reference
+# Quick Reference
 
-Essential CQL configuration and caching patterns for quick copy-paste.
+## Configuration
 
-## Basic Setup
+### Zero Configuration (Development)
 
 ```crystal
-# Minimal
+# Just works in development!
 CQL.configure do |c|
   c.db = "postgresql://localhost/myapp"
 end
+```
 
-# Development
-CQL.configure do |c|
-  c.db = "postgresql://localhost/myapp"
-  c.log_level = :debug
-  c.auto_sync = true
-  c.cache.on = true
-end
+### Production
 
-# Production
+```crystal
 CQL.configure do |c|
   c.db = ENV["DATABASE_URL"]
   c.env = "production"
   c.pool_size = 25
-  c.monitor_performance = true
-  c.auto_sync = false
-  c.cache.on = true
-  c.cache.store = "redis"
-  c.cache.redis_url = ENV["REDIS_URL"]
+  c.monitor_performance = true  # Opt-in
 end
 ```
 
-## Configuration Properties
+### Common Settings
 
 ```crystal
-CQL.configure do |c|
   # Database
   c.db = "postgresql://localhost/myapp"
-  c.env = "development"
-  c.timezone = :utc
+c.env = "development"  # Auto-detected
   c.pool_size = 10
 
-  # Schema
-  c.schema_dir = "src/schemas"
-  c.schema_file = "app_schema.cr"
-  c.schema_class = :AppSchema
-  c.auto_sync = true
-  c.verify_schema = true
-
-  # Logging
-  c.log_level = :debug
-  c.logger = Log.for("myapp")
-
-  # Performance
+# Performance (auto-enabled in dev)
   c.monitor_performance = true
+c.performance_report_interval = 5.minutes
+c.sql_logging = true
+c.sql_logging_colorize = true
 
-  # Cache
+# Caching
   c.cache.on = true
   c.cache.ttl = 30.minutes
   c.cache.memory_size = 2000
-  c.cache.request_cache = true
+
+# Schema
+c.auto_sync = true  # Auto in dev
+c.verify_schema = false
+```
+
+## Models
+
+### Definition
+
+```crystal
+class User < CQL::Model(User)
+  getter id : Int64?
+  getter name : String
+  getter email : String
+  getter active : Bool = true
+  getter created_at : Time?
+  getter updated_at : Time?
+
+  # Associations
+  has_many :posts, Post, foreign_key: :user_id
+  has_one :profile, Profile
+  belongs_to :team, Team
+
+  # Validations
+  validate_presence :name, :email
+  validate_uniqueness :email
+  validate_format :email, /\A[^@]+@[^@]+\z/
+
+  # Scopes
+  scope :active, -> { where(active: true) }
+  scope :recent, -> { order(created_at: :desc) }
 end
 ```
 
-## Cache Configuration
+## Queries
+
+### Basic CRUD
 
 ```crystal
-# Memory cache (default)
-c.cache.on = true
-c.cache.ttl = 1.hour
-c.cache.memory_size = 5000
+# Create
+user = User.create(name: "Alice", email: "alice@example.com")
 
-# Redis cache
-c.cache.on = true
-c.cache.store = "redis"
-c.cache.redis_url = "redis://localhost:6379/0"
-c.cache.redis_pool_size = 25
+# Read
+user = User.find(1)
+user = User.find_by(email: "alice@example.com")
+users = User.all
 
-# Request caching
-c.cache.request_cache = true
-c.cache.request_size = 1000
+# Update
+user.update(name: "Alice Smith")
+User.where(active: false).update(active: true)
 
-# Fragment caching
-c.cache.fragments = true
-c.cache.invalidation = "transaction_aware"
+# Delete
+user.delete
+User.where(created_at: < 1.year.ago).delete_all
 ```
 
-## Environment Patterns
+### Query Builder
 
 ```crystal
-# Environment-based configuration
-CQL.configure do |c|
-  c.db = ENV["DATABASE_URL"] || "postgresql://localhost/myapp"
-  c.env = ENV["CRYSTAL_ENV"] || "development"
-  c.pool_size = ENV["DB_POOL_SIZE"]?.try(&.to_i) || 10
+# Where conditions
+User.where(active: true)
+User.where("age > ?", 18)
+User.where("email LIKE ?", "%@example.com")
 
-  # Cache settings per environment
-  c.cache.on = true
-  c.cache.ttl = c.env == "production" ? 1.hour : 5.minutes
-  c.cache.memory_size = c.env == "production" ? 10000 : 1000
+# Ordering
+User.order(created_at: :desc)
+User.order(name: :asc, created_at: :desc)
 
-  # Redis in production
-  if c.env == "production" && ENV["REDIS_URL"]?
-    c.cache.store = "redis"
-    c.cache.redis_url = ENV["REDIS_URL"]
+# Limiting
+User.limit(10)
+User.limit(10).offset(20)
+
+# Selecting columns
+User.select(:id, :name, :email)
+
+# Joins
+User.joins(:posts).where(posts: {published: true})
+
+# Grouping
+User.group(:role).count
+
+# Having
+User.group(:role).having("COUNT(*) > ?", 10)
+```
+
+### Scopes
+
+```crystal
+# Define scopes
+scope :active, -> { where(active: true) }
+scope :with_posts, -> { joins(:posts).distinct }
+scope :by_email, ->(email : String) { where(email: email) }
+
+# Use scopes
+User.active.with_posts.order(created_at: :desc)
+```
+
+## Associations
+
+### Types
+
+```crystal
+# Has Many
+has_many :posts, Post, foreign_key: :user_id
+
+# Has One
+has_one :profile, Profile
+
+# Belongs To
+belongs_to :team, Team
+
+# Has Many Through
+has_many :tags, Tag, through: :post_tags
+```
+
+### Usage
+
+```crystal
+# Access associations
+user.posts
+user.profile
+user.team
+
+# Create associated records
+user.posts.create(title: "New Post")
+
+# Query through associations
+user.posts.where(published: true)
+```
+
+## Validations
+
+### Built-in
+
+```crystal
+validate_presence :name, :email
+validate_uniqueness :email
+validate_format :email, /\A[^@]+@[^@]+\z/
+validate_length :name, min: 2, max: 100
+validate_inclusion :role, in: ["admin", "user"]
+```
+
+### Custom
+
+```crystal
+validate :custom_validation
+
+def custom_validation
+  if email && email.ends_with?("@spam.com")
+    errors.add(:email, "is from a blocked domain")
+  end
+end
+```
+
+## Migrations
+
+### Create Migration
+
+```crystal
+class CreateUsers < CQL::Migration
+  def up
+    schema.create_table :users do |t|
+      t.primary_key :id
+      t.string :name, null: false
+      t.string :email, null: false
+      t.boolean :active, default: true
+      t.timestamps
+
+      t.index [:email], unique: true
+    end
   end
 
-  # Performance monitoring in development
-  c.monitor_performance = c.env != "test"
-
-  # Auto-sync except in production
-  c.auto_sync = c.env != "production"
+  def down
+    schema.drop_table :users
+  end
 end
 ```
 
-## Web Framework Integration
-
-### Kemal
+### Run Migrations
 
 ```crystal
-require "cql/cache/middleware"
+# Run all pending
+migrator.up
 
-before_all do |env|
-  CQL.start_request_cache
-end
+# Rollback last
+migrator.down
 
-after_all do |env|
-  CQL.end_request_cache
-end
+# Rollback to version
+migrator.down_to(20240101000000_i64)
 ```
 
-### Lucky
+## Caching
+
+### Query Caching
 
 ```crystal
-abstract class ApplicationAction < Lucky::Action
-  include CQL::Cache::Middleware::Lucky
-end
-```
+# Cache query results
+users = User.where(active: true).cache(5.minutes).all
 
-### Manual Request Caching
-
-```crystal
+# Request-scoped caching
 CQL.with_request_cache do
-  # All queries here share per-request cache
-  user = User.find(1)
-  posts = user.posts
+  User.find(1)  # Hits DB
+  User.find(1)  # From cache
 end
 ```
 
-## Cache Management
+### Fragment Caching
 
 ```crystal
-# Control
-CQL.cache_on(true)              # Enable
-CQL.cache_on(false)             # Disable
-CQL.cache_on?                   # Check status
-
-# Statistics
-stats = CQL.cache_stats
-puts "Hit rate: #{stats["hit_rate_percent"]}%"
-puts CQL.cache_summary          # Human-readable summary
-
-# Clear
-CQL.reset_cache!                # Clear stats
-CQL.memory_cache.clear          # Clear data
+stats = CQL.fragment_cache.fetch("user_stats_#{user.id}", ttl: 1.hour) do
+  {
+    post_count: user.posts.count,
+    comment_count: user.comments.count
+  }
+end
 ```
 
-## Fragment Caching
+## Performance
+
+### Auto-enabled in Development
 
 ```crystal
-# Setup
-c.cache.fragments = true
+# You get these automatically:
+# ✅ SQL logging
+# ✅ N+1 detection
+# ✅ Slow query warnings
+# ✅ Performance reports every 5 minutes
+```
 
-# Usage
-fragment_cache = CQL.fragment_cache
+### Manual Control
 
-result = fragment_cache.cache_fragment(
-  fragment_name: "expensive_operation",
-  params: {"user_id" => user.id.to_s},
-  tags: ["user:#{user.id}"],
-  ttl: 1.hour
-) do
-  # Expensive calculation here
-  calculate_user_stats(user)
+```crystal
+# Disable auto-features
+ENV["CQL_NO_SQL_LOG"] = "1"
+ENV["CQL_NO_PERF_MONITOR"] = "1"
+
+# Generate report on demand
+report = CQL::Performance.monitor.generate_comprehensive_report("text")
+
+# Check N+1 issues
+issues = CQL::Performance.monitor.n_plus_one_issues
+```
+
+## Transactions
+
+```crystal
+User.transaction do
+  user = User.create!(name: "Alice")
+  Profile.create!(user_id: user.id)
+  # Rolls back if any operation fails
 end
 
-# Invalidate
-fragment_cache.invalidate_tags(["user:#{user.id}"])
-```
+# Nested transactions
+User.transaction do
+  User.create!(name: "Bob")
 
-## Database URLs
-
-```crystal
-# PostgreSQL
-c.db = "postgresql://localhost/myapp"
-c.db = "postgresql://user:pass@localhost/myapp"
-c.db = "postgresql://user:pass@localhost:5432/myapp"
-
-# MySQL
-c.db = "mysql://localhost/myapp"
-c.db = "mysql://user:pass@localhost/myapp"
-
-# SQLite
-c.db = "sqlite3://./db/app.db"
-c.db = "sqlite3://:memory:"
-```
-
-## Helper Methods
-
-```crystal
-config = CQL.config
-
-# Boolean checks
-config.auto_sync?
-config.monitor_performance?
-config.cache.on?
-
-# Computed values
-config.adapter              # :postgres, :mysql, :sqlite
-config.full_db_url         # Complete URL
-config.schema_path          # Full path to schema
-```
-
-## Schema Management
-
-```crystal
-# Create schema
-schema = CQL.build_schema(:app) do
-  table :users do
-    primary_key :id
-    text :name
-    timestamps
+  User.transaction do
+    User.create!(name: "Charlie")
+    raise "Rollback inner"  # Only rolls back Charlie
   end
+
+  User.create!(name: "David")  # Still created
 end
+```
 
-# Create migrator
-migrator = CQL.build_migrator(schema)
+## Environment Variables
 
-# Environment-specific migrator
-dev_config = CQL.migrator_config_for("development")
+```crystal
+# Control features
+CQL_NO_SQL_LOG=1       # Disable SQL logging
+CQL_NO_PERF_MONITOR=1  # Disable performance monitoring
+
+# Environment
+CRYSTAL_ENV=production  # Set environment
+DATABASE_URL=...       # Database connection
 ```
 
 ## Common Patterns
 
-### Complete E-commerce Setup
+### Batch Operations
 
 ```crystal
-CQL.configure do |c|
-  c.db = ENV["DATABASE_URL"]
-  c.env = ENV["CRYSTAL_ENV"] || "production"
-  c.pool_size = 25
+# Insert many
+users_data = [{name: "Alice"}, {name: "Bob"}]
+User.insert_many(users_data)
 
-  # Cache for product catalog
-  c.cache.on = true
-  c.cache.store = "redis"
-  c.cache.redis_url = ENV["REDIS_URL"]
-  c.cache.ttl = 15.minutes      # Products change frequently
-  c.cache.memory_size = 50000   # Large catalog
-  c.cache.request_cache = true  # Web app
-  c.cache.fragments = true      # Category trees
+# Update many
+User.where(active: false).update_all(active: true)
 
-  # Performance monitoring
-  c.monitor_performance = true
-
-  # Production safety
-  c.auto_sync = false
-  c.verify_schema = true
+# Process in batches
+User.find_each(batch_size: 100) do |user|
+  # Process user
 end
 ```
 
-### Blog/CMS Setup
+### Soft Deletes
 
 ```crystal
-CQL.configure do |c|
-  c.db = ENV["DATABASE_URL"] || "postgresql://localhost/blog"
-  c.env = ENV["CRYSTAL_ENV"] || "development"
+class Post < CQL::Model(Post)
+  include CQL::SoftDeletable
 
-  # Cache for content
-  c.cache.on = true
-  c.cache.ttl = 2.hours         # Content doesn't change often
-  c.cache.request_cache = true
-  c.cache.fragments = true
-  c.cache.invalidation = "version"  # Precise invalidation
-
-  # Environment-specific
-  if c.env == "production"
-    c.cache.store = "redis"
-    c.cache.redis_url = ENV["REDIS_URL"]
-    c.pool_size = 20
-    c.auto_sync = false
-  else
-    c.auto_sync = true
-    c.log_level = :debug
-  end
+  # Adds deleted_at column
+  # Changes default scope to exclude deleted
 end
+
+post.soft_delete
+Post.with_deleted.all  # Include soft deleted
 ```
 
-### API Service Setup
+### Optimistic Locking
 
 ```crystal
-CQL.configure do |c|
-  c.db = ENV["DATABASE_URL"]
-  c.env = "production"
-  c.pool_size = 30
+class Document < CQL::Model(Document)
+  include CQL::OptimisticLocking
 
-  # Shared cache across instances
-  c.cache.on = true
-  c.cache.store = "redis"
-  c.cache.redis_url = ENV["REDIS_URL"]
-  c.cache.ttl = 10.minutes
-  c.cache.request_cache = false  # No request lifecycle
-  c.cache.key_prefix = "api"
-
-  # API optimizations
-  c.monitor_performance = true
-  c.auto_sync = false
-  c.log_level = :info
+  # Adds lock_version column
+  # Prevents concurrent updates
 end
 ```
 
-## Troubleshooting
-
-```crystal
-# Check cache status
-puts "Cache enabled: #{CQL.cache_on?}"
-puts "Config cache: #{CQL.config.cache.on?}"
-
-# Check statistics
-stats = CQL.cache_stats
-puts "Requests: #{stats["total_requests"]}"
-puts "Hit rate: #{stats["hit_rate_percent"]}%"
-puts "Memory: #{stats["memory_usage_bytes"]} bytes"
-
-# Test Redis connection
-if redis = CQL.cache_store.as?(CQL::Cache::RedisCache)
-  puts "Redis ping: #{redis.ping}"
-end
-
-# Validate configuration
-begin
-  CQL.config.validate!
-  puts "Configuration is valid"
-rescue ex
-  puts "Configuration error: #{ex.message}"
-end
-```
-
-## Performance Tips
-
-- **Enable caching early** - it's safe and improves performance
-- **Use request caching** for web apps - eliminates duplicate queries
-- **Start with memory cache** - upgrade to Redis when needed
-- **Set appropriate TTLs** - balance freshness vs performance
-- **Monitor hit rates** - should be >60% for good cache usage
-- **Use fragment caching** for expensive operations
-- **Tag fragments properly** - enables precise invalidation
-
-## Environment Variables
-
-```bash
-# Database
-DATABASE_URL=postgresql://localhost/myapp
-CRYSTAL_ENV=production
-DB_POOL_SIZE=25
-
-# Cache
-REDIS_URL=redis://localhost:6379/0
-CQL_CACHE_TTL=3600
-
-# Performance
-CQL_MONITOR_PERFORMANCE=true
-```
+This quick reference covers the most common CQL operations and patterns.

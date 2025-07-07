@@ -86,13 +86,10 @@ puts "=== 📈 Performance Monitoring ==="
 CQL.configure do |c|
   c.db = "postgresql://localhost/myapp"
 
-  # Enable monitoring
+  # Enable monitoring and SQL logging
   c.monitor_performance = true
-
-  # Performance config
-  c.performance.query_profiling_enabled = true
-  c.performance.n_plus_one_detection_enabled = true
-  c.performance.plan_analysis_enabled = true
+  c.sql_logging = true
+  c.sql_logging_colorize = true
 end
 
 # === 🔧 BEFORE vs AFTER COMPARISON ===

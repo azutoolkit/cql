@@ -11,11 +11,11 @@ module CQL
   #
   # Quick setup for different environments:
   #
-  # **Development** (auto-configured)
+  # **Development** (minimal config - auto-detects environment)
   # ```
   # CQL.configure do |config|
   #   config.db = "postgresql://localhost/myapp"
-  #   config.log_level = :debug
+  #   # That's it! SQL logging & performance monitoring auto-enabled
   # end
   # ```
   #
@@ -25,18 +25,16 @@ module CQL
   #   config.db = ENV["DATABASE_URL"]
   #   config.env = "production"
   #   config.pool_size = 25
-  #   config.monitor_performance = true
-  #   config.cache.on = true
+  #   config.monitor_performance = true  # Opt-in for production
   # end
   # ```
   #
-  # **Quick caching setup**
+  # **Custom Development Setup**
   # ```
   # CQL.configure do |config|
   #   config.db = "postgresql://localhost/myapp"
-  #   config.cache.on = true
-  #   config.cache.ttl = 30.minutes
-  #   config.cache.memory_size = 2000
+  #   config.performance_report_interval = 2.minutes  # More frequent reports
+  #   config.sql_logging_async = true                 # Async SQL logging
   # end
   # ```
   module Configure
@@ -99,12 +97,17 @@ module CQL
       # Enable query performance monitoring
       property monitor_performance : Bool = false
 
-      # Detailed performance configuration
-      property performance : CQL::Performance::PerformanceConfig = CQL::Performance::PerformanceConfig.new
+      # Performance monitoring options (simple on/off switches)
+      property performance_auto_report : Bool = true        # Auto-report in development
+      property performance_report_interval : Time::Span = 5.minutes  # Report frequency
 
       # === 🎨 SQL LOGGING ===
-      # Beautiful SQL log formatter configuration
-      getter sql_logging : CQL::Performance::SQLLogConfig = CQL::Performance::SQLLogConfig.new
+      # Enable beautiful SQL logging (auto-enabled in development)
+      property sql_logging : Bool = false
+
+      # SQL logging options
+      property sql_logging_colorize : Bool = true     # Colorize SQL output
+      property sql_logging_async : Bool = false       # Use async logging (not recommended for dev)
 
       # === 💾 CACHE SYSTEM ===
       # Centralized cache configuration (use config.cache.* to configure)
@@ -159,12 +162,12 @@ module CQL
 
       # Check if performance monitoring is enabled
       def monitor_performance? : Bool
-        @monitor_performance
+        @monitor_performance || (env == "development" && !ENV.has_key?("CQL_NO_PERF_MONITOR"))
       end
 
       # Check if SQL logging is enabled
       def sql_logging? : Bool
-        sql_logging.should_log?
+        sql_logging || (env == "development" && !ENV.has_key?("CQL_NO_SQL_LOG"))
       end
 
       # === 🎯 SMART GETTERS ===
@@ -297,17 +300,19 @@ module CQL
       def setup_performance_monitoring(schema : Schema) : Nil
         return unless monitor_performance?
 
+        # Use smart defaults based on environment
         Performance.setup(schema) do |config|
-          config.query_profiling_enabled = performance.query_profiling_enabled?
-          config.n_plus_one_detection_enabled = performance.n_plus_one_detection_enabled?
-          config.plan_analysis_enabled = performance.plan_analysis_enabled?
-          config.auto_analyze_slow_queries = performance.auto_analyze_slow_queries?
-          config.context_tracking_enabled = performance.context_tracking_enabled?
-          config.endpoint_tracking_enabled = performance.endpoint_tracking_enabled?
-          config.async_processing = performance.async_processing?
-          config.current_endpoint = performance.current_endpoint
-          config.current_user_id = performance.current_user_id
+          # In development: enable async for auto-reporting
+          # In production: disable async to reduce overhead
+          if env == "development"
+            config.async_processing = performance_auto_report
+            config.auto_report_interval = performance_report_interval
+          else
+            config.async_processing = false
+          end
         end
+
+        effective_logger.info { "📊 Performance monitoring enabled#{env == "development" ? " with auto-reporting" : ""}" }
       end
 
       # === 🎨 SQL LOGGING SETUP ===
@@ -316,15 +321,21 @@ module CQL
         return unless sql_logging?
 
         effective_logger.info { "🎨 Setting up beautiful SQL logging..." }
-        sql_logger = CQL::Performance::SQLLogFormatter.new(sql_logging)
-        CQL::Performance.sql_logger = sql_logger
 
-        # Subscribe to the performance monitoring event bus if it exists
-        if monitor_performance? && Performance.monitor
-          Performance.monitor.event_bus.subscribe(sql_logger)
+        CQL.enable_sql_logging do |config|
+          config.enabled = true
+          config.colorize_output = sql_logging_colorize
+          config.async_processing = sql_logging_async
+
+          # Smart defaults for development
+          if env == "development"
+            config.show_params = true
+            config.show_execution_time = true
+            config.highlight_slow_queries = true
+          end
         end
 
-        effective_logger.info { "✅ SQL logging ready - #{sql_logging.async_processing? ? "async" : "sync"} mode" }
+        effective_logger.info { "✅ SQL logging ready - #{sql_logging_async ? "async" : "sync"} mode" }
       end
 
       # === 💾 CACHE SETUP ===
@@ -391,6 +402,12 @@ module CQL
         strategy = EnvironmentStrategyFactory.create(env)
         strategy.apply(self)
         sync_pool_size # Re-sync after environment changes
+
+        # Auto-enable performance features in development unless explicitly disabled
+        if env == "development"
+          @monitor_performance = true unless ENV.has_key?("CQL_NO_PERF_MONITOR")
+          @sql_logging = true unless ENV.has_key?("CQL_NO_SQL_LOG")
+        end
       end
     end
 
@@ -420,13 +437,12 @@ module CQL
 
   # === 🎯 MAIN CONFIGURATION METHOD ===
   #
-  # **Quick Development Setup**
+  # **Minimal Development Setup**
   # ```
   # CQL.configure do |c|
   #   c.db = "postgresql://localhost/myapp"
-  #   c.log_level = :debug
-  #   c.auto_sync = true
   # end
+  # # Auto-enables: SQL logging, performance monitoring, auto-reporting
   # ```
   #
   # **Production Ready**
@@ -435,27 +451,19 @@ module CQL
   #   c.db = ENV["DATABASE_URL"]
   #   c.env = "production"
   #   c.pool_size = 25
-  #   c.monitor_performance = true
-  #   c.auto_sync = false
-  #
-  #   # Enable caching
-  #   c.cache.on = true
-  #   c.cache.ttl = 1.hour
-  #   c.cache.memory_size = 5000
+  #   c.monitor_performance = true    # Opt-in for production
+  #   c.sql_logging = false          # Disable SQL logging
+  #   c.cache.on = true              # Enable caching
   # end
   # ```
   #
-  # **Caching Focus**
+  # **Fine-tuned Performance**
   # ```
   # CQL.configure do |c|
   #   c.db = "postgresql://localhost/myapp"
-  #
-  #   # Quick cache setup
-  #   c.cache.on = true
-  #   c.cache.ttl = 30.minutes
-  #   c.cache.memory_size = 2000
-  #   c.cache.request_cache = true
-  #   c.cache.fragments = true
+  #   c.monitor_performance = true
+  #   c.performance_report_interval = 1.minute  # Frequent reports
+  #   c.sql_logging_colorize = false           # Disable colors
   # end
   # ```
   def self.configure(& : Configure::Config ->)

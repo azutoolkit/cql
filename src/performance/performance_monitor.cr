@@ -21,6 +21,7 @@ module CQL::Performance
     property? context_tracking_enabled : Bool = true
     property? endpoint_tracking_enabled : Bool = false
     property? async_processing : Bool = false
+    property auto_report_interval : Time::Span = 5.minutes
     property current_endpoint : String? = nil
     property current_user_id : String? = nil
 
@@ -53,9 +54,13 @@ module CQL::Performance
     @query_profiler : Profilers::QueryProfiler
     @schema : Schema?
     @start_time : Time
+    @auto_reporting : Bool = false
+    @last_report_time : Time
+    @report_threshold : Int32 = 100  # Report after every 100 queries
 
     def initialize(@config : PerformanceConfig = PerformanceConfig.new)
       @start_time = Time.utc
+      @last_report_time = Time.utc
 
       # Initialize event system
       @event_bus = if @config.async_processing?
@@ -71,6 +76,9 @@ module CQL::Performance
       # Subscribe components to events
       @event_bus.subscribe(@n_plus_one_detector)
       @event_bus.subscribe(@query_profiler)
+
+      # Start auto-reporting if async processing is enabled in development
+      setup_auto_reporting if should_auto_report?
     end
 
     # Initialize with schema for plan analysis
@@ -139,6 +147,9 @@ module CQL::Performance
       end
 
       Log.debug { "Performance monitoring after query: #{execution_time.total_milliseconds.round(2)}ms" }
+
+      # Check if we should generate an auto-report
+      check_and_generate_auto_report
     end
 
     # Relation loading tracking
@@ -317,6 +328,66 @@ module CQL::Performance
       issues.concat(@n_plus_one_detector.issues)
       issues.concat(@query_profiler.issues)
       issues
+    end
+
+    private def should_auto_report? : Bool
+      # Auto-report when async processing is enabled in development environment
+      return false unless @config.async_processing?
+
+      # Check if we're in development environment
+      env = ENV["CRYSTAL_ENV"]? || ENV["CQL_ENV"]? || "development"
+      env.downcase == "development"
+    end
+
+    private def setup_auto_reporting : Void
+      @auto_reporting = true
+
+      # Start background reporting fiber
+      spawn(name: "performance-auto-reporter") do
+        loop do
+          sleep @config.auto_report_interval
+
+          # Only report if there's meaningful data
+          if has_meaningful_data?
+            generate_and_log_report
+          end
+        rescue ex
+          Log.error { "Error in auto-reporting: #{ex.message}" }
+        end
+      end
+
+      Log.info { "Performance auto-reporting enabled (interval: #{@config.auto_report_interval})" }
+    end
+
+    private def check_and_generate_auto_report : Void
+      return unless @auto_reporting
+
+      # Generate report based on query count threshold
+      stats = @query_profiler.statistics
+      total_queries = stats.values.sum(&.execution_count)
+
+      if total_queries > 0 && total_queries % @report_threshold == 0
+        generate_and_log_report
+      end
+    end
+
+    private def has_meaningful_data? : Bool
+      # Check if we have any data worth reporting
+      stats = @query_profiler.statistics
+      total_queries = stats.values.sum(&.execution_count)
+      issues = collect_all_issues
+
+      total_queries > 0 || issues.any?
+    end
+
+    private def generate_and_log_report : Void
+      begin
+        # Generate comprehensive report using logger format
+        report = generate_comprehensive_report("logger")
+        @last_report_time = Time.utc
+      rescue ex
+        Log.error { "Failed to generate performance report: #{ex.message}" }
+      end
     end
   end
 
