@@ -1,0 +1,63 @@
+:::module[CQL::Performance]
+name = "Performance Monitoring"
+description = "Modular performance tools for query profiling, N+1 detection, and SQL plan analysis"
+responsibility = "Provides diagnostics and metrics for SQL performance in development and production"
+design_principles = ["Single Responsibility", "Open/Closed", "Liskov Substitution", "Interface Segregation", "Dependency Inversion"]
+
+:::component[PerformanceMonitor]
+description = "Coordinates all performance features. Observes schema behavior and reports statistics."
+responsibility = "Acts as the orchestrator for configured profiling, detectors, and reporters"
+design_patterns = ["Facade", "Observer"]
+depends_on = ["QueryProfiler", "NPlusOneDetector", "ReportGenerators::Factory"]
+implements = ["MonitorInterface"]
+
+:::component[QueryProfiler]
+description = "Profiles database queries for time and frequency"
+responsibility = "Captures and summarizes query execution stats"
+design_patterns = ["Strategy"]
+used_by = ["PerformanceMonitor"]
+implements = ["ProfilerInterface"]
+
+:::component[NPlusOneDetector]
+description = "Detects potential N+1 queries based on access patterns"
+responsibility = "Identifies inefficient eager loading strategies"
+design_patterns = ["Strategy"]
+used_by = ["PerformanceMonitor"]
+implements = ["DetectorInterface"]
+
+:::component[ReportGenerators::Factory]
+description = "Factory to construct appropriate report generator (HTML, JSON, Logger)"
+responsibility = "Creates the right report formatter based on config"
+design_patterns = ["Factory"]
+depends_on = ["HtmlReportGenerator", "JsonReportGenerator", "LoggerReportGenerator"]
+used_by = ["PerformanceMonitor"]
+
+:::component[SqlLogFormatter]
+description = "Formats SQL output for logging"
+responsibility = "Improves readability and structure of SQL statements in logs"
+design_patterns = ["Decorator"]
+used_by = ["PerformanceMonitor"]
+
+:::interface[MonitorInterface]
+methods = ["initialize_with_schema", "record_event", "report", "reset"]
+
+:::interface[ProfilerInterface]
+methods = ["start", "stop", "report"]
+
+:::interface[DetectorInterface]
+methods = ["observe", "detect", "report"]
+
+:::config[PerformanceConfig]
+description = "Configuration DSL for enabling performance features"
+fields = ["query_profiling : Bool", "n_plus_one_detection : Bool", "plan_analysis : Bool"]
+defaults = ["query_profiling = false", "n_plus_one_detection = false", "plan_analysis = false"]
+
+:::setup[Usage Example]
+
+```crystal
+CQL::Performance.setup(MySchema) do |config|
+  config.query_profiling = true
+  config.n_plus_one_detection = true
+  config.plan_analysis = true
+end
+```

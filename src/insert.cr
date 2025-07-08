@@ -1,10 +1,13 @@
 require "./table"  # Assuming table.cr defines Table
 require "./schema" # Assuming schema.cr defines Schema
+require "./performance"
 
 module CQL
   # An insert statement builder class
   # This class provides methods for building an insert statement
   # It also provides methods for executing the statement
+  #
+  # All insert operations are automatically tracked by CQL::Performance when enabled.
   #
   # **Example** Inserting a record
   #
@@ -51,6 +54,7 @@ module CQL
 
     # Inserts and gets the last inserted ID from the database
     # Works with SQLite, PostgreSQL and MySQL.
+    # The query execution is automatically tracked by CQL::Performance when enabled.
     # - **@return** [Int64] The last inserted ID
     #
     # **Example** Getting the last inserted ID
@@ -63,8 +67,10 @@ module CQL
         # Reset to ensure nothing else but the :id is returned
         @back = Array(Expression::Column).new
         query, params = back(:id).to_sql
-        @schema.exec_query do |conn|
-          conn.query_one(query, args: params, as: type)
+        CQL::Performance.track(query, params) do
+          @schema.exec_query do |conn|
+            conn.query_one(query, args: params, as: type)
+          end
         end
       else
         self.commit.last_insert_id
@@ -76,6 +82,7 @@ module CQL
     end
 
     # Executes the insert statement and returns the result
+    # The query execution is automatically tracked by CQL::Performance when enabled.
     # - **@return** [Int64] The last inserted ID
     #
     # **Example** Inserting a record
@@ -90,8 +97,11 @@ module CQL
     # ```
     def commit
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.exec(query, args: params)
+
+      CQL::Performance.track(query, params) do
+        @schema.exec_query do |conn|
+          conn.exec(query, args: params)
+        end
       end
     rescue ex
       Log.error { "Insert failed: #{ex.message}" }

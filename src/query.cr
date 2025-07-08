@@ -7,11 +7,33 @@ require "./update"
 require "./delete"
 require "./merge_query"
 require "./cache/request_query_cache"
+require "./performance" # Performance monitoring integration
 
 module CQL
   # The `Query` class is responsible for building SQL queries in a structured manner.
   # It holds various components like selected columns, tables, conditions, and more.
   # It provides methods to execute the query and return results.
+  #
+  # ## Performance Monitoring
+  #
+  # All query execution methods (`all`, `first`, `get`, `each`) are automatically tracked
+  # by the CQL Performance module when enabled. This provides:
+  # - Query execution time tracking
+  # - Slow query detection
+  # - N+1 query pattern detection
+  # - Performance report generation
+  #
+  # To enable performance monitoring:
+  # ```
+  # CQL::Performance.enable_development_mode!
+  # ```
+  #
+  # To track queries with context:
+  # ```
+  # CQL::Performance.with_context("UserController#index") do
+  #   query.from(:users).all(User)
+  # end
+  # ```
   #
   # **Example** Creating a new query
   #
@@ -81,7 +103,7 @@ module CQL
       query, params = to_sql
 
       CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
-        CQL::Performance.benchmark(query, params) do
+        CQL::Performance.track(query, params) do
           @schema.exec_query do |conn|
             conn.query_all(query, args: params, as: as_kind)
           end
@@ -122,8 +144,10 @@ module CQL
       query, params = to_sql
       limit(1)
       CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
-        @schema.exec_query do |conn|
-          conn.query_one?(query, args: params, as: as_kind)
+        CQL::Performance.track(query, params) do
+          @schema.exec_query do |conn|
+            conn.query_one?(query, args: params, as: as_kind)
+          end
         end
       end
     end
@@ -158,8 +182,10 @@ module CQL
     def get(as as_kind)
       query, params = to_sql
       CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
-        @schema.exec_query do |conn|
-          conn.query_one?(query, args: params, as: as_kind)
+        CQL::Performance.track(query, params) do
+          @schema.exec_query do |conn|
+            conn.query_one?(query, args: params, as: as_kind)
+          end
         end
       end
     end
@@ -175,9 +201,13 @@ module CQL
     # ```
     def each(as as_kind, &)
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.query_each(query, args: params) do |result|
-          yield as_kind.from_rs(result)
+      CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
+        CQL::Performance.track(query, params) do
+          @schema.exec_query do |conn|
+            conn.query_each(query, args: params) do |result|
+              yield as_kind.from_rs(result)
+            end
+          end
         end
       end
     end
@@ -595,6 +625,23 @@ module CQL
         @order_by[column] = direction == Expression::OrderDirection::ASC ? Expression::OrderDirection::DESC : Expression::OrderDirection::ASC
       end
       self
+    end
+
+    # Executes the query within a performance monitoring context.
+    # This is useful for grouping related queries together in performance reports.
+    # - **@param** context [String] The context name (e.g., "UserController#index")
+    # - **@yield** Block that executes the query
+    # - **@return** The result of the block
+    #
+    # **Example**
+    #
+    # ```
+    # users = query.with_performance_context("UserController#index") do
+    #   query.from(:users).where(active: true).all(User)
+    # end
+    # ```
+    def with_performance_context(context : String, &)
+      CQL::Performance.with_context(context) { yield }
     end
 
     # Removes specific scopes from the query.

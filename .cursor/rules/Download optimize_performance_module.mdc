@@ -1,0 +1,47 @@
+
+:::module[CQL::Performance::Optimization]
+name = "Performance Module Refactoring Plan"
+description = "Refactoring the performance monitoring module to address redundancy, tight coupling, over-engineering, and improve maintainability."
+problems = [
+  "Redundant code and complexity: Multiple similar methods and configurations across profilers and detectors.",
+  "Tight coupling: Direct dependencies between PerformanceMonitor and concrete component implementations.",
+  "Over-engineering: Excessive abstractions and interfaces for simple behaviors.",
+  "Configuration complexity: Too many independent configuration options leading to confusing setup.",
+  "Performance overhead: Unnecessary event system layer introduced for basic logging use cases.",
+  "Code duplication: Similar logic repeated across report generators and formatters."
+]
+
+:::refactoring[Consolidate Utilities]
+description = "Extract shared logic from profilers, detectors, and report generators into a common base class or utility module."
+responsibility = "Provide reusable methods for start/stop timing, report formatting, and config validation."
+design_patterns = ["Template Method", "Strategy"]
+
+:::refactoring[Dependency Injection]
+description = "Introduce dependency injection for components to decouple PerformanceMonitor from concrete implementations."
+responsibility = "Accept component interfaces via constructor or setup block, defaulting to built-in implementations."
+design_patterns = ["Dependency Injection", "Inversion of Control"]
+
+:::refactoring[Simplify Configuration]
+description = "Merge individual boolean flags into a single scoped configuration object with grouping and defaults."
+responsibility = "Provide a clear DSL: `config.profiling.enabled = true`, `config.reporting.format = :html`."
+design_patterns = ["Builder", "Facade"]
+
+:::refactoring[Remove Event System]
+description = "By default, bypass the event system for logging in development, using direct method calls; keep event hooks optional."
+responsibility = "Reduce runtime overhead for basic logging scenarios."
+design_patterns = ["Null Object", "Observer (optional)"]
+
+:::refactoring[Unify Report Generation]
+description = "Consolidate HTML, JSON, Logger generators under a single ReportGenerator base with pluggable format strategies."
+responsibility = "Eliminate duplicated iteration and export logic."
+design_patterns = ["Strategy", "Template Method", "Factory"]
+
+:::refactoring[Reduce Abstractions]
+description = "Remove rarely used interfaces (e.g., DetectorInterface) and merge simple detectors into a single DetectorManager."
+responsibility = "Streamline class hierarchy and lower cognitive load."
+design_patterns = ["Facade"]
+
+:::refactoring[Utility Module for SQL Formatting]
+description = "Centralize SQL formatting logic in a single SqlFormatter utility, used by monitor and reporting."
+responsibility = "Avoid multiple log formatter classes; provide extension hooks."
+design_patterns = ["Decorator"]

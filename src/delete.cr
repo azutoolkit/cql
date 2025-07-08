@@ -1,10 +1,13 @@
 require "./expression/expressions"
+require "./performance"
 
 module CQL
   # A delete query
   # This class represents a delete query
   # It provides methods for building a delete query
   # It also provides methods for executing the query
+  #
+  # All delete operations are automatically tracked by CQL::Performance when enabled.
   #
   # **Example** Deleting a record
   #
@@ -33,6 +36,7 @@ module CQL
     end
 
     # Executes the delete query and returns the result
+    # The query execution is automatically tracked by CQL::Performance when enabled.
     # - **@return** [DB::Result] The result of the query
     #
     # **Example** Deleting a record
@@ -45,8 +49,10 @@ module CQL
     # ```
     def commit
       query, params = to_sql
-      @schema.exec_query do |conn|
-        conn.exec(query, args: params)
+      CQL::Performance.track(query, params) do
+        @schema.exec_query do |conn|
+          conn.exec(query, args: params)
+        end
       end
     end
 

@@ -1,8 +1,11 @@
 require "./expression/expressions"
+require "./performance"
 
 module CQL
   #
   # The `CQL::Update` class represents an SQL UPDATE statement.
+  #
+  # All update operations are automatically tracked by CQL::Performance when enabled.
   #
   # **Example**
   #
@@ -60,6 +63,7 @@ module CQL
     end
 
     # Executes the update query and returns the result.
+    # The query execution is automatically tracked by CQL::Performance when enabled.
     # - **@return** [DB::Result] the result of the query
     #
     # **Example**
@@ -78,8 +82,10 @@ module CQL
       end
 
       query, params = to_sql
-      result = @schema.exec_query do |conn|
-        conn.exec(query, args: params)
+      result = CQL::Performance.track(query, params) do
+        @schema.exec_query do |conn|
+          conn.exec(query, args: params)
+        end
       end
 
       if @with_optimistic_locking && result.rows_affected == 0
