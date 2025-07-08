@@ -4,6 +4,7 @@
 require "db"
 require "./utilities"
 require "./config"
+require "./interfaces"
 
 module CQL::Performance
   # Query execution data
@@ -14,6 +15,7 @@ module CQL::Performance
     getter timestamp : Time = Time.utc
     getter rows_affected : Int64?
     getter error : String?
+    @normalized_sql : String?
 
     def initialize(@sql, @params, @execution_time, @rows_affected = nil, @error = nil)
     end
@@ -29,6 +31,7 @@ module CQL::Performance
 
   # Query profiler without event system
   class QueryProfiler < BasePerformanceComponent
+    include CQL::Performance::QueryProfilerInterface
     @queries : Array(QueryData) = [] of QueryData
     @query_stats : Hash(String, StatsTracker) = {} of String => StatsTracker
     @slow_queries : Array(QueryData) = [] of QueryData
@@ -100,7 +103,7 @@ module CQL::Performance
     end
 
     # Clear all data
-    def clear
+    def clear : Void
       @queries.clear
       @query_stats.clear
       @slow_queries.clear
@@ -159,7 +162,7 @@ module CQL::Performance
     private def log_slow_query(query : QueryData)
       severity = query.execution_time > @config.very_slow_threshold ? "VERY SLOW" : "SLOW"
       formatted_time = format_duration(query.execution_time)
-      Log.warn { "#{severity} QUERY (#{formatted_time}): #{truncate_sql(query.sql)}" }
+      Log.warn { "#{severity} QUERY (#{formatted_time}): #{SQLUtils.truncate_sql(query.sql)}" }
     end
   end
 end

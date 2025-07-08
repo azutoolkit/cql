@@ -140,7 +140,7 @@ module CQL::Performance
     end
 
     private def colorize_token(token : String) : String
-      return token if token.empty? || token.whitespace?
+      return token if token.empty? || token.each_char.all?(&.whitespace?)
 
       upper = token.upcase
 

@@ -42,7 +42,7 @@ module CQL::Performance
 
   # SQL normalization and formatting
   module SQLUtils
-    def normalize_sql(sql : String) : String
+    def self.normalize_sql(sql : String) : String
       sql.gsub(/\$\d+|\?/, "?")
         .gsub(/\b\d+\b/, "?")
         .gsub(/'.+?'/, "'?'")
@@ -50,7 +50,7 @@ module CQL::Performance
         .strip
     end
 
-    def truncate_sql(sql : String, max_length : Int32 = 100) : String
+    def self.truncate_sql(sql : String, max_length : Int32 = 100) : String
       if sql.size > max_length
         "#{sql[0...max_length]}..."
       else
@@ -58,7 +58,7 @@ module CQL::Performance
       end
     end
 
-    def format_params(params : Array(DB::Any), max_length : Int32 = 50) : String
+    def self.format_params(params : Array(DB::Any), max_length : Int32 = 50) : String
       return "[]" if params.empty?
 
       formatted = params.map do |param|

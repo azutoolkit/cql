@@ -56,7 +56,6 @@ module CQL::Configure
   class DevelopmentStrategy < EnvironmentStrategy
     def apply(config : Config) : Nil
       # === 📊 PERFORMANCE ===
-      config.monitor_performance = true
       config.pool_size = 5
       config.pool.size = 5
       config.pool.initial_size = 2

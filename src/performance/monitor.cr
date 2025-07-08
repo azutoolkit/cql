@@ -8,29 +8,9 @@ require "./sql_formatter"
 require "./query_profiler"
 require "./n_plus_one_detector"
 require "./unified_report_generator"
+require "./interfaces"
 
 module CQL::Performance
-  # Component interfaces for dependency injection
-  abstract class QueryProfilerInterface
-    abstract def record_query(sql : String, params : Array(DB::Any),
-                              execution_time : Time::Span,
-                              rows_affected : Int64? = nil,
-                              error : String? = nil) : Void
-    abstract def statistics
-    abstract def slowest_queries(limit : Int32) : Array(QueryData)
-    abstract def issues : Array(Issue)
-    abstract def clear : Void
-  end
-
-  abstract class NPlusOneDetectorInterface
-    abstract def record_query(sql : String) : Void
-    abstract def start_relation_loading(relation_name : String, parent_model : String) : Void
-    abstract def end_relation_loading : Void
-    abstract def patterns
-    abstract def issues : Array(Issue)
-    abstract def clear : Void
-  end
-
   # Monitor with dependency injection
   class Monitor
     include TimingUtils
@@ -45,16 +25,18 @@ module CQL::Performance
     @start_time : Time = Time.utc
     @context : String? = nil
 
-    def initialize(@config : Config = Config.from_env,
-                   @profiler : QueryProfilerInterface? = nil,
-                   @detector : NPlusOneDetectorInterface? = nil,
-                   @sql_formatter : SQLFormatter? = nil,
-                   @report_generator : UnifiedReportGenerator? = nil)
-      # Use provided components or create defaults
-      @profiler ||= QueryProfiler.new(@config.profiling) if @config.profiling.enabled?
-      @detector ||= NPlusOneDetector.new(@config.detection) if @config.detection.enabled?
-      @sql_formatter ||= create_sql_formatter
-      @report_generator ||= UnifiedReportGenerator.new
+    def initialize(
+      config : Config = Config.from_env,
+      profiler : QueryProfilerInterface? = nil,
+      detector : NPlusOneDetectorInterface? = nil,
+      sql_formatter : SQLFormatter? = nil,
+      report_generator : UnifiedReportGenerator? = nil,
+    )
+      @config = config
+      @profiler = profiler || (config.profiling.enabled? ? QueryProfiler.new(config.profiling).as(QueryProfilerInterface) : nil)
+      @detector = detector || (config.detection.enabled? ? NPlusOneDetector.new(config.detection).as(NPlusOneDetectorInterface) : nil)
+      @sql_formatter = sql_formatter || create_sql_formatter
+      @report_generator = report_generator || UnifiedReportGenerator.new
     end
 
     # Main monitoring methods

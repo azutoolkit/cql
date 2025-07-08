@@ -156,13 +156,11 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      CQL::Performance.benchmark(sql, [] of DB::Any) do
-        if conn = @active_connection
-          conn.exec(sql)
-        else
-          @db.using_connection do |db_conn|
-            db_conn.exec(sql)
-          end
+      if conn = @active_connection
+        conn.exec(sql)
+      else
+        @db.using_connection do |db_conn|
+          db_conn.exec(sql)
         end
       end
     end

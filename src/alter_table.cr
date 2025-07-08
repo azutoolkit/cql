@@ -67,12 +67,14 @@ module CQL
     # drop_column(:age)
     # ```
     def drop_column(column : Symbol)
-      col = @table.columns[column]
+      col = @table.columns[column]?
+      if col.nil?
+        Log.error { "Column #{column} does not exist in table #{@table}" }
+        return
+      end
+
       @table.columns.delete(column)
       @actions << Expression::DropColumn.new(col.name.to_s)
-    rescue exception
-      @table.columns[column] = col.not_nil!
-      Log.error { "Column #{column} does not exist in table #{@table}" }
     end
 
     # Renames a column in the table.

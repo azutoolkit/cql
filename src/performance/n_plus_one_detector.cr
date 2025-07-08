@@ -5,6 +5,7 @@ require "db"
 require "./utilities"
 require "./config"
 require "./unified_report_generator"
+require "./interfaces"
 
 module CQL::Performance
   # N+1 query pattern data
@@ -20,6 +21,7 @@ module CQL::Performance
 
   # N+1 detector without event system
   class NPlusOneDetector < BasePerformanceComponent
+    include CQL::Performance::NPlusOneDetectorInterface
     @recent_queries : Array(String) = [] of String
     @patterns : Array(NPlusOnePattern) = [] of NPlusOnePattern
     @config : Config::Detection
@@ -34,7 +36,7 @@ module CQL::Performance
       return unless @enabled
       return if should_ignore?(sql)
 
-      normalized = normalize_sql(sql)
+      normalized = SQLUtils.normalize_sql(sql)
       @recent_queries << normalized
 
       # Keep window size manageable
@@ -87,7 +89,7 @@ module CQL::Performance
     end
 
     # Clear all data
-    def clear
+    def clear : Void
       @recent_queries.clear
       @patterns.clear
       reset
@@ -147,7 +149,7 @@ module CQL::Performance
     end
 
     private def log_detection(query : String, count : Int32)
-      Log.warn { "N+1 Query Pattern Detected: #{truncate_sql(query)} (#{count} times)" }
+      Log.warn { "N+1 Query Pattern Detected: #{SQLUtils.truncate_sql(query)} (#{count} times)" }
     end
   end
 end

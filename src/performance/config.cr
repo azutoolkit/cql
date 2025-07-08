@@ -93,8 +93,12 @@ module CQL::Performance
     property reporting = Reporting.new
     property cache = Cache.new
 
-    def initialize(&)
-      yield self if block_given?
+    def initialize(&block : self -> _)
+      block.call(self)
+    end
+
+    def initialize
+      # Default initialization without block
     end
 
     # Convenience methods
