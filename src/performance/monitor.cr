@@ -8,6 +8,7 @@ require "./sql_formatter"
 require "./query_profiler"
 require "./n_plus_one_detector"
 require "./unified_report_generator"
+require "./performance_metrics"
 require "./interfaces"
 
 module CQL::Performance
@@ -94,6 +95,37 @@ module CQL::Performance
 
       # Generate formatted report
       @report_generator.generate(format, report)
+    end
+
+    # Get comprehensive performance metrics
+    def metrics : PerformanceMetrics
+      PerformanceMetrics.from_components(
+        profiler: @profiler,
+        detector: @detector,
+        cache: nil, # TODO: Add cache support
+        start_time: @start_time,
+        config: @config
+      )
+    end
+
+    # Get metrics summary
+    def metrics_summary : Hash(String, String | Int64 | Float64)
+      metrics.summary
+    end
+
+    # Check if performance is healthy
+    def healthy? : Bool
+      metrics.healthy?
+    end
+
+    # Get critical issues
+    def critical_issues : Array(Issue)
+      metrics.critical_issues
+    end
+
+    # Get high priority issues
+    def high_priority_issues : Array(Issue)
+      metrics.high_priority_issues
     end
 
     # Component access
@@ -260,5 +292,26 @@ module CQL::Performance
 
   def self.configure(&)
     monitor.configure { |config| yield config }
+  end
+
+  # Convenience methods for metrics
+  def self.metrics : PerformanceMetrics
+    monitor.metrics
+  end
+
+  def self.metrics_summary : Hash(String, String | Int64 | Float64)
+    monitor.metrics_summary
+  end
+
+  def self.healthy? : Bool
+    monitor.healthy?
+  end
+
+  def self.critical_issues : Array(Issue)
+    monitor.critical_issues
+  end
+
+  def self.high_priority_issues : Array(Issue)
+    monitor.high_priority_issues
   end
 end

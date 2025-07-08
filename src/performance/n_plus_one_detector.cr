@@ -79,8 +79,8 @@ module CQL::Performance
           severity: severity,
           message: "N+1 pattern detected: Query repeated #{pattern.repetition_count} times",
           details: {
-            "parent_query"   => truncate_sql(pattern.parent_query),
-            "repeated_query" => truncate_sql(pattern.repeated_query),
+            "parent_query"   => SQLUtils.truncate_sql(pattern.parent_query),
+            "repeated_query" => SQLUtils.truncate_sql(pattern.repeated_query),
             "repetitions"    => pattern.repetition_count.to_s,
           },
           timestamp: pattern.timestamp

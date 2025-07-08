@@ -7,6 +7,7 @@ require "./performance/sql_formatter"
 require "./performance/query_profiler"
 require "./performance/n_plus_one_detector"
 require "./performance/unified_report_generator"
+require "./performance/performance_metrics"
 require "./performance/monitor"
 
 # Example usage:
@@ -106,27 +107,28 @@ module CQL::Performance
     end
   end
 
-  # Integration helpers for CQL
-  module QueryMethods
-    # Wrap query execution with monitoring
-    macro monitor_query(sql, params = [] of DB::Any)
-      CQL::Performance.track({{sql}}, {{params}}) do
-        # Original query execution
-        yield
-      end
-    end
+  # Performance Metrics convenience methods
+  def self.get_metrics : PerformanceMetrics
+    monitor.metrics
   end
 
-  # Integration with CQL Active Record for N+1 detection
-  module ActiveRecordIntegration
-    # Hook for relation loading tracking
-    macro track_relation_loading(relation_name, model_class)
-      CQL::Performance.start_relation_loading({{relation_name.stringify}}, {{model_class.stringify}})
-      begin
-        yield
-      ensure
-        CQL::Performance.end_relation_loading
-      end
-    end
+  def self.get_metrics_summary : Hash(String, String | Int64 | Float64)
+    monitor.metrics_summary
+  end
+
+  def self.is_healthy? : Bool
+    monitor.healthy?
+  end
+
+  def self.get_critical_issues : Array(Issue)
+    monitor.critical_issues
+  end
+
+  def self.get_high_priority_issues : Array(Issue)
+    monitor.high_priority_issues
+  end
+
+  def self.export_metrics_as_json : String
+    monitor.metrics.to_json
   end
 end

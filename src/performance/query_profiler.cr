@@ -136,7 +136,7 @@ module CQL::Performance
             severity: :high,
             message: "Query executed #{stats.total_count} times with avg time #{stats.avg_time.total_milliseconds.round(2)}ms",
             details: {
-              "sql"    => truncate_sql(sql),
+              "sql"    => SQLUtils.truncate_sql(sql),
               "count"  => stats.total_count.to_s,
               "avg_ms" => stats.avg_time.total_milliseconds.round(2).to_s,
             }
