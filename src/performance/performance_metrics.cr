@@ -53,10 +53,10 @@ module CQL::Performance
 
       def to_h : Hash(String, JSON::Any)
         {
-          "total_queries"        => JSON::Any.new(@total_queries),
-          "slow_queries"         => JSON::Any.new(@slow_queries),
-          "very_slow_queries"    => JSON::Any.new(@very_slow_queries),
-          "error_queries"        => JSON::Any.new(@error_queries),
+          "total_queries"           => JSON::Any.new(@total_queries),
+          "slow_queries"            => JSON::Any.new(@slow_queries),
+          "very_slow_queries"       => JSON::Any.new(@very_slow_queries),
+          "error_queries"           => JSON::Any.new(@error_queries),
           "total_execution_time_ms" => JSON::Any.new(@total_execution_time.total_milliseconds),
           "avg_execution_time_ms"   => JSON::Any.new(@avg_execution_time.total_milliseconds),
           "min_execution_time_ms"   => JSON::Any.new(@min_execution_time == Time::Span::MAX ? 0.0 : @min_execution_time.total_milliseconds),
@@ -142,11 +142,11 @@ module CQL::Performance
 
       def to_h : Hash(String, JSON::Any)
         {
-          "uptime_seconds"              => JSON::Any.new(@uptime.total_seconds),
-          "memory_usage_mb"             => JSON::Any.new(@memory_usage_mb),
-          "cpu_usage_percent"           => JSON::Any.new(@cpu_usage_percent),
-          "active_connections"          => JSON::Any.new(@active_connections),
-          "max_connections"             => JSON::Any.new(@max_connections),
+          "uptime_seconds"                      => JSON::Any.new(@uptime.total_seconds),
+          "memory_usage_mb"                     => JSON::Any.new(@memory_usage_mb),
+          "cpu_usage_percent"                   => JSON::Any.new(@cpu_usage_percent),
+          "active_connections"                  => JSON::Any.new(@active_connections),
+          "max_connections"                     => JSON::Any.new(@max_connections),
           "connection_pool_utilization_percent" => JSON::Any.new(@connection_pool_utilization),
         }
       end
@@ -172,16 +172,16 @@ module CQL::Performance
 
       def to_h : Hash(String, JSON::Any)
         {
-          "overall_health_score"     => JSON::Any.new(@overall_health_score),
-          "query_health_score"       => JSON::Any.new(@query_health_score),
-          "n_plus_one_health_score"  => JSON::Any.new(@n_plus_one_health_score),
-          "cache_health_score"       => JSON::Any.new(@cache_health_score),
-          "system_health_score"      => JSON::Any.new(@system_health_score),
-          "critical_issues"          => JSON::Any.new(@critical_issues),
-          "high_issues"              => JSON::Any.new(@high_issues),
-          "medium_issues"            => JSON::Any.new(@medium_issues),
-          "low_issues"               => JSON::Any.new(@low_issues),
-          "total_issues"             => JSON::Any.new(@total_issues),
+          "overall_health_score"    => JSON::Any.new(@overall_health_score),
+          "query_health_score"      => JSON::Any.new(@query_health_score),
+          "n_plus_one_health_score" => JSON::Any.new(@n_plus_one_health_score),
+          "cache_health_score"      => JSON::Any.new(@cache_health_score),
+          "system_health_score"     => JSON::Any.new(@system_health_score),
+          "critical_issues"         => JSON::Any.new(@critical_issues),
+          "high_issues"             => JSON::Any.new(@high_issues),
+          "medium_issues"           => JSON::Any.new(@medium_issues),
+          "low_issues"              => JSON::Any.new(@low_issues),
+          "total_issues"            => JSON::Any.new(@total_issues),
         }
       end
     end
@@ -198,10 +198,10 @@ module CQL::Performance
 
       def to_h : Hash(String, JSON::Any)
         {
-          "slowest_queries" => JSON::Any.new(@slowest_queries.map { |q| PerformanceMetrics.to_json_any(q.to_h) }),
-          "most_frequent_queries" => JSON::Any.new(@most_frequent_queries.map { |q| PerformanceMetrics.to_json_any(q) }),
-          "highest_error_queries" => JSON::Any.new(@highest_error_queries.map { |q| PerformanceMetrics.to_json_any(q) }),
-          "most_expensive_queries" => JSON::Any.new(@most_expensive_queries.map { |q| PerformanceMetrics.to_json_any(q) }),
+          "slowest_queries"        => JSON::Any.new(@slowest_queries.map { |query| PerformanceMetrics.to_json_any(query.to_h) }),
+          "most_frequent_queries"  => JSON::Any.new(@most_frequent_queries.map { |query| PerformanceMetrics.to_json_any(query) }),
+          "highest_error_queries"  => JSON::Any.new(@highest_error_queries.map { |query| PerformanceMetrics.to_json_any(query) }),
+          "most_expensive_queries" => JSON::Any.new(@most_expensive_queries.map { |query| PerformanceMetrics.to_json_any(query) }),
         }
       end
     end
@@ -218,10 +218,10 @@ module CQL::Performance
 
       def to_h : Hash(String, JSON::Any)
         {
-          "n_plus_one_patterns" => JSON::Any.new(@n_plus_one_patterns.map { |p| PerformanceMetrics.to_json_any(p.to_h) }),
-          "query_patterns" => JSON::Any.new(@query_patterns.map { |p| PerformanceMetrics.to_json_any(p) }),
-          "time_distribution" => PerformanceMetrics.to_json_any(@time_distribution),
-          "error_patterns" => JSON::Any.new(@error_patterns.map { |p| PerformanceMetrics.to_json_any(p) }),
+          "n_plus_one_patterns" => JSON::Any.new(@n_plus_one_patterns.map { |pattern| PerformanceMetrics.to_json_any(pattern.to_h) }),
+          "query_patterns"      => JSON::Any.new(@query_patterns.map { |pattern| PerformanceMetrics.to_json_any(pattern) }),
+          "time_distribution"   => PerformanceMetrics.to_json_any(@time_distribution),
+          "error_patterns"      => JSON::Any.new(@error_patterns.map { |pattern| PerformanceMetrics.to_json_any(pattern) }),
         }
       end
     end
@@ -247,7 +247,7 @@ module CQL::Performance
       @top_queries : TopQueries,
       @patterns : PerformancePatterns,
       @issues : Array(Issue),
-      @collection_duration : Time::Span = Time::Span.zero
+      @collection_duration : Time::Span = Time::Span.zero,
     )
     end
 
@@ -257,7 +257,7 @@ module CQL::Performance
       detector : NPlusOneDetectorInterface? = nil,
       cache : Cache? = nil,
       start_time : Time? = nil,
-      config : Config? = nil
+      config : Config? = nil,
     ) : self
       start_time ||= Time.utc
       collection_duration = Time.utc - start_time
@@ -302,16 +302,16 @@ module CQL::Performance
     # Export all metrics as a comprehensive hash
     def to_h : Hash(String, JSON::Any)
       {
-        "timestamp" => JSON::Any.new(@timestamp.to_rfc3339),
+        "timestamp"                   => JSON::Any.new(@timestamp.to_rfc3339),
         "collection_duration_seconds" => JSON::Any.new(@collection_duration.total_seconds),
-        "query_metrics" => JSON::Any.new(@query_metrics.to_h),
-        "n_plus_one_metrics" => JSON::Any.new(@n_plus_one_metrics.to_h),
-        "cache_metrics" => JSON::Any.new(@cache_metrics.to_h),
-        "system_metrics" => JSON::Any.new(@system_metrics.to_h),
-        "health_metrics" => JSON::Any.new(@health_metrics.to_h),
-        "top_queries" => JSON::Any.new(@top_queries.to_h),
-        "patterns" => JSON::Any.new(@patterns.to_h),
-        "issues" => JSON::Any.new(@issues.map { |i| PerformanceMetrics.to_json_any(i.to_h) }),
+        "query_metrics"               => JSON::Any.new(@query_metrics.to_h),
+        "n_plus_one_metrics"          => JSON::Any.new(@n_plus_one_metrics.to_h),
+        "cache_metrics"               => JSON::Any.new(@cache_metrics.to_h),
+        "system_metrics"              => JSON::Any.new(@system_metrics.to_h),
+        "health_metrics"              => JSON::Any.new(@health_metrics.to_h),
+        "top_queries"                 => JSON::Any.new(@top_queries.to_h),
+        "patterns"                    => JSON::Any.new(@patterns.to_h),
+        "issues"                      => JSON::Any.new(@issues.map { |i| PerformanceMetrics.to_json_any(i.to_h) }),
       }
     end
 
@@ -323,14 +323,14 @@ module CQL::Performance
     # Get summary metrics for quick overview
     def summary : Hash(String, String | Int32 | Int64 | Float64)
       {
-        "total_queries" => @query_metrics.total_queries,
-        "slow_queries" => @query_metrics.slow_queries,
-        "error_rate_percent" => @query_metrics.error_rate,
-        "avg_query_time_ms" => @query_metrics.avg_execution_time.total_milliseconds,
+        "total_queries"       => @query_metrics.total_queries,
+        "slow_queries"        => @query_metrics.slow_queries,
+        "error_rate_percent"  => @query_metrics.error_rate,
+        "avg_query_time_ms"   => @query_metrics.avg_execution_time.total_milliseconds,
         "n_plus_one_patterns" => @n_plus_one_metrics.total_patterns,
-        "health_score" => @health_metrics.overall_health_score.to_s,
-        "total_issues" => @health_metrics.total_issues,
-        "uptime_seconds" => @system_metrics.uptime.total_seconds,
+        "health_score"        => @health_metrics.overall_health_score.to_s,
+        "total_issues"        => @health_metrics.total_issues,
+        "uptime_seconds"      => @system_metrics.uptime.total_seconds,
       }
     end
 
@@ -400,7 +400,7 @@ module CQL::Performance
 
       # Count slow queries
       slow_queries = profiler.slowest_queries(1000).size.to_i64
-      very_slow_queries = profiler.slowest_queries(1000).select { |q| q.execution_time > 1.second }.size.to_i64
+      very_slow_queries = profiler.slowest_queries(1000).count { |query| query.execution_time > 1.second }
 
       # Calculate rates
       error_rate = 0.0 # TODO: Track errors properly
@@ -434,10 +434,10 @@ module CQL::Performance
       max_repetitions = patterns.max_of?(&.repetition_count) || 0
 
       # Count by severity
-      critical_patterns = patterns.count { |p| p.repetition_count > 50 }
-      high_patterns = patterns.count { |p| p.repetition_count > 20 && p.repetition_count <= 50 }
-      medium_patterns = patterns.count { |p| p.repetition_count > 5 && p.repetition_count <= 20 }
-      low_patterns = patterns.count { |p| p.repetition_count > 2 && p.repetition_count <= 5 }
+      critical_patterns = patterns.count { |pattern| pattern.repetition_count > 50 }
+      high_patterns = patterns.count { |pattern| pattern.repetition_count > 20 && pattern.repetition_count <= 50 }
+      medium_patterns = patterns.count { |pattern| pattern.repetition_count > 5 && pattern.repetition_count <= 20 }
+      low_patterns = patterns.count { |pattern| pattern.repetition_count > 2 && pattern.repetition_count <= 5 }
 
       # Detection rate (placeholder)
       detection_rate = 0.0
@@ -465,10 +465,10 @@ module CQL::Performance
         0_i64, # cache_hits
         0_i64, # cache_misses
         cache.size,
-        1000,  # max_cache_size
-        0.0,   # hit_rate
-        0.0,   # miss_rate
-        0_i64  # evictions
+        1000, # max_cache_size
+        0.0,  # hit_rate
+        0.0,  # miss_rate
+        0_i64 # evictions
       )
     end
 
@@ -478,11 +478,11 @@ module CQL::Performance
       # Placeholder values - would need system monitoring
       SystemMetrics.new(
         uptime,
-        0.0,   # memory_usage_mb
-        0.0,   # cpu_usage_percent
-        0,     # active_connections
-        100,   # max_connections
-        0.0    # connection_pool_utilization
+        0.0, # memory_usage_mb
+        0.0, # cpu_usage_percent
+        0,   # active_connections
+        100, # max_connections
+        0.0  # connection_pool_utilization
       )
     end
 
@@ -506,7 +506,7 @@ module CQL::Performance
         query_health_score,
         n_plus_one_health_score,
         cache_health_score,
-        system_health_score
+        system_health_score,
       ].sum / 4).to_i
 
       HealthMetrics.new(
@@ -540,11 +540,11 @@ module CQL::Performance
       stats = profiler.statistics
       most_frequent = stats.map do |sql, stat|
         {
-          sql: sql,
-          count: stat[:count].to_i64,
-          avg_time: stat[:avg_ms].milliseconds
+          sql:      sql,
+          count:    stat[:count].to_i64,
+          avg_time: stat[:avg_ms].milliseconds,
         }
-      end.sort_by(&.[:count]).reverse!.first(10)
+      end.sort_by!(&.[:count]).reverse!.first(10)
 
       # Highest error queries (placeholder)
       highest_error_queries = [] of NamedTuple(sql: String, errors: Int64, error_rate: Float64)
@@ -552,11 +552,11 @@ module CQL::Performance
       # Most expensive queries (total time)
       most_expensive = stats.map do |sql, stat|
         {
-          sql: sql,
+          sql:        sql,
           total_time: stat[:total_ms].milliseconds,
-          count: stat[:count].to_i64
+          count:      stat[:count].to_i64,
         }
-      end.sort_by(&.[:total_time]).reverse!.first(10)
+      end.sort_by!(&.[:total_time]).reverse!.first(10)
 
       TopQueries.new(slowest_queries, most_frequent, highest_error_queries, most_expensive)
     end
@@ -571,18 +571,18 @@ module CQL::Performance
         stats = profiler.statistics
         query_patterns = stats.map do |sql, stat|
           {
-            pattern: sql,
-            count: stat[:count].to_i64,
-            avg_time: stat[:avg_ms].milliseconds
+            pattern:  sql,
+            count:    stat[:count].to_i64,
+            avg_time: stat[:avg_ms].milliseconds,
           }
-        end.sort_by(&.[:count]).reverse!.first(20)
+        end.sort_by!(&.[:count]).reverse!.first(20)
       end
 
       # Time distribution
       time_distribution = {
-        "fast" => 0_i64,
-        "slow" => 0_i64,
-        "very_slow" => 0_i64
+        "fast"      => 0_i64,
+        "slow"      => 0_i64,
+        "very_slow" => 0_i64,
       }
 
       # Error patterns (placeholder)
@@ -606,7 +606,7 @@ module CQL::Performance
 
       total_queries = stats.values.sum(&.[:count])
       slow_queries = profiler.slowest_queries(1000).size
-      very_slow_queries = profiler.slowest_queries(1000).select { |q| q.execution_time > 1.second }.size
+      very_slow_queries = profiler.slowest_queries(1000).count { |query| query.execution_time > 1.second }
 
       score = 100
       score -= (slow_queries.to_f / total_queries * 20).to_i if total_queries > 0
@@ -620,8 +620,8 @@ module CQL::Performance
       patterns = detector.patterns
       return 100 if patterns.empty?
 
-      critical_patterns = patterns.count { |p| p.repetition_count > 50 }
-      high_patterns = patterns.count { |p| p.repetition_count > 20 }
+      critical_patterns = patterns.count { |pattern| pattern.repetition_count > 50 }
+      high_patterns = patterns.count { |pattern| pattern.repetition_count > 20 }
 
       score = 100
       score -= critical_patterns * 30
@@ -641,13 +641,13 @@ module CQL::Performance
   struct QueryData
     def to_h : Hash(String, JSON::Any)
       {
-        "sql" => JSON::Any.new(@sql),
-        "params" => PerformanceMetrics.to_json_any(@params),
+        "sql"               => JSON::Any.new(@sql),
+        "params"            => PerformanceMetrics.to_json_any(@params),
         "execution_time_ms" => JSON::Any.new(@execution_time.total_milliseconds),
-        "timestamp" => JSON::Any.new(@timestamp.to_rfc3339),
-        "rows_affected" => JSON::Any.new(@rows_affected || 0_i64),
-        "error" => JSON::Any.new(@error || ""),
-        "normalized_sql" => JSON::Any.new(normalized_sql),
+        "timestamp"         => JSON::Any.new(@timestamp.to_rfc3339),
+        "rows_affected"     => JSON::Any.new(@rows_affected || 0_i64),
+        "error"             => JSON::Any.new(@error || ""),
+        "normalized_sql"    => JSON::Any.new(normalized_sql),
       }
     end
   end
@@ -656,10 +656,10 @@ module CQL::Performance
   struct NPlusOnePattern
     def to_h : Hash(String, JSON::Any)
       {
-        "parent_query" => JSON::Any.new(@parent_query),
-        "repeated_query" => JSON::Any.new(@repeated_query),
+        "parent_query"     => JSON::Any.new(@parent_query),
+        "repeated_query"   => JSON::Any.new(@repeated_query),
         "repetition_count" => JSON::Any.new(@repetition_count),
-        "timestamp" => JSON::Any.new(@timestamp.to_rfc3339),
+        "timestamp"        => JSON::Any.new(@timestamp.to_rfc3339),
       }
     end
   end
@@ -668,10 +668,10 @@ module CQL::Performance
   struct Issue
     def to_h : Hash(String, JSON::Any)
       {
-        "type" => JSON::Any.new(@type.to_s),
-        "severity" => JSON::Any.new(@severity.to_s),
-        "message" => JSON::Any.new(@message),
-        "details" => PerformanceMetrics.to_json_any(@details),
+        "type"      => JSON::Any.new(@type.to_s),
+        "severity"  => JSON::Any.new(@severity.to_s),
+        "message"   => JSON::Any.new(@message),
+        "details"   => PerformanceMetrics.to_json_any(@details),
         "timestamp" => JSON::Any.new(@timestamp.to_rfc3339),
       }
     end

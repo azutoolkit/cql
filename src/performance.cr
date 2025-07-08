@@ -108,11 +108,11 @@ module CQL::Performance
   end
 
   # Performance Metrics convenience methods
-  def self.get_metrics : PerformanceMetrics
+  def self.metrics : PerformanceMetrics
     monitor.metrics
   end
 
-  def self.get_metrics_summary : Hash(String, String | Int64 | Float64)
+  def self.metrics_summary : Hash(String, String | Int64 | Float64)
     monitor.metrics_summary
   end
 
@@ -120,11 +120,11 @@ module CQL::Performance
     monitor.healthy?
   end
 
-  def self.get_critical_issues : Array(Issue)
+  def self.critical_issues : Array(Issue)
     monitor.critical_issues
   end
 
-  def self.get_high_priority_issues : Array(Issue)
+  def self.high_priority_issues : Array(Issue)
     monitor.high_priority_issues
   end
 
