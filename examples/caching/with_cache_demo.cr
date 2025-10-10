@@ -125,10 +125,10 @@ class WithCacheDemo
 
     success("Caching system configured")
     configuration_block("Cache Configuration", {
-      "Cache Type"     => "Memory",
-      "Max Size"       => "1000 entries",
-      "Default TTL"    => "30 minutes",
-      "Cache Name"     => CQL::Cache::Cache.cache_name,
+      "Cache Type"  => "Memory",
+      "Max Size"    => "1000 entries",
+      "Default TTL" => "30 minutes",
+      "Cache Name"  => CQL::Cache::Cache.cache_name,
     })
   end
 
@@ -187,10 +187,10 @@ class WithCacheDemo
     cache_key = "demo:basic:hash"
     result = CQL::Cache::Cache.with_cache(cache_key, 5.minutes) do
       {
-        "name" => "John Doe",
-        "age" => 30,
-        "city" => "New York",
-        "active" => true
+        "name"   => "John Doe",
+        "age"    => 30,
+        "city"   => "New York",
+        "active" => true,
       }
     end
     database_operation("Cached hash result", result.to_s)
@@ -245,11 +245,11 @@ class WithCacheDemo
     cache_key = "demo:complex:stats"
     stats = CQL::Cache::Cache.with_cache(cache_key, 15.minutes) do
       {
-        "total_products" => Product.count,
-        "total_orders" => Order.count,
+        "total_products"    => Product.count,
+        "total_orders"      => Order.count,
         "avg_product_price" => Product.all.map(&.price).sum / Product.count,
-        "categories" => Product.all.map(&.category).uniq,
-        "generated_at" => Time.utc.to_s
+        "categories"        => Product.all.map(&.category).uniq,
+        "generated_at"      => Time.utc.to_s,
       }
     end
     database_operation("Cached statistics", stats.to_s)
@@ -290,9 +290,9 @@ class WithCacheDemo
       sleep(0.2.seconds) # Simulate complex query
       # Simulate complex join result
       {
-        "total_revenue" => Order.all.map(&.total_amount).sum,
-        "top_customers" => Order.all.sort_by(&.total_amount).reverse.first(3).map(&.customer_name),
-        "product_categories" => Product.all.map(&.category).tally
+        "total_revenue"      => Order.all.map(&.total_amount).sum,
+        "top_customers"      => Order.all.sort_by(&.total_amount).reverse.first(3).map(&.customer_name),
+        "product_categories" => Product.all.map(&.category).tally,
       }
     end
     database_operation("Complex join result", result.to_s)
@@ -314,9 +314,9 @@ class WithCacheDemo
 
     # Example 2: Using hash parameters
     params_hash = {
-      "category" => "Electronics",
+      "category"  => "Electronics",
       "min_price" => 50.0,
-      "limit" => 10
+      "limit"     => 10,
     }
     result = CQL::Cache::Cache.with_cache("products_filter", params_hash, 10.minutes) do
       Product.where(category: "Electronics").limit(10).all
@@ -427,10 +427,10 @@ class WithCacheDemo
     cache_hits_time = Time.monotonic - start_time
 
     performance_block("Performance Comparison", {
-      "Without Cache" => "#{execution_time(without_cache_time)}",
+      "Without Cache"          => "#{execution_time(without_cache_time)}",
       "With Cache (First Run)" => "#{execution_time(with_cache_time)}",
-      "With Cache (Hits)" => "#{execution_time(cache_hits_time)}",
-      "Cache Hit Speedup" => "#{(without_cache_time.total_seconds / cache_hits_time.total_seconds).round(2)}x faster",
+      "With Cache (Hits)"      => "#{execution_time(cache_hits_time)}",
+      "Cache Hit Speedup"      => "#{(without_cache_time.total_seconds / cache_hits_time.total_seconds).round(2)}x faster",
     })
   end
 
