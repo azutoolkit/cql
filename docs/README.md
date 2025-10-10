@@ -96,7 +96,7 @@ crystal examples/run_examples.cr
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.395
+    version: ~> 0.0.435
   pg: # PostgreSQL driver
     github: will/crystal-pg
     version: ~> 0.26.0
@@ -146,7 +146,7 @@ struct User
   getter updated_at : Time?
 
   # Type-safe relationships
-  has_many :posts, Post, foreign_key: :user_id
+  has_many :posts, foreign_key: :user_id
 
   # Built-in validations
   validate :name, presence: true, size: 2..50

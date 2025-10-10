@@ -104,11 +104,11 @@ struct Comment
   end
 
   # Association: Each Comment belongs to one Post
-  belongs_to :post, Post, foreign_key: :post_id
+  belongs_to :post, Post, :post_id
 end
 ```
 
-In the `Comment` model, we specify the `belongs_to :post, Post, foreign_key: :post_id` association. This links each comment to its parent post. The `Comment` model must have a `post_id` attribute (matching the `foreign_key` option) that stores the `id` of the associated `Post`.
+In the `Comment` model, we specify the `belongs_to :post, Post, :post_id` association. This links each comment to its parent post. The `Comment` model must have a `post_id` attribute (matching the `foreign_key` option) that stores the `id` of the associated `Post`.
 
 ---
 

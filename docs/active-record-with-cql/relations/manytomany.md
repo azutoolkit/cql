@@ -92,7 +92,8 @@ Let's define the `Post`, `Tag`, and `PostTag` models in CQL, establishing the `M
 ### **Post Model**
 
 ```crystal
-struct Post < CQL::ActiveRecord::Model(Int64)
+struct Post
+  include CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :posts
 
   property id : Int64?
@@ -115,7 +116,8 @@ end
 ### **Tag Model**
 
 ```crystal
-struct Tag < CQL::ActiveRecord::Model(Int64)
+struct Tag
+  include CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :tags
 
   property id : Int64?
@@ -135,7 +137,8 @@ end
 ### **PostTag Model (Join Model)**
 
 ```crystal
-struct PostTag < CQL::ActiveRecord::Model(Int64)
+struct PostTag
+  include CQL::ActiveRecord::Model(Int64)
   db_context AcmeDB, :post_tags
 
   property id : Int64?
@@ -147,8 +150,8 @@ struct PostTag < CQL::ActiveRecord::Model(Int64)
   end
 
   # Associations to the parent models
-  belongs_to :post, Post, foreign_key: :post_id
-  belongs_to :tag, Tag, foreign_key: :tag_id
+  belongs_to :post, Post, :post_id
+  belongs_to :tag, Tag, :tag_id
 end
 ```
 

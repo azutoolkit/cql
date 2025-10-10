@@ -82,7 +82,7 @@ Add CQL and your database driver to your `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.374"
+    version: "~> 0.0.435"
 
   # Choose your database driver:
   pg: # For PostgreSQL
@@ -155,7 +155,7 @@ struct User
   getter updated_at : Time?
 
   # Compile-time validated relationships
-  has_many :posts, Post, foreign_key: :user_id
+  has_many :posts, foreign_key: :user_id
 
   # Built-in validations with clear error messages
   validate :username, presence: true, size: 2..50
@@ -184,7 +184,7 @@ struct Post
   getter updated_at : Time?
 
   # Type-safe relationships prevent association errors
-  belongs_to :user, User, :user_id
+  belongs_to :user, User, foreign_key: :user_id
 
   # Comprehensive validations
   validate :title, presence: true, size: 1..100
@@ -331,14 +331,14 @@ end
 ```crystal
 struct User
   # Type-safe relationship definitions
-  has_one :profile, UserProfile
-  has_many :posts, Post, foreign_key: :user_id
-  has_many :comments, Comment
+  has_one :profile, UserProfile, foreign_key: :user_id
+  has_many :posts, foreign_key: :user_id
+  has_many :comments, foreign_key: :user_id
 end
 
 struct Post
-  belongs_to :user, User, :user_id
-  has_many :comments, Comment
+  belongs_to :user, User, foreign_key: :user_id
+  has_many :comments, foreign_key: :post_id
   many_to_many :tags, Tag, join_through: :post_tags
 end
 

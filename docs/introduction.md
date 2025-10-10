@@ -26,8 +26,8 @@ struct User
   property email : String
   property active : Bool = true
 
-  validates :email, presence: true, format: EMAIL_REGEX
-  has_many :posts, Post
+  validate :email, presence: true, match: EMAIL_REGEX
+  has_many :posts, foreign_key: :user_id
 end
 
 # Compile-time safe queries
@@ -94,7 +94,7 @@ Add to `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 1.0"
+    version: "~> 0.0.435"
 ```
 
 Basic example:
@@ -136,7 +136,7 @@ user = User.create!(name: "Alice", email: "alice@example.com")
 - **[Getting Started](guides/getting-started.md)** - Build your first app
 - **[Active Record Guide](guides/active-record-with-cql/README.md)** - Learn the patterns
 
-***
+---
 
 > Built for Crystal developers, by Crystal developers - CQL brings together the performance and safety of Crystal with the power and flexibility of modern ORM design.
 

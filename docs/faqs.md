@@ -92,8 +92,8 @@ A: Define validations in your model:
 
 ```crystal
 struct User
-  validates :name, presence: true, length: {minimum: 2}
-  validates :email, presence: true, format: EMAIL_REGEX, uniqueness: true
+  validate :name, presence: true, size: 2..100
+  validate :email, presence: true, match: EMAIL_REGEX
 end
 ```
 

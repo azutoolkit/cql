@@ -141,11 +141,11 @@ struct User
   property updated_at : Time?
 
   # Validations
-  validates :name, presence: true, length: {minimum: 2}
-  validates :email, presence: true, format: EMAIL_REGEX, uniqueness: true
+  validate :name, presence: true, size: 2..100
+  validate :email, presence: true, match: EMAIL_REGEX
 
   # Associations
-  has_many :posts, Post, foreign_key: :user_id
+  has_many :posts, foreign_key: :user_id
   has_one :profile, UserProfile, foreign_key: :user_id
 
   # Business logic methods

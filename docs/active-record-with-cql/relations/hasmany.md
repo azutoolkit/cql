@@ -90,7 +90,7 @@ struct Post
   # Association: A Post has many Comments
   # The `foreign_key` option specifies the column on the `comments` table
   # that references the `posts` table.
-  has_many :comments, Comment, foreign_key: :post_id
+  has_many :comments, foreign_key: :post_id
 end
 ```
 
@@ -112,11 +112,11 @@ struct Comment
   end
 
   # Association: A Comment belongs to one Post
-  belongs_to :post, Post, foreign_key: :post_id
+  belongs_to :post, Post, :post_id
 end
 ```
 
-- The `belongs_to :post, Post, foreign_key: :post_id` in the `Comment` model links each comment back to its post.
+- The `belongs_to :post, Post, :post_id` in the `Comment` model links each comment back to its post.
 
 ## Working with the `HasMany` Collection
 

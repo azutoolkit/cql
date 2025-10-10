@@ -95,10 +95,10 @@ struct User
   include CQL::ActiveRecord::Model(Int64)
   db_context BlogDB, :users
 
-  has_many :posts, Post
-  has_many :comments, Comment
+  has_many :posts, foreign_key: :user_id
+  has_many :comments, foreign_key: :user_id
 
-  validates :email, presence: true, uniqueness: true
+  validate :email, presence: true
 end
 ```
 

@@ -138,8 +138,8 @@ struct User
   # Virtual password attribute
   property password : String = ""
 
-  validates :email, presence: true, uniqueness: true, format: EMAIL_REGEX
-  validates :password, length: {minimum: 12}, confirmation: true, on: :create
+  validate :email, presence: true, match: EMAIL_REGEX
+  validate :password, size: 12..128
 
   before_save :hash_password, if: :password_changed?
 
@@ -477,27 +477,13 @@ end
 # Secure validation patterns
 struct User
   # Email validation with security considerations
-  validates :email,
-    presence: true,
-    length: {maximum: 254},  # RFC 5321 limit
-    format: /\A[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\z/,
-    uniqueness: {case_insensitive: true}
+  validate :email, presence: true, size: 1..254, match: /\A[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\z/
 
   # Password security requirements
-  validates :password,
-    length: {minimum: 12, maximum: 128},
-    format: {
-      with: /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/,
-      message: "must contain uppercase, lowercase, number, and special character"
-    }
+  validate :password, size: 12..128, match: /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/
 
   # Prevent malicious content
-  validates :name,
-    length: {minimum: 1, maximum: 100},
-    format: {
-      without: /<script|javascript:|data:|vbscript:/i,
-      message: "contains prohibited content"
-    }
+  validate :name, size: 1..100, match: /^((?!<script|javascript:|data:|vbscript:).)*$/i
 
   # Custom security validations
   validate :no_sql_injection_patterns

@@ -8,16 +8,16 @@ CQL supports multiple design patterns, giving you the flexibility to choose the 
 
 ## 📋 Table of Contents
 
-* [🎯 Pattern Overview](./#-pattern-overview)
-* [📊 Pattern Comparison](./#-pattern-comparison)
-* [🏛️ Active Record Pattern](./#️-active-record-pattern)
-* [📦 Repository Pattern](./#-repository-pattern)
-* [🔄 Data Mapper Pattern](./#-data-mapper-pattern)
-* [🎨 Pattern Selection Guide](./#-pattern-selection-guide)
-* [🔄 Migration Strategies](./#-migration-strategies)
-* [💡 Best Practices](./#-best-practices)
+- [🎯 Pattern Overview](./#-pattern-overview)
+- [📊 Pattern Comparison](./#-pattern-comparison)
+- [🏛️ Active Record Pattern](./#️-active-record-pattern)
+- [📦 Repository Pattern](./#-repository-pattern)
+- [🔄 Data Mapper Pattern](./#-data-mapper-pattern)
+- [🎨 Pattern Selection Guide](./#-pattern-selection-guide)
+- [🔄 Migration Strategies](./#-migration-strategies)
+- [💡 Best Practices](./#-best-practices)
 
-***
+---
 
 ## 🎯 Pattern Overview
 
@@ -51,27 +51,27 @@ graph TD
 
 **"An object that wraps a row in a database table"**
 
-* Models contain both data and behavior
-* Database operations are methods on the model
-* Ideal for rapid development and simple domains
+- Models contain both data and behavior
+- Database operations are methods on the model
+- Ideal for rapid development and simple domains
 
 ### 📦 **Repository Pattern**
 
 **"A collection-like interface for accessing domain objects"**
 
-* Separates data access logic from business logic
-* Provides a uniform interface for data operations
-* Excellent for testing and complex queries
+- Separates data access logic from business logic
+- Provides a uniform interface for data operations
+- Excellent for testing and complex queries
 
 ### 🔄 **Data Mapper Pattern**
 
 **"A layer that moves data between objects and database"**
 
-* Complete separation between domain and persistence
-* Maximum flexibility for complex domain models
-* Ideal for sophisticated business logic
+- Complete separation between domain and persistence
+- Maximum flexibility for complex domain models
+- Ideal for sophisticated business logic
 
-***
+---
 
 ## 📊 Pattern Comparison
 
@@ -89,29 +89,29 @@ graph TD
 
 **Choose Active Record when:**
 
-* Building CRUD-heavy applications
-* Working with simple domain models
-* Prioritizing rapid development
-* Team is new to ORMs
-* Requirements are stable
+- Building CRUD-heavy applications
+- Working with simple domain models
+- Prioritizing rapid development
+- Team is new to ORMs
+- Requirements are stable
 
 **Choose Repository when:**
 
-* Need clear separation of concerns
-* Building data-centric applications
-* Complex querying requirements
-* High testability requirements
-* Multiple data sources
+- Need clear separation of concerns
+- Building data-centric applications
+- Complex querying requirements
+- High testability requirements
+- Multiple data sources
 
 **Choose Data Mapper when:**
 
-* Complex business domain
-* Rich domain models with sophisticated logic
-* Need complete persistence ignorance
-* Working with legacy databases
-* Maximum flexibility required
+- Complex business domain
+- Rich domain models with sophisticated logic
+- Need complete persistence ignorance
+- Working with legacy databases
+- Maximum flexibility required
 
-***
+---
 
 ## 🏛️ Active Record Pattern
 
@@ -121,10 +121,10 @@ The Active Record pattern combines data and behavior in a single object, making 
 
 ### 🎯 Key Characteristics
 
-* **Data + Behavior**: Models contain both properties and business logic
-* **Direct Database Access**: Objects can save, update, and delete themselves
-* **Inheritance-based**: Models inherit persistence capabilities
-* **Convention over Configuration**: Sensible defaults reduce boilerplate
+- **Data + Behavior**: Models contain both properties and business logic
+- **Direct Database Access**: Objects can save, update, and delete themselves
+- **Inheritance-based**: Models inherit persistence capabilities
+- **Convention over Configuration**: Sensible defaults reduce boilerplate
 
 ### 📝 Implementation in CQL
 
@@ -141,11 +141,11 @@ struct User
   property updated_at : Time?
 
   # Validations
-  validates :name, presence: true, length: {minimum: 2}
-  validates :email, presence: true, format: EMAIL_REGEX, uniqueness: true
+  validate :name, presence: true, size: 2..100
+  validate :email, presence: true, match: EMAIL_REGEX
 
   # Associations
-  has_many :posts, Post, foreign_key: :user_id
+  has_many :posts, foreign_key: :user_id
   has_one :profile, UserProfile, foreign_key: :user_id
 
   # Business logic methods
@@ -193,29 +193,29 @@ user.deactivate!  # Custom business logic
 
 ### ✅ Advantages
 
-* **Rapid Development**: Quick to implement and understand
-* **Intuitive API**: Natural object-oriented interface
-* **Rich Query Interface**: Built-in querying capabilities
-* **Automatic Persistence**: Objects know how to save themselves
-* **Convention-based**: Minimal configuration required
+- **Rapid Development**: Quick to implement and understand
+- **Intuitive API**: Natural object-oriented interface
+- **Rich Query Interface**: Built-in querying capabilities
+- **Automatic Persistence**: Objects know how to save themselves
+- **Convention-based**: Minimal configuration required
 
 ### ❌ Disadvantages
 
-* **Tight Coupling**: Domain logic tied to persistence layer
-* **Limited Testability**: Harder to mock database operations
-* **Inheritance Constraints**: Models must inherit from base class
-* **Database Leakage**: Database concerns can leak into domain logic
+- **Tight Coupling**: Domain logic tied to persistence layer
+- **Limited Testability**: Harder to mock database operations
+- **Inheritance Constraints**: Models must inherit from base class
+- **Database Leakage**: Database concerns can leak into domain logic
 
 ### 🎯 Best Use Cases
 
-* **CRUD Applications**: Admin panels, content management systems
-* **Rapid Prototyping**: Quick MVPs and proof-of-concepts
-* **Simple Domains**: Straightforward business logic
-* **Small Teams**: Easy for new developers to understand
+- **CRUD Applications**: Admin panels, content management systems
+- **Rapid Prototyping**: Quick MVPs and proof-of-concepts
+- **Simple Domains**: Straightforward business logic
+- **Small Teams**: Easy for new developers to understand
 
 **👉** [**Learn Active Record in Detail →**](active-record.md)
 
-***
+---
 
 ## 📦 Repository Pattern
 
@@ -225,10 +225,10 @@ The Repository pattern provides a uniform interface for accessing data, regardle
 
 ### 🎯 Key Characteristics
 
-* **Collection Interface**: Treat database like an in-memory collection
-* **Abstraction Layer**: Hide persistence details from domain logic
-* **Centralized Queries**: All data access logic in one place
-* **Testability**: Easy to mock for unit testing
+- **Collection Interface**: Treat database like an in-memory collection
+- **Abstraction Layer**: Hide persistence details from domain logic
+- **Centralized Queries**: All data access logic in one place
+- **Testability**: Easy to mock for unit testing
 
 ### 📝 Implementation in CQL
 
@@ -401,25 +401,25 @@ user_count = repo.count_active_users
 
 ### ✅ Advantages
 
-* **Separation of Concerns**: Clean boundary between domain and data access
-* **Testability**: Easy to mock repositories for unit testing
-* **Flexibility**: Can swap data sources without changing domain logic
-* **Centralized Queries**: All data access logic in one place
-* **Collection Metaphor**: Intuitive interface for domain objects
+- **Separation of Concerns**: Clean boundary between domain and data access
+- **Testability**: Easy to mock repositories for unit testing
+- **Flexibility**: Can swap data sources without changing domain logic
+- **Centralized Queries**: All data access logic in one place
+- **Collection Metaphor**: Intuitive interface for domain objects
 
 ### ❌ Disadvantages
 
-* **More Code**: Requires additional repository classes
-* **Mapping Overhead**: Manual mapping between database and domain objects
-* **Learning Curve**: More complex than Active Record
-* **Potential Duplication**: May duplicate some CRUD logic
+- **More Code**: Requires additional repository classes
+- **Mapping Overhead**: Manual mapping between database and domain objects
+- **Learning Curve**: More complex than Active Record
+- **Potential Duplication**: May duplicate some CRUD logic
 
 ### 🎯 Best Use Cases
 
-* **Complex Querying**: Applications with sophisticated data access patterns
-* **High Testability**: When unit testing is critical
-* **Multiple Data Sources**: When you need to abstract data access
-* **Team Collaboration**: Clear boundaries for different team members
+- **Complex Querying**: Applications with sophisticated data access patterns
+- **High Testability**: When unit testing is critical
+- **Multiple Data Sources**: When you need to abstract data access
+- **Team Collaboration**: Clear boundaries for different team members
 
 ### 🧪 Testing with Repository Pattern
 
@@ -472,7 +472,7 @@ end
 
 **👉** [**Learn Repository Pattern in Detail →**](repository.md)
 
-***
+---
 
 ## 🔄 Data Mapper Pattern
 
@@ -482,10 +482,10 @@ The Data Mapper pattern provides complete separation between domain objects and 
 
 ### 🎯 Key Characteristics
 
-* **Complete Separation**: Domain objects know nothing about persistence
-* **Mapper Layer**: Dedicated classes handle object-relational mapping
-* **Persistence Ignorance**: Domain objects focus purely on business logic
-* **Maximum Flexibility**: Can map any object structure to any database schema
+- **Complete Separation**: Domain objects know nothing about persistence
+- **Mapper Layer**: Dedicated classes handle object-relational mapping
+- **Persistence Ignorance**: Domain objects focus purely on business logic
+- **Maximum Flexibility**: Can map any object structure to any database schema
 
 ### 📝 Implementation Concept in CQL
 
@@ -700,30 +700,30 @@ end
 
 ### ✅ Advantages
 
-* **Complete Separation**: Domain objects are completely ignorant of persistence
-* **Rich Domain Models**: Full focus on business logic and behavior
-* **Flexibility**: Can map any object structure to any database schema
-* **Testability**: Domain objects are pure and easy to test
-* **Legacy Integration**: Can work with existing database schemas
+- **Complete Separation**: Domain objects are completely ignorant of persistence
+- **Rich Domain Models**: Full focus on business logic and behavior
+- **Flexibility**: Can map any object structure to any database schema
+- **Testability**: Domain objects are pure and easy to test
+- **Legacy Integration**: Can work with existing database schemas
 
 ### ❌ Disadvantages
 
-* **Complexity**: Requires significant additional code and abstractions
-* **Learning Curve**: Most complex pattern to understand and implement
-* **Performance**: Additional mapping layer can impact performance
-* **Development Time**: Slower initial development compared to other patterns
+- **Complexity**: Requires significant additional code and abstractions
+- **Learning Curve**: Most complex pattern to understand and implement
+- **Performance**: Additional mapping layer can impact performance
+- **Development Time**: Slower initial development compared to other patterns
 
 ### 🎯 Best Use Cases
 
-* **Complex Domain Logic**: Rich business rules and sophisticated models
-* **Legacy Database Integration**: Working with existing, non-optimal schemas
-* **Domain-Driven Design**: When following DDD principles strictly
-* **Large Teams**: Clear separation enables parallel development
-* **Long-term Projects**: Investment in flexibility pays off over time
+- **Complex Domain Logic**: Rich business rules and sophisticated models
+- **Legacy Database Integration**: Working with existing, non-optimal schemas
+- **Domain-Driven Design**: When following DDD principles strictly
+- **Large Teams**: Clear separation enables parallel development
+- **Long-term Projects**: Investment in flexibility pays off over time
 
 **👉** [**Learn Data Mapper Concepts →**](entity-framework.md)
 
-***
+---
 
 ## 🎨 Pattern Selection Guide
 
@@ -755,30 +755,30 @@ flowchart TD
 
 #### Choose **Active Record** if:
 
-* [ ] Building CRUD-heavy applications
-* [ ] Simple domain models with basic business logic
-* [ ] Rapid development is priority
-* [ ] Team is new to ORMs or has limited experience
-* [ ] Small to medium application size
-* [ ] Requirements are well-defined and stable
+- [ ] Building CRUD-heavy applications
+- [ ] Simple domain models with basic business logic
+- [ ] Rapid development is priority
+- [ ] Team is new to ORMs or has limited experience
+- [ ] Small to medium application size
+- [ ] Requirements are well-defined and stable
 
 #### Choose **Repository** if:
 
-* [ ] Need clear separation between domain and data access
-* [ ] Complex querying requirements
-* [ ] High unit testing requirements
-* [ ] Multiple data sources or potential for data source changes
-* [ ] Medium to large application size
-* [ ] Team has moderate to high ORM experience
+- [ ] Need clear separation between domain and data access
+- [ ] Complex querying requirements
+- [ ] High unit testing requirements
+- [ ] Multiple data sources or potential for data source changes
+- [ ] Medium to large application size
+- [ ] Team has moderate to high ORM experience
 
 #### Choose **Data Mapper** if:
 
-* [ ] Complex business domain with rich models
-* [ ] Following Domain-Driven Design principles
-* [ ] Need complete persistence ignorance
-* [ ] Working with legacy or non-optimal database schemas
-* [ ] Large, long-term projects
-* [ ] Team has high experience with advanced patterns
+- [ ] Complex business domain with rich models
+- [ ] Following Domain-Driven Design principles
+- [ ] Need complete persistence ignorance
+- [ ] Working with legacy or non-optimal database schemas
+- [ ] Large, long-term projects
+- [ ] Team has high experience with advanced patterns
 
 ### 🎯 Hybrid Approaches
 
@@ -802,7 +802,7 @@ class OrderMapper
 end
 ```
 
-***
+---
 
 ## 🔄 Migration Strategies
 
@@ -871,7 +871,7 @@ class UserMapper
 end
 ```
 
-***
+---
 
 ## 💡 Best Practices
 
@@ -1028,26 +1028,26 @@ class UserRepository
 end
 ```
 
-***
+---
 
 ## 🎓 Summary
 
 Choosing the right data access pattern is crucial for building maintainable Crystal applications. Each pattern offers different trade-offs:
 
-* **🏛️ Active Record**: Perfect for rapid development and simple domains
-* **📦 Repository**: Ideal for testability and separation of concerns
-* **🔄 Data Mapper**: Best for complex domains and maximum flexibility
+- **🏛️ Active Record**: Perfect for rapid development and simple domains
+- **📦 Repository**: Ideal for testability and separation of concerns
+- **🔄 Data Mapper**: Best for complex domains and maximum flexibility
 
 Remember that you can mix patterns within the same application, and you can always evolve from simpler to more sophisticated patterns as your application grows.
 
 The key is to **start simple** and **refactor when complexity demands it**. CQL's flexible architecture supports all these patterns, giving you the freedom to choose what works best for your specific needs.
 
-***
+---
 
 > 🚀 **Ready to implement?** Choose your pattern and dive into the detailed guides for implementation examples and best practices!
 
 **Next Steps:**
 
-* [**Active Record Implementation →**](active-record.md)
-* [**Repository Implementation →**](repository.md)
-* [**Entity Framework Concepts →**](entity-framework.md)
+- [**Active Record Implementation →**](active-record.md)
+- [**Repository Implementation →**](repository.md)
+- [**Entity Framework Concepts →**](entity-framework.md)

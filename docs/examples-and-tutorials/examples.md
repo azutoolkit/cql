@@ -16,25 +16,25 @@ Our examples are organized by complexity and use case to help you find exactly w
 
 Perfect for beginners and those new to CQL:
 
-* [**Configuration Example**](../examples/configuration-example.md) - Database setup patterns for different environments
-* [**Blog Engine**](../examples/blog-engine.md) - Complete blog application with Active Record
-* [**Generated Schema Example**](../examples/generated-schema-example.md) - Working with existing database schemas
+- [**Configuration Example**](../examples/configuration-example.md) - Database setup patterns for different environments
+- [**Blog Engine**](../examples/blog-engine.md) - Complete blog application with Active Record
+- [**Generated Schema Example**](../examples/generated-schema-example.md) - Working with existing database schemas
 
 ### Migration & Schema Examples
 
 Database management and schema evolution:
 
-* [**Migration Configuration**](../examples/migration-configuration-example.md) - Setting up migrations for your project
-* [**Migrator Configuration**](../examples/migrator-config-example.md) - Advanced migration workflows
-* [**Schema Migration Workflow**](../examples/schema-migration-workflow.md) - End-to-end schema management
-* [**PostgreSQL Migration Workflow**](../examples/postgresql-migration-workflow.md) - PostgreSQL-specific patterns
+- [**Migration Configuration**](../examples/migration-configuration-example.md) - Setting up migrations for your project
+- [**Migrator Configuration**](../examples/migrator-config-example.md) - Advanced migration workflows
+- [**Schema Migration Workflow**](../examples/schema-migration-workflow.md) - End-to-end schema management
+- [**PostgreSQL Migration Workflow**](../examples/postgresql-migration-workflow.md) - PostgreSQL-specific patterns
 
 ### Performance & Monitoring Examples
 
 Optimization and monitoring techniques:
 
-* [**Performance Monitoring**](../examples/performance-monitoring-example.md) - Query analysis and optimization
-* [**Logger Report**](../examples/logger-report-example.md) - Performance reporting and logging
+- [**Performance Monitoring**](../examples/performance-monitoring-example.md) - Query analysis and optimization
+- [**Logger Report**](../examples/logger-report-example.md) - Performance reporting and logging
 
 ## Learning Paths
 
@@ -91,10 +91,10 @@ struct User
   include CQL::ActiveRecord::Model(Int64)
   db_context BlogDB, :users
 
-  has_many :posts, Post
-  has_many :comments, Comment
+  has_many :posts, foreign_key: :user_id
+  has_many :comments, foreign_key: :user_id
 
-  validates :email, presence: true, uniqueness: true
+  validate :email, presence: true
 end
 ```
 
@@ -141,9 +141,9 @@ end
 
 ### Choose the Right Example
 
-* **Beginner**: Start with [Configuration Example](../examples/configuration-example.md)
-* **Intermediate**: Try [Blog Engine](../examples/blog-engine.md) or [Schema Migration Workflow](../examples/schema-migration-workflow.md)
-* **Advanced**: Explore [Performance Monitoring](../examples/performance-monitoring-example.md)
+- **Beginner**: Start with [Configuration Example](../examples/configuration-example.md)
+- **Intermediate**: Try [Blog Engine](../examples/blog-engine.md) or [Schema Migration Workflow](../examples/schema-migration-workflow.md)
+- **Advanced**: Explore [Performance Monitoring](../examples/performance-monitoring-example.md)
 
 ### Follow Along
 
@@ -155,28 +155,28 @@ end
 
 ### Combine with Guides
 
-* Use examples alongside the [Guides](../getting-started/guides.md) for deeper understanding
-* Reference [Core Concepts](../foundation/core-concepts.md) for theoretical background
-* Check [Troubleshooting](../help-and-resources/troubleshooting.md) if you encounter issues
+- Use examples alongside the [Guides](../getting-started/guides.md) for deeper understanding
+- Reference [Core Concepts](../foundation/core-concepts.md) for theoretical background
+- Check [Troubleshooting](../help-and-resources/troubleshooting.md) if you encounter issues
 
 ## What Makes These Examples Special
 
 Each example is designed to be:
 
-* **Complete** - Full working code that you can run immediately
-* **Tested** - Verified to work with the latest CQL version
-* **Documented** - Clear explanations of what each part does
-* **Progressive** - Build complexity gradually
-* **Real-world** - Based on actual use cases and patterns
+- **Complete** - Full working code that you can run immediately
+- **Tested** - Verified to work with the latest CQL version
+- **Documented** - Clear explanations of what each part does
+- **Progressive** - Build complexity gradually
+- **Real-world** - Based on actual use cases and patterns
 
 ## Related Resources
 
-* [**Guides**](../getting-started/guides.md) - Detailed explanations of CQL features
-* [**Core Concepts**](../foundation/core-concepts.md) - Fundamental concepts and theory
-* [**Troubleshooting**](../help-and-resources/troubleshooting.md) - Solutions to common problems
-* [**Community**](../help-and-resources/community.md) - Get help from other developers
+- [**Guides**](../getting-started/guides.md) - Detailed explanations of CQL features
+- [**Core Concepts**](../foundation/core-concepts.md) - Fundamental concepts and theory
+- [**Troubleshooting**](../help-and-resources/troubleshooting.md) - Solutions to common problems
+- [**Community**](../help-and-resources/community.md) - Get help from other developers
 
-***
+---
 
 > Don't just read the examples - run them! The best way to learn CQL is by experimenting with the code and seeing how it behaves.
 

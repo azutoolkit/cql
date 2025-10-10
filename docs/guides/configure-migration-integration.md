@@ -334,10 +334,10 @@ class User
   property created_at : Time?
   property updated_at : Time?
 
-  has_many :posts, Post, foreign_key: :user_id
+  has_many :posts, foreign_key: :user_id
 
-  validates :username, presence: true, uniqueness: true
-  validates :email, presence: true, uniqueness: true, format: EMAIL_REGEX
+  validate :username, presence: true
+  validate :email, presence: true, match: EMAIL_REGEX
 end
 
 class Post
@@ -354,8 +354,8 @@ class Post
 
   belongs_to :user, User, :user_id
 
-  validates :title, presence: true, length: {min: 3, max: 255}
-  validates :user_id, presence: true
+  validate :title, presence: true, size: 3..255
+  validate :user_id, presence: true
 
   scope :published, -> { where(published: true) }
   scope :recent, -> { order(:created_at, :desc) }

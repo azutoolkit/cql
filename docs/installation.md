@@ -16,9 +16,9 @@ crystal --version
 
 **Database Server:** Choose one or more:
 
-* **SQLite** - Built into most systems (development/testing)
-* **PostgreSQL** - `brew install postgresql` (production recommended)
-* **MySQL** - `brew install mysql` (legacy support)
+- **SQLite** - Built into most systems (development/testing)
+- **PostgreSQL** - `brew install postgresql` (production recommended)
+- **MySQL** - `brew install mysql` (legacy support)
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ cd myapp
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.266"
+    version: "~> 0.0.435"
 
   # Choose your database driver
   sqlite3:
@@ -302,10 +302,10 @@ docker-compose up -d postgres
 
 **Connection Issues:**
 
-* Verify database server is running
-* Check connection string format
-* Confirm database exists
-* Verify user permissions
+- Verify database server is running
+- Check connection string format
+- Confirm database exists
+- Verify user permissions
 
 **Dependencies:**
 
@@ -317,12 +317,12 @@ shards install
 
 **Common Errors:**
 
-* `Database not found` - Create database first
-* `Permission denied` - Check user privileges
-* `Connection refused` - Verify server is running
+- `Database not found` - Create database first
+- `Permission denied` - Check user privileges
+- `Connection refused` - Verify server is running
 
 ## Next Steps
 
-* [Configuration Guide](guides/configuration.md) - Environment-specific setup
-* [Getting Started](guides/getting-started.md) - Build your first app
-* [Schema Design](core-concepts/schemas.md) - Design your database
+- [Configuration Guide](guides/configuration.md) - Environment-specific setup
+- [Getting Started](guides/getting-started.md) - Build your first app
+- [Schema Design](core-concepts/schemas.md) - Design your database

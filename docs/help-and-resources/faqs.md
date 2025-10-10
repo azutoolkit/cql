@@ -96,8 +96,8 @@ A: Define validations in your model:
 
 ```crystal
 struct User
-  validates :name, presence: true, length: {minimum: 2}
-  validates :email, presence: true, format: EMAIL_REGEX, uniqueness: true
+  validate :name, presence: true, size: 2..100
+  validate :email, presence: true, match: EMAIL_REGEX
 end
 ```
 
@@ -189,10 +189,10 @@ MyDB = CQL::Schema.define(
 
 A: Common optimization strategies:
 
-* Add appropriate indexes to frequently queried columns
-* Use `select` to limit returned columns
-* Use `includes` or `joins` to avoid N+1 queries
-* Implement pagination for large result sets
+- Add appropriate indexes to frequently queried columns
+- Use `select` to limit returned columns
+- Use `includes` or `joins` to avoid N+1 queries
+- Implement pagination for large result sets
 
 See [Performance Optimization](../guides/performance-optimization.md) for details.
 

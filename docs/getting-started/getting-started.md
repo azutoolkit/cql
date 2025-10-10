@@ -4,17 +4,17 @@ Welcome to CQL (Crystal Query Language)! This guide will walk you through settin
 
 CQL is a powerful Object-Relational Mapping (ORM) library that provides type-safe database interactions, migrations, and Active Record patterns for Crystal applications.
 
-***
+---
 
 ## Prerequisites
 
 Before getting started, ensure you have:
 
-* **Crystal** (latest stable version recommended)
-* **A supported database**: PostgreSQL, MySQL, or SQLite
-* **Database driver shards**: Depending on your database choice
+- **Crystal** (latest stable version recommended)
+- **A supported database**: PostgreSQL, MySQL, or SQLite
+- **Database driver shards**: Depending on your database choice
 
-***
+---
 
 ## 1. Installation
 
@@ -24,7 +24,7 @@ Add CQL and your database driver to your `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.266
+    version: ~> 0.0.435
 
   # Choose your database driver:
   pg: # For PostgreSQL
@@ -48,7 +48,7 @@ Then install dependencies:
 shards install
 ```
 
-***
+---
 
 ## 2. Database Setup
 
@@ -103,7 +103,7 @@ AcmeDB = CQL::Schema.define(
 end
 ```
 
-***
+---
 
 ## 3. Creating Your First Migration
 
@@ -133,7 +133,7 @@ class CreateUsers < CQL::Migration(1)
 end
 ```
 
-***
+---
 
 ## 4. Defining Your First Model
 
@@ -161,7 +161,7 @@ struct User
 end
 ```
 
-***
+---
 
 ## 5. Initialize Database and Run Migrations
 
@@ -209,7 +209,7 @@ migrator.up
 puts "✅ Database initialized with #{migrator.applied_migrations.size} migrations"
 ```
 
-***
+---
 
 ## 6. Basic CRUD Operations
 
@@ -325,7 +325,7 @@ User.where(active: false).delete!
 puts "✅ All inactive users deleted"
 ```
 
-***
+---
 
 ## 7. Working with Associations
 
@@ -375,7 +375,7 @@ struct Post
   property updated_at : Time?
 
   # Associations
-  belongs_to :user, key: user_id, ref: id
+  belongs_to :user, User, foreign_key: :user_id
 
   def initialize(@title : String, @body : String, @user_id : Int64)
   end
@@ -390,7 +390,7 @@ struct User
   # ... existing properties ...
 
   # Associations
-  has_many :posts, key: id, ref: user_id
+  has_many :posts, foreign_key: :user_id
 end
 ```
 
@@ -424,7 +424,7 @@ if post
 end
 ```
 
-***
+---
 
 ## 8. Using Validations
 
@@ -479,7 +479,7 @@ struct User
 end
 ```
 
-***
+---
 
 ## 9. Using Transactions
 
@@ -501,7 +501,7 @@ User.transaction do |tx|
 end
 ```
 
-***
+---
 
 ## 10. Next Steps
 
@@ -509,26 +509,26 @@ Congratulations! You now have a working CQL application. Here's what to explore 
 
 ### Essential Guides
 
-* [**Defining Models**](../active-record-with-cql/defining-models.md) - Learn advanced model features
-* [**Complex Queries**](../active-record-with-cql/complex-queries.md) - Master the query interface
-* [**Validations**](../active-record-with-cql/validations.md) - Ensure data integrity
-* [**Relationships**](../active-record-with-cql/relations/) - Work with associations
-* [**Migrations**](../database-management/migrations.md) - Manage schema changes
+- [**Defining Models**](../active-record-with-cql/defining-models.md) - Learn advanced model features
+- [**Complex Queries**](../active-record-with-cql/complex-queries.md) - Master the query interface
+- [**Validations**](../active-record-with-cql/validations.md) - Ensure data integrity
+- [**Relationships**](../active-record-with-cql/relations/) - Work with associations
+- [**Migrations**](../database-management/migrations.md) - Manage schema changes
 
 ### Advanced Topics
 
-* [**Transactions**](../active-record-with-cql/transactions.md) - Maintain data consistency
-* [**Callbacks**](../active-record-with-cql/callbacks.md) - Hook into model lifecycle
-* [**Scopes**](../active-record-with-cql/scopes.md) - Create reusable query methods
-* [**Performance Optimization**](broken-reference) - Scale your application
+- [**Transactions**](../active-record-with-cql/transactions.md) - Maintain data consistency
+- [**Callbacks**](../active-record-with-cql/callbacks.md) - Hook into model lifecycle
+- [**Scopes**](../active-record-with-cql/scopes.md) - Create reusable query methods
+- [**Performance Optimization**](broken-reference) - Scale your application
 
 ### Patterns and Best Practices
 
-* [**Repository Pattern**](../foundation/patterns/repository.md) - Alternative to Active Record
-* [**Testing Strategies**](../advanced-topics/testing-strategies.md) - Test your database code
-* [**Deployment Guide**](../guides/deployment-guide.md) - Deploy to production
+- [**Repository Pattern**](../foundation/patterns/repository.md) - Alternative to Active Record
+- [**Testing Strategies**](../advanced-topics/testing-strategies.md) - Test your database code
+- [**Deployment Guide**](../guides/deployment-guide.md) - Deploy to production
 
-***
+---
 
 ## Common Issues and Solutions
 
@@ -569,7 +569,7 @@ else
 end
 ```
 
-***
+---
 
 ## Example Application Structure
 
@@ -591,6 +591,6 @@ myapp/
     └── development.db     # SQLite database file
 ```
 
-***
+---
 
 Welcome to CQL! You're now ready to build powerful, type-safe database applications with Crystal. 🎉

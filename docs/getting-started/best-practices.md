@@ -2,21 +2,21 @@
 
 _Essential guidelines for building robust, performant, and maintainable applications with CQL_
 
-***
+---
 
 ## 📋 Overview
 
 This guide covers proven patterns and practices for:
 
-* **Database Design** - Schema and relationship patterns
-* **Model Architecture** - Clean, maintainable model design
-* **Query Optimization** - Fast, efficient database queries
-* **Error Handling** - Robust error management
-* **Testing** - Comprehensive testing strategies
-* **Security** - Protection against common vulnerabilities
-* **Performance** - Scaling and optimization techniques
+- **Database Design** - Schema and relationship patterns
+- **Model Architecture** - Clean, maintainable model design
+- **Query Optimization** - Fast, efficient database queries
+- **Error Handling** - Robust error management
+- **Testing** - Comprehensive testing strategies
+- **Security** - Protection against common vulnerabilities
+- **Performance** - Scaling and optimization techniques
 
-***
+---
 
 ## 🏗️ Database Design Best Practices
 
@@ -122,7 +122,7 @@ class Post
 end
 ```
 
-***
+---
 
 ## 🏛️ Model Architecture Best Practices
 
@@ -285,7 +285,7 @@ class User
 end
 ```
 
-***
+---
 
 ## 🚀 Query Optimization Best Practices
 
@@ -400,7 +400,7 @@ def deactivate_inactive_users
 end
 ```
 
-***
+---
 
 ## 🛡️ Security Best Practices
 
@@ -434,9 +434,9 @@ class User
   property bio : String?
 
   # ✅ Validate input format and content
-  validates :email, presence: true, format: EMAIL_REGEX
-  validates :role, inclusion: {in: ["user", "admin", "moderator"]}
-  validates :bio, length: {maximum: 1000}
+  validate :email, presence: true, match: EMAIL_REGEX
+  validate :role, in: ["user", "admin", "moderator"]
+  validate :bio, size: 0..1000
 
   # ✅ Sanitize HTML content
   before_save :sanitize_bio
@@ -488,7 +488,7 @@ class UsersController
 end
 ```
 
-***
+---
 
 ## 🧪 Testing Best Practices
 
@@ -660,7 +660,7 @@ describe "Performance tests" do
 end
 ```
 
-***
+---
 
 ## 📊 Performance Monitoring
 
@@ -722,7 +722,7 @@ MemoryMonitor.check_usage("bulk user creation") do
 end
 ```
 
-***
+---
 
 ## 🎯 Code Organization
 
@@ -803,7 +803,7 @@ class Post
 end
 ```
 
-***
+---
 
 ## 🎓 Summary
 
@@ -819,20 +819,20 @@ end
 
 ### Quick Reference Checklist
 
-* [ ] Use appropriate data types for all properties
-* [ ] Add indexes for commonly queried fields
-* [ ] Implement comprehensive validations
-* [ ] Use efficient query patterns
-* [ ] Test all model functionality
-* [ ] Monitor performance in production
-* [ ] Organize code with clear separation of concerns
-* [ ] Follow security best practices
+- [ ] Use appropriate data types for all properties
+- [ ] Add indexes for commonly queried fields
+- [ ] Implement comprehensive validations
+- [ ] Use efficient query patterns
+- [ ] Test all model functionality
+- [ ] Monitor performance in production
+- [ ] Organize code with clear separation of concerns
+- [ ] Follow security best practices
 
-***
+---
 
 **Continue Learning:**
 
-* 📚 [**Performance Optimization**](broken-reference) - Advanced optimization techniques
-* 🔒 [**Security Guide**](../advanced-topics/security-guide.md) - Comprehensive security practices
-* 🧪 [**Testing Strategies**](../advanced-topics/testing-strategies.md) - Advanced testing approaches
-* 🏗️ [**Architecture Guide**](architecture-overview.md) - Understanding CQL's architecture
+- 📚 [**Performance Optimization**](broken-reference) - Advanced optimization techniques
+- 🔒 [**Security Guide**](../advanced-topics/security-guide.md) - Comprehensive security practices
+- 🧪 [**Testing Strategies**](../advanced-topics/testing-strategies.md) - Advanced testing approaches
+- 🏗️ [**Architecture Guide**](architecture-overview.md) - Understanding CQL's architecture

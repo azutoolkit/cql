@@ -379,9 +379,9 @@ class User
   property bio : String?
 
   # ✅ Validate input format and content
-  validates :email, presence: true, format: EMAIL_REGEX
-  validates :role, inclusion: {in: ["user", "admin", "moderator"]}
-  validates :bio, length: {maximum: 1000}
+  validate :email, presence: true, match: EMAIL_REGEX
+  validate :role, in: ["user", "admin", "moderator"]
+  validate :bio, size: 0..1000
 
   # ✅ Sanitize HTML content
   before_save :sanitize_bio

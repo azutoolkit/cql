@@ -85,7 +85,7 @@ struct User
   end
 
   # Association: A User has one Profile
-  has_one :profile, Profile
+  has_one :profile, Profile, foreign_key: :user_id
 end
 ```
 
@@ -108,7 +108,7 @@ struct Profile
   end
 
   # Association: A Profile belongs to one User
-  belongs_to :user, User, foreign_key: :user_id
+  belongs_to :user, User, :user_id
 end
 ```
 
