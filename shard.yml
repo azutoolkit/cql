@@ -1,8 +1,8 @@
 name: cql
-version: 0.0.435
+version: 0.0.442
 authors:
   - Elias Perez <eperez@justworks.com>
-crystal: ">= 1.12.2"
+crystal: '>= 1.12.2'
 license: MIT
 dependencies:
   ulid:
