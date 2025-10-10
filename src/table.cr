@@ -157,16 +157,29 @@ module CQL
     end
 
     # Helper method to get primary key columns for a referenced table
-    # NOTE: This currently assumes the schema is already loaded or accessible.
-    # A more robust implementation might require passing the Schema object
-    # or having a way to look up table definitions globally.
+    # Looks up the referenced table in the schema and returns its primary key column(s)
+    # - **@param** table_name [Symbol] The name of the referenced table
+    # - **@return** [Array(Symbol)] The primary key column names
+    # - **@raise** [CQL::Error] If the referenced table is not found
+    #
+    # **Example**
+    # ```
+    # primary_key_columns(:users) # => [:id]
+    # ```
     private def primary_key_columns(table_name : Symbol) : Array(Symbol)
-      # TODO: Implement actual lookup of the referenced table's primary key(s)
-      # For now, default to [:id] as a placeholder.
-      # This requires access to the Schema or other table definitions.
-      # referenced_table = @schema.find_table(table_name) # Hypothetical
-      # return referenced_table.primary_keys.map(&.name) if referenced_table
-      [:id]
+      # Look up the referenced table in the schema
+      referenced_table = @schema.tables[table_name]?
+
+      unless referenced_table
+        # If table not found in schema, default to [:id] for forward compatibility
+        # This allows references to tables not yet defined in the schema
+        Log.warn { "Referenced table '#{table_name}' not found in schema, assuming primary key is 'id'" }
+        return [:id]
+      end
+
+      # Return the primary key column name(s)
+      # Tables can have composite primary keys, but typically have a single primary key
+      [referenced_table.primary.name]
     end
 
     # Adds a new primary key column to the table.

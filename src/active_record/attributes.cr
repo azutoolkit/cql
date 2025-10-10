@@ -33,7 +33,22 @@ module CQL
       def attributes(attrs : Hash(Symbol, DB::Any))
         attrs.each do |key, value|
           {% for ivar in @type.instance_vars %}
-          @{{ivar.id}} = value if key == :{{ivar.id}} && value.is_a?({{ivar.type}})
+            if key == :{{ivar.id}}
+              {% if ivar.type.resolve.nilable? %}
+                # Handle nilable types - check if value matches the non-nil type or is nil
+                {% non_nil_type = ivar.type.resolve.union_types.find { |t| t != Nil } %}
+                if value.nil?
+                  @{{ivar.id}} = nil
+                elsif value.is_a?({{non_nil_type}})
+                  @{{ivar.id}} = value.as({{non_nil_type}})
+                end
+              {% else %}
+                # Handle non-nilable types normally
+                if value.is_a?({{ivar.type}})
+                  @{{ivar.id}} = value
+                end
+              {% end %}
+            end
           {% end %}
         end
       end
@@ -50,7 +65,22 @@ module CQL
       def attributes(**attrs)
         attrs.each do |key, value|
           {% for ivar in @type.instance_vars %}
-          @{{ivar.id}} = value if key == :{{ivar.id}} && value.is_a?({{ivar.type}})
+            if key == :{{ivar.id}}
+              {% if ivar.type.resolve.nilable? %}
+                # Handle nilable types - check if value matches the non-nil type or is nil
+                {% non_nil_type = ivar.type.resolve.union_types.find { |t| t != Nil } %}
+                if value.nil?
+                  @{{ivar.id}} = nil
+                elsif value.is_a?({{non_nil_type}})
+                  @{{ivar.id}} = value.as({{non_nil_type}})
+                end
+              {% else %}
+                # Handle non-nilable types normally
+                if value.is_a?({{ivar.type}})
+                  @{{ivar.id}} = value
+                end
+              {% end %}
+            end
           {% end %}
         end
       end

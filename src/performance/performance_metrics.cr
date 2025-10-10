@@ -255,15 +255,16 @@ module CQL::Performance
     def self.from_components(
       profiler : QueryProfilerInterface? = nil,
       detector : NPlusOneDetectorInterface? = nil,
-      cache : Cache? = nil,
+      cache = nil,
       start_time : Time? = nil,
       config : Config? = nil,
+      error_count : Int32 = 0,
     ) : self
       start_time ||= Time.utc
       collection_duration = Time.utc - start_time
 
       # Query metrics
-      query_metrics = build_query_metrics(profiler, collection_duration)
+      query_metrics = build_query_metrics(profiler, collection_duration, error_count)
 
       # N+1 metrics
       n_plus_one_metrics = build_n_plus_one_metrics(detector)
@@ -382,10 +383,10 @@ module CQL::Performance
       end
     end
 
-    private def self.build_query_metrics(profiler : QueryProfilerInterface?, duration : Time::Span) : QueryMetrics
+    private def self.build_query_metrics(profiler : QueryProfilerInterface?, duration : Time::Span, error_count : Int32 = 0) : QueryMetrics
       unless profiler
         return QueryMetrics.new(
-          0_i64, 0_i64, 0_i64, 0_i64,
+          0_i64, 0_i64, 0_i64, error_count.to_i64,
           Time::Span.zero, Time::Span.zero, Time::Span.zero, Time::Span.zero,
           0.0, 0.0, 0.0
         )
@@ -403,7 +404,9 @@ module CQL::Performance
       very_slow_queries = profiler.slowest_queries(1000).count { |query| query.execution_time > 1.second }
 
       # Calculate rates
-      error_rate = 0.0 # TODO: Track errors properly
+      error_queries = error_count.to_i64
+      total_operations = total_queries + error_queries
+      error_rate = total_operations > 0 ? (error_queries.to_f64 / total_operations) * 100 : 0.0
       queries_per_second = duration.total_seconds > 0 ? total_queries.to_f64 / duration.total_seconds : 0.0
       slow_query_rate = total_queries > 0 ? (slow_queries.to_f64 / total_queries) * 100 : 0.0
 
@@ -411,7 +414,7 @@ module CQL::Performance
         total_queries,
         slow_queries,
         very_slow_queries,
-        0_i64, # error_queries
+        error_queries,
         total_time,
         avg_time,
         min_time.milliseconds,

@@ -1,7 +1,10 @@
+require "./timestamp_manager"
+
 module CQL
   module ActiveRecord
     module Persistence
       macro included
+        include CQL::ActiveRecord::TimestampManager
         # Reload the record from the database
         # - **@return** [Nil]
         #
@@ -216,31 +219,10 @@ module CQL
 
         # Automatically set timestamp fields before save
         # Sets created_at on create and updated_at on both create and update
+        # Uses TimestampManager module for consistent timestamp handling
         private def set_timestamps!
-          current_time = Time.utc
-
-          # Check if this model has timestamp columns
-          table = {{@type.id}}.schema.tables[{{@type.id}}.table]
-          has_created_at = table.columns[:created_at]?
-          has_updated_at = table.columns[:updated_at]?
-
-          # Build attributes hash for timestamp updates
-          timestamp_attrs = {} of Symbol => DB::Any
-
-          if !persisted? && has_created_at
-            # Set created_at for new records
-            timestamp_attrs[:created_at] = current_time.as(DB::Any)
-          end
-
-          if has_updated_at
-            # Always set updated_at
-            timestamp_attrs[:updated_at] = current_time.as(DB::Any)
-          end
-
-          # Update the attributes if we have any timestamp fields to set
-          unless timestamp_attrs.empty?
-            self.attributes(timestamp_attrs) if self.responds_to?(:attributes)
-          end
+          timestamp_attrs = prepare_timestamps(!persisted?)
+          apply_timestamps(timestamp_attrs)
         end
 
         # Save the record to the database or update it if it already exists
@@ -254,16 +236,22 @@ module CQL
         # ```
         # begin
         #   user.save!
-        # rescue CQL::RecordInvalid
+        # rescue ex : CQL::RecordInvalid
         #   # Handle validation errors
-        # rescue CQL::RecordNotSaved
+        #   puts "Validation failed: #{ex.error_messages.join(", ")}"
+        # rescue ex : CQL::RecordNotSaved
         #   # Handle other save errors
+        #   puts "Save failed: #{ex.message}"
         # end
         # ```
         def save!
           return true if save
-          if errors.any?
-            raise CQL::RecordInvalid.new("Record invalid: #{errors.join(", ")}")
+          validation_errors = errors
+          if validation_errors.any?
+            error_summary = validation_errors.map { |e| "#{e.field}: #{e.message}" }.join(", ")
+            # Convert validation errors to NamedTuple format for exception
+            error_tuples = validation_errors.map { |e| {field: e.field, message: e.message} }
+            raise CQL::RecordInvalid.new("Record invalid: #{error_summary}", error_tuples)
           else
             raise CQL::RecordNotSaved.new("Failed to save the record")
           end

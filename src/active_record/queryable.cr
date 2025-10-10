@@ -450,19 +450,6 @@ module CQL
           records.size.to_i64
         end
 
-        # Alias methods for consistency with Rails ActiveRecord
-        def self.min(column : Symbol)
-          minimum(column)
-        end
-
-        def self.max(column : Symbol)
-          maximum(column)
-        end
-
-        def self.avg(column : Symbol)
-          average(column)
-        end
-
         # Replace existing order clause
         # - **@param** fields [Symbol*] The fields to order by
         # - **@return** [QueryBuilder(T)] A new query builder instance

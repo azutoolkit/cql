@@ -12,6 +12,35 @@ require "./performance_metrics"
 require "./interfaces"
 
 module CQL::Performance
+  # Cache statistics tracker
+  struct CacheStats
+    property hits : Atomic(Int64) = Atomic(Int64).new(0)
+    property misses : Atomic(Int64) = Atomic(Int64).new(0)
+
+    def record_hit
+      @hits.add(1)
+    end
+
+    def record_miss
+      @misses.add(1)
+    end
+
+    def hit_rate : Float64
+      total = total_requests
+      return 0.0 if total == 0
+      (@hits.get.to_f / total) * 100.0
+    end
+
+    def total_requests : Int64
+      @hits.get + @misses.get
+    end
+
+    def clear
+      @hits.set(0)
+      @misses.set(0)
+    end
+  end
+
   # Monitor with dependency injection
   class Monitor
     include TimingUtils
@@ -25,6 +54,8 @@ module CQL::Performance
     @report_generator : UnifiedReportGenerator
     @start_time : Time = Time.utc
     @context : String? = nil
+    @error_count : Atomic(Int32) = Atomic(Int32).new(0)
+    @cache_stats : CacheStats = CacheStats.new
 
     def initialize(
       config : Config = Config.from_env,
@@ -58,8 +89,15 @@ module CQL::Performance
 
       result
     rescue ex
-      # Record error
+      # Track error count
+      @error_count.add(1)
+
+      # Record error in profiler
       record_execution(sql, params, Time::Span.zero, nil, ex.message)
+
+      # Log error if configured
+      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
+
       raise ex
     end
 
@@ -102,9 +140,10 @@ module CQL::Performance
       PerformanceMetrics.from_components(
         profiler: @profiler,
         detector: @detector,
-        cache: nil, # TODO: Add cache support
+        cache: @cache_stats,
         start_time: @start_time,
-        config: @config
+        config: @config,
+        error_count: @error_count.get
       )
     end
 
@@ -137,10 +176,20 @@ module CQL::Performance
       @detector
     end
 
+    def cache_stats : CacheStats
+      @cache_stats
+    end
+
+    def error_count : Int32
+      @error_count.get
+    end
+
     # Clear all data
     def clear
       @profiler.try(&.clear)
       @detector.try(&.clear)
+      @cache_stats.clear
+      @error_count.set(0)
     end
 
     # Check if monitoring is enabled
@@ -215,12 +264,15 @@ module CQL::Performance
         duration: duration,
         total_queries: total_queries,
         slow_queries: slow_queries,
-        errors: 0, # TODO: Track errors
+        errors: @error_count.get,
         issues: all_issues,
         stats: stats,
         metadata: {
           "environment"        => ENV["CRYSTAL_ENV"]? || "development",
           "monitoring_enabled" => enabled?.to_s,
+          "cache_hit_rate"     => @cache_stats.hit_rate.round(2).to_s,
+          "cache_requests"     => @cache_stats.total_requests.to_s,
+          "error_count"        => @error_count.get.to_s,
         }
       )
     end
