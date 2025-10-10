@@ -103,6 +103,14 @@ class ExampleRunner
       "caching"
     )
 
+    @examples << Example.new(
+      "with_cache Method Demo",
+      "caching/with_cache_demo.cr",
+      "Comprehensive demonstration of the with_cache method with various data types, TTL settings, and performance monitoring",
+      ["Crystal 1.16.3+", "SQLite3"],
+      "caching"
+    )
+
     # Configuration Examples
     @examples << Example.new(
       "Configuration Showcase",

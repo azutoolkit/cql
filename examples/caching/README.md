@@ -95,6 +95,22 @@ This directory contains comprehensive examples of CQL's enterprise-grade caching
 
 **Run:** `crystal per_request_query_cache_demo.cr`
 
+### 🔧 **with_cache_demo.cr**
+
+**Purpose:** Comprehensive demonstration of the `with_cache` method
+**Features:**
+
+- Basic `with_cache` usage with different data types
+- Custom TTL (Time To Live) settings
+- Caching complex objects and database results
+- Expensive computation caching with performance monitoring
+- Cache key generation strategies
+- Cache statistics and monitoring
+- Cache invalidation patterns
+- Performance comparison (with/without cache)
+
+**Run:** `crystal with_cache_demo.cr`
+
 ## 🚀 Getting Started
 
 ### Prerequisites

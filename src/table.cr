@@ -320,6 +320,29 @@ module CQL
       col
     end
 
+    # Adds a new REAL column to the table (SQLite floating point type).
+    # - **@param** name [Symbol] the name of the column to be added
+    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** null [Bool] whether the column allows null values (default: false)
+    # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
+    # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
+    # - **@param** index [Bool] whether the column should be indexed (default: false)
+    # - **@return** [Column] the new column
+    #
+    # **Example** Adding a new column with default options
+    #
+    # ```
+    # real :price
+    # real :price, as: "product_price", null: false, default: 0.0, unique: true, index: true
+    # ```
+    def real(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
+      col = Column(Float64).new(name, as_name, null, default, unique)
+      col.table = self
+      @columns[name] = col
+      col.index = index ? add_index(columns: [name], unique: unique) : nil
+      col
+    end
+
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
     # - **@param** as_name [String, nil] an optional alias for the column

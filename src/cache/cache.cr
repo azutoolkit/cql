@@ -65,9 +65,10 @@ module CQL
       # Helper to run a block with caching if enabled
       # - **@param** key [String] The cache key
       # - **@param** ttl [Time::Span] Time to live (default: 1 hour)
+      # - **@param** as_kind [Class] Type to cast the result to (optional)
       # - **@yield** [Void] Block to execute if cache miss
       # - **@return** [T] The cached or computed result
-      def self.with_cache(key : String, ttl : Time::Span = @@default_ttl, &)
+      def self.with_cache(key : String, ttl : Time::Span = @@default_ttl, as_kind : Class? = nil, &)
         return yield unless @@enabled
 
         start_time = Time.monotonic
