@@ -36,7 +36,7 @@ module CQL
             if key == :{{ivar.id}}
               {% if ivar.type.resolve.nilable? %}
                 # Handle nilable types - check if value matches the non-nil type or is nil
-                {% non_nil_type = ivar.type.resolve.union_types.find { |t| t != Nil } %}
+                {% non_nil_type = ivar.type.resolve.union_types.find { |kind| kind != Nil } %}
                 if value.nil?
                   @{{ivar.id}} = nil
                 elsif value.is_a?({{non_nil_type}})
@@ -68,7 +68,7 @@ module CQL
             if key == :{{ivar.id}}
               {% if ivar.type.resolve.nilable? %}
                 # Handle nilable types - check if value matches the non-nil type or is nil
-                {% non_nil_type = ivar.type.resolve.union_types.find { |t| t != Nil } %}
+                {% non_nil_type = ivar.type.resolve.union_types.find { |kind| kind != Nil } %}
                 if value.nil?
                   @{{ivar.id}} = nil
                 elsif value.is_a?({{non_nil_type}})

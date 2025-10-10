@@ -76,8 +76,8 @@ describe "CQL::ActiveRecord::TimestampManager" do
 
       article.created_at.should_not be_nil
       article.updated_at.should_not be_nil
-      article.created_at.try { |t| t.should be_close(current_time, 1.second) }
-      article.updated_at.try { |t| t.should be_close(current_time, 1.second) }
+      article.created_at.try(&.should(be_close(current_time, 1.second)))
+      article.updated_at.try(&.should(be_close(current_time, 1.second)))
     end
   end
 
@@ -92,8 +92,8 @@ describe "CQL::ActiveRecord::TimestampManager" do
 
       article.created_at.should_not be_nil
       article.updated_at.should_not be_nil
-      article.created_at.try { |t| t.should be_close(Time.utc, 2.seconds) }
-      article.updated_at.try { |t| t.should be_close(Time.utc, 2.seconds) }
+      article.created_at.try(&.should(be_close(Time.utc, 2.seconds)))
+      article.updated_at.try(&.should(be_close(Time.utc, 2.seconds)))
     end
 
     it "updates updated_at on update but not created_at" do
@@ -127,7 +127,7 @@ describe "CQL::ActiveRecord::TimestampManager" do
       article.touch(:updated_at)
 
       article.updated_at.should_not eq(original_updated_at)
-      article.updated_at.try { |t| t.should be_close(Time.utc, 1.second) }
+      article.updated_at.try(&.should(be_close(Time.utc, 1.second)))
     end
 
     it "raises error when touching unsaved record" do
@@ -146,7 +146,7 @@ describe "CQL::ActiveRecord::TimestampManager" do
       result = article.touch(:updated_at, :created_at)
 
       result.should be_true
-      article.updated_at.try { |t| t.should be_close(Time.utc, 1.second) }
+      article.updated_at.try(&.should(be_close(Time.utc, 1.second)))
     end
 
     it "validates timestamp columns exist" do
@@ -177,9 +177,9 @@ describe "CQL::ActiveRecord::TimestampManager" do
       updated2 = Article.find!(article2.id.not_nil!)
       updated3 = Article.find!(article3.id.not_nil!)
 
-      updated1.updated_at.try { |t| t.should be_close(Time.utc, 2.seconds) }
-      updated2.updated_at.try { |t| t.should be_close(Time.utc, 2.seconds) }
-      updated3.updated_at.try { |t| t.should be_close(Time.utc, 2.seconds) }
+      updated1.updated_at.try(&.should(be_close(Time.utc, 2.seconds)))
+      updated2.updated_at.try(&.should(be_close(Time.utc, 2.seconds)))
+      updated3.updated_at.try(&.should(be_close(Time.utc, 2.seconds)))
     end
 
     it "returns 0 when given empty array" do
@@ -196,4 +196,3 @@ describe "CQL::ActiveRecord::TimestampManager" do
     end
   end
 end
-

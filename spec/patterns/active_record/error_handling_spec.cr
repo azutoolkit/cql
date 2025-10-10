@@ -185,4 +185,3 @@ describe "CQL::Error Handling" do
     end
   end
 end
-
