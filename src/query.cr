@@ -190,6 +190,22 @@ module CQL
       end
     end
 
+    # Executes the query and returns a scalar value, raises if not found.
+    # - **@param** as [Type] The type to cast the result to
+    # - **@return** [Type] The scalar result of the query
+    # - **@raise** [DB::NoResultsError] If no result is found
+    # Example: `query.get!(Int64)`
+    # ```
+    # schema = CQL::Schema.new
+    # query = CQL::Query.new(schema)
+    # query.select(:count).from(:users).get!(Int64)
+    #
+    # => 10
+    # ```
+    def get!(as as_kind)
+      get(as_kind).not_nil!
+    end
+
     # Iterates over each result and yields it to the provided block.
     # Example:
     # ```
@@ -418,6 +434,44 @@ module CQL
       col_expr = Expression::Column.new(column, alias_name: col_alias_str)
       like_condition = Expression::Like.new(col_expr, pattern)
       merge_where_condition(like_condition)
+      self
+    end
+
+    # Adds an IS NULL condition for the specified field.
+    # Provides explicit null checking for better code clarity.
+    # - **@param** field [Symbol | String] The column to check for null
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    # ```
+    # # Find users with no deleted_at timestamp
+    # User.query.where_null(:deleted_at).all(User)
+    # ```
+    def where_null(field : Symbol | String)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      null_condition = Expression::IsNull.new(col_expr)
+      merge_where_condition(null_condition)
+      self
+    end
+
+    # Adds an IS NOT NULL condition for the specified field.
+    # Provides explicit non-null checking for better code clarity.
+    # - **@param** field [Symbol | String] The column to check for not null
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    # ```
+    # # Find users with a deleted_at timestamp (soft-deleted users)
+    # User.query.where_not_null(:deleted_at).all(User)
+    # ```
+    def where_not_null(field : Symbol | String)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      not_null_condition = Expression::IsNotNull.new(col_expr)
+      merge_where_condition(not_null_condition)
       self
     end
 

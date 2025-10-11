@@ -4,6 +4,10 @@ module CQL::ActiveRecord::Relations
   # Enhanced collection class for one-to-many relationships with improved
   # type safety, error handling, and performance optimizations.
   #
+  # Logger for deprecation warnings
+  Log = ::Log.for("CQL::Relations")
+
+  #
   # This class manages the relationship between two tables through a foreign key
   # column in the target table and provides methods to manage the association
   # between the two tables and query records in the associated table based on
@@ -61,8 +65,11 @@ module CQL::ActiveRecord::Relations
       @target_table = Target.table
       @records = [] of Target
 
-      # Handle legacy cascade parameter
-      @dependent = :destroy if @cascade && @dependent == :nullify
+      # Handle legacy cascade parameter with deprecation warning
+      if @cascade
+        Log.warn { "DEPRECATION WARNING: The 'cascade' parameter is deprecated and will be removed in v1.0.0. Use 'dependent: :destroy' instead." }
+        @dependent = :destroy if @dependent == :nullify
+      end
 
       reload if auto_load
     end

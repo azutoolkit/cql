@@ -62,13 +62,16 @@ module CQL
         @validate : Bool = true,                   # validate records
         @autosave : Bool = false,                  # autosave records
       )
+        # Handle legacy cascade parameter with deprecation warning
+        if @cascade
+          Relations::Log.warn { "DEPRECATION WARNING: The 'cascade' parameter is deprecated and will be removed in v1.0.0. Use 'dependent: :destroy' instead." }
+          @dependent = :destroy if @dependent == :nullify
+        end
+
         # Initialize parent with auto_load: false to prevent loading in base initializer
         super(@key, @id, @cascade, @query, auto_load: false, dependent: @dependent)
         @through_table = Through.table
         @records = [] of Target
-
-        # Handle legacy cascade parameter
-        @dependent = :destroy if @cascade && @dependent == :nullify
       end
 
       # Override reload to perform the correct JOIN query for many-to-many
