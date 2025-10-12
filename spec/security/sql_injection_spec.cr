@@ -191,10 +191,10 @@ describe "SQL Injection Prevention" do
       result = schema.query
         .from(:users)
         .where(id: id)
-        .all(Hash(String, DB::Any))
+        .all({id: Int64, username: String, email: String})
 
       result.size.should eq(1)
-      result.first["username"].as(String).should eq(malicious_username)
+      result.first[:username].should eq(malicious_username)
     end
   end
 
@@ -241,10 +241,10 @@ describe "SQL Injection Prevention" do
       result = schema.query
         .from(:users)
         .where(id: id)
-        .all(Hash(String, DB::Any))
+        .all({id: Int64, username: String, email: String})
 
       result.size.should eq(1)
-      result.first["username"].as(String).should eq(malicious_username)
+      result.first[:username].should eq(malicious_username)
     end
   end
 
@@ -376,10 +376,10 @@ describe "SQL Injection Prevention" do
       users = schema.query
         .from(:users)
         .where_null(:email)
-        .all(Hash(String, DB::Any))
+        .all({id: Int64, email: String?})
 
       users.size.should eq(1)
-      users.first["id"].as(Int64).should eq(id)
+      users.first[:id].should eq(id)
     end
 
     it "safely handles NOT NULL checks" do
@@ -407,10 +407,10 @@ describe "SQL Injection Prevention" do
       users = schema.query
         .from(:users)
         .where_not_null(:email)
-        .all(Hash(String, DB::Any))
+        .all({id: Int64, email: String?})
 
       users.size.should eq(1)
-      users.first["id"].as(Int64).should eq(id2)
+      users.first[:id].should eq(id2)
     end
   end
 end
