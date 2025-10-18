@@ -247,8 +247,8 @@ class WithCacheDemo
       {
         "total_products"    => Product.count,
         "total_orders"      => Order.count,
-        "avg_product_price" => Product.all.map(&.price).sum / Product.count,
-        "categories"        => Product.all.map(&.category).uniq,
+        "avg_product_price" => Product.all.sum(&.price) / Product.count,
+        "categories"        => Product.all.map(&.category).uniq!,
         "generated_at"      => Time.utc.to_s,
       }
     end
@@ -290,8 +290,8 @@ class WithCacheDemo
       sleep(0.2.seconds) # Simulate complex query
       # Simulate complex join result
       {
-        "total_revenue"      => Order.all.map(&.total_amount).sum,
-        "top_customers"      => Order.all.sort_by(&.total_amount).reverse.first(3).map(&.customer_name),
+        "total_revenue"      => Order.all.sum(&.total_amount),
+        "top_customers"      => Order.all.sort_by(&.total_amount).reverse!.first(3).map(&.customer_name),
         "product_categories" => Product.all.map(&.category).tally,
       }
     end

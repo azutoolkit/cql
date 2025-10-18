@@ -270,9 +270,9 @@ module Beautify
 
   def table_header(columns)
     max_widths = columns.map { |col| col.to_s.size + 2 }
-    header = "┌" + max_widths.map { |w| "─" * w }.join("┬") + "┐"
-    content = "│" + columns.zip(max_widths).map { |col, w| " #{col}".ljust(w) }.join("│") + "│"
-    separator = "├" + max_widths.map { |w| "─" * w }.join("┼") + "┤"
+    header = "┌" + max_widths.map { |width| "─" * width }.join("┬") + "┐"
+    content = "│" + columns.zip(max_widths).map { |column, width| " #{column}".ljust(width) }.join("│") + "│"
+    separator = "├" + max_widths.map { |width| "─" * width }.join("┼") + "┤"
 
     puts header
     puts content
@@ -280,12 +280,12 @@ module Beautify
   end
 
   def table_row(columns, max_widths)
-    content = "│" + columns.zip(max_widths).map { |col, w| " #{col}".ljust(w) }.join("│") + "│"
+    content = "│" + columns.zip(max_widths).map { |column, width| " #{column}".ljust(width) }.join("│") + "│"
     puts content
   end
 
   def table_footer(max_widths)
-    footer = "└" + max_widths.map { |w| "─" * w }.join("┴") + "┘"
+    footer = "└" + max_widths.map { |width| "─" * width }.join("┴") + "┘"
     puts footer
   end
 end

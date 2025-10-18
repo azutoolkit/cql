@@ -210,7 +210,7 @@ puts
 
 # Demonstration query to show SQL logging
 info("Executing demonstration query to show SQL logging...")
-demo_users = AcmeDB.query.from(:users).where(name: "Alice Smith").all({id: Int32, name: String, email: String})
+AcmeDB.query.from(:users).where(name: "Alice Smith").all({id: Int32, name: String, email: String})
 success("Query executed - check the SQL log output above!")
 puts
 

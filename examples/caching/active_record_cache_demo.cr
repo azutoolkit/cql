@@ -216,11 +216,11 @@ puts "\n📊 Testing Cached Find Operations"
 
 # Test cached find with performance measurement
 start_time = Time.monotonic
-cached_user1 = MockUser.cache_find(user1.id.not_nil!)
+MockUser.cache_find(user1.id.not_nil!)
 first_find_time = Time.monotonic - start_time
 
 start_time = Time.monotonic
-cached_user1_again = MockUser.cache_find(user1.id.not_nil!)
+MockUser.cache_find(user1.id.not_nil!)
 second_find_time = Time.monotonic - start_time
 
 puts "🔍 First cache_find (#{user1.id}): #{first_find_time.total_milliseconds.round(2)}ms"

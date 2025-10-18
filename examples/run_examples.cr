@@ -438,7 +438,6 @@ class ExampleRunner
           failed += 1
         end
       rescue ex
-        execution_time = Time.monotonic - start_time
         puts "❌ Error: #{ex.message}".colorize(:red)
         failed += 1
       end

@@ -106,11 +106,11 @@ class AdvancedCachingDemo
     section("Setting up Caching Systems")
 
     # Create cache backends
-    memory_cache = CQL::Cache::MemoryCache.new(max_size: 1000)
+    CQL::Cache::MemoryCache.new(max_size: 1000)
 
     # Create invalidation strategies
-    timestamp_strategy = CQL::Cache::TimestampInvalidation.new(max_age: 1.hour)
-    version_strategy = CQL::Cache::VersionInvalidation.new
+    CQL::Cache::TimestampInvalidation.new(max_age: 1.hour)
+    CQL::Cache::VersionInvalidation.new
 
     success("Caching systems configured")
     configuration_block("Cache Configuration", {

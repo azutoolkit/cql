@@ -153,7 +153,7 @@ CQL::Cache::Middleware::Manual.with_request("request-3") do
 
   join_query = schema.query
     .from(:users)
-    .join(:posts) { |f| f.users.id == f.posts.user_id }
+    .join(:posts) { |fields| fields.users.id == fields.posts.user_id }
     .select(users: [:id, :name], posts: [:title])
     .where { users.name == "John Doe" }
 

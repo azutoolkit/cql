@@ -8,88 +8,88 @@ require "../../src/cql"
 # === 🎯 QUICK DEVELOPMENT SETUP ===
 puts "=== 🎯 Quick Development Setup ==="
 
-CQL.configure do |c|
+CQL.configure do |config|
   # Short, memorable database connection
-  c.db = "postgresql://localhost/myapp"
+  config.db = "postgresql://localhost/myapp"
 
   # Easy log level control
-  c.log_level = :debug
+  config.log_level = :debug
 
   # Schema auto-sync (great for development)
-  c.auto_sync = true
+  config.auto_sync = true
 end
 
 # === 📊 PRODUCTION CONFIGURATION ===
 puts "=== 📊 Production Configuration ==="
 
-CQL.configure do |c|
+CQL.configure do |config|
   # Environment detection
-  c.env = "production"
+  config.env = "production"
 
   # Database from environment
-  c.db = ENV["DATABASE_URL"]
+  config.db = ENV["DATABASE_URL"]
 
   # Performance tuning
-  c.pool_size = 25
-  c.monitor_performance = true
+  config.pool_size = 25
+  config.monitor_performance = true
 
   # Security first
-  c.auto_sync = false
-  c.verify_schema = true
+  config.auto_sync = false
+  config.verify_schema = true
 
   # Caching for performance
-  c.cache.on = true
-  c.cache.ttl = 1.hour
-  c.cache.memory_size = 5000
+  config.cache.on = true
+  config.cache.ttl = 1.hour
+  config.cache.memory_size = 5000
 end
 
 # === 💾 CACHE-FOCUSED SETUP ===
 puts "=== 💾 Cache-Focused Setup ==="
 
-CQL.configure do |c|
-  c.db = "postgresql://localhost/myapp"
+CQL.configure do |config|
+  config.db = "postgresql://localhost/myapp"
 
   # Quick cache enablement
-  c.cache.on = true
-  c.cache.ttl = 30.minutes
-  c.cache.memory_size = 2000
+  config.cache.on = true
+  config.cache.ttl = 30.minutes
+  config.cache.memory_size = 2000
 
   # Request-scoped caching (great for web apps)
-  c.cache.request_cache = true
-  c.cache.request_size = 1000
+  config.cache.request_cache = true
+  config.cache.request_size = 1000
 
   # Fragment caching for complex queries
-  c.cache.fragments = true
-  c.cache.fragment_versions = true
+  config.cache.fragments = true
+  config.cache.fragment_versions = true
 
   # Smart invalidation
-  c.cache.invalidation = "transaction_aware"
+  config.cache.invalidation = "transaction_aware"
 end
 
 # === 🧪 TEST CONFIGURATION ===
 puts "=== 🧪 Test Configuration ==="
 
-CQL.configure do |c|
-  c.env = "test"
-  c.db = "sqlite3://:memory:"
-  c.pool_size = 1
-  c.auto_sync = true
-  c.log_level = :error
+CQL.configure do |config|
+  config.env = "test"
+  config.db = "sqlite3://:memory:"
+  config.pool_size = 1
+  config.auto_sync = true
+  config.log_level = :error
 
   # Disable cache in tests
-  c.cache.on = false
+  config.cache.on = false
 end
 
 # === 📈 PERFORMANCE MONITORING ===
 puts "=== 📈 Performance Monitoring ==="
 
-CQL.configure do |c|
-  c.db = "postgresql://localhost/myapp"
+CQL.configure do |config|
+  config.db = "postgresql://localhost/myapp"
 
   # Enable monitoring and SQL logging
-  c.monitor_performance = true
-  c.sql_logging = true
-  c.sql_logging_colorize = true
+  config.monitor_performance = true
+  config.sql_logging = true
+  config.sql_logging_colorize = true
 end
 
 # === 🔧 BEFORE vs AFTER COMPARISON ===
@@ -120,25 +120,25 @@ puts "=== 🔧 Before vs After Comparison ==="
 # ```
 
 # AFTER (new developer-friendly syntax):
-CQL.configure do |c|
-  c.db = "postgresql://localhost/myapp"
-  c.monitor_performance = true
-  c.auto_load = true
-  c.auto_sync = true
-  c.verify_schema = true
-  c.bootstrap = false
-  c.migrations_table = :schema_migrations
-  c.schema_file = "app_schema.cr"
-  c.schema_class = :AppSchema
-  c.timezone = :utc
-  c.pool_size = 10
+CQL.configure do |config|
+  config.db = "postgresql://localhost/myapp"
+  config.monitor_performance = true
+  config.auto_load = true
+  config.auto_sync = true
+  config.verify_schema = true
+  config.bootstrap = false
+  config.migrations_table = :schema_migrations
+  config.schema_file = "app_schema.cr"
+  config.schema_class = :AppSchema
+  config.timezone = :utc
+  config.pool_size = 10
 
-  c.cache.on = true
-  c.cache.ttl = 30.minutes
-  c.cache.memory = true
-  c.cache.memory_size = 2000
-  c.cache.request_cache = true
-  c.cache.invalidation = "timestamp"
+  config.cache.on = true
+  config.cache.ttl = 30.minutes
+  config.cache.memory = true
+  config.cache.memory_size = 2000
+  config.cache.request_cache = true
+  config.cache.invalidation = "timestamp"
 end
 
 # === 🌟 BENEFITS OF NEW CONFIGURATION ===
