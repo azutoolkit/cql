@@ -97,6 +97,10 @@ module CQL
       property sql_logging_colorize : Bool = true # Colorize SQL output
       property sql_logging_async : Bool = false   # Use async logging (not recommended for dev)
 
+      # === 📊 PERFORMANCE MONITORING ===
+      # Enable performance monitoring and tracking
+      property monitor_performance : Bool = false
+
       # === 💾 CACHE SYSTEM ===
       # Centralized cache configuration (use config.cache.* to configure)
       getter cache : CacheConfig = CacheConfig.new
@@ -151,6 +155,11 @@ module CQL
       # Check if SQL logging is enabled
       def sql_logging? : Bool
         sql_logging || (env == "development" && !ENV.has_key?("CQL_NO_SQL_LOG"))
+      end
+
+      # Check if performance monitoring is enabled
+      def monitor_performance? : Bool
+        @monitor_performance
       end
 
       # === 🎯 SMART GETTERS ===

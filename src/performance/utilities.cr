@@ -113,7 +113,7 @@ module CQL::Performance
         "max_time_ms"   => @max_time.total_milliseconds,
         "error_count"   => @errors,
         "error_rate"    => error_rate,
-      }
+      } of String => String | Int64 | Float64
     end
   end
 

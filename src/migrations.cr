@@ -117,7 +117,7 @@ module CQL
 
       CQL::Migrator.migrations << {{@type}}
       def self.version : Int64
-        V
+        V.to_i64
       end
 
       def initialize(@schema : CQL::Schema); end

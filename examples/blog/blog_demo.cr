@@ -53,7 +53,7 @@ module BlogDemo
     seed_data = BlogDemo::Seeders.seed_data
 
     sleep 1.second
-    CQL::Performance.monitor.generate_comprehensive_report("logger")
+    CQL::Performance.monitor.generate_report("logger")
     sleep 1.second
     BlogDemo::Demos.crud_operations(seed_data)
 

@@ -243,48 +243,48 @@ module CQL::Performance
   class ConsoleReportFormatter < ReportFormatter
     def format(report : PerformanceReport) : String
       # Output directly to console
-      puts colorize("\n" + "═" * 80, :cyan)
-      puts colorize("🚀 CQL PERFORMANCE REPORT", :cyan, :bold)
-      puts colorize("═" * 80, :cyan)
+      puts ("\n" + "═" * 80).colorize(:cyan)
+      puts "🚀 CQL PERFORMANCE REPORT".colorize(:cyan).bold
+      puts ("═" * 80).colorize(:cyan)
 
-      puts colorize("\n📊 OVERVIEW", :blue, :bold)
-      puts colorize("─" * 20, :blue)
-      puts "  ⏰ Generated: #{colorize(report.timestamp.to_s, :white, :bold)}"
-      puts "  ⚡ Duration: #{colorize(format_duration(report.duration), :green)}"
-      puts "  📈 Total Queries: #{colorize(report.total_queries.to_s, :white, :bold)}"
-      puts "  🐌 Slow Queries: #{colorize(report.slow_queries.to_s, :yellow)}"
-      puts "  ❌ Errors: #{colorize(report.errors.to_s, :red)}"
+      puts "\n📊 OVERVIEW".colorize(:blue).bold
+      puts ("─" * 20).colorize(:blue)
+      puts "  ⏰ Generated: #{report.timestamp.to_s.colorize(:white).bold}"
+      puts "  ⚡ Duration: #{format_duration(report.duration).colorize(:green)}"
+      puts "  📈 Total Queries: #{report.total_queries.to_s.colorize(:white).bold}"
+      puts "  🐌 Slow Queries: #{report.slow_queries.to_s.colorize(:yellow)}"
+      puts "  ❌ Errors: #{report.errors.to_s.colorize(:red)}"
 
       if report.issues.any?
-        puts colorize("\n⚠️  PERFORMANCE ISSUES", :red, :bold)
-        puts colorize("─" * 25, :red)
+        puts "\n⚠️  PERFORMANCE ISSUES".colorize(:red).bold
+        puts ("─" * 25).colorize(:red)
 
         report.issues.group_by(&.severity).each do |severity, issues|
           color = severity_color(severity)
-          puts "  #{severity_emoji(severity)} #{colorize(severity.to_s.upcase, color, :bold)}: #{colorize(issues.size.to_s, color)} issues"
+          puts "  #{severity_emoji(severity)} #{severity.to_s.upcase.colorize(color).bold}: #{issues.size.to_s.colorize(color)} issues"
         end
 
-        puts colorize("\n🔍 DETAILS", :yellow, :bold)
-        puts colorize("─" * 15, :yellow)
+        puts "\n🔍 DETAILS".colorize(:yellow).bold
+        puts ("─" * 15).colorize(:yellow)
 
         report.issues.each_with_index do |issue, i|
           color = severity_color(issue.severity)
-          puts "\n  #{i + 1}. #{severity_emoji(issue.severity)} #{colorize(issue.type.to_s, color, :bold)}"
-          puts "     #{colorize("Message:", :cyan)} #{issue.message}"
+          puts "\n  #{i + 1}. #{severity_emoji(issue.severity)} #{issue.type.to_s.colorize(color).bold}"
+          puts "     #{"Message:".colorize(:cyan)} #{issue.message}"
           issue.details.each do |key, value|
-            puts "     #{colorize(key + ":", :cyan)} #{value}"
+            puts "     #{(key + ":").colorize(:cyan)} #{value}"
           end
         end
       else
-        puts colorize("\n✅ EXCELLENT PERFORMANCE!", :green, :bold)
-        puts colorize("─" * 30, :green)
+        puts "\n✅ EXCELLENT PERFORMANCE!".colorize(:green).bold
+        puts ("─" * 30).colorize(:green)
         puts "  🎉 No performance issues detected"
         puts "  🚀 Your queries are running smoothly"
       end
 
-      puts colorize("\n" + "═" * 80, :cyan)
-      puts colorize("🔧 Report generated at #{Time.utc.to_s("%H:%M:%S")}", :cyan)
-      puts colorize("═" * 80 + "\n", :cyan)
+      puts ("\n" + "═" * 80).colorize(:cyan)
+      puts "🔧 Report generated at #{Time.utc.to_s("%H:%M:%S")}".colorize(:cyan)
+      puts ("═" * 80 + "\n").colorize(:cyan)
 
       "" # Return empty string since we printed to console
     end
