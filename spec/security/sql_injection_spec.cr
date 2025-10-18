@@ -414,4 +414,3 @@ describe "SQL Injection Prevention" do
     end
   end
 end
-
