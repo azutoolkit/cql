@@ -252,11 +252,37 @@ module CQL
                       {% if !["message", "on"].includes?(predicate.stringify) %}
                         {% if predicate.stringify == "confirmation" %}
                         unless rule.confirmation?(instance.{{name.id}}, instance.{{expected_value.id}})
-                          errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
+                          errors << Error.new(:{{name.id}}, {{options[:message] || "#{name.id} confirmation doesn't match"}})
                         end
                         {% else %}
                         unless rule.{{predicate.id}}?(instance.{{name.id}}, {{expected_value}})
-                          errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
+                          {% default_msg = "Invalid #{name.id}" %}
+                          {% if predicate.stringify == "required" %}
+                            {% default_msg = "#{name.id} is required" %}
+                          {% elsif predicate.stringify == "eq" %}
+                            {% default_msg = "#{name.id} must be equal to #{expected_value}" %}
+                          {% elsif predicate.stringify == "gt" %}
+                            {% default_msg = "#{name.id} must be greater than #{expected_value}" %}
+                          {% elsif predicate.stringify == "gte" %}
+                            {% default_msg = "#{name.id} must be greater than or equal to #{expected_value}" %}
+                          {% elsif predicate.stringify == "lt" %}
+                            {% default_msg = "#{name.id} must be less than #{expected_value}" %}
+                          {% elsif predicate.stringify == "lte" %}
+                            {% default_msg = "#{name.id} must be less than or equal to #{expected_value}" %}
+                          {% elsif predicate.stringify == "in" %}
+                            {% default_msg = "#{name.id} must be included in #{expected_value}" %}
+                          {% elsif predicate.stringify == "exclude" %}
+                            {% default_msg = "#{name.id} must not be included in #{expected_value}" %}
+                          {% elsif predicate.stringify == "match" %}
+                            {% default_msg = "#{name.id} must match the pattern #{expected_value}" %}
+                          {% elsif predicate.stringify == "size" %}
+                            {% default_msg = "#{name.id} must have a size of #{expected_value}" %}
+                          {% elsif predicate.stringify == "presence" %}
+                            {% default_msg = "#{name.id} must be present" %}
+                          {% elsif predicate.stringify == "accept" %}
+                            {% default_msg = "#{name.id} must be accepted" %}
+                          {% end %}
+                          errors << Error.new(:{{name.id}}, {{options[:message] || default_msg}})
                         end
                         {% end %}
                       {% end %}
@@ -267,50 +293,43 @@ module CQL
                     {% if !["message", "on"].includes?(predicate.stringify) %}
                       {% if predicate.stringify == "confirmation" %}
                       unless rule.confirmation?(instance.{{name.id}}, instance.{{expected_value.id}})
-                        errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
+                        errors << Error.new(:{{name.id}}, {{options[:message] || "#{name.id} confirmation doesn't match"}})
                       end
                       {% else %}
                       unless rule.{{predicate.id}}?(instance.{{name.id}}, {{expected_value}})
-                        errors << Error.new(:{{name.id}}, {{options["message"] || generate_default_message(name.stringify, predicate.stringify, expected_value)}})
+                        {% default_msg = "Invalid #{name.id}" %}
+                        {% if predicate.stringify == "required" %}
+                          {% default_msg = "#{name.id} is required" %}
+                        {% elsif predicate.stringify == "eq" %}
+                          {% default_msg = "#{name.id} must be equal to #{expected_value}" %}
+                        {% elsif predicate.stringify == "gt" %}
+                          {% default_msg = "#{name.id} must be greater than #{expected_value}" %}
+                        {% elsif predicate.stringify == "gte" %}
+                          {% default_msg = "#{name.id} must be greater than or equal to #{expected_value}" %}
+                        {% elsif predicate.stringify == "lt" %}
+                          {% default_msg = "#{name.id} must be less than #{expected_value}" %}
+                        {% elsif predicate.stringify == "lte" %}
+                          {% default_msg = "#{name.id} must be less than or equal to #{expected_value}" %}
+                        {% elsif predicate.stringify == "in" %}
+                          {% default_msg = "#{name.id} must be included in #{expected_value}" %}
+                        {% elsif predicate.stringify == "exclude" %}
+                          {% default_msg = "#{name.id} must not be included in #{expected_value}" %}
+                        {% elsif predicate.stringify == "match" %}
+                          {% default_msg = "#{name.id} must match the pattern #{expected_value}" %}
+                        {% elsif predicate.stringify == "size" %}
+                          {% default_msg = "#{name.id} must have a size of #{expected_value}" %}
+                        {% elsif predicate.stringify == "presence" %}
+                          {% default_msg = "#{name.id} must be present" %}
+                        {% elsif predicate.stringify == "accept" %}
+                          {% default_msg = "#{name.id} must be accepted" %}
+                        {% end %}
+                        errors << Error.new(:{{name.id}}, {{options[:message] || default_msg}})
                       end
                       {% end %}
                     {% end %}
                   {% end %}
                 {% end %}
               {% end %}
-            end
-          end
-
-          private def self.generate_default_message(field, predicate, value)
-            case predicate
-            when "required?"
-              "#{field} is required"
-            when "eq?"
-              "#{field} must be equal to #{value}"
-            when "gt?"
-              "#{field} must be greater than #{value}"
-            when "gte?"
-              "#{field} must be greater than or equal to #{value}"
-            when "lt?"
-              "#{field} must be less than #{value}"
-            when "lte?"
-              "#{field} must be less than or equal to #{value}"
-            when "in?"
-              "#{field} must be included in #{value}"
-            when "exclude?"
-              "#{field} must not be included in #{value}"
-            when "match?"
-              "#{field} must match the pattern #{value}"
-            when "size?"
-              "#{field} must have a size of #{value}"
-            when "presence?"
-              "#{field} must be present"
-            when "confirmation?"
-              "#{field} confirmation doesn't match"
-            when "accept?"
-              "#{field} must be accepted"
-            else
-              "Invalid #{field}"
             end
           end
         end
