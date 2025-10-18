@@ -4,47 +4,47 @@ icon: shield-check
 
 # Security Guide
 
-> **Secure your Crystal applications** - Essential security practices for database interactions, authentication, and data protection
+Essential security practices for database interactions, authentication, and data protection in CQL applications.
 
 Security is paramount in production applications. This guide covers essential security practices for CQL applications, from SQL injection prevention to data encryption and access control.
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [🛡️ SQL Injection Prevention](security-guide.md#️-sql-injection-prevention)
-- [🔐 Authentication & Authorization](security-guide.md#-authentication--authorization)
-- [🔒 Data Protection](security-guide.md#-data-protection)
-- [🚫 Input Validation](security-guide.md#-input-validation)
-- [🔑 Database Security](security-guide.md#-database-security)
-- [📊 Auditing & Monitoring](security-guide.md#-auditing--monitoring)
-- [✅ Security Checklist](security-guide.md#-security-checklist)
+- [SQL Injection Prevention](security-guide.md#sql-injection-prevention)
+- [Authentication & Authorization](security-guide.md#authentication--authorization)
+- [Data Protection](security-guide.md#data-protection)
+- [Input Validation](security-guide.md#input-validation)
+- [Database Security](security-guide.md#database-security)
+- [Auditing & Monitoring](security-guide.md#auditing--monitoring)
+- [Security Checklist](security-guide.md#security-checklist)
 
 ---
 
-## 🛡️ SQL Injection Prevention
+## SQL Injection Prevention
 
-### 🎯 Parameterized Queries (Built-in Protection)
+### Parameterized Queries (Built-in Protection)
 
 CQL automatically protects against SQL injection through parameterized queries:
 
 ```crystal
-# ✅ Safe - CQL automatically parameterizes
+# Safe - CQL automatically parameterizes
 user = User.where(email: user_input).first?
 users = User.where("created_at > ?", date_input).all
 
-# ✅ Safe - Query builder methods use parameters
+# Safe - Query builder methods use parameters
 User.where(id: [1, 2, 3]).all
 
-# ⚠️ Dangerous - Raw SQL with string interpolation
+# Dangerous - Raw SQL with string interpolation
 schema.exec("SELECT * FROM users WHERE email = '#{user_input}'")  # DON'T DO THIS
 
-# ✅ Safe - Raw SQL with parameters
+# Safe - Raw SQL with parameters
 schema.exec_query("SELECT * FROM users WHERE email = ?", [user_input])
 ```
 
-### 🔧 Safe Dynamic Queries
+### Safe Dynamic Queries
 
 ```crystal
-# ✅ Safe dynamic filtering
+# Safe dynamic filtering
 class UserFilter
   def self.build_query(filters : Hash(String, String))
     query = User.all
@@ -65,7 +65,7 @@ class UserFilter
   end
 end
 
-# ✅ Safe column ordering
+# Safe column ordering
 class UserQuery
   ALLOWED_ORDER_COLUMNS = ["id", "name", "created_at", "email"]
 
@@ -89,9 +89,9 @@ end
 
 ---
 
-## 🔐 Authentication & Authorization
+## Authentication & Authorization
 
-### 🔑 Secure Password Handling
+### Secure Password Handling
 
 ```mermaid fullWidth="true"
 flowchart TD
@@ -196,7 +196,7 @@ struct User
 end
 ```
 
-### 🛡️ Role-Based Access Control
+### Role-Based Access Control
 
 ```mermaid fullWidth="true"
 graph TD
@@ -297,7 +297,7 @@ class UserService
 end
 ```
 
-### 🔐 Session Management
+### Session Management
 
 ```crystal
 # Secure session model
@@ -359,9 +359,9 @@ end
 
 ---
 
-## 🔒 Data Protection
+## Data Protection
 
-### 🔐 Sensitive Data Encryption
+### Sensitive Data Encryption
 
 ```crystal
 # Encrypted attribute handling
@@ -416,7 +416,7 @@ struct User
 end
 ```
 
-### 🔍 Personal Data Handling (GDPR/Privacy)
+### Personal Data Handling (GDPR/Privacy)
 
 ```crystal
 # Personal data tracking and management
@@ -479,9 +479,9 @@ end
 
 ---
 
-## 🚫 Input Validation
+## Input Validation
 
-### ✅ Comprehensive Validation
+### Comprehensive Validation
 
 ```crystal
 # Secure validation patterns
@@ -548,7 +548,7 @@ struct User
 end
 ```
 
-### 🛡️ XSS Prevention
+### XSS Prevention
 
 ```crystal
 # HTML sanitization for user content
@@ -600,9 +600,9 @@ end
 
 ---
 
-## 🔑 Database Security
+## Database Security
 
-### 🔒 Connection Security
+### Connection Security
 
 ```crystal
 # Secure database configuration
@@ -633,7 +633,7 @@ module DatabaseSecurity
 end
 ```
 
-### 🔐 Database User Permissions
+### Database User Permissions
 
 ```sql
 -- Database user setup with minimal permissions
@@ -657,9 +657,9 @@ REVOKE ALL ON information_schema FROM app_user;
 
 ---
 
-## 📊 Auditing & Monitoring
+## Auditing & Monitoring
 
-### 📝 Audit Logging
+### Audit Logging
 
 ```crystal
 # Audit trail for sensitive operations
@@ -751,7 +751,7 @@ struct User
 end
 ```
 
-### 🚨 Security Monitoring
+### Security Monitoring
 
 ```crystal
 # Security event monitoring
@@ -818,9 +818,9 @@ end
 
 ---
 
-## ✅ Security Checklist
+## Security Checklist
 
-### 🔐 Application Security
+### Application Security
 
 - [ ] **SQL Injection Prevention**
   - [ ] Use parameterized queries for all database interactions
@@ -839,7 +839,7 @@ end
   - [ ] Implement data anonymization/deletion
   - [ ] Handle personal data compliance (GDPR)
 
-### 🗄️ Database Security
+### Database Security
 
 - [ ] **Connection Security**
   - [ ] SSL/TLS enabled for database connections
@@ -852,7 +852,7 @@ end
   - [ ] Regular credential rotation
   - [ ] Network access restrictions
 
-### 📊 Monitoring & Auditing
+### Monitoring & Auditing
 
 - [ ] **Audit Logging**
   - [ ] All sensitive operations logged
@@ -865,7 +865,7 @@ end
   - [ ] Suspicious query pattern detection
   - [ ] Real-time security alerts
 
-### 🔧 Development Security
+### Development Security
 
 - [ ] **Code Security**
   - [ ] Security code reviews
@@ -880,9 +880,9 @@ end
 
 ---
 
-## 🚀 Advanced Security Patterns
+## Advanced Security Patterns
 
-### 🔐 Zero-Trust Data Access
+### Zero-Trust Data Access
 
 ```crystal
 # Implement zero-trust principle for data access
@@ -924,7 +924,7 @@ module ZeroTrustAccess
 end
 ```
 
-### 🕵️ Threat Detection
+### Threat Detection
 
 ```mermaid fullWidth="true"
 flowchart TD
@@ -1002,7 +1002,7 @@ end
 
 ---
 
-> 🔐 **Security is not a feature, it's a foundation** - Implement security measures from the beginning of your project, not as an afterthought. Regular security reviews and updates are essential for maintaining protection.
+Security is not a feature, it's a foundation. Implement security measures from the beginning of your project, not as an afterthought. Regular security reviews and updates are essential for maintaining protection.
 
 **Next Steps:**
 

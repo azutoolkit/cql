@@ -1,6 +1,6 @@
 # CRUD Operations
 
-CQL Active Record models provide a rich set of methods for performing CRUD (Create, Read, Update, Delete) operations on your database records. These methods are designed to be intuitive and align with common Active Record patterns.
+CQL Active Record models provide a comprehensive set of methods for performing CRUD (Create, Read, Update, Delete) operations on your database records. These methods are designed to be intuitive and align with common Active Record patterns.
 
 This guide assumes you have a model defined, for example:
 
@@ -16,7 +16,7 @@ struct User
 end
 ```
 
-***
+---
 
 ## 1. Creating Records
 
@@ -26,10 +26,10 @@ There are several ways to create new records and persist them to the database.
 
 The most fundamental way is to create a new instance of your model using `new` and then call `save` or `save!` to persist it.
 
-* **`save`**: Attempts to save the record. Runs validations. If successful, populates the `id` (if auto-generated) and returns `true`. If validations fail or another `before_save` callback halts the chain, it returns `false` and does not persist the record. The `errors` collection on the instance can be inspected.
-* **`save!`**: Similar to `save`, but raises an exception if the record cannot be saved.
-  * Raises `CQL::Errors::RecordInvalid` if validations fail.
-  * May raise other database-related exceptions or `CQL::Errors::RecordNotSaved` for other save failures.
+- **`save`**: Attempts to save the record. Runs validations. If successful, populates the `id` (if auto-generated) and returns `true`. If validations fail or another `before_save` callback halts the chain, it returns `false` and does not persist the record. The `errors` collection on the instance can be inspected.
+- **`save!`**: Similar to `save`, but raises an exception if the record cannot be saved.
+  - Raises `CQL::Errors::RecordInvalid` if validations fail.
+  - May raise other database-related exceptions or `CQL::Errors::RecordNotSaved` for other save failures.
 
 ```crystal
 # Using save (returns true/false)
@@ -56,8 +56,8 @@ end
 
 These class methods provide a convenient way to instantiate and save a record in a single step.
 
-* **`Model.create(attributes)`**: Creates a new instance with the given attributes (as a Hash or keyword arguments) and attempts to `save` it. Returns the model instance (which might be invalid and not persisted if `save` failed) or `false` if a `before_create` callback halted the process.
-* **`Model.create!(attributes)`**: Similar to `create`, but calls `save!` internally. It will raise an exception (`CQL::Errors::RecordInvalid` or other) if the record cannot be created and persisted.
+- **`Model.create(attributes)`**: Creates a new instance with the given attributes (as a Hash or keyword arguments) and attempts to `save` it. Returns the model instance (which might be invalid and not persisted if `save` failed) or `false` if a `before_create` callback halted the process.
+- **`Model.create!(attributes)`**: Similar to `create`, but calls `save!` internally. It will raise an exception (`CQL::Errors::RecordInvalid` or other) if the record cannot be created and persisted.
 
 ```crystal
 # Using create! (raises on failure)
@@ -91,7 +91,7 @@ end
 
 This method attempts to find a record matching the given attributes. If found, it returns that record. If not found, it creates and persists a new record with those attributes (plus any additional ones provided if the find attributes are a subset of create attributes).
 
-* It uses `create!` internally for the creation part, so it can raise exceptions if the creation fails (e.g., due to validations).
+- It uses `create!` internally for the creation part, so it can raise exceptions if the creation fails (e.g., due to validations).
 
 ```crystal
 # Attempts to find a user by email. If not found, creates with name and email.
@@ -108,7 +108,7 @@ user_diana = User.find_or_create_by(email: "diana@example.com", name: "Diana Pri
 puts "User '#{user_diana.name}' created or found."
 ```
 
-***
+---
 
 ## 2. Reading Records
 
@@ -116,44 +116,50 @@ CQL provides various methods to retrieve records from the database. Many of thes
 
 **Summary of Common Finders:**
 
-*   **`Model.all`**: Retrieves all records of the model type. Returns `Array(Model)`.
+- **`Model.all`**: Retrieves all records of the model type. Returns `Array(Model)`.
 
-    ```crystal
-    all_users = User.all
-    ```
-*   **`Model.find?(id : Pk)`** (or `Model.find(id : Pk)`): Finds a record by its primary key. Returns `Model?` (the instance or `nil`).
+  ```crystal
+  all_users = User.all
+  ```
 
-    ```crystal
-    maybe_user = User.find?(1_i64)
-    ```
-*   **`Model.find!(id : Pk)`**: Finds a record by its primary key. Returns `Model` or raises `DB::NoResultsError` (or similar if not found).
+- **`Model.find?(id : Pk)`** (or `Model.find(id : Pk)`): Finds a record by its primary key. Returns `Model?` (the instance or `nil`).
 
-    ```crystal
-    # user = User.find!(1_i64)
-    ```
-*   **`Model.find_by(**attributes)`**: Finds the first record matching the given attributes. Returns `Model?`.
+  ```crystal
+  maybe_user = User.find?(1_i64)
+  ```
 
-    ```crystal
-    active_admin = User.find_by(active: true, role: "admin")
-    ```
-*   **`Model.find_by!(**attributes)`**: Finds the first record matching attributes. Returns `Model`or raises`DB::NoResultsError`.
+- **`Model.find!(id : Pk)`**: Finds a record by its primary key. Returns `Model` or raises `DB::NoResultsError` (or similar if not found).
 
-    ```crystal
-    # specific_user = User.find_by!(email: "jane.doe@example.com")
-    ```
-*   **`Model.find_all_by(**attributes)`**: Finds all records matching attributes. Returns `Array(Model)`.
+  ```crystal
+  # user = User.find!(1_i64)
+  ```
 
-    ```crystal
-    all_active_users = User.find_all_by(active: true)
-    ```
-* **`Model.first`**: Retrieves the first record (ordered by primary key). Returns `Model?`.
-* **`Model.last`**: Retrieves the last record (ordered by primary key). Returns `Model?`.
-* **`Model.count`**: Returns the total number of records as `Int64`.
-* **`Model.query.[condition].count`**: Counts records matching specific conditions.
+- **`Model.find_by(**attributes)`**: Finds the first record matching the given attributes. Returns `Model?`.
+
+  ```crystal
+  active_admin = User.find_by(active: true, role: "admin")
+  ```
+
+- **`Model.find_by!(**attributes)`**: Finds the first record matching attributes. Returns `Model`or raises`DB::NoResultsError`.
+
+  ```crystal
+  # specific_user = User.find_by!(email: "jane.doe@example.com")
+  ```
+
+- **`Model.find_all_by(**attributes)`**: Finds all records matching attributes. Returns `Array(Model)`.
+
+  ```crystal
+  all_active_users = User.find_all_by(active: true)
+  ```
+
+- **`Model.first`**: Retrieves the first record (ordered by primary key). Returns `Model?`.
+- **`Model.last`**: Retrieves the last record (ordered by primary key). Returns `Model?`.
+- **`Model.count`**: Returns the total number of records as `Int64`.
+- **`Model.query.[condition].count`**: Counts records matching specific conditions.
 
 For building more complex queries (e.g., with joins, specific selections, grouping), refer to the [Querying Guide](../guides/active-record-with-cql/querying.md).
 
-***
+---
 
 ## 3. Updating Records
 
@@ -194,8 +200,8 @@ end
 
 These instance methods provide a shortcut to assign attributes and then save the record.
 
-* **`instance.update(attributes)`**: Assigns the given attributes (Hash or keyword arguments) to the instance and then calls `save`. Returns `true` if successful, `false` otherwise.
-* **`instance.update!(attributes)`**: Assigns attributes and calls `save!`. Raises an exception if saving fails (e.g., `CQL::Errors::RecordInvalid`).
+- **`instance.update(attributes)`**: Assigns the given attributes (Hash or keyword arguments) to the instance and then calls `save`. Returns `true` if successful, `false` otherwise.
+- **`instance.update!(attributes)`**: Assigns attributes and calls `save!`. Raises an exception if saving fails (e.g., `CQL::Errors::RecordInvalid`).
 
 ```crystal
 if user_alice = User.find_by(email: "alice@example.com")
@@ -243,8 +249,8 @@ end
 
 These methods allow updating multiple records at once without instantiating each one.
 
-* **`Model.update_by(conditions_hash, updates_hash)`**: Updates all records matching `conditions_hash` with the attributes in `updates_hash`.
-* **`Model.update_all(updates_hash)`**: Updates all records in the table with the attributes in `updates_hash`. **Use with extreme caution!**
+- **`Model.update_by(conditions_hash, updates_hash)`**: Updates all records matching `conditions_hash` with the attributes in `updates_hash`.
+- **`Model.update_all(updates_hash)`**: Updates all records in the table with the attributes in `updates_hash`. **Use with extreme caution!**
 
 These methods typically execute a single SQL `UPDATE` statement and do **not** instantiate records, run validations, or trigger callbacks.
 
@@ -261,7 +267,7 @@ puts "Deactivated all guest users."
 # puts "Set all users to pending_review status."
 ```
 
-***
+---
 
 ## 4. Deleting Records
 
@@ -271,8 +277,8 @@ Records can be deleted individually or in batches.
 
 Deletes the specific model instance from the database.
 
-* Runs `before_destroy` and `after_destroy` callbacks.
-* Returns `true` if successful. Returns `false` if a `before_destroy` callback halts the operation.
+- Runs `before_destroy` and `after_destroy` callbacks.
+- Returns `true` if successful. Returns `false` if a `before_destroy` callback halts the operation.
 
 ```crystal
 if user_to_delete = User.find_by(email: "charlie@example.com")
@@ -291,8 +297,8 @@ end
 
 Deletes the record with the specified primary key directly from the database.
 
-* This method typically does **not** run Active Record callbacks (`before_destroy`, `after_destroy`) as it usually issues a direct SQL `DELETE` command.
-* It might raise an exception if the record doesn't exist or if there's a database error.
+- This method typically does **not** run Active Record callbacks (`before_destroy`, `after_destroy`) as it usually issues a direct SQL `DELETE` command.
+- It might raise an exception if the record doesn't exist or if there's a database error.
 
 ```crystal
 if some_user = User.find_by(email: "user_to_delete_by_id@example.com")
@@ -310,8 +316,8 @@ end
 
 These class methods delete multiple records based on conditions or all records from a table.
 
-* **`Model.delete_by!(attributes_hash)`**: Deletes all records matching the `attributes_hash`.
-* **`Model.delete_all`**: Deletes all records from the model's table. **Use with extreme caution!**
+- **`Model.delete_by!(attributes_hash)`**: Deletes all records matching the `attributes_hash`.
+- **`Model.delete_all`**: Deletes all records from the model's table. **Use with extreme caution!**
 
 These methods typically execute direct SQL `DELETE` statements and do **not** instantiate records or run Active Record callbacks.
 
@@ -327,6 +333,6 @@ puts "Deleted all inactive users (callbacks likely skipped)."
 
 Always be careful with batch delete operations, especially `delete_all`, as they can lead to irreversible data loss if not used correctly.
 
-***
+---
 
 This guide covers the primary CRUD operations available in CQL Active Record. For more advanced querying, refer to the [Querying Guide](../guides/active-record-with-cql/querying.md), and for information on lifecycle events and data integrity, see the guides on [Callbacks](callbacks.md) and [Validations](validations.md).

@@ -2,7 +2,7 @@
 
 CQL Active Record models are Crystal classes or structs that map directly to database tables. Each model encapsulates the table's columns as properties, provides type-safe access to data, and includes methods for persistence, querying, and associations.
 
-***
+---
 
 ## Basic Model Definition
 
@@ -44,7 +44,7 @@ end
 * Nullable types (e.g., `Int32?`, `String?`) are used for columns that may be `NULL` or auto-generated
 * Define a constructor to initialize required fields
 
-***
+---
 
 ## Primary Key Types
 
@@ -100,7 +100,7 @@ class Event
 end
 ```
 
-***
+---
 
 ## Working with Attributes
 
@@ -185,7 +185,7 @@ article.published_at = nil      # Not published yet
 article.author_id = nil         # Anonymous article
 ```
 
-***
+---
 
 ## Database Fields Configuration
 
@@ -212,7 +212,7 @@ class User
 end
 ```
 
-***
+---
 
 ## Complete Model Example
 
@@ -272,7 +272,7 @@ puts user.name                   # => "Jane Doe"
 puts user.age                    # => 25
 ```
 
-***
+---
 
 ## Best Practices
 
@@ -283,7 +283,7 @@ puts user.age                    # => 25
 * **Be careful with mass assignment**: Validate input when using `attributes` method with user data
 * **Follow naming conventions**: Use snake\_case for database columns and property names
 
-***
+---
 
 ## Related Guides
 
@@ -315,7 +315,7 @@ For more information on working with CQL Active Record models, see these related
 * [Transactions](transactions.md) - Managing database transactions
 * [Migrations](../database-management/migrations.md) - Managing database schema changes
 
-***
+---
 
 ## Model Definition Methods
 
@@ -615,6 +615,6 @@ end
 inspect_models(User, Product, AnalyticsEvent)
 ```
 
-***
+---
 
 These model definition methods provide powerful introspection capabilities and help you work dynamically with your models while maintaining type safety. They're particularly useful for building developer tools, debugging, and creating flexible application architectures.

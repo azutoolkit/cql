@@ -4,7 +4,7 @@ icon: arrow-right-to-arc
 
 # Introduction
 
-**Crystal Query Language (CQL)** is a type-safe ORM for Crystal that combines compile-time safety with high performance.
+Crystal Query Language (CQL) is a type-safe ORM for Crystal that combines compile-time safety with high performance.
 
 ## What is CQL?
 

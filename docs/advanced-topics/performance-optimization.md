@@ -7,16 +7,16 @@ This guide covers techniques for optimizing CQL performance in your applications
 ### Development (Auto-Enabled)
 
 ```crystal
-# Performance monitoring is automatically enabled in development!
+# Performance monitoring is automatically enabled in development
 CQL.configure do |config|
   config.db = "postgresql://localhost/myapp"
 end
 
 # You get:
-# ✅ Query profiling
-# ✅ N+1 detection
-# ✅ Slow query analysis
-# ✅ Performance reports every 5 minutes
+# - Query profiling
+# - N+1 detection
+# - Slow query analysis
+# - Performance reports every 5 minutes
 ```
 
 ### Production
@@ -281,7 +281,7 @@ end
 
 ```crystal
 # Identify slow queries in reports
-# Look for queries marked with ⚠️ or 🐌
+# Look for queries marked with warnings or slow indicators
 
 # Add indexes for frequently filtered columns
 table.add_index [:status, :created_at]
@@ -344,45 +344,48 @@ end
 ### Output Examples
 
 #### Standard Query
+
 ```
-✅ SQL 2.3ms (5 rows)
+SQL 2.3ms (5 rows)
 SELECT users.*, posts.title
   FROM users
   INNER JOIN posts ON users.id = posts.user_id
   WHERE users.active = ?
   ORDER BY users.created_at DESC
   LIMIT 10
-📊 Parameters: [true]
+Parameters: [true]
 ```
 
 #### Slow Query
+
 ```
-⚠️ SQL 125.0ms (100 rows) [SLOW]
+SQL 125.0ms (100 rows) [SLOW]
 SELECT DISTINCT categories.*, COUNT(posts.id) as post_count
   FROM categories
   LEFT JOIN posts ON categories.id = posts.category_id
   GROUP BY categories.id
   HAVING post_count > ?
   ORDER BY post_count DESC
-📊 Parameters: [10]
+Parameters: [10]
 ```
 
 #### Error Query
+
 ```
-❌ SQL 0.5ms (ERROR)
+SQL 0.5ms (ERROR)
 INSERT INTO users (name, email) VALUES (?, ?)
-📊 Parameters: ["John Doe", "john@example.com"]
-💥 Error: duplicate key value violates unique constraint "users_email_key"
+Parameters: ["John Doe", "john@example.com"]
+Error: duplicate key value violates unique constraint "users_email_key"
 ```
 
 ### Performance Indicators
 
 The formatter uses visual indicators for query performance:
 
-- ✅ **Fast** (< 50ms) - Green checkmark
-- ⚠️ **Slow** (50-1000ms) - Yellow warning
-- 🐌 **Very Slow** (> 1000ms) - Snail emoji
-- ❌ **Error** - Red X
+- **Fast** (< 50ms) - Green checkmark
+- **Slow** (50-1000ms) - Yellow warning
+- **Very Slow** (> 1000ms) - Slow indicator
+- **Error** - Red X
 
 ### Production Usage
 

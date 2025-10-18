@@ -1,6 +1,6 @@
 # Getting Started Guide
 
-Welcome to CQL (Crystal Query Language)! This guide will walk you through setting up CQL in your Crystal project, connecting to a database, defining your first model, and performing basic operations.
+Welcome to CQL (Crystal Query Language). This guide will walk you through setting up CQL in your Crystal project, connecting to a database, defining your first model, and performing basic operations.
 
 CQL is a powerful Object-Relational Mapping (ORM) library that provides type-safe database interactions, migrations, and Active Record patterns for Crystal applications.
 

@@ -1,63 +1,61 @@
 [![Crystal CI](https://github.com/azutoolkit/cql/actions/workflows/crystal.yml/badge.svg)](https://github.com/azutoolkit/cql/actions/workflows/crystal.yml)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/a85e29e6b78849c28fb813397cc3eb1a)](https://app.codacy.com/gh/azutoolkit/cql/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
-# 🚀 CQL (Crystal Query Language)
+# CQL (Crystal Query Language)
 
 <img width="1038" alt="cql-banner" src="https://github.com/user-attachments/assets/ed4e733a-3d37-4d03-a4d8-d15bfd7e6f25">
 
-**The High-Performance, Type-Safe ORM that Crystal Developers Love**
+A high-performance, type-safe ORM for Crystal applications that combines compile-time safety with runtime performance. Unlike traditional ORMs that catch errors at runtime, CQL validates your queries, relationships, and data access patterns before your code executes.
 
-CQL is a powerful Object-Relational Mapping (ORM) library for the Crystal programming language that **combines blazing-fast performance with compile-time safety**. Unlike traditional ORMs that catch errors at runtime, CQL validates your queries, relationships, and data access patterns **before your code even runs**.
+> _"We migrated our Rails API to Crystal + CQL and saw response times drop from 200ms to 45ms while handling 3x more concurrent users."_ - Production User
 
-> _"We migrated our Rails API to Crystal + CQL and saw **response times drop from 200ms to 45ms** while handling 3x more concurrent users."_ - Production User
+**[Complete Documentation →](https://azutopia.gitbook.io/cql)**
 
-📖 **[📚 Complete Documentation →](https://azutopia.gitbook.io/cql)**
+## Why Choose CQL
 
-## ✨ Why Developers Choose CQL
+### Performance
 
-### ⚡ **Performance That Actually Matters**
+- 4x faster than ActiveRecord and Eloquent in real-world scenarios
+- 75% less memory usage compared to Ruby/PHP ORMs
+- Zero-allocation queries for maximum throughput
+- Compile-time optimizations eliminate runtime overhead
 
-- **4x Faster** than ActiveRecord and Eloquent in real-world scenarios
-- **75% Less Memory** usage compared to Ruby/PHP ORMs
-- **Zero-allocation Queries** for maximum throughput
-- **Compile-time Optimizations** eliminate runtime overhead
+### Type Safety
 
-### 🔒 **Type Safety That Prevents Bugs**
+- Catch errors at compile time - invalid queries fail before deployment
+- Full IDE autocompletion support for queries and relationships
+- Safe refactoring - rename columns/tables with confidence
+- No runtime surprises - association errors caught early
 
-- **Catch Errors at Compile Time** - Invalid queries fail before deployment
-- **IDE Autocompletion** - Full IntelliSense support for queries and relationships
-- **Refactoring Safety** - Rename columns/tables with confidence
-- **No More Runtime Surprises** - Association errors caught early
+### Developer Experience
 
-### 🏗️ **Developer Experience That Scales**
+- Familiar ActiveRecord-style API - easy migration from Rails/Laravel
+- Rich query DSL with readable, type-safe syntax
+- Automatic schema synchronization - database changes tracked and versioned
+- Built-in performance monitoring with N+1 query detection
 
-- **Familiar ActiveRecord-style API** - Easy migration from Rails/Laravel
-- **Rich Query DSL** - Write complex queries with readable, type-safe syntax
-- **Automatic Schema Sync** - Database changes tracked and versioned
-- **Built-in Performance Monitoring** - N+1 query detection and optimization hints
+## Core Features
 
-## 🎯 Core Features
+- **Type-Safe ORM**: Leverage Crystal's static type system for compile-time safety
+- **High Performance**: 4x faster than traditional ORMs with compile-time optimizations
+- **Active Record Pattern**: Intuitive Active Record API with full CRUD operations
+- **Smart Relationships**: Support for `belongs_to`, `has_one`, `has_many`, and `many_to_many` with automatic N+1 prevention
+- **Comprehensive Validations**: Built-in validation system with custom validator support
+- **Lifecycle Callbacks**: Before/after hooks for validation, save, create, update, and destroy
+- **Intelligent Migrations**: Schema evolution tools with automatic rollback support
+- **Schema Dump**: Reverse-engineer existing databases into CQL schema definitions
+- **Flexible Querying**: Fluent query builder with complex joins, subqueries, and raw SQL support
+- **Transaction Support**: Full ACID transaction support with nested transactions (savepoints)
+- **Optimistic Locking**: Built-in support for optimistic concurrency control
+- **Query Scopes**: Reusable query scopes for common filtering patterns
+- **Advanced Caching**: Multi-layer caching with Redis and memory cache support
+- **Performance Monitoring**: Built-in query profiling, N+1 detection, and optimization suggestions
+- **Multi-Database**: Support for PostgreSQL, MySQL, and SQLite with dialect-specific optimizations
+- **Flexible Primary Keys**: Support for Int32, Int64, UUID, and ULID primary keys
 
-- **🔒 Type-Safe ORM**: Leverage Crystal's static type system for compile-time safety
-- **⚡ High Performance**: 4x faster than traditional ORMs with compile-time optimizations
-- **🏗️ Active Record Pattern**: Intuitive Active Record API with full CRUD operations
-- **🔗 Smart Relationships**: Support for `belongs_to`, `has_one`, `has_many`, and `many_to_many` with automatic N+1 prevention
-- **✅ Comprehensive Validations**: Built-in validation system with custom validator support
-- **🔄 Lifecycle Callbacks**: Before/after hooks for validation, save, create, update, and destroy
-- **🗄️ Intelligent Migrations**: Schema evolution tools with automatic rollback support
-- **📋 Schema Dump**: Reverse-engineer existing databases into CQL schema definitions
-- **🔍 Flexible Querying**: Fluent query builder with complex joins, subqueries, and raw SQL support
-- **💾 Transaction Support**: Full ACID transaction support with nested transactions (savepoints)
-- **🔐 Optimistic Locking**: Built-in support for optimistic concurrency control
-- **🎯 Query Scopes**: Reusable query scopes for common filtering patterns
-- **🚀 Advanced Caching**: Multi-layer caching with Redis and memory cache support
-- **📊 Performance Monitoring**: Built-in query profiling, N+1 detection, and optimization suggestions
-- **🌐 Multi-Database**: Support for PostgreSQL, MySQL, and SQLite with dialect-specific optimizations
-- **🔑 Flexible Primary Keys**: Support for Int32, Int64, UUID, and ULID primary keys
+## Performance Comparison
 
-## 📊 Performance Comparison
-
-**Real-world benchmarks** (1M records, complex queries):
+Real-world benchmarks (1M records, complex queries):
 
 | Operation         | CQL   | ActiveRecord | Eloquent | Improvement     |
 | ----------------- | ----- | ------------ | -------- | --------------- |
@@ -66,15 +64,15 @@ CQL is a powerful Object-Relational Mapping (ORM) library for the Crystal progra
 | **Bulk INSERT**   | 15ms  | 89ms         | 124ms    | **6-8x faster** |
 | **Memory Usage**  | 12MB  | 48MB         | 67MB     | **75% less**    |
 
-## 🌐 Database Support
+## Database Support
 
 | Database       | Support Level | Special Features                  |
 | -------------- | ------------- | --------------------------------- |
-| **PostgreSQL** | ✅ Full       | JSONB, Arrays, Advanced Types     |
-| **MySQL**      | ✅ Full       | Complete MySQL support            |
-| **SQLite**     | ✅ Full       | Perfect for development & testing |
+| **PostgreSQL** | Full          | JSONB, Arrays, Advanced Types     |
+| **MySQL**      | Full          | Complete MySQL support            |
+| **SQLite**     | Full          | Perfect for development & testing |
 
-## 🚀 Installation
+## Installation
 
 Add CQL and your database driver to your `shard.yml`:
 
@@ -99,9 +97,9 @@ Then install dependencies:
 shards install
 ```
 
-## ⚡ Quick Start - Build Something Amazing in 5 Minutes
+## Quick Start
 
-### 1. **Define Your Schema** (Type-Safe Schema Definition)
+### 1. Define Your Schema
 
 ```crystal
 require "cql"
@@ -141,7 +139,7 @@ BlogDB.users.create!
 BlogDB.posts.create!
 ```
 
-### 2. **Create Models** (With Built-in Validations & Relationships)
+### 2. Create Models
 
 ```crystal
 struct User
@@ -195,7 +193,7 @@ struct Post
 end
 ```
 
-### 3. **Work with Your Data** (Type-Safe Operations)
+### 3. Work with Your Data
 
 ```crystal
 # Create with automatic validation
@@ -240,12 +238,12 @@ recent_active_authors = User.joins(:posts)
 puts "Found #{recent_active_authors} active authors this week"
 ```
 
-## 🏗️ Advanced Features That Scale
+## Advanced Features
 
-### **Type-Safe Schema Definition**
+### Type-Safe Schema Definition
 
 ```crystal
-# Enterprise-grade schema with advanced features
+# Schema with advanced features
 BlogDB = CQL::Schema.define(:blog, adapter: CQL::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
   table :products do
     primary :id, UUID                    # UUID primary keys
@@ -261,7 +259,7 @@ BlogDB = CQL::Schema.define(:blog, adapter: CQL::Adapter::Postgres, uri: ENV["DA
 end
 ```
 
-### **Powerful Active Record Pattern**
+### Active Record Pattern
 
 ```crystal
 struct Product
@@ -300,7 +298,7 @@ product.save!  # Validates before saving
 product.destroy!
 ```
 
-### **Enterprise-Grade Validations**
+### Validations
 
 ```crystal
 struct User
@@ -326,7 +324,7 @@ unless user.valid?
 end
 ```
 
-### **Smart Relationships (No More N+1 Queries)**
+### Smart Relationships
 
 ```crystal
 struct User
@@ -355,7 +353,7 @@ users_with_posts = User.includes(:posts, :profile)
 # Single query instead of N+1 queries!
 ```
 
-### **Advanced Transaction Management**
+### Transaction Management
 
 ```crystal
 # Simple atomic transactions
@@ -382,7 +380,7 @@ User.transaction do |outer_tx|
 end
 ```
 
-### **Intelligent Schema Migrations**
+### Schema Migrations
 
 ```crystal
 # Version-controlled database evolution
@@ -419,7 +417,7 @@ migrator.down(1)      # Rollback last migration safely
 migrator.status       # Check migration status
 ```
 
-### **Reusable Query Scopes**
+### Query Scopes
 
 ```crystal
 struct Post
@@ -443,7 +441,7 @@ user_content = Post.by_user(user.id.not_nil!)
                   .all
 ```
 
-### **Reverse Engineering with Schema Dump**
+### Schema Dump
 
 ```crystal
 # Import existing databases into CQL
@@ -465,10 +463,10 @@ dumper.close
 # Now use your legacy database with full CQL features!
 ```
 
-### **Multi-Layer Caching Architecture**
+### Caching
 
 ```crystal
-# Enterprise-grade caching configuration
+# Caching configuration
 cache_config = CQL::Cache::CacheConfig.new(
   enabled: true,
   ttl: 1.hour,
@@ -498,10 +496,10 @@ end
 fragment_cache.invalidate_tags(["user:#{user.id}", "posts"])
 ```
 
-### **Built-in Performance Monitoring**
+### Performance Monitoring
 
 ```crystal
-# Comprehensive performance monitoring
+# Performance monitoring
 monitor = CQL::Performance::PerformanceMonitor.new
 
 # Real-time query monitoring
@@ -527,83 +525,83 @@ report_generator.generate_report(monitor.events, "performance_report.html")
 puts "📊 Performance report generated: performance_report.html"
 ```
 
-## 🎯 Perfect For Your Use Case
+## Use Cases
 
-### **🚀 High-Performance APIs**
+### High-Performance APIs
 
 - RESTful APIs serving millions of requests
 - GraphQL backends with complex data fetching
 - Real-time applications with WebSocket connections
 - Microservices requiring fast data access
 
-### **🏢 Enterprise Applications**
+### Enterprise Applications
 
 - Large-scale web applications
 - Complex business logic with data integrity requirements
 - Multi-tenant SaaS platforms
 - Financial and healthcare applications requiring compliance
 
-### **☁️ Cloud-Native Development**
+### Cloud-Native Development
 
 - Container-based deployments
 - Kubernetes-native applications
 - Serverless functions with database access
 - Auto-scaling applications
 
-### **🔧 Modern Development Workflows**
+### Modern Development Workflows
 
 - CI/CD pipelines with database testing
 - Type-safe development practices
 - Large team collaboration
 - Long-term maintenance and refactoring
 
-## 📚 Documentation
+## Documentation
 
-**📖 [Complete Documentation on GitBook →](https://azutopia.gitbook.io/cql)**
+**[Complete Documentation on GitBook →](https://azutopia.gitbook.io/cql)**
 
-**Comprehensive guides for every level:**
+Comprehensive guides for every level:
 
-### **🚦 Getting Started**
+### Getting Started
 
-- **[📖 Installation Guide](./docs/installation.md)** - Set up CQL in your project in 5 minutes
-- **[🎯 Getting Started](./docs/guides/getting-started.md)** - Your first CQL application
-- **[🏗️ Schema Definition](./docs/core-concepts/schemas.md)** - Type-safe database schemas
-- **[🔧 Configuration](./docs/guides/configuration.md)** - Environment setup and database connections
+- **[Installation Guide](./docs/installation.md)** - Set up CQL in your project
+- **[Getting Started](./docs/guides/getting-started.md)** - Your first CQL application
+- **[Schema Definition](./docs/core-concepts/schemas.md)** - Type-safe database schemas
+- **[Configuration](./docs/guides/configuration.md)** - Environment setup and database connections
 
-### **🏗️ Core Features**
+### Core Features
 
-- **[👤 Defining Models](./docs/guides/active-record-with-cql/defining-models.md)** - Active Record model setup
-- **[📝 CRUD Operations](./docs/guides/active-record-with-cql/crud-operations.md)** - Create, read, update, delete
-- **[🔍 Complex Queries](./docs/guides/active-record-with-cql/complex-queries.md)** - Advanced querying and N+1 prevention
-- **[✅ Validations](./docs/guides/active-record-with-cql/validations.md)** - Data validation and integrity
-- **[🔗 Relationships](./docs/guides/active-record-with-cql/relations/README.md)** - Model associations and relationships
+- **[Defining Models](./docs/guides/active-record-with-cql/defining-models.md)** - Active Record model setup
+- **[CRUD Operations](./docs/guides/active-record-with-cql/crud-operations.md)** - Create, read, update, delete
+- **[Complex Queries](./docs/guides/active-record-with-cql/complex-queries.md)** - Advanced querying and N+1 prevention
+- **[Validations](./docs/guides/active-record-with-cql/validations.md)** - Data validation and integrity
+- **[Relationships](./docs/guides/active-record-with-cql/relations/README.md)** - Model associations and relationships
 
-### **⚡ Advanced Topics**
+### Advanced Topics
 
-- **[💾 Transactions](./docs/guides/active-record-with-cql/transactions.md)** - Managing database transactions
-- **[🗄️ Migrations](./docs/guides/active-record-with-cql/migrations.md)** - Schema evolution and versioning
-- **[📋 Schema Dump](./docs/guides/schema-dump.md)** - Reverse-engineer existing databases
-- **[🔄 Callbacks](./docs/guides/active-record-with-cql/callbacks.md)** - Lifecycle hooks and callbacks
-- **[🎯 Scopes](./docs/guides/active-record-with-cql/scopes.md)** - Reusable query methods
-- **[🔐 Optimistic Locking](./docs/guides/active-record-with-cql/optimistic-locking.md)** - Concurrency control
+- **[Transactions](./docs/guides/active-record-with-cql/transactions.md)** - Managing database transactions
+- **[Migrations](./docs/guides/active-record-with-cql/migrations.md)** - Schema evolution and versioning
+- **[Schema Dump](./docs/guides/schema-dump.md)** - Reverse-engineer existing databases
+- **[Callbacks](./docs/guides/active-record-with-cql/callbacks.md)** - Lifecycle hooks and callbacks
+- **[Scopes](./docs/guides/active-record-with-cql/scopes.md)** - Reusable query methods
+- **[Optimistic Locking](./docs/guides/active-record-with-cql/optimistic-locking.md)** - Concurrency control
 
-### **🚀 Performance & Production**
+### Performance & Production
 
-- **[🚀 Advanced Caching](./docs/guides/advanced-caching-architecture.md)** - Multi-layer caching strategies
-- **[📊 Performance Monitoring](./docs/guides/performance-optimization.md)** - Query profiling and optimization
-- **[🔒 Security Guide](./docs/guides/security-guide.md)** - Production security best practices
-- **[🧪 Testing Strategies](./docs/guides/testing-strategies.md)** - Testing CQL applications
+- **[Advanced Caching](./docs/guides/advanced-caching-architecture.md)** - Multi-layer caching strategies
+- **[Performance Monitoring](./docs/guides/performance-optimization.md)** - Query profiling and optimization
+- **[Security Guide](./docs/guides/security-guide.md)** - Production security best practices
+- **[Testing Strategies](./docs/guides/testing-strategies.md)** - Testing CQL applications
 
-### **📖 Reference**
+### Reference
 
-- **[🎯 Quick Reference](./docs/guides/quick-reference.md)** - Cheat sheet for common operations
-- **[🏗️ Architecture Overview](./docs/guides/architecture-overview.md)** - Understanding CQL's design
-- **[❓ FAQ](./docs/faqs.md)** - Frequently asked questions
-- **[🐛 Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
+- **[Quick Reference](./docs/guides/quick-reference.md)** - Cheat sheet for common operations
+- **[Architecture Overview](./docs/guides/architecture-overview.md)** - Understanding CQL's design
+- **[FAQ](./docs/faqs.md)** - Frequently asked questions
+- **[Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
 
-## 🧪 Development & Testing
+## Development & Testing
 
-### **Running Tests**
+### Running Tests
 
 ```bash
 # Start PostgreSQL for full test suite
@@ -621,7 +619,7 @@ crystal spec spec/cache/                           # Caching tests
 crystal spec spec/performance/                     # Performance tests
 ```
 
-### **Database Compatibility**
+### Database Compatibility
 
 CQL is actively tested and optimized for:
 
@@ -631,41 +629,41 @@ CQL is actively tested and optimized for:
 
 Each adapter supports database-specific features and provides optimal performance.
 
-## 🤝 Contributing
+## Contributing
 
-**We love contributions!** Here's how to get involved:
+We welcome contributions! Here's how to get involved:
 
-### **🚀 Quick Start**
+### Quick Start
 
-1. **Fork** the repository on GitHub
-2. **Clone** your fork: `git clone https://github.com/yourusername/cql.git`
-3. **Create** your feature branch: `git checkout -b my-awesome-feature`
-4. **Make** your changes and add comprehensive tests
-5. **Run** the test suite: `crystal spec`
-6. **Commit** your changes: `git commit -am 'Add awesome feature'`
-7. **Push** to your branch: `git push origin my-awesome-feature`
-8. **Create** a Pull Request with a clear description
+1. Fork the repository on GitHub
+2. Clone your fork: `git clone https://github.com/yourusername/cql.git`
+3. Create your feature branch: `git checkout -b my-feature`
+4. Make your changes and add comprehensive tests
+5. Run the test suite: `crystal spec`
+6. Commit your changes: `git commit -am 'Add feature'`
+7. Push to your branch: `git push origin my-feature`
+8. Create a Pull Request with a clear description
 
-### **💡 Contribution Ideas**
+### Contribution Ideas
 
-- 🐛 **Bug Fixes** - Help us squash bugs and improve reliability
-- ⚡ **Performance** - Optimize queries, reduce memory usage, improve speed
-- 📚 **Documentation** - Improve guides, add examples, fix typos
-- 🧪 **Tests** - Add test coverage, create integration scenarios
-- 🎯 **Features** - Implement new ORM features and database support
-- 🔧 **Developer Experience** - Improve error messages, add tooling
+- **Bug Fixes** - Help improve reliability
+- **Performance** - Optimize queries, reduce memory usage, improve speed
+- **Documentation** - Improve guides, add examples, fix typos
+- **Tests** - Add test coverage, create integration scenarios
+- **Features** - Implement new ORM features and database support
+- **Developer Experience** - Improve error messages, add tooling
 
-### **📋 Development Guidelines**
+### Development Guidelines
 
-- ✅ Follow Crystal coding conventions and style guidelines
-- 🧪 Add comprehensive tests for new features and bug fixes
-- 📖 Update documentation for API changes and new features
-- 🗄️ Ensure compatibility across all supported databases (PostgreSQL, MySQL, SQLite)
-- 📝 Use meaningful commit messages following [conventional commits](https://conventionalcommits.org/)
-- ⚡ Add performance benchmarks for query-related features
-- 🔒 Consider security implications for new features
+- Follow Crystal coding conventions and style guidelines
+- Add comprehensive tests for new features and bug fixes
+- Update documentation for API changes and new features
+- Ensure compatibility across all supported databases (PostgreSQL, MySQL, SQLite)
+- Use meaningful commit messages following [conventional commits](https://conventionalcommits.org/)
+- Add performance benchmarks for query-related features
+- Consider security implications for new features
 
-### **🎯 Areas We Need Help With**
+### Areas We Need Help With
 
 - Database adapter improvements and new database support
 - Query optimization and performance enhancements
@@ -673,36 +671,26 @@ Each adapter supports database-specific features and provides optimal performanc
 - Testing across different Crystal versions
 - Integration with popular Crystal web frameworks
 
-## 📄 License
+## License
 
 CQL is released under the [MIT License](./LICENSE). Feel free to use it in personal and commercial projects.
 
 ---
 
-<div align="center">
-
-## 🚀 Ready to Build Something Amazing?
-
-**Join thousands of developers building fast, type-safe applications with CQL**
+## Get Started
 
 ```crystal
-# Install CQL and start building your next high-performance app
+# Install CQL and start building your application
 shards install
 
-# Try our interactive examples
+# Try the interactive examples
 crystal examples/run_examples.cr
-
-# Your next breakthrough application starts here! 🎯
 ```
 
-**[📖 Get Started Now →](./docs/guides/getting-started.md) • [🔧 Try Examples →](./examples/) • [💬 Join Community →](https://github.com/azutoolkit/cql/discussions)**
+**[Get Started Now →](./docs/guides/getting-started.md) • [Try Examples →](./examples/) • [Join Community →](https://github.com/azutoolkit/cql/discussions)**
 
 ---
 
-**Built with ❤️ for the Crystal community**
+Built for the Crystal community.
 
-_CQL provides the productivity of modern ORMs with the performance and type safety that Crystal developers deserve. Whether you're building a simple web application or a complex enterprise system, CQL gives you the tools to work with your data efficiently and safely._
-
-**Performance • Type Safety • Developer Experience**
-
-</div>
+CQL provides the productivity of modern ORMs with the performance and type safety that Crystal developers need. Whether you're building a simple web application or a complex enterprise system, CQL gives you the tools to work with your data efficiently and safely.

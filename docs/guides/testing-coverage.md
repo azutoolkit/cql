@@ -1,6 +1,6 @@
 # Test Coverage & Quality Assurance
 
-> **Ensure code quality** - Comprehensive guide to testing, coverage measurement, and quality assurance in CQL
+Comprehensive guide to testing, coverage measurement, and quality assurance in CQL applications.
 
 ## Overview
 
@@ -153,14 +153,14 @@ end
 Each test should be independent:
 
 ```crystal
-# ✅ Good - creates own data
+# Good - creates own data
 it "finds user by email" do
   user = User.create(email: "test@example.com")
   found = User.find_by(email: "test@example.com")
   found.should eq(user)
 end
 
-# ❌ Bad - depends on other tests
+# Bad - depends on other tests
 it "finds user by email" do
   # Assumes user exists from previous test
   found = User.find_by(email: "test@example.com")
@@ -173,12 +173,12 @@ end
 Use descriptive test names:
 
 ```crystal
-# ✅ Good - clear intent
+# Good - clear intent
 it "prevents SQL injection in WHERE clauses"
 it "raises RecordNotFound when ID doesn't exist"
 it "caches query results within same request"
 
-# ❌ Bad - vague
+# Bad - vague
 it "works correctly"
 it "test 1"
 it "user stuff"
@@ -189,14 +189,14 @@ it "user stuff"
 Each test should verify one behavior:
 
 ```crystal
-# ✅ Good - focused
+# Good - focused
 it "validates email presence" do
   user = User.new(email: nil)
   user.valid?.should be_false
   user.errors.first.field.should eq(:email)
 end
 
-# ❌ Bad - tests multiple things
+# Bad - tests multiple things
 it "validates user" do
   user = User.new(email: nil, name: nil)
   user.valid?.should be_false
@@ -267,7 +267,7 @@ Utility code needs good coverage:
 Focus on testing public interfaces:
 
 ```crystal
-# ✅ Test public API
+# Test public API
 it "query builder chains methods" do
   query = schema.query
     .from(:users)
@@ -278,7 +278,7 @@ it "query builder chains methods" do
   query.to_sql.should contain("WHERE")
 end
 
-# ⚠️ Avoid testing internals
+# Avoid testing internals
 it "query builder internal state" do
   query = schema.query.from(:users)
   query.@table.should eq(:users)  # Testing internal state
@@ -480,12 +480,12 @@ Monitor Crystal language progress on coverage:
 
 While Crystal lacks automated coverage tools, CQL maintains high test quality through:
 
-✅ **Comprehensive test suite** (801 tests)
-✅ **Pattern-based organization**
-✅ **Multiple database testing**
-✅ **Security testing**
-✅ **Manual coverage verification**
-✅ **Code review process**
+- **Comprehensive test suite** (801 tests)
+- **Pattern-based organization**
+- **Multiple database testing**
+- **Security testing**
+- **Manual coverage verification**
+- **Code review process**
 
 **Key Principle:** Every feature has tests, every bug has a regression test, every PR includes tests.
 
@@ -500,8 +500,3 @@ While Crystal lacks automated coverage tools, CQL maintains high test quality th
 ---
 
 **Next:** [Performance Testing](./performance-optimization.md)
-
-
-
-
-

@@ -2,73 +2,73 @@
 icon: database
 ---
 
-# 🚀 CQL (Crystal Query Language)
+# CQL (Crystal Query Language)
 
-**The High-Performance, Type-Safe ORM for Crystal**
+A high-performance, type-safe ORM for Crystal applications.
 
-_Build fast, reliable database applications with compile-time safety and exceptional performance._
+Build fast, reliable database applications with compile-time safety and exceptional performance.
 
-[![Type Safety](https://img.shields.io/badge/Type_Safety-Compile_Time-blue)](#-type-safety-at-compile-time) [![Database Support](https://img.shields.io/badge/Databases-PostgreSQL%20%7C%20MySQL%20%7C%20SQLite-green)](#-database-support)
+[![Type Safety](https://img.shields.io/badge/Type_Safety-Compile_Time-blue)](#type-safety-at-compile-time) [![Database Support](https://img.shields.io/badge/Databases-PostgreSQL%20%7C%20MySQL%20%7C%20SQLite-green)](#database-support)
 
 ---
 
-## ✨ What Makes CQL Special?
+## What Makes CQL Special?
 
-CQL brings **compile-time safety** and **performance optimization** to Crystal applications. Unlike traditional ORMs that check for errors at runtime, CQL validates your queries, relationships, and data access patterns **before your code even runs**.
+CQL brings compile-time safety and performance optimization to Crystal applications. Unlike traditional ORMs that check for errors at runtime, CQL validates your queries, relationships, and data access patterns before your code executes.
 
 ```crystal
-# Type-safe queries that catch errors at compile time ✅
-users = User.where(active: true)      # ✅ Type checked
-           .order(created_at: :desc)  # ✅ Validates column exists
-           .limit(10)                 # ✅ Validates parameter type
+# Type-safe queries that catch errors at compile time
+users = User.where(active: true)      # Type checked
+           .order(created_at: :desc)  # Validates column exists
+           .limit(10)                 # Validates parameter type
            .all
 
 # This would fail at COMPILE TIME, not runtime:
-# User.where(nonexistent: true)      # ❌ Compile error!
-# User.where(age: "invalid")         # ❌ Type mismatch caught early!
+# User.where(nonexistent: true)      # Compile error!
+# User.where(age: "invalid")         # Type mismatch caught early!
 ```
 
 ---
 
-## 🎯 Key Features & Benefits
+## Key Features & Benefits
 
-### ⚡ **Performance Optimized**
+### Performance Optimized
 
-- **Zero-allocation Queries** through Crystal's compile-time optimizations
-- **Connection Pooling** built-in for high-concurrency applications
-- **Query Caching** with multiple cache backends (Memory, Redis)
-- **N+1 Query Detection** and performance monitoring tools
+- Zero-allocation queries through Crystal's compile-time optimizations
+- Connection pooling built-in for high-concurrency applications
+- Query caching with multiple cache backends (Memory, Redis)
+- N+1 query detection and performance monitoring tools
 
-### 🔒 **Type Safety at Compile Time**
+### Type Safety at Compile Time
 
-- **Catch Bugs Early** - Invalid queries fail at compile time
-- **IDE Support** - Full autocompletion and refactoring
-- **Relationship Safety** - No more runtime association errors
-- **Query Validation** - SQL structure validated before deployment
+- Catch bugs early - invalid queries fail at compile time
+- Full IDE support with autocompletion and refactoring
+- Relationship safety - no more runtime association errors
+- Query validation - SQL structure validated before deployment
 
-### 🏗️ **Developer Experience**
+### Developer Experience
 
-- **ActiveRecord-style API** - Familiar patterns for Rails developers
-- **Automatic Schema Management** - Migrations with rollback support
-- **Rich Query DSL** - Expressive and readable database queries
-- **Built-in Validations** - Data integrity without boilerplate
+- ActiveRecord-style API - familiar patterns for Rails developers
+- Automatic schema management - migrations with rollback support
+- Rich query DSL - expressive and readable database queries
+- Built-in validations - data integrity without boilerplate
 
-### 🌐 **Production Ready**
+### Production Ready
 
-- **PostgreSQL, MySQL, SQLite** support through Crystal DB drivers
-- **Transaction Management** with rollback safety
-- **Performance Monitoring** and query analysis tools
-- **Multiple Design Patterns** - Active Record, Repository, Data Mapper support
+- PostgreSQL, MySQL, SQLite support through Crystal DB drivers
+- Transaction management with rollback safety
+- Performance monitoring and query analysis tools
+- Multiple design patterns - Active Record, Repository, Data Mapper support
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-Get up and running in **under 5 minutes**:
+Get up and running in under 5 minutes:
 
-### 🎯 **Try CQL Interactively**
+### Try CQL Interactively
 
-**Explore CQL features with our interactive examples runner:**
+Explore CQL features with our interactive examples runner:
 
 ```bash
 # Clone the repository
@@ -79,17 +79,17 @@ cd cql
 crystal examples/run_examples.cr
 ```
 
-**Choose from organized categories:**
+Choose from organized categories:
 
-- 🚀 **Basic Examples** - Simple caching and core concepts
-- 💾 **Advanced Caching** - Enterprise-grade caching patterns
-- ⚙️ **Configuration** - Environment setup and best practices
-- 🗄️ **Migrations** - Database schema evolution
-- 📊 **Performance** - Monitoring and optimization
-- 🌐 **Framework Integration** - Web framework examples
-- 🎯 **Complete Blog App** - Full-featured application demo
+- **Basic Examples** - Simple caching and core concepts
+- **Advanced Caching** - Enterprise-grade caching patterns
+- **Configuration** - Environment setup and best practices
+- **Migrations** - Database schema evolution
+- **Performance** - Monitoring and optimization
+- **Framework Integration** - Web framework examples
+- **Complete Blog App** - Full-featured application demo
 
-### 1. **Add to Your Project**
+### 1. Add to Your Project
 
 ```yaml
 # shard.yml
@@ -102,7 +102,7 @@ dependencies:
     version: ~> 0.26.0
 ```
 
-### 2. **Define Your Schema**
+### 2. Define Your Schema
 
 ```crystal
 # Set up your database schema
@@ -131,7 +131,7 @@ BlogDB = CQL::Schema.define(
 end
 ```
 
-### 3. **Create Your First Model**
+### 3. Create Your First Model
 
 ```crystal
 struct User
@@ -157,7 +157,7 @@ struct User
 end
 ```
 
-### 4. **Start Building**
+### 4. Start Building
 
 ```crystal
 # Create records with validation
@@ -178,9 +178,9 @@ puts "User #{user.name} has #{posts.size} posts"
 
 ---
 
-## 📊 Database Support
+## Database Support
 
-**Supported databases with their Crystal DB drivers:**
+Supported databases with their Crystal DB drivers:
 
 | Database       | Driver    | Connection String Example             |
 | -------------- | --------- | ------------------------------------- |
@@ -190,9 +190,9 @@ puts "User #{user.name} has #{posts.size} posts"
 
 ---
 
-## 🎨 Advanced Features
+## Advanced Features
 
-### **Relationships Made Simple**
+### Relationships Made Simple
 
 ```crystal
 # Define relationships with type safety
@@ -219,7 +219,7 @@ author = post.user                    # Type: User
 comments = post.comments.all          # Type: Array(Comment)
 ```
 
-### **Powerful Query DSL**
+### Powerful Query DSL
 
 ```crystal
 # Complex queries with full type safety
@@ -238,7 +238,7 @@ posts_with_authors = BlogDB.query
   .all({title: String, content: String, name: String})
 ```
 
-### **Automatic Schema Management**
+### Automatic Schema Management
 
 ```crystal
 # Migrations with full rollback support
@@ -265,7 +265,7 @@ class CreateUsers < CQL::Migration(1)
 end
 ```
 
-### **Built-in Validations**
+### Built-in Validations
 
 ```crystal
 struct User
@@ -296,23 +296,23 @@ end
 
 ---
 
-## 🛠️ Why Choose CQL?
+## Why Choose CQL?
 
-### **✅ For High-Performance Applications**
+### For High-Performance Applications
 
 - APIs serving high request volumes
 - Real-time applications requiring low latency
 - Data-intensive processing applications
 - Microservices architecture
 
-### **✅ For Enterprise Development**
+### For Enterprise Development
 
 - Large team collaboration with type safety
 - Long-term maintenance requirements
 - Complex business logic with data integrity
 - Compliance and audit requirements
 
-### **✅ For Modern Development**
+### For Modern Development
 
 - Type-safe development practices
 - DevOps and CI/CD pipeline integration
@@ -321,18 +321,18 @@ end
 
 ---
 
-## 📚 Complete Documentation
+## Complete Documentation
 
-### **🚦 Getting Started**
+### Getting Started
 
-| **New to CQL?**                                                              | **Migrating?**                                        |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 🎮 [Interactive Examples](../examples/) (`crystal examples/run_examples.cr`) | 🔄 [From ActiveRecord](guides/migration-guide.md)     |
-| 📖 [Installation](installation.md)                                           | 🔄 [From Other ORMs](guides/migration-guide.md)       |
-| 🎯 [Getting Started](guides/getting-started.md)                              | ⚖️ [Feature Comparison](guides/feature-comparison.md) |
-| 🏗️ [First Application](guides/active-record-with-cql/)                       | 📚 [Complete Examples](../examples/)                  |
+| **New to CQL?**                                                           | **Migrating?**                                     |
+| ------------------------------------------------------------------------- | -------------------------------------------------- |
+| [Interactive Examples](../examples/) (`crystal examples/run_examples.cr`) | [From ActiveRecord](guides/migration-guide.md)     |
+| [Installation](installation.md)                                           | [From Other ORMs](guides/migration-guide.md)       |
+| [Getting Started](guides/getting-started.md)                              | [Feature Comparison](guides/feature-comparison.md) |
+| [First Application](guides/active-record-with-cql/)                       | [Complete Examples](../examples/)                  |
 
-### **🏗️ Core Features**
+### Core Features
 
 | **Foundation**                            | **Active Record**                                                 | **Advanced**                                      |
 | ----------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------- |
@@ -340,7 +340,7 @@ end
 | [Schemas](core-concepts/schemas.md)       | [Querying](guides/active-record-with-cql/queryable.md)            | [Caching](guides/caching-guide.md)                |
 | [Migrations](core-concepts/migrations.md) | [Relationships](guides/active-record-with-cql/relations/)         | [Security](guides/security-guide.md)              |
 
-### **⚡ Quick Reference**
+### Quick Reference
 
 | **I want to...**                    | **Go to...**                                                                                                       |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -352,7 +352,7 @@ end
 
 ---
 
-## 🎯 Ready to Get Started?
+## Ready to Get Started?
 
 ```crystal
 # Try the interactive examples first
@@ -360,20 +360,14 @@ crystal examples/run_examples.cr
 
 # Or install CQL and start building
 shards install
-
-# Your next type-safe application awaits! 🚀
 ```
 
-**👉 [Try Interactive Examples →](../examples/) • [Start with Installation →](installation.md)**
+**[Try Interactive Examples →](../examples/) • [Start with Installation →](installation.md)**
 
 ---
 
-<div align="center">
+Built with Crystal's performance and safety in mind.
 
-**Built with Crystal's performance and safety in mind**
+All examples are tested with the latest CQL version.
 
-_All examples are tested with the latest CQL version_
-
-[📖 **Documentation**](guides/getting-started.md) • [🔧 **Examples**](examples/) • [❓ **FAQ**](faqs.md) • [🐛 **Issues**](troubleshooting.md)
-
-</div>
+**[Documentation](guides/getting-started.md) • [Examples](examples/) • [FAQ](faqs.md) • [Issues](troubleshooting.md)**
