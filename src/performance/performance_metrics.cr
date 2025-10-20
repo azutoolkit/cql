@@ -255,7 +255,7 @@ module CQL::Performance
     def self.from_components(
       profiler : QueryProfilerInterface? = nil,
       detector : NPlusOneDetectorInterface? = nil,
-      cache = nil,
+      cache : CQL::Cache::Cache? = nil,
       start_time : Time? = nil,
       config : Config? = nil,
       error_count : Int32 = 0,
@@ -458,7 +458,7 @@ module CQL::Performance
       )
     end
 
-    private def self.build_cache_metrics(cache : Cache?) : CacheMetrics
+    private def self.build_cache_metrics(cache : CQL::Cache::Cache?) : CacheMetrics
       unless cache
         return CacheMetrics.new(0_i64, 0_i64, 0, 0, 0.0, 0.0, 0_i64)
       end
@@ -489,7 +489,7 @@ module CQL::Performance
       )
     end
 
-    private def self.build_health_metrics(profiler : QueryProfilerInterface?, detector : NPlusOneDetectorInterface?, cache : Cache?) : HealthMetrics
+    private def self.build_health_metrics(profiler : QueryProfilerInterface?, detector : NPlusOneDetectorInterface?, cache : CQL::Cache::Cache?) : HealthMetrics
       # Collect issues
       issues = collect_issues(profiler, detector)
       critical_issues = issues.count(&.severity.== :critical)
@@ -632,7 +632,7 @@ module CQL::Performance
       [score, 0].max
     end
 
-    private def self.calculate_cache_health_score(cache : Cache?) : Int32
+    private def self.calculate_cache_health_score(cache : CQL::Cache::Cache?) : Int32
       return 100 unless cache
 
       # Placeholder - would need cache hit/miss metrics
