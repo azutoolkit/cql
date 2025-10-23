@@ -404,7 +404,7 @@ module CQL::Performance
         critical_patterns = @n_plus_one_metrics.critical_patterns
         high_patterns = @n_plus_one_metrics.high_patterns
         score -= critical_patterns * 10.0 # 10 points per critical pattern
-        score -= high_patterns * 5.0 # 5 points per high pattern
+        score -= high_patterns * 5.0      # 5 points per high pattern
       end
 
       # Deduct points for cache misses (if cache is available)
