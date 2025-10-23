@@ -10,6 +10,7 @@ require "./n_plus_one_detector"
 require "./unified_report_generator"
 require "./performance_metrics"
 require "./interfaces"
+require "../cache/cache_store"
 
 module CQL::Performance
   # Cache statistics tracker
@@ -137,10 +138,13 @@ module CQL::Performance
 
     # Get comprehensive performance metrics
     def metrics : PerformanceMetrics
+      # Try to get cache instance if available
+      cache_instance = get_cache_instance
+
       PerformanceMetrics.from_components(
         profiler: @profiler,
         detector: @detector,
-        cache: @cache_stats,
+        cache: cache_instance,
         start_time: @start_time,
         config: @config,
         error_count: @error_count.get
@@ -284,6 +288,20 @@ module CQL::Performance
         max_sql_length: @config.logging.max_sql_length,
         max_param_length: @config.logging.max_param_length
       )
+    end
+
+    private def get_cache_instance : CQL::Cache::Cache?
+      # Try to get cache instance from the cache system
+      begin
+        # Check if cache is available and configured
+        if CQL::Cache::CacheStore.config
+          CQL::Cache::CacheStore.instance.as(CQL::Cache::Cache)
+        else
+          nil
+        end
+      rescue
+        nil
+      end
     end
 
     private def reconfigure_components

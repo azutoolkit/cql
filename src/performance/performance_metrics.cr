@@ -251,6 +251,27 @@ module CQL::Performance
     )
     end
 
+    # Calculate performance score from query metrics (static method for external use)
+    def self.calculate_performance_score(query_metrics : QueryMetrics) : Float64
+      # Base score starts at 100
+      score = 100.0
+
+      # Deduct points for slow queries
+      if query_metrics.total_queries > 0
+        slow_query_rate = query_metrics.slow_query_rate
+        score -= slow_query_rate * 0.5 # 0.5 points per percentage of slow queries
+      end
+
+      # Deduct points for errors
+      if query_metrics.total_queries > 0
+        error_rate = query_metrics.error_rate
+        score -= error_rate * 2.0 # 2 points per percentage of errors
+      end
+
+      # Ensure score doesn't go below 0
+      [score, 0.0].max
+    end
+
     # Create metrics from performance components
     def self.from_components(
       profiler : QueryProfilerInterface? = nil,
@@ -358,6 +379,42 @@ module CQL::Performance
     # Get issues by severity
     def issues_by_severity(severity : Symbol) : Array(Issue)
       @issues.select(&.severity.== severity)
+    end
+
+    # Calculate overall performance score (0-100)
+    # Higher scores indicate better performance
+    def calculate_performance_score : Float64
+      # Base score starts at 100
+      score = 100.0
+
+      # Deduct points for slow queries
+      if @query_metrics.total_queries > 0
+        slow_query_rate = @query_metrics.slow_query_rate
+        score -= slow_query_rate * 0.5 # 0.5 points per percentage of slow queries
+      end
+
+      # Deduct points for errors
+      if @query_metrics.total_queries > 0
+        error_rate = @query_metrics.error_rate
+        score -= error_rate * 2.0 # 2 points per percentage of errors
+      end
+
+      # Deduct points for N+1 patterns
+      if @n_plus_one_metrics.total_patterns > 0
+        critical_patterns = @n_plus_one_metrics.critical_patterns
+        high_patterns = @n_plus_one_metrics.high_patterns
+        score -= critical_patterns * 10.0 # 10 points per critical pattern
+        score -= high_patterns * 5.0 # 5 points per high pattern
+      end
+
+      # Deduct points for cache misses (if cache is available)
+      if @cache_metrics.cache_hits + @cache_metrics.cache_misses > 0
+        miss_rate = @cache_metrics.miss_rate
+        score -= miss_rate * 0.1 # 0.1 points per percentage of cache misses
+      end
+
+      # Ensure score doesn't go below 0
+      [score, 0.0].max
     end
 
     # Get slowest queries with details
