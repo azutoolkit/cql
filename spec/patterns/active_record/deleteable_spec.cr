@@ -91,8 +91,8 @@ describe CQL::ActiveRecord::Deleteable do
 
     it "returns a result with affected rows" do
       # Create some test records
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       result = TestUser.delete_all
       result.rows_affected.should eq(2)

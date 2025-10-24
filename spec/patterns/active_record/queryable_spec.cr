@@ -22,7 +22,7 @@ describe CQL::ActiveRecord::Queryable do
     end
 
     it "creates a QueryBuilder and executes select with hash syntax" do
-      query = TestUser.select(name: :full_name, email: :email_address)
+      query = TestUser.select(name: :name, email: :email)
       query.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
   end
@@ -159,8 +159,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".count" do
     it "executes count aggregate with default column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       count = TestUser.count
       count.should be_a(Int64)
@@ -168,8 +168,8 @@ describe CQL::ActiveRecord::Queryable do
     end
 
     it "executes count aggregate with specific column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       count = TestUser.count(:id)
       count.should be_a(Int64)
@@ -179,8 +179,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".sum" do
     it "executes sum aggregate" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       sum = TestUser.sum(:age)
       sum.should be_a(Float64 | Int64)
@@ -189,8 +189,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".avg" do
     it "executes avg aggregate" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       avg = TestUser.avg(:age)
       avg.should be_a(Float64)
@@ -199,8 +199,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".min" do
     it "executes min aggregate" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       min = TestUser.min(:age)
       min.should be_a(DB::Any)
@@ -209,8 +209,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".max" do
     it "executes max aggregate" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       max = TestUser.max(:age)
       max.should be_a(DB::Any)
@@ -219,8 +219,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".all" do
     it "finds all records matching the current query" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       users = TestUser.all
       users.should be_a(Array(TestUser))
@@ -230,8 +230,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".first" do
     it "finds first record matching the current query" do
-      TestUser.create!(name: "First User", email: "first@example.com", age: 25)
-      TestUser.create!(name: "Second User", email: "second@example.com", age: 30)
+      TestUser.create!(name: "First User", email: "first@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "Second User", email: "second@example.com", age: 30, password: "password123")
 
       user = TestUser.first
       user.should be_a(TestUser?)
@@ -241,7 +241,7 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".first!" do
     it "finds first record matching the current query, raises if not found" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       user = TestUser.first!
       user.should be_a(TestUser)
@@ -256,8 +256,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".last" do
     it "finds last record matching the current query" do
-      TestUser.create!(name: "First User", email: "first@example.com", age: 25)
-      TestUser.create!(name: "Last User", email: "last@example.com", age: 30)
+      TestUser.create!(name: "First User", email: "first@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "Last User", email: "last@example.com", age: 30, password: "password123")
 
       user = TestUser.last
       user.should be_a(TestUser?)
@@ -267,7 +267,7 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".last!" do
     it "finds last record matching the current query, raises if not found" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       user = TestUser.last!
       user.should be_a(TestUser)
@@ -282,18 +282,20 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".each" do
     it "iterates over each record matching the current query" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      user1 = TestUser.new(name: "User 1", email: "user1@example.com", age: 25, password: "password1", password_confirmation: "password1")
+      user1.save!
+      user2 = TestUser.new(name: "User 2", email: "user2@example.com", age: 30, password: "password2", password_confirmation: "password2")
+      user2.save!
 
       # Test that the each method with block exists
       # The actual block implementation would be tested in integration tests
-      TestUser.each { }
+      TestUser.each { |_| }
     end
   end
 
   describe ".exists?" do
     it "checks if any records exist matching the current query" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       TestUser.exists?.should be_true
     end
@@ -303,7 +305,7 @@ describe CQL::ActiveRecord::Queryable do
     end
 
     it "checks existence with given conditions" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       TestUser.exists?(name: "Test User").should be_true
       TestUser.exists?(name: "Nonexistent").should be_false
@@ -316,7 +318,7 @@ describe CQL::ActiveRecord::Queryable do
     end
 
     it "returns false when records exist" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       TestUser.empty?.should be_false
     end
   end
@@ -364,7 +366,7 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".find_by" do
     it "finds record by attributes with hash" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       conditions = {:name => "Test User"} of Symbol => DB::Any
       user = TestUser.find_by(conditions)
@@ -373,7 +375,7 @@ describe CQL::ActiveRecord::Queryable do
     end
 
     it "finds record by attributes with hash syntax" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       user = TestUser.find_by(name: "Test User")
       user.should be_a(TestUser?)
@@ -383,7 +385,7 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".find_by!" do
     it "finds record by attributes, raises if not found" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       user = TestUser.find_by!(name: "Test User")
       user.should be_a(TestUser)
@@ -400,7 +402,7 @@ describe CQL::ActiveRecord::Queryable do
     it "iterates over records in batches" do
       # Create multiple test records
       5.times do |i|
-        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i)
+        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i, password: "password123")
       end
 
       count = 0
@@ -417,7 +419,7 @@ describe CQL::ActiveRecord::Queryable do
     it "processes records in batches" do
       # Create multiple test records
       5.times do |i|
-        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i)
+        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i, password: "password123")
       end
 
       batch_count = 0
@@ -436,8 +438,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".pluck" do
     it "extracts column values from all matching records" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       names = TestUser.pluck(:name, as: String)
       names.should be_a(Array(String))
@@ -447,7 +449,7 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".pick" do
     it "extracts a single column value from the first matching record" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       name = TestUser.pick(:name, as: String)
       name.should be_a(String?)
@@ -469,8 +471,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".maximum" do
     it "gets maximum value of a column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       max_age = TestUser.maximum(:age)
       max_age.should be_a(DB::Any?)
@@ -479,8 +481,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".minimum" do
     it "gets minimum value of a column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       min_age = TestUser.minimum(:age)
       min_age.should be_a(DB::Any?)
@@ -489,8 +491,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".average" do
     it "gets average value of a column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       avg_age = TestUser.average(:age)
       avg_age.should be_a(Float64?)
@@ -499,9 +501,9 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".distinct" do
     it "gets distinct values for a column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 25)
-      TestUser.create!(name: "User 3", email: "user3@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 3", email: "user3@example.com", age: 30, password: "password123")
 
       distinct_ages = TestUser.distinct(:age, as: Int32)
       distinct_ages.should be_a(Array(Int32))
@@ -511,12 +513,12 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".delete_all" do
     it "deletes all records matching current scope" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
-      deleted_count = TestUser.delete_all
-      deleted_count.should be_a(Int64)
-      deleted_count.should eq(2)
+      result = TestUser.delete_all
+      result.should be_a(DB::ExecResult)
+      result.rows_affected.should eq(2)
     end
   end
 
@@ -556,25 +558,25 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".any?" do
     it "checks if any records exist" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       TestUser.any?.should be_true
     end
   end
 
   describe ".many?" do
     it "checks if many records exist (more than one)" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
       TestUser.many?.should be_false
 
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
       TestUser.many?.should be_true
     end
   end
 
   describe ".size" do
     it "gets the count of records" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       size = TestUser.size
       size.should be_a(Int64)

@@ -18,7 +18,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     it "initializes with the correct schema and table" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder.query.schema.should eq(UserDB)
-      builder.query.query_tables[:users].should eq(:users)
+      builder.query.query_tables["users"].should be_a(CQL::Query::QueryTableInfo)
     end
   end
 
@@ -69,7 +69,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
     it "adds columns to select with hash syntax" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
-      new_builder = builder.select(name: :full_name, email: :email_address)
+      new_builder = builder.select(name: :user_name, email: :email_address)
 
       new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
@@ -300,8 +300,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
   describe "#all" do
     it "executes the query and returns all results" do
       # Create test data
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       results = builder.all
@@ -313,8 +313,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#first" do
     it "executes the query and returns the first result" do
-      TestUser.create!(name: "First User", email: "first@example.com", age: 25)
-      TestUser.create!(name: "Second User", email: "second@example.com", age: 30)
+      TestUser.create!(name: "First User", email: "first@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "Second User", email: "second@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       result = builder.first
@@ -326,7 +326,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#first!" do
     it "executes the query and returns the first result, raises if not found" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       result = builder.first!
@@ -346,8 +346,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#last" do
     it "executes the query and returns the last result" do
-      TestUser.create!(name: "First User", email: "first@example.com", age: 25)
-      TestUser.create!(name: "Last User", email: "last@example.com", age: 30)
+      TestUser.create!(name: "First User", email: "first@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "Last User", email: "last@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       result = builder.last
@@ -359,7 +359,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#last!" do
     it "executes the query and returns the last result, raises if not found" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       result = builder.last!
@@ -379,7 +379,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#get" do
     it "executes the query and returns a scalar value" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder = builder.select(:name)
@@ -391,8 +391,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#each" do
     it "iterates over each result" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       count = 0
@@ -407,7 +407,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#exists?" do
     it "checks if any records exist" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder.exists?.should be_true
@@ -420,7 +420,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
 
     it "checks existence with conditions" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder.exists?(name: "Test User").should be_true
@@ -436,7 +436,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
 
     it "returns false when records exist" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder.empty?.should be_false
@@ -500,7 +500,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#find_by" do
     it "finds record by attributes with hash" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       result = builder.find_by(name: "Test User")
@@ -510,7 +510,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
 
     it "finds record by attributes with hash syntax" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       result = builder.find_by(name: "Test User")
@@ -522,7 +522,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#find_by!" do
     it "finds record by attributes, raises if not found" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       result = builder.find_by!(name: "Test User")
@@ -543,7 +543,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     it "iterates over records in batches" do
       # Create multiple test records
       5.times do |i|
-        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i)
+        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i, password: "password123", password_confirmation: "password123")
       end
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
@@ -561,7 +561,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     it "processes records in batches" do
       # Create multiple test records
       5.times do |i|
-        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i)
+        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i, password: "password123", password_confirmation: "password123")
       end
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
@@ -581,8 +581,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#pluck" do
     it "extracts column values from all matching records" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       names = builder.pluck(:name, as: String)
@@ -594,7 +594,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#pick" do
     it "extracts a single column value from the first matching record" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       name = builder.pick(:name, as: String)
@@ -620,8 +620,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#maximum" do
     it "gets maximum value of a column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       max_age = builder.maximum(:age)
@@ -632,8 +632,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#minimum" do
     it "gets minimum value of a column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       min_age = builder.minimum(:age)
@@ -644,8 +644,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#average" do
     it "gets average value of a column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 20, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       avg_age = builder.average(:age)
@@ -656,9 +656,9 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#distinct_values" do
     it "gets distinct values for a column" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 25)
-      TestUser.create!(name: "User 3", email: "user3@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 3", email: "user3@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       distinct_ages = builder.distinct_values(:age, as: Int32)
@@ -706,8 +706,8 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#delete_all" do
     it "deletes all records matching current scope" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       deleted_count = builder.delete_all
@@ -738,7 +738,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#any?" do
     it "checks if any records exist" do
-      TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder.any?.should be_true
@@ -747,20 +747,20 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#many?" do
     it "checks if many records exist (more than one)" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder.many?.should be_false
 
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
       builder.many?.should be_true
     end
   end
 
   describe "#size" do
     it "gets the count of records" do
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       size = builder.size

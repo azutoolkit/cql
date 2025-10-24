@@ -71,6 +71,8 @@ module CQL
     property offset : Int32? = nil
     property? distinct : Bool = false
     getter aggr_columns : Array(Expression::Aggregate) = [] of Expression::Aggregate
+    # Store column aliases: column => alias
+    getter column_aliases : Hash(CQL::BaseColumn, String) = {} of CQL::BaseColumn => String
 
     # Initializes the `Query` object with the provided schema.
     # - **@param** schema [Schema] The schema object to use for the query
@@ -84,6 +86,25 @@ module CQL
     # => #<CQL::Query:0x00007f8b1b0b3b00>
     # ```
     def initialize(@schema : Schema)
+    end
+
+    # Clone the query object
+    def clone
+      new_query = Query.new(@schema)
+      # Copy all properties manually
+      @columns.each { |col| new_query.columns << col }
+      @query_tables.each { |key, value| new_query.query_tables[key] = value }
+      new_query.where = @where
+      @group_by.each { |col| new_query.group_by << col }
+      new_query.having = @having
+      @order_by.each { |key, value| new_query.order_by[key] = value }
+      @joins.each { |join| new_query.joins << join }
+      new_query.limit = @limit
+      new_query.offset = @offset
+      new_query.distinct = @distinct
+      @aggr_columns.each { |aggr| new_query.aggr_columns << aggr }
+      @column_aliases.each { |key, value| new_query.column_aliases[key] = value }
+      new_query
     end
 
     # Executes the query and returns all records.
@@ -141,12 +162,14 @@ module CQL
     # => <User:0x00007f8b1b0b3b00 @name="John", @age=30>
     # ```
     def first(as as_kind)
-      query, params = to_sql
-      limit(1)
-      CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
-        CQL::Performance.track(query, params) do
+      # Create a new query with limit 1 without modifying the original
+      limited_query = clone
+      limited_query.limit(1)
+      limited_query_sql, limited_params = limited_query.to_sql
+      CQL::Cache::RequestQueryCacheHelper.with_cache(limited_query_sql, limited_params) do
+        CQL::Performance.track(limited_query_sql, limited_params) do
           @schema.exec_query do |conn|
-            conn.query_one?(query, args: params, as: as_kind)
+            conn.query_one?(limited_query_sql, args: limited_params, as: as_kind)
           end
         end
       end
@@ -215,13 +238,13 @@ module CQL
     #
     # => John
     # ```
-    def each(as as_kind, &)
+    def each(as as_kind : U.class, &block : U ->) forall U
       query, params = to_sql
       CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
         CQL::Performance.track(query, params) do
           @schema.exec_query do |conn|
-            conn.query_each(query, args: params) do |result|
-              yield as_kind.from_rs(result)
+            conn.query_all(query, args: params, as: as_kind).each do |record|
+              block.call record
             end
           end
         end
@@ -315,9 +338,15 @@ module CQL
           @aggr_columns << build_aggr_expression(key, value)
         else
           if value.is_a?(Array(Symbol))
-            value.map { |name| @columns << find_column(name, key.to_s) }
+            value.map { |name|
+              column = find_column(name, key.to_s)
+              @columns << column
+              @column_aliases[column] = key.to_s
+            }
           else
-            @columns << find_column(value, key.to_s)
+            column = find_column(key)
+            @columns << column
+            @column_aliases[column] = value.to_s
           end
         end
       end
@@ -1143,10 +1172,15 @@ module CQL
       else
         # Explicit SELECT
         selected_columns = @columns.map do |base_col|
-          # find_alias_for_table returns String alias
-          col_alias_str = find_alias_for_table(base_col.table.not_nil!)
-          # Create Expression::Column with String alias
-          Expression::Column.new(base_col, alias_name: col_alias_str)
+          # Check if this column has a custom alias
+          if @column_aliases.has_key?(base_col)
+            # Use the custom column alias
+            Expression::Column.new(base_col, alias_name: @column_aliases[base_col])
+          else
+            # Use the table alias
+            col_alias_str = find_alias_for_table(base_col.table.not_nil!)
+            Expression::Column.new(base_col, alias_name: col_alias_str)
+          end
         end
       end
 

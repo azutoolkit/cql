@@ -17,4 +17,5 @@ AppSchema = CQL::Schema.define(
     text :phone, null: true
     timestamps
   end
+
 end

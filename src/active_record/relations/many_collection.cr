@@ -239,6 +239,10 @@ module CQL
         else
           clear_join_records
         end
+
+        # Clear internal state since associations are gone
+        @records.clear if @loaded
+        self
       end
 
       # Clear associations and delete target records (without callbacks)
@@ -257,6 +261,10 @@ module CQL
         else
           clear_join_records
         end
+
+        # Clear internal state since associations are gone
+        @records.clear if @loaded
+        self
       end
 
       # Clear only the join table records (preserve target records)
@@ -271,6 +279,7 @@ module CQL
 
         # Clear internal state since associations are gone
         @records.clear if @loaded
+        self
       end
 
       # Build a new target record but don't save it or create association

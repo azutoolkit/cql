@@ -39,7 +39,7 @@ module CQL
         # Create a new QueryBuilder with a modified query using a block
         # - **@yield** [CQL::Query] The query to modify
         # - **@return** [QueryBuilder(T)] A new query builder instance
-        def with_query(&block)
+        def with_query(&block : CQL::Query -> CQL::Query)
           # Create a new query by applying the block to a copy of the current query
           new_query = block.call(clone_query(@query))
           QueryBuilder(T).new(new_query, @model_class)
@@ -70,6 +70,7 @@ module CQL
           original_query.order_by.each { |key, value| new_query.order_by[key] = value }
           original_query.joins.each { |join| new_query.joins << join }
           original_query.aggr_columns.each { |aggr| new_query.aggr_columns << aggr }
+          original_query.column_aliases.each { |key, value| new_query.column_aliases[key] = value }
 
           new_query
         end
@@ -242,7 +243,7 @@ module CQL
         def count(column : Symbol = :*)
           result = @query.count(column)
           result = result.get(Int64 | Int32 | Nil) if result.responds_to?(:get)
-          result || 0
+          result || 0_i64
         end
 
         # Add sum aggregate
@@ -251,7 +252,7 @@ module CQL
         def sum(column : Symbol)
           result = @query.sum(column)
           result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
-          result || 0
+          result || 0_i64
         end
 
         # Add avg aggregate
@@ -331,10 +332,8 @@ module CQL
 
         # Iterate over each result
         # - **@yield** [T] Each model instance
-        def each(&)
-          @query.each(T) do |record|
-            yield record
-          end
+        def each(&block : T ->)
+          @query.each(as: T, &block)
         end
 
         # Check if any records exist
@@ -608,7 +607,7 @@ module CQL
         # - **@return** [Int64] Number of deleted records
         def delete_all
           records = all
-          records.each(&.delete)
+          records.each(&.delete!)
           records.size.to_i64
         end
 
@@ -624,6 +623,12 @@ module CQL
         def none
           # Create a query with an impossible condition
           none_query = CQL::Query.new(@query.schema)
+          # Set up the FROM clause with the model's table
+          table = @model_class.table
+          none_query.from(table)
+          # Add an impossible condition to ensure no results
+          # Use a condition that will never be true
+          none_query.where(id: -1)
           QueryBuilder(T).new(none_query, @model_class)
         end
 

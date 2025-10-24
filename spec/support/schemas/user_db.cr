@@ -61,4 +61,20 @@ UserDB = CQL::Schema.define(
     foreign_key [:movie_id], references: :movies, references_columns: [:id]
     foreign_key [:actor_id], references: :actors, references_columns: [:id]
   end
+
+  table :roles do
+    primary :id, Int32
+    column :name, String
+    column :description, String, null: true
+    timestamps
+  end
+
+  table :user_roles do
+    primary :id, Int32
+    column :user_id, Int32
+    column :role_id, Int32
+    timestamps
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+    foreign_key [:role_id], references: :roles, references_columns: [:id]
+  end
 end

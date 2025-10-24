@@ -295,7 +295,7 @@ module CQL
 
         # Iterate over each record matching the current query
         # - **@yield** [T] Each model instance
-        def self.each(&block)
+        def self.each(&block : {{@type.id}} ->)
           query.each(&block)
         end
 
@@ -443,11 +443,17 @@ module CQL
         # Delete all records matching current scope
         # - **@return** [Int64] Number of deleted records
         def self.delete_all
-          # This would need to be implemented using CQL::Delete
-          # For now, we'll use a simple approach
-          records = query.all
-          records.each(&.delete)
-          records.size.to_i64
+          # Use CQL::Delete to delete all records matching the query
+          delete_query = CQL::Delete
+            .new({{@type.id}}.schema)
+            .from({{@type.id}}.table)
+          # Add where condition if it exists
+          if where_condition = query.query.where
+            delete_query.where(where_condition)
+          end
+
+          result = delete_query.commit
+          result.rows_affected
         end
 
         # Replace existing order clause

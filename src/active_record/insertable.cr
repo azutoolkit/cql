@@ -36,6 +36,10 @@ module CQL
           insertable_attrs = attrs.dup
           insertable_attrs.delete(:id)
 
+          # Filter out ignored fields (fields not in the database schema)
+          table_columns = schema.tables[table_name].columns.keys
+          insertable_attrs = insertable_attrs.select { |key, _| table_columns.includes?(key) }
+
           # Fallback for non-PostgreSQL
           pk_id = CQL::Insert.new(schema)
             .into(table_name)
@@ -69,6 +73,10 @@ module CQL
           fields.each { |key, value| fields_hash[key] = value.as(DB::Any) }
           fields_hash.delete(:id)
 
+          # Filter out ignored fields (fields not in the database schema)
+          table_columns = schema.tables[table_name].columns.keys
+          fields_hash = fields_hash.select { |key, _| table_columns.includes?(key) }
+
           # Fallback for non-PostgreSQL
           pk_id = CQL::Insert.new(schema)
             .into(table_name)
@@ -98,11 +106,17 @@ module CQL
           attrs = record.attributes
           attrs.delete(:id)
 
+          # Filter out ignored fields (fields not in the database schema)
+          schema = {{@type.id}}.schema
+          table = {{@type.id}}.table
+          table_columns = schema.tables[table].columns.keys
+          filtered_attrs = attrs.select { |key, _| table_columns.includes?(key) }
+
           # Create the record
           id = CQL::Insert
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
-            .values(attrs)
+            .values(filtered_attrs)
             .last_insert_id
 
           new_id = if Pk.is_a?(Int32.class)
@@ -127,10 +141,20 @@ module CQL
         # User.create!(name: "Alice", email: "alice@example.com")
         # ```
         def self.create!(**fields) : {{@type.id}}
+          # Filter out ignored fields (fields not in the database schema)
+          schema = {{@type.id}}.schema
+          table_name = {{@type.id}}.table
+          table_columns = schema.tables[table_name].columns.keys
+
+          # Convert NamedTuple to Hash and filter
+          fields_hash = {} of Symbol => DB::Any
+          fields.each { |key, value| fields_hash[key] = value.as(DB::Any) }
+          filtered_fields = fields_hash.select { |key, _| table_columns.includes?(key) }
+
           id = CQL::Insert
             .new({{@type.id}}.schema)
             .into({{@type.id}}.table)
-            .values(**fields)
+            .values(filtered_fields)
             .last_insert_id
 
           id = if Pk.is_a?(Int32.class)

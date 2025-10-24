@@ -510,7 +510,7 @@ module CQL::ActiveRecord::Relations
     # user.posts.size => 0
     # ```
     def clear
-      records_affected = 0
+      records_affected = 0_i64
 
       case @dependent
       when :destroy
