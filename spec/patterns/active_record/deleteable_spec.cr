@@ -1,13 +1,21 @@
 require "./spec_helper"
 
 describe CQL::ActiveRecord::Deleteable do
+  before_each do
+    UserDB.users.create!
+  end
+
+  after_each do
+    UserDB.users.drop!
+  end
+
   describe ".delete!" do
     it "deletes a record by ID" do
-      user = TestUser.create!(name: "Delete Test", email: "delete@example.com", age: 25)
+      user = TestUser.create!(name: "Delete Test", email: "delete@example.com", age: 25, password: "password123")
       id = user.id.not_nil!
 
       result = TestUser.delete!(id)
-      result.should be_a(Int64)
+      result.should be_a(DB::ExecResult)
 
       # Verify the record is deleted
       expect_raises(DB::NoResultsError) do
@@ -16,7 +24,7 @@ describe CQL::ActiveRecord::Deleteable do
     end
 
     it "returns a result with affected rows" do
-      user = TestUser.create!(name: "Delete Test", email: "delete@example.com", age: 25)
+      user = TestUser.create!(name: "Delete Test", email: "delete@example.com", age: 25, password: "password123")
       id = user.id.not_nil!
 
       result = TestUser.delete!(id)
@@ -26,12 +34,12 @@ describe CQL::ActiveRecord::Deleteable do
 
   describe ".delete_by!" do
     it "deletes records matching specific fields with hash syntax" do
-      user1 = TestUser.create!(name: "Delete Test 1", email: "delete1@example.com", age: 25)
-      user2 = TestUser.create!(name: "Delete Test 2", email: "delete2@example.com", age: 30)
-      user3 = TestUser.create!(name: "Delete Test 3", email: "delete3@example.com", age: 25)
+      user1 = TestUser.create!(name: "Delete Test 1", email: "delete1@example.com", age: 25, password: "password123")
+      user2 = TestUser.create!(name: "Delete Test 2", email: "delete2@example.com", age: 30, password: "password123")
+      user3 = TestUser.create!(name: "Delete Test 3", email: "delete3@example.com", age: 25, password: "password123")
 
       result = TestUser.delete_by!(age: 25)
-      result.should be_a(Int64)
+      result.should be_a(DB::ExecResult)
 
       # Verify only records with age 25 are deleted
       expect_raises(DB::NoResultsError) { TestUser.find!(user1.id.not_nil!) }
@@ -40,12 +48,12 @@ describe CQL::ActiveRecord::Deleteable do
     end
 
     it "deletes records matching specific fields with hash parameter" do
-      user1 = TestUser.create!(name: "Delete Test 1", email: "delete1@example.com", age: 25)
-      user2 = TestUser.create!(name: "Delete Test 2", email: "delete2@example.com", age: 30)
+      user1 = TestUser.create!(name: "Delete Test 1", email: "delete1@example.com", age: 25, password: "password123")
+      user2 = TestUser.create!(name: "Delete Test 2", email: "delete2@example.com", age: 30, password: "password123")
 
       fields = {:age => 25} of Symbol => DB::Any
       result = TestUser.delete_by!(fields)
-      result.should be_a(Int64)
+      result.should be_a(DB::ExecResult)
 
       # Verify only records with age 25 are deleted
       expect_raises(DB::NoResultsError) { TestUser.find!(user1.id.not_nil!) }
@@ -53,12 +61,12 @@ describe CQL::ActiveRecord::Deleteable do
     end
 
     it "deletes records matching multiple fields" do
-      user1 = TestUser.create!(name: "Delete Test", email: "delete1@example.com", age: 25)
-      user2 = TestUser.create!(name: "Delete Test", email: "delete2@example.com", age: 30)
-      user3 = TestUser.create!(name: "Other Name", email: "delete3@example.com", age: 25)
+      user1 = TestUser.create!(name: "Delete Test", email: "delete1@example.com", age: 25, password: "password123")
+      user2 = TestUser.create!(name: "Delete Test", email: "delete2@example.com", age: 30, password: "password123")
+      user3 = TestUser.create!(name: "Other Name", email: "delete3@example.com", age: 25, password: "password123")
 
       result = TestUser.delete_by!(name: "Delete Test", age: 25)
-      result.should be_a(Int64)
+      result.should be_a(DB::ExecResult)
 
       # Verify only the matching record is deleted
       expect_raises(DB::NoResultsError) { TestUser.find!(user1.id.not_nil!) }
@@ -70,12 +78,12 @@ describe CQL::ActiveRecord::Deleteable do
   describe ".delete_all" do
     it "deletes all records in the table" do
       # Create some test records
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
-      TestUser.create!(name: "User 3", email: "user3@example.com", age: 35)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
+      TestUser.create!(name: "User 3", email: "user3@example.com", age: 35, password: "password123")
 
       result = TestUser.delete_all
-      result.should be_a(Int64)
+      result.should be_a(DB::ExecResult)
 
       # Verify all records are deleted
       TestUser.all.size.should eq(0)
@@ -83,8 +91,8 @@ describe CQL::ActiveRecord::Deleteable do
 
     it "returns a result with affected rows" do
       # Create some test records
-      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       result = TestUser.delete_all
       result.rows_affected.should eq(2)
@@ -98,12 +106,12 @@ describe CQL::ActiveRecord::Deleteable do
     end
 
     it "returns false for a persisted record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user.destroyed?.should be_false
     end
 
     it "returns true after the record is destroyed" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user.delete!
       user.destroyed?.should be_true
     end
@@ -111,7 +119,7 @@ describe CQL::ActiveRecord::Deleteable do
 
   describe "#delete!" do
     it "deletes the record from the database" do
-      user = TestUser.create!(name: "Delete Test", email: "delete@example.com", age: 25)
+      user = TestUser.create!(name: "Delete Test", email: "delete@example.com", age: 25, password: "password123")
       id = user.id.not_nil!
 
       result = user.delete!
@@ -130,7 +138,7 @@ describe CQL::ActiveRecord::Deleteable do
     end
 
     it "runs before_destroy callbacks" do
-      user = TestUser.create!(name: "Callback Test", email: "callback@example.com", age: 25)
+      user = TestUser.create!(name: "Callback Test", email: "callback@example.com", age: 25, password: "password123")
       user.halt_on_callback = "before_destroy"
 
       result = user.delete!
@@ -141,7 +149,7 @@ describe CQL::ActiveRecord::Deleteable do
     end
 
     it "runs after_destroy callbacks on successful deletion" do
-      user = TestUser.create!(name: "Callback Test", email: "callback@example.com", age: 25)
+      user = TestUser.create!(name: "Callback Test", email: "callback@example.com", age: 25, password: "password123")
       user.halt_on_callback = nil
 
       result = user.delete!
@@ -153,7 +161,7 @@ describe CQL::ActiveRecord::Deleteable do
     end
 
     it "sets destroyed flag and clears ID on successful deletion" do
-      user = TestUser.create!(name: "Destroy Test", email: "destroy@example.com", age: 25)
+      user = TestUser.create!(name: "Destroy Test", email: "destroy@example.com", age: 25, password: "password123")
       user.id.not_nil!
 
       result = user.delete!
@@ -164,7 +172,7 @@ describe CQL::ActiveRecord::Deleteable do
     end
 
     it "does not set destroyed flag on failed deletion" do
-      user = TestUser.create!(name: "Fail Test", email: "fail@example.com", age: 25)
+      user = TestUser.create!(name: "Fail Test", email: "fail@example.com", age: 25, password: "password123")
       user.halt_on_callback = "before_destroy"
 
       result = user.delete!

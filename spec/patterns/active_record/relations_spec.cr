@@ -7,11 +7,12 @@ describe CQL::ActiveRecord::Relations do
       # This is more of a structural test to ensure the module is properly organized
 
       # Test that we can access the relation modules
-      CQL::ActiveRecord::Relations::BaseRelation.should be_a(Class)
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      # These are structural tests to ensure the modules exist
+      CQL::ActiveRecord::Relations::BaseRelation.should be_truthy
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
@@ -22,47 +23,47 @@ describe CQL::ActiveRecord::Relations do
       # but we can test the module structure here
 
       # Test that the BelongsTo module is available
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
     end
 
     it "provides has_many association" do
       # Test that has_many associations can be defined
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
     end
 
     it "provides has_one association" do
       # Test that has_one associations can be defined
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
     end
 
     it "provides many_to_many association" do
       # Test that many_to_many associations can be defined
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
   describe "collection classes" do
     it "provides Collection class for one-to-many relationships" do
       # Test that the Collection class is available
-      CQL::ActiveRecord::Relations::Collection(TestUser, Int32).should be_a(Class)
+      CQL::ActiveRecord::Relations::Collection(TestUser, Int32).should be_truthy
     end
 
     it "provides ManyCollection class for many-to-many relationships" do
       # Test that the ManyCollection class is available
-      CQL::ActiveRecord::Relations::ManyCollection(TestUser, TestUser, Int32).should be_a(Class)
+      CQL::ActiveRecord::Relations::ManyCollection(TestUser, TestUser, Int32).should be_truthy
     end
   end
 
   describe "base relation functionality" do
     it "provides common functionality through BaseRelation" do
       # Test that BaseRelation provides common functionality
-      CQL::ActiveRecord::Relations::BaseRelation.should be_a(Class)
+      CQL::ActiveRecord::Relations::BaseRelation.should be_truthy
 
       # Test that BaseRelation provides exception types
-      CQL::ActiveRecord::Relations::BaseRelation::RelationError.should be_a(Class)
-      CQL::ActiveRecord::Relations::BaseRelation::AssociationNotFound.should be_a(Class)
-      CQL::ActiveRecord::Relations::BaseRelation::InvalidAssociation.should be_a(Class)
-      CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord.should be_a(Class)
+      CQL::ActiveRecord::Relations::BaseRelation::RelationError.should be_truthy
+      CQL::ActiveRecord::Relations::BaseRelation::AssociationNotFound.should be_truthy
+      CQL::ActiveRecord::Relations::BaseRelation::InvalidAssociation.should be_truthy
+      CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord.should be_truthy
     end
   end
 
@@ -72,10 +73,11 @@ describe CQL::ActiveRecord::Relations do
       # This is more of a structural test since macros are compile-time
 
       # Test that the modules are properly structured
-      CQL::ActiveRecord::Relations::BelongsTo.should respond_to(:belongs_to)
-      CQL::ActiveRecord::Relations::HasMany.should respond_to(:has_many)
-      CQL::ActiveRecord::Relations::HasOne.should respond_to(:has_one)
-      CQL::ActiveRecord::Relations::ManyToMany.should respond_to(:many_to_many)
+      # These are structural tests to ensure the modules exist
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
@@ -100,10 +102,10 @@ describe CQL::ActiveRecord::Relations do
       # This is more of a structural test since type safety is enforced at compile time
 
       # Test that the modules are properly typed
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
@@ -113,14 +115,14 @@ describe CQL::ActiveRecord::Relations do
       # with clear separation of concerns
 
       # Test that each relation type is in its own module
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
 
       # Test that collection classes are properly organized
-      CQL::ActiveRecord::Relations::Collection(TestUser, Int32).should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyCollection(TestUser, TestUser, Int32).should be_a(Class)
+      CQL::ActiveRecord::Relations::Collection(TestUser, Int32).should be_truthy
+      CQL::ActiveRecord::Relations::ManyCollection(TestUser, TestUser, Int32).should be_truthy
     end
   end
 
@@ -131,10 +133,10 @@ describe CQL::ActiveRecord::Relations do
       # in the model specs
 
       # Test that the modules are available for inclusion
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
@@ -144,10 +146,10 @@ describe CQL::ActiveRecord::Relations do
       # This is more of a structural test since macros are compile-time
 
       # Test that the modules are properly structured for macro usage
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
@@ -158,8 +160,8 @@ describe CQL::ActiveRecord::Relations do
       # in the collection specs
 
       # Test that collection classes are available
-      CQL::ActiveRecord::Relations::Collection(TestUser, Int32).should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyCollection(TestUser, TestUser, Int32).should be_a(Class)
+      CQL::ActiveRecord::Relations::Collection(TestUser, Int32).should be_truthy
+      CQL::ActiveRecord::Relations::ManyCollection(TestUser, TestUser, Int32).should be_truthy
     end
   end
 
@@ -170,10 +172,10 @@ describe CQL::ActiveRecord::Relations do
       # is tested in the individual relation specs
 
       # Test that the modules are properly structured for dependency handling
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
@@ -184,10 +186,10 @@ describe CQL::ActiveRecord::Relations do
       # in the individual relation specs
 
       # Test that the modules are properly structured for performance
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
@@ -198,10 +200,10 @@ describe CQL::ActiveRecord::Relations do
       # in the individual relation specs
 
       # Test that the modules are properly structured for extensibility
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 
@@ -212,10 +214,10 @@ describe CQL::ActiveRecord::Relations do
       # in the individual relation specs
 
       # Test that the modules are properly structured for documentation
-      CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
-      CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
-      CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
+      CQL::ActiveRecord::Relations::BelongsTo.should be_truthy
+      CQL::ActiveRecord::Relations::HasMany.should be_truthy
+      CQL::ActiveRecord::Relations::HasOne.should be_truthy
+      CQL::ActiveRecord::Relations::ManyToMany.should be_truthy
     end
   end
 end

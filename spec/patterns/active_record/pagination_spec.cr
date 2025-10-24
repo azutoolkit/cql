@@ -1,6 +1,13 @@
 require "./spec_helper"
 
 describe "Pagination functionality" do
+  before_each do
+    UserDB.users.create!
+  end
+
+  after_each do
+    UserDB.users.drop!
+  end
   describe "pagination functionality" do
     it "provides pagination methods for models" do
       # Test that the Pagination module exists and can be included
@@ -24,7 +31,7 @@ describe "Pagination functionality" do
     it "handles pagination logic correctly" do
       # Create test data
       10.times do |i|
-        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i)
+            TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i, password: "password123")
       end
 
       # Test pagination using query builder
@@ -53,10 +60,10 @@ describe "Pagination functionality" do
 
     it "maintains consistent ordering" do
       # Create test data with specific names for ordering
-      TestUser.create!(name: "Alice", email: "alice@example.com", age: 25)
-      TestUser.create!(name: "Bob", email: "bob@example.com", age: 30)
-      TestUser.create!(name: "Charlie", email: "charlie@example.com", age: 35)
-      TestUser.create!(name: "David", email: "david@example.com", age: 40)
+      TestUser.create!(name: "Alice", email: "alice@example.com", age: 25, password: "password123")
+      TestUser.create!(name: "Bob", email: "bob@example.com", age: 30, password: "password123")
+      TestUser.create!(name: "Charlie", email: "charlie@example.com", age: 35, password: "password123")
+      TestUser.create!(name: "David", email: "david@example.com", age: 40, password: "password123")
 
       # Test pagination with ordering
       first_page = TestUser.query.order(:name).limit(2).offset(0).all

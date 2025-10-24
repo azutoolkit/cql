@@ -1,9 +1,16 @@
 require "./spec_helper"
 
 describe CQL::ActiveRecord::Relations::Collection do
+  before_each do
+    UserDB.users.create!
+  end
+
+  after_each do
+    UserDB.users.drop!
+  end
   describe "#initialize" do
     it "creates a collection with the given parameters" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -19,7 +26,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "handles legacy cascade parameter with deprecation warning" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       # This should trigger a deprecation warning in the logs
@@ -36,7 +43,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "auto-loads records when auto_load is true" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       # Create some associated records
@@ -58,7 +65,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#each" do
     it "implements the each method for Enumerable" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -80,7 +87,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#all" do
     it "returns all associated records" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -95,7 +102,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "returns records of specified type" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -112,7 +119,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#reload" do
     it "reloads the association records from the database" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -129,7 +136,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#loaded?" do
     it "checks if the collection has been loaded" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -148,7 +155,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#ids" do
     it "returns a list of primary keys for the associated records" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -165,7 +172,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#<<" do
     it "adds a record to the collection and saves it" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -184,7 +191,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#empty?" do
     it "checks if the collection is empty" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -200,7 +207,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#exists?" do
     it "checks if any records exist with the given attributes" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -217,7 +224,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#first?" do
     it "returns the first record in the collection" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -234,7 +241,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#first" do
     it "returns the first record in the collection, raises if none found" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -252,7 +259,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#last?" do
     it "returns the last record in the collection" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -269,7 +276,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#last" do
     it "returns the last record in the collection, raises if none found" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -287,7 +294,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#size" do
     it "returns the number of associated records" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -304,7 +311,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#count" do
     it "counts records directly from database without loading" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -321,7 +328,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#find" do
     it "finds associated records matching the given attributes" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -338,7 +345,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#find_by" do
     it "finds a single record by attributes" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -355,7 +362,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#build" do
     it "creates a new, unsaved record with the parent association set" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -372,7 +379,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#create" do
     it "creates a new record with the given attributes and saves it" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -387,7 +394,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "creates and associates an existing record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -405,7 +412,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#delete" do
     it "deletes the associated record from the parent record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -421,7 +428,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "deletes the associated record by ID" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -440,7 +447,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#delete_all" do
     it "deletes all associated records" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -457,7 +464,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#nullify_all" do
     it "sets all foreign keys to nil" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -474,7 +481,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#ids=" do
     it "associates the parent record with the records that match the primary keys" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -497,7 +504,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#where" do
     it "returns a new query for chaining where conditions" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -514,7 +521,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#limit" do
     it "applies a limit to the query" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -531,7 +538,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#offset" do
     it "applies an offset to the query" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -548,7 +555,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#order" do
     it "orders the query results" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -565,7 +572,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#clear" do
     it "clears all associated records from the parent record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -583,7 +590,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#includes?" do
     it "checks if the collection includes a specific record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -601,7 +608,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "Enumerable methods" do
     it "implements map method" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -616,7 +623,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "implements select method" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -631,7 +638,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "implements reject method" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -646,7 +653,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "implements find method" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -661,7 +668,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "implements any? method" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -676,7 +683,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "implements all? method" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -693,7 +700,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#[]" do
     it "gets element at index, returns nil if out of bounds" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -708,7 +715,7 @@ describe CQL::ActiveRecord::Relations::Collection do
     end
 
     it "gets element at index, raises if out of bounds" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -726,7 +733,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#to_a" do
     it "converts to array" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -743,7 +750,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#each_with_index" do
     it "each with index" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -766,7 +773,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#map_with_index" do
     it "map with index" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -783,7 +790,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#length" do
     it "gets the length/size of the collection" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -800,7 +807,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#concat" do
     it "adds multiple records to the collection" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(
@@ -822,7 +829,7 @@ describe CQL::ActiveRecord::Relations::Collection do
 
   describe "#remove" do
     it "removes records from the collection without deleting them" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::Collection(TestUser, Int32).new(

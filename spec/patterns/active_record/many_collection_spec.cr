@@ -26,9 +26,16 @@ class TestRole
 end
 
 describe CQL::ActiveRecord::Relations::ManyCollection do
+  before_each do
+    UserDB.users.create!
+  end
+
+  after_each do
+    UserDB.users.drop!
+  end
   describe "#initialize" do
     it "creates a many-to-many collection with the given parameters" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -46,7 +53,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     end
 
     it "handles legacy cascade parameter with deprecation warning" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       # This should trigger a deprecation warning in the logs
@@ -67,7 +74,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#reload" do
     it "reloads the association records from the database" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -85,7 +92,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#<<" do
     it "adds an existing record to the association" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
 
@@ -102,7 +109,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     end
 
     it "raises an error if the target record is not persisted" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
       role = TestRole.new("Admin") # Not persisted
 
@@ -122,7 +129,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#create" do
     it "creates a new target record with given attributes and associates it" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -138,7 +145,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     end
 
     it "associates an existing or new target record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
 
@@ -157,7 +164,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#delete" do
     it "deletes the association for the given record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
 
@@ -178,7 +185,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     end
 
     it "deletes the association for the record with the given ID" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
       role_id = role.id.not_nil!
@@ -202,7 +209,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#clear" do
     it "clears all associated records from the parent record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -220,7 +227,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#clear_with_destroy" do
     it "clears associations and destroys target records" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -238,7 +245,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#clear_with_delete" do
     it "clears associations and deletes target records" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -256,7 +263,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#clear_join_records" do
     it "clears only the join table records" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -274,7 +281,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#build" do
     it "builds a new target record but doesn't save it or create association" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -292,7 +299,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#exists?" do
     it "checks if any records exist with the given attributes via join table" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -310,7 +317,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#includes?" do
     it "checks if the collection includes a specific record" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
 
@@ -329,7 +336,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#ids=" do
     it "sets the associated record IDs" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
       role1 = TestRole.create!(name: "Admin")
       role2 = TestRole.create!(name: "User")
@@ -352,7 +359,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#ids" do
     it "gets associated record IDs" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -370,7 +377,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#concat" do
     it "adds multiple records to the association" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -393,7 +400,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#remove" do
     it "removes multiple records from the association" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -416,7 +423,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#find" do
     it "finds associated records with given attributes via join table" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -434,7 +441,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "#find_by" do
     it "finds a single associated record with given attributes via join table" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -452,7 +459,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "inheritance from Collection" do
     it "inherits all Collection methods" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -471,7 +478,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "dependent strategies" do
     it "handles :destroy dependent strategy" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -486,7 +493,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     end
 
     it "handles :delete_all dependent strategy" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -501,7 +508,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     end
 
     it "handles :nullify dependent strategy" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -518,7 +525,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
 
   describe "validation and autosave options" do
     it "handles validation option" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
@@ -534,7 +541,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     end
 
     it "handles autosave option" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user_id = user.id.not_nil!
 
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(

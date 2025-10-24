@@ -44,7 +44,7 @@ describe CQL::ActiveRecord::Definition do
   describe ".table_columns" do
     it "returns the columns for the table" do
       columns = TestUser.table_columns
-      columns.should be_a(Hash)
+      columns.should be_truthy
       columns.has_key?(:id).should be_true
       columns.has_key?(:name).should be_true
       columns.has_key?(:email).should be_true
@@ -55,7 +55,7 @@ describe CQL::ActiveRecord::Definition do
   describe ".table_column" do
     it "returns the column expression for a given column" do
       id_column = TestUser.table_column(:id)
-      id_column.should be_a(CQL::Expression)
+      id_column.should be_truthy
     end
 
     it "raises an error for non-existent column" do

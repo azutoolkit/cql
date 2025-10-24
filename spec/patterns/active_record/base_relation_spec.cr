@@ -1,6 +1,13 @@
 require "./spec_helper"
 
 describe CQL::ActiveRecord::Relations::BaseRelation do
+  before_each do
+    UserDB.users.create!
+  end
+
+  after_each do
+    UserDB.users.drop!
+  end
   describe "exception types" do
     it "defines RelationError as base exception" do
       error = CQL::ActiveRecord::Relations::BaseRelation::RelationError.new("Test error")
@@ -29,7 +36,7 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
 
   describe "safe_id macro" do
     it "safely retrieves the primary key for persisted records" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       # This would be used in a macro context, but we can test the concept
       id = user.id
@@ -38,7 +45,7 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
     end
 
     it "raises UnsavedRecord for records without ID" do
-      user = TestUser.new("Test User", "test@example.com", 25)
+      user = TestUser.new("Test User", "test@example.com", 25, "password123", "password123")
 
       # This would be used in a macro context
       expect_raises(NilAssertionError) do
@@ -49,7 +56,7 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
 
   describe "safe_foreign_key macro" do
     it "safely retrieves foreign key values" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       # This would be used in a macro context for foreign key access
       # The macro would check if the foreign key is nil and raise InvalidAssociation
@@ -73,14 +80,14 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
 
   describe "ensure_persisted macro" do
     it "validates that a record is persisted" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       # This would be used in a macro context
       user.persisted?.should be_true
     end
 
     it "raises UnsavedRecord for non-persisted records" do
-      user = TestUser.new("Test User", "test@example.com", 25)
+      user = TestUser.new("Test User", "test@example.com", 25, "password123", "password123")
 
       # This would be used in a macro context
       user.persisted?.should be_false
@@ -89,10 +96,11 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
 
   describe "safe_db_operation macro" do
     it "wraps database operations with error handling" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       # This would be used in a macro context to wrap database operations
       # The macro would catch DB::Error and CQL::Schema::ConnectionError
+      user.password_confirmation = "password123"
       result = user.save
       result.should be_true
     end
@@ -100,7 +108,7 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
     it "handles database errors gracefully" do
       # This would be used in a macro context
       # The macro would catch and re-raise errors with RelationError
-      user = TestUser.new("Test User", "test@example.com", 25)
+      user = TestUser.new("Test User", "test@example.com", 25, "password123", "password123")
 
       # Test that database operations can fail gracefully
       result = user.save
@@ -171,7 +179,7 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
       query.should be_a(CQL::Query)
 
       # Test that we can check persistence
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       user.persisted?.should be_true
 
       new_user = TestUser.new("New User", "new@example.com", 30)
@@ -182,7 +190,7 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
   describe "type safety" do
     it "maintains type safety across relation operations" do
       # Test that the base relation maintains type safety
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 
       # Test ID type safety
       id = user.id

@@ -1,6 +1,13 @@
 require "./spec_helper"
 
 describe CQL::ActiveRecord::Queryable do
+  before_each do
+    UserDB.users.create!
+  end
+
+  after_each do
+    UserDB.users.drop!
+  end
   describe ".query" do
     it "creates a new query builder for the model" do
       query = TestUser.query
@@ -316,7 +323,7 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".find" do
     it "finds record by primary key" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       id = user.id.not_nil!
 
       found_user = TestUser.find(id)
@@ -327,7 +334,7 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".find?" do
     it "finds record by primary key, returns nil if not found" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       id = user.id.not_nil!
 
       found_user = TestUser.find?(id)
@@ -341,7 +348,7 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".find!" do
     it "finds record by primary key, raises if not found" do
-      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
+      user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
       id = user.id.not_nil!
 
       found_user = TestUser.find!(id)
@@ -433,7 +440,7 @@ describe CQL::ActiveRecord::Queryable do
       TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
 
       names = TestUser.pluck(:name, as: String)
-      names.should be_a(Array)
+      names.should be_a(Array(String))
       names.size.should eq(2)
     end
   end
@@ -449,8 +456,8 @@ describe CQL::ActiveRecord::Queryable do
 
   describe ".ids" do
     it "gets array of primary key values" do
-      user1 = TestUser.create!(name: "User 1", email: "user1@example.com", age: 25)
-      user2 = TestUser.create!(name: "User 2", email: "user2@example.com", age: 30)
+      user1 = TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123")
+      user2 = TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123")
 
       ids = TestUser.ids(as: Int32)
       ids.should be_a(Array(Int32))
