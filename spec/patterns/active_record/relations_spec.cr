@@ -82,7 +82,7 @@ describe CQL::ActiveRecord::Relations do
   describe "error handling" do
     it "provides consistent error handling across all relation types" do
       # Test that all relation types use the same error handling patterns
-      base_error = CQL::ActiveRecord::Relations::BaseRelation::RelationError.new("Test error")
+      CQL::ActiveRecord::Relations::BaseRelation::RelationError.new("Test error")
       association_error = CQL::ActiveRecord::Relations::BaseRelation::AssociationNotFound.new("Association not found")
       invalid_error = CQL::ActiveRecord::Relations::BaseRelation::InvalidAssociation.new("Invalid association")
       unsaved_error = CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord.new("Unsaved record")

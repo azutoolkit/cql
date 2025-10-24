@@ -258,7 +258,7 @@ describe CQL::ActiveRecord::Persistence do
 
       ids = [article1.id!, article2.id!, article3.id!]
       original_times = [article1.updated_at, article2.updated_at, article3.updated_at]
-      original_times.each { |time| time.should_not be_nil }
+      original_times.each(&.should_not(be_nil))
 
       # Wait a small amount to ensure time difference
       sleep 1.millisecond
@@ -287,7 +287,7 @@ describe CQL::ActiveRecord::Persistence do
 
       ids = [article1.id!, article2.id!]
       original_times = [article1.updated_at, article2.updated_at]
-      original_times.each { |time| time.should_not be_nil }
+      original_times.each(&.should_not(be_nil))
 
       # Wait a small amount to ensure time difference
       sleep 1.millisecond

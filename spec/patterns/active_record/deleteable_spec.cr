@@ -154,7 +154,7 @@ describe CQL::ActiveRecord::Deleteable do
 
     it "sets destroyed flag and clears ID on successful deletion" do
       user = TestUser.create!(name: "Destroy Test", email: "destroy@example.com", age: 25)
-      original_id = user.id.not_nil!
+      user.id.not_nil!
 
       result = user.delete!
       result.should be_true
