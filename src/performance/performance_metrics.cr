@@ -276,7 +276,7 @@ module CQL::Performance
     def self.from_components(
       profiler : QueryProfilerInterface? = nil,
       detector : NPlusOneDetectorInterface? = nil,
-      cache : CQL::Cache::Cache? = nil,
+      cache : CQL::Cache::CacheInterface? = nil,
       start_time : Time? = nil,
       config : Config? = nil,
       error_count : Int32 = 0,
@@ -515,19 +515,26 @@ module CQL::Performance
       )
     end
 
-    private def self.build_cache_metrics(cache : CQL::Cache::Cache?) : CacheMetrics
+    private def self.build_cache_metrics(cache : CQL::Cache::CacheInterface?) : CacheMetrics
       unless cache
         return CacheMetrics.new(0_i64, 0_i64, 0, 0, 0.0, 0.0, 0_i64)
       end
 
-      # Placeholder values - would need cache to expose these metrics
+      # Get cache statistics from the interface
+      cache_stats = cache.stats
+      cache_hits = cache_stats["hits"]?.try(&.to_i64) || 0_i64
+      cache_misses = cache_stats["misses"]?.try(&.to_i64) || 0_i64
+      cache_size = cache.size
+      hit_rate = cache_hits + cache_misses > 0 ? (cache_hits.to_f / (cache_hits + cache_misses).to_f) * 100.0 : 0.0
+      miss_rate = 100.0 - hit_rate
+
       CacheMetrics.new(
-        0_i64, # cache_hits
-        0_i64, # cache_misses
-        cache.size,
+        cache_hits,
+        cache_misses,
+        cache_size,
         1000, # max_cache_size
-        0.0,  # hit_rate
-        0.0,  # miss_rate
+        hit_rate,
+        miss_rate,
         0_i64 # evictions
       )
     end
@@ -546,7 +553,7 @@ module CQL::Performance
       )
     end
 
-    private def self.build_health_metrics(profiler : QueryProfilerInterface?, detector : NPlusOneDetectorInterface?, cache : CQL::Cache::Cache?) : HealthMetrics
+    private def self.build_health_metrics(profiler : QueryProfilerInterface?, detector : NPlusOneDetectorInterface?, cache : CQL::Cache::CacheInterface?) : HealthMetrics
       # Collect issues
       issues = collect_issues(profiler, detector)
       critical_issues = issues.count(&.severity.== :critical)
@@ -689,11 +696,23 @@ module CQL::Performance
       [score, 0].max
     end
 
-    private def self.calculate_cache_health_score(cache : CQL::Cache::Cache?) : Int32
+    private def self.calculate_cache_health_score(cache : CQL::Cache::CacheInterface?) : Int32
       return 100 unless cache
 
-      # Placeholder - would need cache hit/miss metrics
-      100
+      # Calculate health score based on cache statistics
+      cache_stats = cache.stats
+      hit_rate = cache_stats["hit_rate"]?.try(&.as_f) || 0.0
+
+      # Base score of 100, penalize for low hit rates
+      if hit_rate >= 80.0
+        100
+      elsif hit_rate >= 60.0
+        80
+      elsif hit_rate >= 40.0
+        60
+      else
+        40
+      end
     end
   end
 

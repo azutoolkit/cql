@@ -290,12 +290,12 @@ module CQL::Performance
       )
     end
 
-    private def get_cache_instance : CQL::Cache::Cache?
+    private def get_cache_instance : CQL::Cache::CacheInterface?
       # Try to get cache instance from the cache system
 
       # Check if cache is available and configured
       if CQL::Cache::CacheStore.config
-        CQL::Cache::CacheStore.instance.as(CQL::Cache::Cache)
+        CQL::Cache::CacheStore.instance
       else
         nil
       end
