@@ -200,15 +200,18 @@ module CQL
             # Create path
             return false unless run_callbacks(:before_create)
             result = create!
-            create_success = !@id.nil?
+            @id = result.id if result
+            create_success = !result.nil?
             run_callbacks(:after_create) if create_success
             create_success
           else
             # Update path
             return false unless run_callbacks(:before_update)
             result = update!
-            run_callbacks(:after_update) if result
-            result
+            @id = result.id if result
+            update_success = !result.nil?
+            run_callbacks(:after_update) if update_success
+            update_success
           end
 
           # Run after save callbacks
