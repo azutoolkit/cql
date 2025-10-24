@@ -31,7 +31,7 @@ describe "Pagination functionality" do
     it "handles pagination logic correctly" do
       # Create test data
       10.times do |i|
-            TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i, password: "password123")
+        TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i, password: "password123")
       end
 
       # Test pagination using query builder
