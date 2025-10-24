@@ -30,7 +30,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "creates a many-to-many collection with the given parameters" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -41,14 +41,14 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         validate: true,
         autosave: false
       )
-      
+
       collection.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
 
     it "handles legacy cascade parameter with deprecation warning" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       # This should trigger a deprecation warning in the logs
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
@@ -60,7 +60,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         validate: true,
         autosave: false
       )
-      
+
       collection.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
   end
@@ -69,7 +69,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "reloads the association records from the database" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -77,7 +77,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       records = collection.reload
       records.should be_a(Array(TestRole))
     end
@@ -88,7 +88,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -96,7 +96,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       result = collection << role
       result.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
@@ -105,7 +105,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
       role = TestRole.new("Admin") # Not persisted
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -113,7 +113,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       expect_raises(CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord) do
         collection << role
       end
@@ -124,7 +124,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "creates a new target record with given attributes and associates it" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -132,7 +132,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       role = collection.create(name: "Admin", description: "Administrator role")
       role.should be_a(TestRole)
     end
@@ -141,7 +141,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -149,7 +149,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       result = collection.create(role)
       result.should be_a(TestRole)
     end
@@ -160,7 +160,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -168,10 +168,10 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       # First associate the role
       collection << role
-      
+
       # Then delete the association
       result = collection.delete(role)
       result.should be_a(TestRole?)
@@ -182,7 +182,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
       role_id = role.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -190,10 +190,10 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       # First associate the role
       collection << role
-      
+
       # Then delete the association by ID
       result = collection.delete(role_id)
       result.should be_a(TestRole?)
@@ -204,7 +204,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "clears all associated records from the parent record" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -212,7 +212,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :destroy
       )
-      
+
       result = collection.clear
       result.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
@@ -222,7 +222,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "clears associations and destroys target records" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -230,7 +230,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :destroy
       )
-      
+
       result = collection.clear_with_destroy
       result.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
@@ -240,7 +240,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "clears associations and deletes target records" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -248,7 +248,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :delete_all
       )
-      
+
       result = collection.clear_with_delete
       result.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
@@ -258,7 +258,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "clears only the join table records" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -266,7 +266,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       result = collection.clear_join_records
       result.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
@@ -276,7 +276,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "builds a new target record but doesn't save it or create association" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -284,7 +284,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       role = collection.build(name: "Admin", description: "Administrator role")
       role.should be_a(TestRole)
     end
@@ -294,7 +294,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "checks if any records exist with the given attributes via join table" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -302,7 +302,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       exists = collection.exists?(name: "Admin")
       exists.should be_a(Bool)
     end
@@ -313,7 +313,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
       role = TestRole.create!(name: "Admin")
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -321,7 +321,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       includes = collection.includes?(role)
       includes.should be_a(Bool)
     end
@@ -333,7 +333,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
       user_id = user.id.not_nil!
       role1 = TestRole.create!(name: "Admin")
       role2 = TestRole.create!(name: "User")
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -341,10 +341,10 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       ids = [role1.id.not_nil!, role2.id.not_nil!]
       collection.ids = ids
-      
+
       # This would reload the collection
       collection.reload
     end
@@ -354,7 +354,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "gets associated record IDs" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -362,7 +362,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       ids = collection.ids
       ids.should be_a(Array(Int32))
     end
@@ -372,7 +372,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "adds multiple records to the association" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -380,12 +380,12 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       roles = [
         TestRole.create!(name: "Admin"),
-        TestRole.create!(name: "User")
+        TestRole.create!(name: "User"),
       ]
-      
+
       result = collection.concat(roles)
       result.should be_a(Array(TestRole))
     end
@@ -395,7 +395,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "removes multiple records from the association" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -403,12 +403,12 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       roles = [
         TestRole.create!(name: "Admin"),
-        TestRole.create!(name: "User")
+        TestRole.create!(name: "User"),
       ]
-      
+
       result = collection.remove(roles)
       result.should be_a(Array(TestRole))
     end
@@ -418,7 +418,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "finds associated records with given attributes via join table" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -426,7 +426,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       records = collection.find(name: "Admin")
       records.should be_a(Array(TestRole))
     end
@@ -436,7 +436,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "finds a single associated record with given attributes via join table" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -444,7 +444,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       record = collection.find_by(name: "Admin")
       record.should be_a(TestRole?)
     end
@@ -454,7 +454,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "inherits all Collection methods" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -462,7 +462,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       # Test inherited methods
       collection.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
       collection.should be_a(CQL::ActiveRecord::Relations::Collection(TestRole, Int32))
@@ -473,7 +473,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "handles :destroy dependent strategy" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -481,14 +481,14 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :destroy
       )
-      
+
       collection.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
 
     it "handles :delete_all dependent strategy" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -496,14 +496,14 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :delete_all
       )
-      
+
       collection.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
 
     it "handles :nullify dependent strategy" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -511,7 +511,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         query: CQL::Query.new(TestRole.schema).from(TestRole.table),
         dependent: :nullify
       )
-      
+
       collection.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
   end
@@ -520,7 +520,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
     it "handles validation option" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -529,14 +529,14 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         dependent: :nullify,
         validate: true
       )
-      
+
       collection.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
 
     it "handles autosave option" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25)
       user_id = user.id.not_nil!
-      
+
       collection = CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32).new(
         key: :user_id,
         id: user_id,
@@ -545,7 +545,7 @@ describe CQL::ActiveRecord::Relations::ManyCollection do
         dependent: :nullify,
         autosave: true
       )
-      
+
       collection.should be_a(CQL::ActiveRecord::Relations::ManyCollection(TestRole, TestUserRole, Int32))
     end
   end

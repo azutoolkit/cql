@@ -89,7 +89,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       # Test that the where method with block exists
       # The actual block implementation would be tested in integration tests
       new_builder = builder.where(name: "Test")
-      
+
       new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
   end

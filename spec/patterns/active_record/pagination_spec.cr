@@ -26,18 +26,18 @@ describe "Pagination functionality" do
       10.times do |i|
         TestUser.create!(name: "User #{i}", email: "user#{i}@example.com", age: 20 + i)
       end
-      
+
       # Test pagination using query builder
       # First page
       first_page = TestUser.query.limit(3).offset(0).all
       first_page.should be_a(Array(TestUser))
       first_page.size.should eq(3)
-      
+
       # Second page
       second_page = TestUser.query.limit(3).offset(3).all
       second_page.should be_a(Array(TestUser))
       second_page.size.should eq(3)
-      
+
       # Last page
       last_page = TestUser.query.limit(3).offset(9).all
       last_page.should be_a(Array(TestUser))
@@ -57,14 +57,14 @@ describe "Pagination functionality" do
       TestUser.create!(name: "Bob", email: "bob@example.com", age: 30)
       TestUser.create!(name: "Charlie", email: "charlie@example.com", age: 35)
       TestUser.create!(name: "David", email: "david@example.com", age: 40)
-      
+
       # Test pagination with ordering
       first_page = TestUser.query.order(:name).limit(2).offset(0).all
       first_page.size.should eq(2)
-      
+
       second_page = TestUser.query.order(:name).limit(2).offset(2).all
       second_page.size.should eq(2)
-      
+
       # Verify no overlap between pages
       first_names = first_page.map(&.name)
       second_names = second_page.map(&.name)

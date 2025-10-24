@@ -5,7 +5,7 @@ describe CQL::ActiveRecord::Relations do
     it "includes all relation modules" do
       # Test that the Relations module includes all necessary relation types
       # This is more of a structural test to ensure the module is properly organized
-      
+
       # Test that we can access the relation modules
       CQL::ActiveRecord::Relations::BaseRelation.should be_a(Class)
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
@@ -20,7 +20,7 @@ describe CQL::ActiveRecord::Relations do
       # Test that belongs_to associations can be defined
       # This would typically be tested in the actual model specs
       # but we can test the module structure here
-      
+
       # Test that the BelongsTo module is available
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
     end
@@ -57,7 +57,7 @@ describe CQL::ActiveRecord::Relations do
     it "provides common functionality through BaseRelation" do
       # Test that BaseRelation provides common functionality
       CQL::ActiveRecord::Relations::BaseRelation.should be_a(Class)
-      
+
       # Test that BaseRelation provides exception types
       CQL::ActiveRecord::Relations::BaseRelation::RelationError.should be_a(Class)
       CQL::ActiveRecord::Relations::BaseRelation::AssociationNotFound.should be_a(Class)
@@ -70,7 +70,7 @@ describe CQL::ActiveRecord::Relations do
     it "provides macros for defining associations" do
       # Test that the relation modules provide the necessary macros
       # This is more of a structural test since macros are compile-time
-      
+
       # Test that the modules are properly structured
       CQL::ActiveRecord::Relations::BelongsTo.should respond_to(:belongs_to)
       CQL::ActiveRecord::Relations::HasMany.should respond_to(:has_many)
@@ -86,7 +86,7 @@ describe CQL::ActiveRecord::Relations do
       association_error = CQL::ActiveRecord::Relations::BaseRelation::AssociationNotFound.new("Association not found")
       invalid_error = CQL::ActiveRecord::Relations::BaseRelation::InvalidAssociation.new("Invalid association")
       unsaved_error = CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord.new("Unsaved record")
-      
+
       # All errors should inherit from RelationError
       association_error.should be_a(CQL::ActiveRecord::Relations::BaseRelation::RelationError)
       invalid_error.should be_a(CQL::ActiveRecord::Relations::BaseRelation::RelationError)
@@ -98,7 +98,7 @@ describe CQL::ActiveRecord::Relations do
     it "maintains type safety across all relation types" do
       # Test that relations maintain type safety
       # This is more of a structural test since type safety is enforced at compile time
-      
+
       # Test that the modules are properly typed
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
       CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
@@ -111,13 +111,13 @@ describe CQL::ActiveRecord::Relations do
     it "organizes relation functionality logically" do
       # Test that the Relations module is properly organized
       # with clear separation of concerns
-      
+
       # Test that each relation type is in its own module
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
       CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
       CQL::ActiveRecord::Relations::HasOne.should be_a(Class)
       CQL::ActiveRecord::Relations::ManyToMany.should be_a(Class)
-      
+
       # Test that collection classes are properly organized
       CQL::ActiveRecord::Relations::Collection(TestUser, Int32).should be_a(Class)
       CQL::ActiveRecord::Relations::ManyCollection(TestUser, TestUser, Int32).should be_a(Class)
@@ -129,7 +129,7 @@ describe CQL::ActiveRecord::Relations do
       # Test that the Relations module integrates properly with Active Record
       # This is more of a structural test since actual integration is tested
       # in the model specs
-      
+
       # Test that the modules are available for inclusion
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
       CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
@@ -142,7 +142,7 @@ describe CQL::ActiveRecord::Relations do
     it "provides macro functionality for defining associations" do
       # Test that the relation modules provide macro functionality
       # This is more of a structural test since macros are compile-time
-      
+
       # Test that the modules are properly structured for macro usage
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
       CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
@@ -156,7 +156,7 @@ describe CQL::ActiveRecord::Relations do
       # Test that collection classes provide the necessary functionality
       # This is more of a structural test since actual functionality is tested
       # in the collection specs
-      
+
       # Test that collection classes are available
       CQL::ActiveRecord::Relations::Collection(TestUser, Int32).should be_a(Class)
       CQL::ActiveRecord::Relations::ManyCollection(TestUser, TestUser, Int32).should be_a(Class)
@@ -168,7 +168,7 @@ describe CQL::ActiveRecord::Relations do
       # Test that all relation types handle dependencies consistently
       # This is more of a structural test since actual dependency handling
       # is tested in the individual relation specs
-      
+
       # Test that the modules are properly structured for dependency handling
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
       CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
@@ -182,7 +182,7 @@ describe CQL::ActiveRecord::Relations do
       # Test that the Relations module is structured for performance
       # This is more of a structural test since actual performance is tested
       # in the individual relation specs
-      
+
       # Test that the modules are properly structured for performance
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
       CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
@@ -196,7 +196,7 @@ describe CQL::ActiveRecord::Relations do
       # Test that the Relations module is structured for extensibility
       # This is more of a structural test since actual extensibility is tested
       # in the individual relation specs
-      
+
       # Test that the modules are properly structured for extensibility
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
       CQL::ActiveRecord::Relations::HasMany.should be_a(Class)
@@ -210,7 +210,7 @@ describe CQL::ActiveRecord::Relations do
       # Test that the Relations module is well-documented
       # This is more of a structural test since actual documentation is tested
       # in the individual relation specs
-      
+
       # Test that the modules are properly structured for documentation
       CQL::ActiveRecord::Relations::BelongsTo.should be_a(Class)
       CQL::ActiveRecord::Relations::HasMany.should be_a(Class)

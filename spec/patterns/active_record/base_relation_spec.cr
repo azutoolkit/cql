@@ -151,7 +151,7 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
         CQL::ActiveRecord::Relations::BaseRelation::RelationError.new("Test"),
         CQL::ActiveRecord::Relations::BaseRelation::AssociationNotFound.new("Test"),
         CQL::ActiveRecord::Relations::BaseRelation::InvalidAssociation.new("Test"),
-        CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord.new("Test")
+        CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord.new("Test"),
       ]
 
       errors.each do |error|
