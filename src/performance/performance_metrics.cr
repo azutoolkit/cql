@@ -701,7 +701,7 @@ module CQL::Performance
 
       # Calculate health score based on cache statistics
       cache_stats = cache.stats
-      hit_rate = cache_stats["hit_rate"]?.try(&.as_f) || 0.0
+      hit_rate = cache_stats["hit_rate"]?.try(&.to_f64) || 0.0
 
       # Base score of 100, penalize for low hit rates
       if hit_rate >= 80.0
