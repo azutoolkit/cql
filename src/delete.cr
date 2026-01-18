@@ -68,10 +68,11 @@ module CQL
     #   .where(id: 1)
     #   .to_sql
     # ```
-    def to_sql(gen = @schema.gen)
-      gen.reset
-      build.accept(gen)
-      {gen.query, gen.params}
+    def to_sql(gen : Expression::Generator? = nil)
+      generator = gen || @schema.new_generator
+      generator.reset
+      build.accept(generator)
+      {generator.query, generator.params}
     end
 
     # Sets the table to delete from

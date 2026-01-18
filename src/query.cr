@@ -162,16 +162,24 @@ module CQL
     # => <User:0x00007f8b1b0b3b00 @name="John", @age=30>
     # ```
     def first(as as_kind)
-      # Create a new query with limit 1 without modifying the original
-      limited_query = clone
-      limited_query.limit(1)
-      limited_query_sql, limited_params = limited_query.to_sql
-      CQL::Cache::RequestQueryCacheHelper.with_cache(limited_query_sql, limited_params) do
-        CQL::Performance.track(limited_query_sql, limited_params) do
-          @schema.exec_query do |conn|
-            conn.query_one?(limited_query_sql, args: limited_params, as: as_kind)
+      # Temporarily set limit to 1 without cloning to avoid unnecessary allocations
+      original_limit = @limit
+      original_offset = @offset
+      @limit = 1
+
+      begin
+        query_sql, params = to_sql
+        CQL::Cache::RequestQueryCacheHelper.with_cache(query_sql, params) do
+          CQL::Performance.track(query_sql, params) do
+            @schema.exec_query do |conn|
+              conn.query_one?(query_sql, args: params, as: as_kind)
+            end
           end
         end
+      ensure
+        # Restore original limit/offset state
+        @limit = original_limit
+        @offset = original_offset
       end
     end
 
@@ -261,10 +269,11 @@ module CQL
     # query.to_sql
     # => {"SELECT * FROM users WHERE name = ? AND age = ?", ["John", 30]}
     # ```
-    def to_sql(gen = @schema.gen)
-      gen.reset
-      build.accept(gen)
-      {gen.query, gen.params}
+    def to_sql(gen : Expression::Generator? = nil)
+      generator = gen || @schema.new_generator
+      generator.reset
+      build.accept(generator)
+      {generator.query, generator.params}
     end
 
     # Specifies the columns to select.
@@ -1136,9 +1145,6 @@ module CQL
 
     private def build_limit
       Expression::Limit.new(@limit, @offset) if @limit
-    ensure
-      @limit = nil
-      @offset = nil
     end
 
     private def build_select

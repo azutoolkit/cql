@@ -61,14 +61,55 @@ module CQL
     # - **@return** [Hash(Symbol, Table)] the tables in the schema
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
 
-    # - **@return** [Expression::Generator] the expression generator
-    getter gen : Expression::Generator
-
     # - **@return** [DB::Database] the database connection pool
     private getter db : DB::Database
 
-    # Holds the active connection if currently inside a transaction block
-    private getter? active_connection : DB::Connection? = nil
+    # Fiber-local connection storage for thread-safe transaction handling
+    @fiber_connections = {} of Fiber => DB::Connection
+    @fiber_mutex = Mutex.new
+
+    # Creates a new expression generator for thread-safe SQL generation.
+    # Each call returns a fresh Generator instance to avoid state corruption
+    # when multiple fibers generate SQL concurrently.
+    #
+    # - **@return** [Expression::Generator] a new generator instance
+    #
+    # **Example**
+    # ```
+    # gen = schema.new_generator
+    # sql, params = query.to_sql(gen)
+    # ```
+    def new_generator : Expression::Generator
+      Expression::Generator.new(@adapter)
+    end
+
+    # Returns a generator for SQL expression building.
+    # **DEPRECATED**: Use `new_generator` instead for thread-safe SQL generation.
+    # This method creates a new generator each time to prevent concurrent access issues.
+    @[Deprecated("Use new_generator for thread-safe SQL generation")]
+    def gen : Expression::Generator
+      new_generator
+    end
+
+    # Gets the active connection for the current fiber, if any.
+    # Used internally for transaction support.
+    private def active_connection : DB::Connection?
+      @fiber_mutex.synchronize do
+        @fiber_connections[Fiber.current]?
+      end
+    end
+
+    # Sets the active connection for the current fiber.
+    # Used internally for transaction support.
+    private def active_connection=(conn : DB::Connection?)
+      @fiber_mutex.synchronize do
+        if conn
+          @fiber_connections[Fiber.current] = conn
+        else
+          @fiber_connections.delete(Fiber.current)
+        end
+      end
+    end
 
     # Builds a new schema.
     #
@@ -108,7 +149,6 @@ module CQL
     # ```
     def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0")
       validate_uri!
-      @gen = Expression::Generator.new(@adapter)
       @db = DB.open(@uri)
     end
 
@@ -156,7 +196,7 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      if conn = @active_connection
+      if conn = active_connection
         conn.exec(sql)
       else
         @db.using_connection do |db_conn|
@@ -168,7 +208,7 @@ module CQL
     def exec_query(&)
       # Performance monitoring will be handled by individual query methods
       # that call this method, as we don't have access to SQL/params here
-      if conn = @active_connection
+      if conn = active_connection
         yield conn
       else
         @db.using_connection do |db_conn|
@@ -231,13 +271,13 @@ module CQL
     # end
     # ```
     def transaction(&)
-      previous_connection = @active_connection
+      previous_connection = active_connection
       @db.transaction do |tx|
-        @active_connection = tx.connection
+        self.active_connection = tx.connection
         begin
           yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
         ensure
-          @active_connection = previous_connection
+          self.active_connection = previous_connection
         end
       end
     rescue ex : DB::Rollback
@@ -248,12 +288,12 @@ module CQL
     end
 
     def transaction(tx : DB::Transaction, &)
-      previous_connection = @active_connection
-      @active_connection = tx.connection
+      previous_connection = active_connection
+      self.active_connection = tx.connection
       begin
         yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
       ensure
-        @active_connection = previous_connection
+        self.active_connection = previous_connection
       end
     end
 
@@ -341,7 +381,7 @@ module CQL
 
       alter_table = AlterTable.new(tables[table_name], self)
       with alter_table yield
-      sql_statements = alter_table.to_sql(@gen)
+      sql_statements = alter_table.to_sql(new_generator)
 
       exec_query do |conn|
         conn.transaction do |tx|

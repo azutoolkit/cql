@@ -33,6 +33,7 @@ module CQL
       end
 
       @entries = {} of String => CacheEntry
+      @access_order = [] of String  # Track access order for O(1) LRU eviction
       @tag_index = {} of String => Set(String)
       @version_store = {} of String => Int64
       @mutex = Mutex.new
@@ -59,6 +60,7 @@ module CQL
             end
 
             entry.touch
+            update_access_order(key)
             @stats["hits"] += 1
             entry.value
           else
@@ -70,14 +72,25 @@ module CQL
 
       def set(key : String, value : String, ttl : Time::Span? = nil) : Bool
         @mutex.synchronize do
+          # Track if this is a new entry
+          is_new = !@entries.has_key?(key)
+
           # Check size limits and evict if necessary
           if max_size = @max_size
-            if @entries.size >= max_size && !@entries.has_key?(key)
+            if @entries.size >= max_size && is_new
               evict_lru
             end
           end
 
           @entries[key] = CacheEntry.new(value, ttl)
+
+          # Update access order tracking
+          if is_new
+            @access_order << key
+          else
+            update_access_order(key)
+          end
+
           @stats["sets"] += 1
           true
         end
@@ -113,6 +126,7 @@ module CQL
       def clear : Bool
         @mutex.synchronize do
           @entries.clear
+          @access_order.clear
           @tag_index.clear
           @version_store.clear
           @stats = {
@@ -251,6 +265,7 @@ module CQL
 
       private def remove_entry(key : String) : Nil
         @entries.delete(key)
+        @access_order.delete(key)
         remove_from_tag_index(key)
       end
 
@@ -261,16 +276,24 @@ module CQL
         end
       end
 
-      private def evict_lru : Nil
-        # Find the least recently used entry (lowest access count, then oldest)
-        oldest_entry = @entries.min_by? do |_, entry|
-          {entry.access_count, entry.created_at}
-        end
+      # Move key to end of access order (most recently used)
+      private def update_access_order(key : String) : Nil
+        @access_order.delete(key)
+        @access_order << key
+      end
 
-        if oldest_entry
-          key, _ = oldest_entry
-          remove_entry(key)
-          @stats["evictions"] += 1
+      # O(1) LRU eviction - take from front of access_order
+      private def evict_lru : Nil
+        while !@access_order.empty?
+          key = @access_order.shift  # Remove from front (least recently used)
+
+          # Verify entry still exists (might have been deleted via tags or TTL)
+          if @entries.has_key?(key)
+            @entries.delete(key)
+            remove_from_tag_index(key)
+            @stats["evictions"] += 1
+            return
+          end
         end
       end
     end

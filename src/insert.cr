@@ -230,10 +230,11 @@ module CQL
     # ```
     # insert.into(:users).values(name: "John", age: 30).to_sql
     # ```
-    def to_sql(gen = @schema.gen)
-      gen.reset
-      build.accept(gen)
-      {gen.query, gen.params}
+    def to_sql(gen : Expression::Generator? = nil)
+      generator = gen || @schema.new_generator
+      generator.reset
+      build.accept(generator)
+      {generator.query, generator.params}
     end
 
     private def build_query

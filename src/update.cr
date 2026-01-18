@@ -109,10 +109,11 @@ module CQL
     #
     # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
     # ```
-    def to_sql(gen = @schema.gen)
-      gen.reset
-      build.accept(gen)
-      {gen.query, gen.params}
+    def to_sql(gen : Expression::Generator? = nil)
+      generator = gen || @schema.new_generator
+      generator.reset
+      build.accept(generator)
+      {generator.query, generator.params}
     end
 
     # Sets the table to update.
