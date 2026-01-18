@@ -49,7 +49,7 @@ describe "Generator Thread Safety" do
     end
 
     # Each insert should have exactly 3 params
-    collected.each do |sql, params|
+    collected.each do |_, params|
       params.size.should eq(3)
     end
   end
@@ -75,7 +75,7 @@ describe "Generator Thread Safety" do
     end
 
     # Each update should have exactly 2 params (set value + where id)
-    collected.each do |sql, params|
+    collected.each do |_, params|
       params.size.should eq(2)
     end
   end
@@ -100,7 +100,7 @@ describe "Generator Thread Safety" do
     end
 
     # Each delete should have exactly 1 param (where id)
-    collected.each do |sql, params|
+    collected.each do |_, params|
       params.size.should eq(1)
     end
   end
