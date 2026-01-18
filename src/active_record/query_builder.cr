@@ -41,38 +41,14 @@ module CQL
         # - **@return** [QueryBuilder(T)] A new query builder instance
         def with_query(&block : CQL::Query -> CQL::Query)
           # Create a new query by applying the block to a copy of the current query
-          new_query = block.call(clone_query(@query))
+          new_query = block.call(@query.clone)
           QueryBuilder(T).new(new_query, @model_class)
         end
 
         # Clone the current QueryBuilder and apply modifications
         # - **@return** [QueryBuilder(T)] A new query builder instance
         private def clone_builder : QueryBuilder(T)
-          QueryBuilder(T).new(clone_query(@query), @model_class)
-        end
-
-        # Clone a CQL::Query object since it doesn't have a built-in clone method
-        private def clone_query(original_query : CQL::Query) : CQL::Query
-          # Create a new query with the same schema
-          new_query = CQL::Query.new(original_query.schema)
-
-          # Copy properties that have setters
-          new_query.where = original_query.where
-          new_query.having = original_query.having
-          new_query.limit = original_query.limit
-          new_query.offset = original_query.offset
-          new_query.distinct = original_query.distinct?
-
-          # Copy collections by adding elements one by one
-          original_query.columns.each { |col| new_query.columns << col }
-          original_query.query_tables.each { |key, value| new_query.query_tables[key] = value }
-          original_query.group_by.each { |col| new_query.group_by << col }
-          original_query.order_by.each { |key, value| new_query.order_by[key] = value }
-          original_query.joins.each { |join| new_query.joins << join }
-          original_query.aggr_columns.each { |aggr| new_query.aggr_columns << aggr }
-          original_query.column_aliases.each { |key, value| new_query.column_aliases[key] = value }
-
-          new_query
+          QueryBuilder(T).new(@query.clone, @model_class)
         end
 
         # Add columns to select
