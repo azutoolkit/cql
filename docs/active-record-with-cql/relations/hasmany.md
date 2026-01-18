@@ -90,7 +90,7 @@ struct Post
   # Association: A Post has many Comments
   # The `foreign_key` option specifies the column on the `comments` table
   # that references the `posts` table.
-  has_many :comments, foreign_key: :post_id
+  has_many :comments, Comment, foreign_key: :post_id
 end
 ```
 
@@ -112,11 +112,11 @@ struct Comment
   end
 
   # Association: A Comment belongs to one Post
-  belongs_to :post, Post, :post_id
+  belongs_to :post, Post, foreign_key: :post_id
 end
 ```
 
-- The `belongs_to :post, Post, :post_id` in the `Comment` model links each comment back to its post.
+- The `belongs_to :post, Post, foreign_key: :post_id` in the `Comment` model links each comment back to its post.
 
 ## Working with the `HasMany` Collection
 
@@ -245,21 +245,61 @@ If you delete the parent record (`post.delete`), associated comments are _not_ a
 
 ## Eager Loading
 
-To avoid N+1 query problems when loading many posts and their comments, use joins:
+To avoid N+1 query problems when loading many posts and their comments, CQL provides two approaches:
+
+### Using Preload (Recommended)
+
+The `preload` method loads associations using separate batch queries:
 
 ```crystal
-# Fetches all posts and their associated comments in a more optimized way (typically 2 queries)
-posts_with_comments = Post.query.join(:comments).all(Post)
+# Fetches all posts, then batch-loads their comments (2 queries total)
+posts_with_comments = Post.preload(:comments).all
 
 posts_with_comments.each do |p|
-  puts "Post: #{p.title} has #{p.comments.size} comments (already loaded):"
-  p.comments.each do |c| # Accesses the already loaded comments
+  puts "Post: #{p.title} has #{p.comments.size} comments:"
+  p.comments.each do |c|
     puts "  - #{c.body}"
   end
 end
+
+# Chain with other query methods
+recent_posts = Post.where("created_at > ?", 1.week.ago)
+                   .preload(:comments)
+                   .order(created_at: :desc)
+                   .all
 ```
 
-- `join(:comments)` tells CQL to fetch all comments for the retrieved posts using efficient JOIN operations.
+Benefits of `preload`:
+
+- Avoids cartesian product issues
+- Works correctly with pagination
+- Keeps queries simple and efficient
+
+### Using Join
+
+Use `join` when you need to filter based on associated records:
+
+```crystal
+# Find posts that have comments (filter by association)
+posts_with_any_comments = Post.join(:comments)
+                              .distinct
+                              .all
+
+# Filter by association attributes
+posts_with_recent_comments = Post.join(:comments)
+                                 .where("comments.created_at > ?", 1.day.ago)
+                                 .distinct
+                                 .all
+```
+
+### When to Use Each Approach
+
+| Use Case                          | Method      |
+|-----------------------------------|-------------|
+| Load data to display              | `preload`   |
+| Filter by associated data         | `join`      |
+| Count or aggregate associations   | `join`      |
+| Paginated results with includes   | `preload`   |
 
 ---
 
@@ -269,7 +309,8 @@ In this guide, we've explored the `HasMany` relationship in CQL. We covered:
 
 - Defining `Post` and `Comment` models with `has_many` and `belongs_to` associations, including the `foreign_key` option.
 - Interacting with the `has_many` collection using methods like `create`, `build`, `<<`, `all`, `find_by`, `exists?`, `size`, `delete`, and `clear`.
-- Eager loading associations with `includes`.
+- Eager loading associations with `preload` to avoid N+1 queries.
+- Using `join` for filtering by associated records.
 
 ### Next Steps
 

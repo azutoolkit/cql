@@ -293,7 +293,7 @@ users = User.all
 users.each { |user| puts user.posts.count }
 
 # Solution: Preload associations
-users = User.includes(:posts).all
+users = User.preload(:posts).all
 users.each { |user| puts user.posts.count }
 ```
 

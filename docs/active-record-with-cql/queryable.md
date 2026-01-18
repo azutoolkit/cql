@@ -763,6 +763,96 @@ end
 
 ---
 
+## Eager Loading with Preload
+
+Eager loading allows you to load associated records in batch queries, avoiding the N+1 query problem. CQL provides the `preload` method for efficient association loading.
+
+### Basic Preloading
+
+```crystal
+# Preload a single association
+users = User.preload(:posts).all
+users.each do |user|
+  # posts are already loaded - no additional query
+  puts "#{user.name} has #{user.posts.size} posts"
+end
+
+# Preload multiple associations
+users = User.preload(:posts, :comments).all
+users.each do |user|
+  puts "#{user.name}: #{user.posts.size} posts, #{user.comments.size} comments"
+end
+```
+
+### Chaining with Where
+
+Preload works seamlessly with other query methods:
+
+```crystal
+# Filter users then preload their posts
+active_users = User.where(active: true)
+                   .preload(:posts)
+                   .order(:name)
+                   .all
+
+# Only 2 queries total:
+# 1. SELECT * FROM users WHERE active = true ORDER BY name
+# 2. SELECT * FROM posts WHERE user_id IN (...)
+```
+
+### How Preload Works
+
+Unlike JOIN-based eager loading, `preload` uses separate queries:
+
+1. First query fetches the primary records
+2. Subsequent queries fetch associated records using `IN` clauses
+3. Records are matched in memory and associations are populated
+
+This approach:
+
+- Avoids cartesian product issues with multiple has_many associations
+- Keeps queries simple and indexable
+- Works well with pagination
+
+### Preload vs Join
+
+| Aspect                   | `preload`                    | `join`                          |
+|--------------------------|------------------------------|---------------------------------|
+| Query count              | N+1 reduced to 2 queries     | 1 query                         |
+| Cartesian product        | No                           | Yes (with multiple has_many)    |
+| Filtering on association | No                           | Yes                             |
+| Pagination               | Works correctly              | May return duplicates           |
+| Best for                 | Loading data to display      | Filtering by association        |
+
+```crystal
+# Use preload when you need the associated data
+users = User.preload(:posts).all
+
+# Use join when filtering by association
+users_with_recent_posts = User.join(:posts)
+                              .where("posts.created_at > ?", 1.week.ago)
+                              .distinct
+                              .all
+```
+
+### Performance Considerations
+
+```crystal
+# Preload only what you need
+users = User.preload(:posts).all  # Good - loads posts in one query
+
+# Avoid preloading unused associations
+users = User.preload(:posts, :comments, :profile).all  # Wasteful if you only use posts
+
+# Combine with select for optimal performance
+users = User.select(:id, :name)
+            .preload(:posts)
+            .where(active: true)
+            .all
+```
+
+---
+
 ## Advanced Query Composition
 
 CQL's query interface allows you to build complex queries by combining multiple query methods. This section demonstrates common patterns and best practices for composing sophisticated queries.
