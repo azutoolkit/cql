@@ -91,10 +91,10 @@ module Expression
         result = dialect.define_column("active", "BOOLEAN", true, true, false, false)
         result.should eq("active BOOLEAN DEFAULT TRUE")
 
-        # Test timestamp default
+        # Test timestamp default (with millisecond precision)
         time = Time.utc(2023, 1, 1, 12, 0, 0)
         result = dialect.define_column("created_at", "TIMESTAMP", time, false, false, true)
-        result.should contain("DEFAULT ''2023-01-01 12:00:00''")
+        result.should contain("DEFAULT ''2023-01-01 12:00:00.000''")
         result.should contain("NOT NULL")
       end
     end
@@ -210,9 +210,9 @@ module Expression
         dialect = MySqlDialect.new
         time = Time.utc(2023, 1, 1, 12, 0, 0)
 
-        # MySQL datetime format
+        # MySQL datetime format (with millisecond precision)
         result = dialect.define_column("created_at", "DATETIME", time, true, false, false)
-        result.should contain("DEFAULT ''2023-01-01 12:00:00''")
+        result.should contain("DEFAULT ''2023-01-01 12:00:00.000''")
       end
     end
   end

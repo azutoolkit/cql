@@ -571,57 +571,6 @@ module CQL
     end
 
     # Adds a new column to the table.
-    # Interval is a column type that can be used to store a duration of time.
-    # It is a wrapper around the Time::Span type.
-    #
-    # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
-    # - **@param** null [Bool] whether the column allows null values (default: false)
-    # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
-    # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
-    # - **@param** index [Bool] whether the column should be indexed (default: false)
-    # - **@return** [Column] the new column
-    #
-    # **Example** Adding a new interval column
-    #
-    # ```
-    # interval :duration
-    # interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
-    # ```
-    def interval(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Time::Span).new(name, as_name, null, default, unique)
-      col.table = self
-      @columns[name] = col
-      col.index = index ? add_index(columns: [name], unique: unique) : nil
-      col
-    end
-
-    # Adds a new column to the table.
-    # Blob is a column type that can be used to store binary data.
-    # It is a wrapper around the Slice(UInt8) type.
-    # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
-    # - **@param** null [Bool] whether the column allows null values (default: false)
-    # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
-    # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
-    # - **@param** index [Bool] whether the column should be indexed (default: false)
-    # - **@return** [Column] the new column
-    #
-    # **Example** Adding a new column with default options
-    #
-    # ```
-    # blob :data
-    # blob :data, as: "binary_data", null: false, default: nil, unique: true, index: true
-    # ```
-    def blob(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
-      col = Column(Slice(UInt8)).new(name, as_name, null, default, unique, size)
-      col.table = self
-      @columns[name] = col
-      col.index = index ? add_index(columns: [name], unique: unique) : nil
-      col
-    end
-
-    # Adds a new column to the table.
     #
     # **Example** Adding timestamps to the table
     #

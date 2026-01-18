@@ -38,8 +38,12 @@ module Expression
     end
 
     # MySQL-specific implementations that differ from base
+    # MySQL requires column type for CHANGE COLUMN syntax
     def rename_column(table_name : String, old_name : String, new_name : String, column_type : String?) : String
-      "#{@@cached_strings["mysql_change_prefix"]}#{old_name} #{new_name} #{column_type.not_nil!}"
+      unless column_type
+        raise CQL::MySqlUnsupportedFeatureError.new("MySQL requires column type for CHANGE COLUMN. Please provide the column_type parameter.")
+      end
+      "#{@@cached_strings["mysql_change_prefix"]}#{old_name} #{new_name} #{column_type}"
     end
 
     def modify_column(table_name : String, column_name : String, column_type : String) : String
@@ -84,7 +88,17 @@ module Expression
       unique : Bool,
       timestamp_column : Bool,
     ) : String
-      build_column_definition(column_name, column_type, default_value, nullable, unique)
+      # For timestamp columns, use the database function directly (without quoting)
+      if timestamp_column && default_value.is_a?(String) && default_value.starts_with?("NOW(")
+        build_sql(128) do |str|
+          str << column_name << " " << column_type
+          str << " DEFAULT " << default_value
+          str << " NOT NULL" unless nullable
+          str << " UNIQUE" if unique
+        end
+      else
+        build_column_definition(column_name, column_type, default_value, nullable, unique)
+      end
     end
 
     def add_column(
@@ -195,14 +209,15 @@ module Expression
       ""
     end
 
-    # Override time formatting for MySQL-specific format
+    # Override time formatting for MySQL-specific format (with milliseconds)
     protected def format_time(value : Time) : String
-      "''#{value.to_s("%Y-%m-%d %H:%M:%S")}''"
+      "''#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}''"
     end
 
-    # Returns the SQL function name for the current timestamp
+    # Returns the SQL function for the current timestamp (evaluated by database)
+    # NOW(3) includes millisecond precision
     def current_timestamp : String
-      Time.local.to_s("%Y-%m-%d %H:%M:%S.%L")
+      "NOW(3)"
     end
   end
 end

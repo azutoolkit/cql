@@ -86,7 +86,17 @@ module Expression
       unique : Bool,
       timestamp_column : Bool,
     ) : String
-      build_column_definition(column_name, column_type, default_value, nullable, unique)
+      # For timestamp columns, use the database function directly (without quoting)
+      if timestamp_column && default_value.is_a?(String) && default_value == "CURRENT_TIMESTAMP"
+        build_sql(128) do |str|
+          str << column_name << " " << column_type
+          str << " DEFAULT " << default_value
+          str << " NOT NULL" unless nullable
+          str << " UNIQUE" if unique
+        end
+      else
+        build_column_definition(column_name, column_type, default_value, nullable, unique)
+      end
     end
 
     def add_column(
@@ -198,9 +208,9 @@ module Expression
       "''#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}''"
     end
 
-    # Returns the SQL function name for the current timestamp
+    # Returns the SQL function for the current timestamp (evaluated by database)
     def current_timestamp : String
-      Time.local.to_s("%Y-%m-%d %H:%M:%S.%L")
+      "CURRENT_TIMESTAMP"
     end
   end
 end

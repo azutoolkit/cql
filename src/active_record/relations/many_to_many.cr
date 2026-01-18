@@ -68,14 +68,14 @@ module CQL::ActiveRecord::Relations
 
       # Instance variable for memoizing the collection
       @[DB::Field(ignore: true)]
-      @_{{name.id}} : CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Int32)?
+      @_{{name.id}} : CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Pk)?
 
       # Enhanced getter with caching and proper error handling
       @[DB::Field(ignore: true)]
-      def {{name.id}} : CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Int32)
+      def {{name.id}} : CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Pk)
         return @_{{name.id}}.not_nil! if @_{{name.id}}
 
-        parent_id = safe_id(self, Int32)
+        parent_id = safe_id(self, Pk)
 
         # Build a query with proper JOIN to only fetch associated records
         base_query = safe_db_operation do
@@ -84,7 +84,7 @@ module CQL::ActiveRecord::Relations
             .where { {{join_class}}.table_column(:{{fk}}).eq(parent_id) }
         end
 
-        @_{{name.id}} = CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Int32).new(
+        @_{{name.id}} = CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Pk).new(
           key: :{{fk}},
           id: parent_id,
           target_key: :{{target_fk}},
@@ -97,7 +97,7 @@ module CQL::ActiveRecord::Relations
       end
 
       # Reload the association and clear the memoized value
-      def reload_{{name.id}} : CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Int32)
+      def reload_{{name.id}} : CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Pk)
         @_{{name.id}} = nil
         {{name.id}}.reload
         {{name.id}}
@@ -136,7 +136,7 @@ module CQL::ActiveRecord::Relations
       def {{name.id}}_count : Int64
         return @_{{name.id}}.not_nil!.size.to_i64 if @_{{name.id}} && @_{{name.id}}.not_nil!.loaded?
 
-        parent_id = safe_id(self, Int32)
+        parent_id = safe_id(self, Pk)
 
         safe_db_operation do
            CQL::Query
@@ -152,7 +152,7 @@ module CQL::ActiveRecord::Relations
       def {{name.id}}_any? : Bool
         return !@_{{name.id}}.not_nil!.empty? if @_{{name.id}} && @_{{name.id}}.not_nil!.loaded?
 
-        parent_id = safe_id(self, Int32)
+        parent_id = safe_id(self, Pk)
 
         safe_db_operation do
           begin
@@ -173,8 +173,8 @@ module CQL::ActiveRecord::Relations
       def {{name.id}}_include?(record : {{klass.id}}) : Bool
         return {{name.id}}.includes?(record) if @_{{name.id}} && @_{{name.id}}.not_nil!.loaded?
 
-        parent_id = safe_id(self, Int32)
-        target_id = safe_id(record, Int32)
+        parent_id = safe_id(self, Pk)
+        target_id = safe_id(record, Pk)
 
         safe_db_operation do
           begin
@@ -192,10 +192,10 @@ module CQL::ActiveRecord::Relations
       end
 
       # Get IDs of associated records without loading full records
-      def {{name.id}}_ids : Array(Int32)
+      def {{name.id}}_ids : Array(Pk)
         return {{name.id}}.ids if @_{{name.id}} && @_{{name.id}}.not_nil!.loaded?
 
-        parent_id = safe_id(self, Int32)
+        parent_id = safe_id(self, Pk)
 
                  safe_db_operation do
            records = CQL::Query
@@ -206,14 +206,14 @@ module CQL::ActiveRecord::Relations
 
            records.compact_map do |record|
              if fk_value = record.attributes[:{{target_fk}}]?
-               fk_value.as(Int32)
+               fk_value.as(Pk)
              end
            end.compact
          end
       end
 
       # Set associated record IDs (replaces current associations)
-      def {{name.id}}_ids=(ids : Array(Int32))
+      def {{name.id}}_ids=(ids : Array(Pk))
         {{name.id}}.ids = ids
       end
 

@@ -130,42 +130,6 @@ module CQL
           record.as({{@type.id}})
         end
 
-        # Create a new record, validates the record first
-        # - **@param** fields [Hash(Symbol, DB::Any)] The fields to use
-        # - **@return** [PrimaryKey] The ID of the new record
-        # - **@raise** [ValidationError] If validation fails
-        #
-        # **Example** Creating a new record
-        #
-        # ```
-        # User.create!(name: "Alice", email: "alice@example.com")
-        # ```
-        def self.create!(**fields) : {{@type.id}}
-          # Filter out ignored fields (fields not in the database schema)
-          schema = {{@type.id}}.schema
-          table_name = {{@type.id}}.table
-          table_columns = schema.tables[table_name].columns.keys
-
-          # Convert NamedTuple to Hash and filter
-          fields_hash = {} of Symbol => DB::Any
-          fields.each { |key, value| fields_hash[key] = value.as(DB::Any) }
-          filtered_fields = fields_hash.select { |key, _| table_columns.includes?(key) }
-
-          id = CQL::Insert
-            .new({{@type.id}}.schema)
-            .into({{@type.id}}.table)
-            .values(filtered_fields)
-            .last_insert_id
-
-          id = if Pk.is_a?(Int32.class)
-            id.to_i32
-          else
-            id.as(Pk)
-          end
-
-          {{@type.id}}.find!(id.as(Pk))
-        end
-
         # Create a new record with given attributes
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
         # - **@return** [PrimaryKey] The ID of the new record
