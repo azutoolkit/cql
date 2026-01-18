@@ -385,9 +385,9 @@ users = User.query
   .where(active: true)
   .limit(100)
 
-# Use includes for eager loading (prevents N+1)
+# Use preload for eager loading (prevents N+1)
 posts = Post.query
-  .includes(:user, :comments)
+  .preload(:user, :comments)
   .where(published: true)
 
 # Use batch operations for large datasets

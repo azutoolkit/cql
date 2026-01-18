@@ -164,12 +164,38 @@ Each guide includes:
 - **Advanced Features**: Using collection methods, dependent options, and performance optimizations
 - **Complete Examples**: Real-world scenarios with full code samples
 
+## Eager Loading with Preload
+
+CQL provides the `preload` method to efficiently load associations and avoid N+1 query problems:
+
+```crystal
+# Load users with their posts in 2 queries (instead of N+1)
+users = User.preload(:posts).all
+users.each do |user|
+  puts "#{user.name} has #{user.posts.size} posts"  # No additional query
+end
+
+# Preload multiple associations
+users = User.preload(:posts, :comments, :profile).all
+
+# Chain with other query methods
+active_users = User.where(active: true)
+                   .preload(:posts)
+                   .order(:name)
+                   .all
+```
+
+For more details, see:
+
+- [Eager Loading in Queryable](../queryable.md#eager-loading-with-preload)
+- [HasMany Eager Loading](./hasmany.md#eager-loading)
+
 ## Best Practices
 
 ### Performance
 
 - Use `cache: true` for frequently accessed `belongs_to` associations
-- Consider eager loading for scenarios where you'll access multiple associations
+- Use `preload` to avoid N+1 queries when accessing associations in loops
 - Use `dependent: :destroy` or `:delete` to maintain referential integrity
 
 ### Schema Design

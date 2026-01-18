@@ -308,11 +308,11 @@ class BlogApp < Azu::Application
 
   get "/articles" do |ctx|
     # First query - hits database
-    articles = Article.published.includes(:author)
+    articles = Article.published.preload(:author)
 
     # If this same query runs again in the same request
     # (e.g., in a partial or helper), it hits the cache
-    popular_articles = Article.published.includes(:author)
+    popular_articles = Article.published.preload(:author)
 
     render_template "articles/index.html", {
       articles: articles,
@@ -359,8 +359,8 @@ class UsersController < ApplicationController
 
   def dashboard
     # Complex queries that benefit from caching
-    @active_users = User.where(active: true).includes(:posts)
-    @recent_posts = Post.recent.includes(:author)
+    @active_users = User.where(active: true).preload(:posts)
+    @recent_posts = Post.recent.preload(:author)
 
     # If these queries are repeated (e.g., in partials), they hit cache
     render "dashboard"

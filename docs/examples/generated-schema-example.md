@@ -310,12 +310,12 @@ comment.save!
 puts "Created comment: #{comment.content} (ID: #{comment.id})"
 
 # Query with relationships
-posts = Post.includes(:user).all
+posts = Post.preload(:user).all
 posts.each do |post|
   puts "Post: #{post.title} by #{post.user.try(&.name) || 'Unknown'}"
 end
 
-comments = Comment.includes(:user, :post).all
+comments = Comment.preload(:user, :post).all
 comments.each do |comment|
   puts "Comment: #{comment.content} by #{comment.user.try(&.name) || 'Unknown'} on #{comment.post.try(&.title) || 'Unknown Post'}"
 end

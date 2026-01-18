@@ -457,7 +457,7 @@ posts = Post.join(:user).all
 posts.each { |post| puts post.user.name }
 
 # ✅ Good: Preload associations
-posts = Post.includes(:user).all
+posts = Post.preload(:user).all
 posts.each { |post| puts post.user.name }
 ```
 

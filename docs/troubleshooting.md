@@ -386,6 +386,59 @@ Error: undefined method 'posts' for User
 
 ---
 
+## 🎯 Error Handling
+
+### Unified Error Hierarchy
+
+All CQL errors inherit from `CQL::Error`, enabling unified error handling:
+
+```crystal
+begin
+  user = User.find!(non_existent_id)
+  user.posts.create!(invalid_data)
+rescue CQL::Error => ex
+  # Catches all CQL-related errors:
+  # - CQL::Schema::Error (connection, URI, version conflicts)
+  # - CQL::Migrator::Error (migration failures)
+  # - CQL::SchemaDump::Error (schema dump issues)
+  # - CQL::ActiveRecord::Relations::BaseRelation::RelationError
+  puts "CQL Error: #{ex.message}"
+end
+```
+
+### Specific Error Handling
+
+Handle specific error types when needed:
+
+```crystal
+begin
+  migrator.up
+rescue CQL::Schema::ConnectionError => ex
+  puts "Database connection failed: #{ex.message}"
+rescue CQL::Schema::InvalidURIError => ex
+  puts "Invalid database URI: #{ex.message}"
+rescue CQL::Migrator::Error => ex
+  puts "Migration failed: #{ex.message}"
+rescue CQL::Error => ex
+  puts "General CQL error: #{ex.message}"
+end
+```
+
+### Error Types Reference
+
+| Error Class                                                   | Description                      |
+|---------------------------------------------------------------|----------------------------------|
+| `CQL::Error`                                                  | Base class for all CQL errors    |
+| `CQL::Schema::Error`                                          | Schema-related errors            |
+| `CQL::Schema::ConnectionError`                                | Database connection failures     |
+| `CQL::Schema::InvalidURIError`                                | Invalid database URI format      |
+| `CQL::Schema::VersionConflictError`                           | Schema version conflicts         |
+| `CQL::Migrator::Error`                                        | Migration execution errors       |
+| `CQL::SchemaDump::Error`                                      | Schema dump/introspection errors |
+| `CQL::ActiveRecord::Relations::BaseRelation::RelationError`   | Association errors               |
+
+---
+
 ## ⚠️ Runtime Errors
 
 ### ❌ Issue: Validation Errors Not Displayed
@@ -498,10 +551,10 @@ user.save  # Returns false but no error details shown
      puts user.posts.count  # Triggers one query per user
    end
 
-   # ✅ Use eager loading (when available)
-   users = User.join(:posts).all
+   # ✅ Use preload to avoid N+1 queries
+   users = User.preload(:posts).all
    users.each do |user|
-     puts user.posts.count  # Posts already loaded
+     puts user.posts.size  # Posts already loaded - no additional query
    end
    ```
 

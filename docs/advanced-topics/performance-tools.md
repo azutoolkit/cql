@@ -104,7 +104,7 @@ posts.each do |post|
 end
 
 # Better approach:
-posts = Post.includes(:user).all  # Single query with JOIN
+posts = Post.preload(:user).all  # Single query with JOIN
 posts.each do |post|
   puts "#{post.title} by #{post.user.name}"  # No additional queries
 end
@@ -434,7 +434,7 @@ end
 
 # Usage
 users = benchmark_query("User.all with includes") do
-  User.includes(:posts, :comments).all
+  User.preload(:posts, :comments).all
 end
 ```
 

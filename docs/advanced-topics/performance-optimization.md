@@ -50,7 +50,7 @@ users.each do |user|
 end
 
 # Good: Eager loading
-users = User.includes(:posts).all
+users = User.preload(:posts).all
 users.each do |user|
   puts user.posts.size  # No additional queries
 end

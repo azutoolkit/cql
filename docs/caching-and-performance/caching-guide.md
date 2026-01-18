@@ -314,7 +314,7 @@ def render_category_tree
     tags: ["categories"],
     ttl: 30.minutes
   ) do
-    Category.root_categories.includes(:children).to_json
+    Category.root_categories.preload(:children).to_json
   end
 end
 ```
@@ -451,7 +451,7 @@ class ProductsController < ApplicationController
 
     product_json = cache_fragment("product_#{product_id}") do
       product = Product.find(product_id)
-      reviews = product.reviews.includes(:user).limit(10)
+      reviews = product.reviews.preload(:user).limit(10)
 
       {
         product: product.to_json,

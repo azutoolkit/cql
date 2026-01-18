@@ -290,7 +290,7 @@ def render_category_tree
     tags: ["categories"],
     ttl: 30.minutes
   ) do
-    Category.root_categories.includes(:children).to_json
+    Category.root_categories.preload(:children).to_json
   end
 end
 ```

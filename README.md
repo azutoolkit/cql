@@ -346,11 +346,11 @@ user.posts.create(title: "New Post", content: "Content")
 user.posts.size                         # Efficient count without loading all records
 user.posts.any?                         # Check existence without memory overhead
 
-# Smart eager loading
-users_with_posts = User.includes(:posts, :profile)
+# Eager loading with preload (avoids N+1 queries)
+users_with_posts = User.preload(:posts)
                       .where(active: true)
                       .all
-# Single query instead of N+1 queries!
+# Only 2 queries instead of N+1 queries!
 ```
 
 ### Transaction Management
@@ -486,10 +486,10 @@ fragment_cache = CQL::Cache::FragmentCache.new(memory_cache)
 # Intelligent caching with automatic invalidation
 result = fragment_cache.cache_fragment("expensive_query", {"user_id" => user.id}) do
   # Expensive database operation cached automatically
-  User.joins(:posts, :comments)
+  User.join(:posts)
       .where(active: true)
-      .includes(:profile)
-      .complex_aggregation
+      .preload(:profile)
+      .all
 end
 
 # Tag-based cache invalidation
@@ -516,7 +516,7 @@ detector.analyze_queries(queries) do |pattern|
   puts "⚠️  N+1 Query Pattern Detected:"
   puts "   Model: #{pattern.model}"
   puts "   Association: #{pattern.association}"
-  puts "   Suggestion: Use .includes(:#{pattern.association})"
+  puts "   Suggestion: Use .preload(:#{pattern.association})"
 end
 
 # Generate beautiful performance reports

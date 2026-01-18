@@ -386,7 +386,7 @@ it "avoids N+1 queries with associations" do
   query_count = 0
   monitor = ->(sql : String) { query_count += 1 }
 
-  users = User.includes(:posts).all
+  users = User.preload(:posts).all
   users.each { |u| u.posts.size }
 
   # Should be 2 queries (users + posts), not 11 (users + N * posts)
