@@ -33,7 +33,7 @@ module CQL
       end
 
       @entries = {} of String => CacheEntry
-      @access_order = [] of String  # Track access order for O(1) LRU eviction
+      @access_order = [] of String # Track access order for O(1) LRU eviction
       @tag_index = {} of String => Set(String)
       @version_store = {} of String => Int64
       @mutex = Mutex.new
@@ -285,7 +285,7 @@ module CQL
       # O(1) LRU eviction - take from front of access_order
       private def evict_lru : Nil
         while !@access_order.empty?
-          key = @access_order.shift  # Remove from front (least recently used)
+          key = @access_order.shift # Remove from front (least recently used)
 
           # Verify entry still exists (might have been deleted via tags or TTL)
           if @entries.has_key?(key)
