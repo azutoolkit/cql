@@ -6,6 +6,7 @@ require "file_utils" # For Dir.mkdir_p
 require "json"
 
 # Internal CQL Entry Point
+require "./exceptions"
 require "./cql"
 
 module CQL
@@ -38,7 +39,7 @@ module CQL
   class Schema
     Log = CQL.config.logger
 
-    class Error < Exception; end
+    class Error < CQL::Error; end
 
     class InvalidURIError < Error; end
 

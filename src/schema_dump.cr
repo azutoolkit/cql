@@ -1,5 +1,6 @@
 require "db"
 require "json"
+require "./exceptions"
 require "./cql"
 
 module CQL
@@ -21,7 +22,7 @@ module CQL
   class SchemaDump
     Log = CQL.config.logger
 
-    class Error < Exception; end
+    class Error < CQL::Error; end
 
     DEFAULT_SCHEMA_DUMP_FILE_PATH = "./src/schemas/schema.cr"
 

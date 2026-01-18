@@ -489,6 +489,6 @@ module CQL
       repo.delete_by(name: migration.name, version: migration.version)
     end
 
-    class Error < Exception; end
+    class Error < CQL::Error; end
   end
 end

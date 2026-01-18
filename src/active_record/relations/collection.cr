@@ -143,6 +143,16 @@ module CQL::ActiveRecord::Relations
       reload unless @loaded
     end
 
+    # Inject preloaded records without database query
+    # Used by eager loading/preload to set association data that was
+    # loaded in a batch query to avoid N+1 queries.
+    # - **param** : records (Array(Target)) - The preloaded records
+    # - **return** : Nil
+    def _inject_preloaded(records : Array(Target)) : Nil
+      @records = records
+      @loaded = true
+    end
+
     # Returns a list of primary keys for the associated records
     # - **return** : Array(Pk)
     #

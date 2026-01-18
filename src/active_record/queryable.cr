@@ -152,6 +152,21 @@ module CQL
           query.distinct
         end
 
+        # Create a QueryBuilder with associations to preload (eager load).
+        # Preloading fetches associated records in batch queries to avoid N+1 queries.
+        # - **@param** associations [Symbol*] The association names to preload
+        # - **@return** [QueryBuilder(T)] The query builder instance with preload configured
+        #
+        # **Example**
+        # ```
+        # User.preload(:posts).all           # Preload single association
+        # User.preload(:posts, :comments).all # Preload multiple associations
+        # User.where(active: true).preload(:posts).all # Chain with where
+        # ```
+        def self.preload(*associations : Symbol)
+          query.preload(*associations)
+        end
+
         # Execute automatic inner join
         # - **@param** table_or_alias [Symbol | Hash] The table or alias mapping
         # - **@return** [QueryBuilder(T)] The query builder instance

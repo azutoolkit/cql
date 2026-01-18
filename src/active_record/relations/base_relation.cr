@@ -4,7 +4,7 @@ module CQL::ActiveRecord::Relations
   # type safety, and shared behaviors across different association types.
   module BaseRelation
     # Common exception types for relation operations
-    class RelationError < Exception; end
+    class RelationError < CQL::Error; end
 
     class AssociationNotFound < RelationError; end
 

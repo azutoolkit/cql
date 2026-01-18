@@ -81,6 +81,53 @@ module CQL::ActiveRecord::Relations
         @{{name.id}} = nil
       end
 
+      # Inject preloaded records into the association without database query.
+      # Used by eager loading/preload to avoid N+1 queries.
+      # - **param** : records (Array({{type.id}})) - The preloaded records for this association
+      # - **return** : Nil
+      def _set_preloaded_{{name.id}}(records : Array({{type.id}})) : Nil
+        parent_id = safe_id(self, Pk)
+
+        @{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
+          key: {{fk}},
+          id: parent_id,
+          cascade: ({{dependent}} == :destroy || {{dependent}} == :delete_all),
+          dependent: {{dependent}},
+          auto_load: false
+        )
+        @{{name.id}}.not_nil!._inject_preloaded(records)
+      end
+
+      # Class method to preload this association for a collection of parent records.
+      # Executes a single query to fetch all related records and distributes them.
+      # - **param** : records (Array(self)) - The parent records
+      # - **param** : parent_ids (Array) - The parent IDs
+      # - **return** : Nil
+      def self._preload_{{name.id}}(records : Array(self), parent_ids : Array) : Nil
+        return if records.empty? || parent_ids.empty?
+
+        # Fetch all related records in one query
+        related_records = {{type.id}}.where({ {{fk}} => parent_ids }).all
+
+        # Group related records by foreign key
+        grouped = {} of Pk => Array({{type.id}})
+        related_records.each do |record|
+          fk_value = record.{{fk.id}}
+          next if fk_value.nil?
+          key = fk_value.as(Pk)
+          grouped[key] ||= [] of {{type.id}}
+          grouped[key] << record
+        end
+
+        # Inject preloaded records into each parent
+        records.each do |parent|
+          parent_id = parent.id
+          next if parent_id.nil?
+          related = grouped[parent_id.as(Pk)]? || [] of {{type.id}}
+          parent._set_preloaded_{{name.id}}(related)
+        end
+      end
+
       # Handle dependent associations when parent is destroyed
       def handle_{{name.id}}_dependency
         return unless @{{name.id}} # Only process if association was accessed
