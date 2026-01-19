@@ -68,37 +68,153 @@ end
 
 ### UUID Primary Keys
 
+UUIDs (Universally Unique Identifiers) are 128-bit identifiers ideal for distributed systems where coordination between nodes isn't possible. CQL generates UUIDs automatically when creating records.
+
+**Schema Definition:**
+
+```crystal
+MyDB = CQL::Schema.define(:my_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://db.sqlite3") do
+  table :sessions do
+    primary :id, String, auto_increment: false  # UUID stored as TEXT
+    bigint :user_id
+    text :token
+    timestamps
+  end
+end
+```
+
+**Model Definition:**
+
 ```crystal
 class Session
   include CQL::ActiveRecord::Model(UUID)
-  db_context AppDB, :sessions
+  db_context MyDB, :sessions
 
   property id : UUID?
-  property user_id : Int32
-  property token : String
-  property expires_at : Time
+  property user_id : Int64 = 0_i64
+  property token : String = ""
+  property created_at : Time?
+  property updated_at : Time?
 
-  def initialize(@user_id : Int32, @token : String, @expires_at : Time)
+  def initialize
+  end
+
+  def initialize(@token : String, @user_id : Int64)
   end
 end
 ```
+
+**Usage:**
+
+```crystal
+# Create a session - UUID is generated automatically
+session = Session.create!(
+  token: "abc123",
+  user_id: 1_i64,
+  created_at: Time.utc,
+  updated_at: Time.utc
+)
+
+session.id                    # => UUID instance
+session.id!.to_s              # => "550e8400-e29b-41d4-a716-446655440000"
+
+# Find by UUID
+found = Session.find!(session.id!)
+
+# UUIDs are unique across all records
+session1 = Session.create!(token: "token1", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+session2 = Session.create!(token: "token2", user_id: 2_i64, created_at: Time.utc, updated_at: Time.utc)
+session1.id != session2.id    # => true
+```
+
+**UUID Characteristics:**
+
+* **Format:** 8-4-4-4-12 hex characters (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+* **Size:** 36 characters as string (with hyphens)
+* **Uniqueness:** Globally unique without coordination
+* **Use cases:** Distributed systems, public-facing IDs, merge-safe records
 
 ### ULID Primary Keys
 
+ULIDs (Universally Unique Lexicographically Sortable Identifiers) combine the benefits of UUIDs with lexicographic sortability. They're ideal for time-ordered data like events, logs, or audit trails.
+
+**Schema Definition:**
+
 ```crystal
-class Event
-  include CQL::ActiveRecord::Model(ULID)
-  db_context EventDB, :events
-
-  property id : ULID?
-  property event_type : String
-  property payload : JSON::Any
-  property occurred_at : Time
-
-  def initialize(@event_type : String, @payload : JSON::Any, @occurred_at : Time = Time.utc)
+EventDB = CQL::Schema.define(:event_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://events.db") do
+  table :events do
+    primary :id, String, auto_increment: false  # ULID stored as TEXT
+    text :event_type
+    text :payload
+    timestamps
   end
 end
 ```
+
+**Model Definition:**
+
+```crystal
+class Event
+  include CQL::ActiveRecord::Model(String)  # ULID uses String type
+  db_context EventDB, :events
+
+  property id : String?
+  property event_type : String = ""
+  property payload : String = ""
+  property created_at : Time?
+  property updated_at : Time?
+
+  def initialize
+  end
+
+  def initialize(@event_type : String, @payload : String)
+  end
+end
+```
+
+**Usage:**
+
+```crystal
+# Create an event - ULID is generated automatically
+event = Event.create!(
+  event_type: "user.created",
+  payload: "{\"user_id\": 1}",
+  created_at: Time.utc,
+  updated_at: Time.utc
+)
+
+event.id                      # => "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+event.id!.size                # => 26 characters
+
+# Find by ULID
+found = Event.find!(event.id!)
+
+# ULIDs are sortable by creation time
+event1 = Event.create!(event_type: "first", payload: "{}", created_at: Time.utc, updated_at: Time.utc)
+sleep 1.millisecond
+event2 = Event.create!(event_type: "second", payload: "{}", created_at: Time.utc, updated_at: Time.utc)
+
+event2.id! > event1.id!       # => true (lexicographically sortable)
+
+# Query events in chronological order using ID
+events = Event.order(:id).all  # Ordered by creation time
+```
+
+**ULID Characteristics:**
+
+* **Format:** 26 Crockford Base32 characters (e.g., `01ARZ3NDEKTSV4RRFFQ69G5FAV`)
+* **Size:** 26 characters (more compact than UUID)
+* **Sortability:** Lexicographically sortable by creation time
+* **Uniqueness:** Unique with 80-bit randomness per millisecond
+* **Use cases:** Event sourcing, audit logs, time-series data, distributed systems needing time ordering
+
+### Choosing Between Primary Key Types
+
+| Type            | Format                   | Sortable | Size      | Best For                         |
+| --------------- | ------------------------ | -------- | --------- | -------------------------------- |
+| `Int32`/`Int64` | Sequential integer       | Yes      | 4-8 bytes | Simple apps, internal IDs        |
+| `UUID`          | Random hex               | No       | 36 chars  | Distributed systems, public IDs  |
+| `String` (ULID) | Base32 timestamp+random  | Yes      | 26 chars  | Event logs, time-ordered data    |
 
 ---
 

@@ -2,8 +2,8 @@
 # This provides a simple ULID-like implementation that works with modern Crystal
 module CQL
   module ULIDCompat
-    ENCODING = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-    TIME_LEN = 10
+    ENCODING   = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+    TIME_LEN   = 10
     RANDOM_LEN = 16
 
     # Generate a ULID-compatible string (26 characters)
