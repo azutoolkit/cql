@@ -5,6 +5,7 @@ require "json"
 require "log"
 require "ulid"
 require "uuid"
+require "./ulid_compat"
 require "colorize"
 
 require "./expression"

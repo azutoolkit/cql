@@ -91,12 +91,21 @@ module CQL
           end
 
           # Update the database directly without callbacks
-          result = CQL::Update
-            .new({{@type.id}}.schema)
-            .table({{@type.id}}.table)
-            .set(attrs)
-            .where(id: id!)
-            .commit
+          {% if Pk == UUID %}
+            result = CQL::Update
+              .new({{@type.id}}.schema)
+              .table({{@type.id}}.table)
+              .set(attrs)
+              .where(id: id!.to_s)
+              .commit
+          {% else %}
+            result = CQL::Update
+              .new({{@type.id}}.schema)
+              .table({{@type.id}}.table)
+              .set(attrs)
+              .where(id: id!)
+              .commit
+          {% end %}
 
           # Update the local instance attributes to match
           if result.rows_affected > 0
@@ -163,12 +172,21 @@ module CQL
           end
 
           # Update multiple records directly without callbacks using IN clause
-          result = CQL::Update
-            .new({{@type.id}}.schema)
-            .table({{@type.id}}.table)
-            .set(attrs)
-            .where(id: ids.map(&.as(DB::Any)))
-            .commit
+          {% if Pk == UUID %}
+            result = CQL::Update
+              .new({{@type.id}}.schema)
+              .table({{@type.id}}.table)
+              .set(attrs)
+              .where(id: ids.map(&.to_s.as(DB::Any)))
+              .commit
+          {% else %}
+            result = CQL::Update
+              .new({{@type.id}}.schema)
+              .table({{@type.id}}.table)
+              .set(attrs)
+              .where(id: ids.map(&.as(DB::Any)))
+              .commit
+          {% end %}
 
           result.rows_affected
         end
@@ -200,7 +218,7 @@ module CQL
             # Create path
             return false unless run_callbacks(:before_create)
             result = create!
-            @id = result.id if result
+            # Note: id is already set by create! on the instance, no need to reassign
             create_success = !result.nil?
             run_callbacks(:after_create) if create_success
             create_success
@@ -208,7 +226,7 @@ module CQL
             # Update path
             return false unless run_callbacks(:before_update)
             result = update!
-            @id = result.id if result
+            # Note: id is already set on the instance
             update_success = !result.nil?
             run_callbacks(:after_update) if update_success
             update_success

@@ -96,7 +96,11 @@ module CQL
 
           # Update the record in the database
           where_attrs = Hash(Symbol, DB::Any).new
-          where_attrs[:id] = id!.as(DB::Any)
+          {% if Pk == UUID %}
+            where_attrs[:id] = id!.to_s.as(DB::Any)
+          {% else %}
+            where_attrs[:id] = id!.as(DB::Any)
+          {% end %}
 
           update_attrs = Hash(Symbol, DB::Any).new
           update_attrs[:deleted_at] = @deleted_at.as(DB::Any)
@@ -128,7 +132,7 @@ module CQL
           # Run after destroy callbacks and clear the ID if successful
           if success
             run_callbacks(:after_destroy)
-            @id = nil
+            clear_id!
             self.destroyed = true
           end
 
@@ -143,7 +147,11 @@ module CQL
 
           # Update the record in the database
           where_attrs = Hash(Symbol, DB::Any).new
-          where_attrs[:id] = id!.as(DB::Any)
+          {% if Pk == UUID %}
+            where_attrs[:id] = id!.to_s.as(DB::Any)
+          {% else %}
+            where_attrs[:id] = id!.as(DB::Any)
+          {% end %}
 
           update_attrs = Hash(Symbol, DB::Any).new
           update_attrs[:deleted_at] = nil.as(DB::Any)
@@ -177,11 +185,19 @@ module CQL
 
         # Force delete a record by ID (permanent delete)
         def self.force_delete!(id : Pk)
-          CQL::Delete
-            .new({{@type.id}}.schema)
-            .from({{@type.id}}.table)
-            .where(id: id)
-            .commit
+          {% if Pk == UUID %}
+            CQL::Delete
+              .new({{@type.id}}.schema)
+              .from({{@type.id}}.table)
+              .where(id: id.to_s)
+              .commit
+          {% else %}
+            CQL::Delete
+              .new({{@type.id}}.schema)
+              .from({{@type.id}}.table)
+              .where(id: id)
+              .commit
+          {% end %}
         end
 
         # Soft delete records matching specific fields

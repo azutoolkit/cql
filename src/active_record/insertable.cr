@@ -40,20 +40,44 @@ module CQL
           table_columns = schema.tables[table_name].columns.keys
           insertable_attrs = insertable_attrs.select { |key, _| table_columns.includes?(key) }
 
-          # Fallback for non-PostgreSQL
-          pk_id = CQL::Insert.new(schema)
-            .into(table_name)
-            .values(insertable_attrs)
-            .commit
-            .last_insert_id # Int64
+          {% if Pk == UUID %}
+            # Generate UUID before insert, store as String for SQLite compatibility
+            generated_id = UUID.random
+            insertable_attrs[:id] = generated_id.to_s.as(DB::Any)
 
-          actual_pk = if Pk.is_a?(Int32.class)
-                        pk_id.to_i32
-                      else
-                        pk_id.as(Pk)
-                      end
+            CQL::Insert.new(schema)
+              .into(table_name)
+              .values(insertable_attrs)
+              .commit
 
-          {{@type.id}}.find!(actual_pk.as(Pk))
+            {{@type.id}}.find!(generated_id)
+          {% elsif Pk == String %}
+            # Generate ULID before insert (ULID stored as String)
+            generated_id = CQL::ULIDCompat.generate
+            insertable_attrs[:id] = generated_id.as(DB::Any)
+
+            CQL::Insert.new(schema)
+              .into(table_name)
+              .values(insertable_attrs)
+              .commit
+
+            {{@type.id}}.find!(generated_id)
+          {% else %}
+            # Int32/Int64 - use database auto-increment
+            pk_id = CQL::Insert.new(schema)
+              .into(table_name)
+              .values(insertable_attrs)
+              .commit
+              .last_insert_id # Int64
+
+            actual_pk = {% if Pk == Int32 %}
+                          pk_id.to_i32
+                        {% else %}
+                          pk_id
+                        {% end %}
+
+            {{@type.id}}.find!(actual_pk.as(Pk))
+          {% end %}
         end
 
         # Create a new record with given fields
@@ -77,19 +101,44 @@ module CQL
           table_columns = schema.tables[table_name].columns.keys
           fields_hash = fields_hash.select { |key, _| table_columns.includes?(key) }
 
-          # Fallback for non-PostgreSQL
-          pk_id = CQL::Insert.new(schema)
-            .into(table_name)
-            .values(fields_hash)
-            .last_insert_id # Int64
+          {% if Pk == UUID %}
+            # Generate UUID before insert, store as String for SQLite compatibility
+            generated_id = UUID.random
+            fields_hash[:id] = generated_id.to_s.as(DB::Any)
 
-          actual_pk = if Pk.is_a?(Int32.class)
-                        pk_id.to_i32
-                      else
-                        pk_id.as(Pk)
-                      end
+            CQL::Insert.new(schema)
+              .into(table_name)
+              .values(fields_hash)
+              .commit
 
-          {{@type.id}}.find!(actual_pk.as(Pk))
+            {{@type.id}}.find!(generated_id)
+          {% elsif Pk == String %}
+            # Generate ULID before insert (ULID stored as String)
+            generated_id = CQL::ULIDCompat.generate
+            fields_hash[:id] = generated_id.as(DB::Any)
+
+            CQL::Insert.new(schema)
+              .into(table_name)
+              .values(fields_hash)
+              .commit
+
+            {{@type.id}}.find!(generated_id)
+          {% else %}
+            # Int32/Int64 - use database auto-increment
+            pk_id = CQL::Insert.new(schema)
+              .into(table_name)
+              .values(fields_hash)
+              .commit
+              .last_insert_id # Int64
+
+            actual_pk = {% if Pk == Int32 %}
+                          pk_id.to_i32
+                        {% else %}
+                          pk_id
+                        {% end %}
+
+            {{@type.id}}.find!(actual_pk.as(Pk))
+          {% end %}
         end
 
         # Create a new record from a model instance
@@ -112,20 +161,46 @@ module CQL
           table_columns = schema.tables[table].columns.keys
           filtered_attrs = attrs.select { |key, _| table_columns.includes?(key) }
 
-          # Create the record
-          id = CQL::Insert
-            .new({{@type.id}}.schema)
-            .into({{@type.id}}.table)
-            .values(filtered_attrs)
-            .last_insert_id
+          {% if Pk == UUID %}
+            # Generate UUID before insert, store as String for SQLite compatibility
+            generated_id = UUID.random
+            filtered_attrs[:id] = generated_id.to_s.as(DB::Any)
 
-          new_id = if Pk.is_a?(Int32.class)
-            id.to_i32
-          else
-            id.as(Pk)
-          end
+            CQL::Insert
+              .new({{@type.id}}.schema)
+              .into({{@type.id}}.table)
+              .values(filtered_attrs)
+              .commit
 
-          record.id = new_id.as(Pk)
+            record.id = generated_id
+          {% elsif Pk == String %}
+            # Generate ULID before insert (ULID stored as String)
+            generated_id = CQL::ULIDCompat.generate
+            filtered_attrs[:id] = generated_id.as(DB::Any)
+
+            CQL::Insert
+              .new({{@type.id}}.schema)
+              .into({{@type.id}}.table)
+              .values(filtered_attrs)
+              .commit
+
+            record.id = generated_id
+          {% else %}
+            # Int32/Int64 - use database auto-increment
+            id = CQL::Insert
+              .new({{@type.id}}.schema)
+              .into({{@type.id}}.table)
+              .values(filtered_attrs)
+              .last_insert_id
+
+            new_id = {% if Pk == Int32 %}
+                       id.to_i32
+                     {% else %}
+                       id
+                     {% end %}
+
+            record.id = new_id.as(Pk)
+          {% end %}
 
           record.as({{@type.id}})
         end

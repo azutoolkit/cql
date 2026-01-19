@@ -15,7 +15,18 @@ module CQL
         hash = Hash(Symbol, DB::Any).new
         {% for ivar in @type.instance_vars %}
           {% if !ivar.annotation(DB::Field) || !ivar.annotation(DB::Field).named_args[:ignore] %}
-            hash[:{{ ivar }}] = {{ ivar }}
+            {% ivar_type = ivar.type.resolve %}
+            {% is_uuid = ivar_type == UUID || (ivar_type.union? && ivar_type.union_types.any? { |union_type| union_type == UUID }) %}
+            # Check for DB::Field key annotation to map internal storage to DB column name
+            {% db_field = ivar.annotation(DB::Field) %}
+            {% key_name = db_field && db_field.named_args[:key] ? db_field.named_args[:key].id : ivar.id %}
+            {% if is_uuid %}
+              # Convert UUID to String for DB::Any compatibility
+              _val = @{{ ivar.id }}
+              hash[:{{ key_name }}] = _val.nil? ? nil : _val.to_s
+            {% else %}
+              hash[:{{ key_name }}] = @{{ ivar.id }}
+            {% end %}
           {% end %}
         {% end %}
         hash

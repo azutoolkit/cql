@@ -15,11 +15,19 @@ module CQL
         # User.delete!(1)
         # ```
         def self.delete!(id : Pk)
-          CQL::Delete
-            .new({{@type.id}}.schema)
-            .from({{@type.id}}.table)
-            .where(id: id)
-            .commit
+          {% if Pk == UUID %}
+            CQL::Delete
+              .new({{@type.id}}.schema)
+              .from({{@type.id}}.table)
+              .where(id: id.to_s)
+              .commit
+          {% else %}
+            CQL::Delete
+              .new({{@type.id}}.schema)
+              .from({{@type.id}}.table)
+              .where(id: id)
+              .commit
+          {% end %}
         end
 
         # Delete records matching specific fields
@@ -100,7 +108,7 @@ module CQL
           # Run after destroy callbacks and clear the ID if successful
           if success
             run_callbacks(:after_destroy)
-            @id = nil
+            clear_id!
             self.destroyed = true
           end
 

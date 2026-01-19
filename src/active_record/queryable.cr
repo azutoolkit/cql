@@ -328,18 +328,27 @@ module CQL
         end
 
         # Find record by primary key
-        # - **@param** id [Int32 | Int64] The primary key value
+        # - **@param** id [Int32 | Int64 | UUID | String] The primary key value
         # - **@return** [T?] The record or nil if not found
         def self.find(id)
-          query.where(id: id).first
+          {% if Pk == UUID %}
+            # Convert UUID to string for query compatibility
+            query.where(id: id.to_s).first
+          {% else %}
+            query.where(id: id).first
+          {% end %}
         end
 
         def self.find?(id)
-          query.where(id: id).first
+          {% if Pk == UUID %}
+            query.where(id: id.to_s).first
+          {% else %}
+            query.where(id: id).first
+          {% end %}
         end
 
         # Find record by primary key, raises if not found
-        # - **@param** id [Int32 | Int64] The primary key value
+        # - **@param** id [Int32 | Int64 | UUID | String] The primary key value
         # - **@return** [T] The record
         def self.find!(id)
           result = find(id)
