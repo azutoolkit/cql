@@ -157,6 +157,16 @@ describe CQL::Query do
       select_query.should eq({output.strip, [100, 1000]})
     end
 
+    it "generates correct PostgreSQL placeholders for BETWEEN" do
+      generator = Expression::Generator.new(CQL::Adapter::Postgres)
+      column = Northwind.orders.columns[:total]
+      between_node = Expression::Between.new(Expression::Column.new(column), 100, 1000)
+      result = between_node.accept(generator)
+
+      result.should eq("orders.total BETWEEN $1 AND $2")
+      generator.params.should eq([100, 1000] of DB::Any)
+    end
+
     it "handles IN operator with subquery" do
       subquery = Northwind.query.from(:orders).select(:customer_id).where { orders.total > 1000 }
       select_query = Northwind.query

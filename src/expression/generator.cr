@@ -247,14 +247,17 @@ module Expression
 
     def visit(node : Between) : String
       @params << node.low
+      low_placeholder = placeholder
+
       @params << node.high
+      high_placeholder = placeholder
+
       String.build do |string|
-        # Column node handles alias
         string << node.column.accept(self)
         string << " BETWEEN "
-        string << placeholder
+        string << low_placeholder
         string << " AND "
-        string << placeholder
+        string << high_placeholder
       end
     end
 
