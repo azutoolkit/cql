@@ -56,7 +56,7 @@ describe "Cursor-based Pagination" do
       results = CursorTestRecord.after_cursor(cursor_id, limit: 3)
 
       results.size.should eq(3)
-      results.all? { |r| r.id! > cursor_id }.should be_true
+      results.all? { |record| record.id! > cursor_id }.should be_true
     end
 
     it "returns empty array when cursor is at the end" do
@@ -97,7 +97,7 @@ describe "Cursor-based Pagination" do
       results = CursorTestRecord.before_cursor(cursor_id, limit: 3)
 
       results.size.should eq(3)
-      results.all? { |r| r.id! < cursor_id }.should be_true
+      results.all? { |record| record.id! < cursor_id }.should be_true
     end
 
     it "returns empty array when cursor is at the beginning" do
@@ -135,7 +135,7 @@ describe "Cursor-based Pagination" do
       results = CursorTestRecord.paginate_by(:sort_order, 30_i64, limit: 3)
 
       results.size.should eq(3)
-      results.all? { |r| r.sort_order > 30 }.should be_true
+      results.all? { |record| record.sort_order > 30 }.should be_true
     end
 
     it "returns records in order of the specified column" do
@@ -161,7 +161,7 @@ describe "Cursor-based Pagination" do
         page = CursorTestRecord.after_cursor(cursor_id, limit: 3)
         break if page.empty?
 
-        page.each { |r| collected_ids << r.id! }
+        page.each { |record| collected_ids << record.id! }
         cursor_id = page.last.id!
       end
 
@@ -179,7 +179,7 @@ describe "Cursor-based Pagination" do
         page = CursorTestRecord.before_cursor(cursor_id, limit: 3)
         break if page.empty?
 
-        page.reverse_each { |r| collected_ids.unshift(r.id!) }
+        page.reverse_each { |record| collected_ids.unshift(record.id!) }
         cursor_id = page.first.id!
       end
 
