@@ -34,7 +34,7 @@ module Expression
         if column.auto_increment?
           str << " GENERATED ALWAYS AS IDENTITY PRIMARY KEY"
         else
-          str << " GENERATED AS IDENTITY PRIMARY KEY"
+          str << " PRIMARY KEY"
         end
       end
     end

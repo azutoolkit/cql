@@ -33,10 +33,10 @@ module Expression
         result = dialect.auto_increment_primary_key(column, "INTEGER")
         result.should eq("id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY")
 
-        # Test without auto_increment
+        # Test without auto_increment (no IDENTITY generation)
         column = CQL::PrimaryKey(Int32).new(:id, auto_increment: false)
         result = dialect.auto_increment_primary_key(column, "INTEGER")
-        result.should eq("id INTEGER GENERATED AS IDENTITY PRIMARY KEY")
+        result.should eq("id INTEGER PRIMARY KEY")
       end
     end
 

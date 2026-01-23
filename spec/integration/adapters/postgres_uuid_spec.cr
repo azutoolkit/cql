@@ -12,8 +12,8 @@ PostgresUuidDB = CQL::Schema.define(
     primary :id, String, auto_increment: false
     text :token
     bigint :user_id
-    timestamp :created_at
-    timestamp :updated_at
+    timestamp :created_at, null: true
+    timestamp :updated_at, null: true
   end
 end
 
