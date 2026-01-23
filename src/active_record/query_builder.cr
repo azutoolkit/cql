@@ -100,6 +100,24 @@ module CQL
           clone_builder.tap(&.query.where_like(field, pattern))
         end
 
+        # Add greater-than condition
+        # Useful for cursor-based pagination and range queries.
+        # - **@param** field [Symbol | String] The field to compare
+        # - **@param** value [DB::Any] The value to compare against
+        # - **@return** [QueryBuilder(T)] Self for chaining
+        def where_gt(field : Symbol | String, value : DB::Any)
+          clone_builder.tap(&.query.where_gt(field, value))
+        end
+
+        # Add less-than condition
+        # Useful for cursor-based pagination and range queries.
+        # - **@param** field [Symbol | String] The field to compare
+        # - **@param** value [DB::Any] The value to compare against
+        # - **@return** [QueryBuilder(T)] Self for chaining
+        def where_lt(field : Symbol | String, value : DB::Any)
+          clone_builder.tap(&.query.where_lt(field, value))
+        end
+
         # Add order by clauses
         # - **@param** fields [Symbol*] The fields to order by
         # - **@return** [QueryBuilder(T)] Self for chaining
@@ -451,6 +469,7 @@ module CQL
         # Batch processing - iterate over records in batches
         # - **@param** batch_size [Int32] Size of each batch
         # - **@yield** [T] Each record
+        # NOTE: Uses String-based ID comparison to support all PK types (Int32, Int64, UUID, ULID)
         def find_each(batch_size : Int32 = 1000, & : T ->)
           # Ensure we have a consistent ordering to avoid infinite loops
           # If no ordering is specified, order by primary key (usually id)
@@ -459,7 +478,7 @@ module CQL
           offset = 0
           max_iterations = 10000 # Safety limit to prevent infinite loops
           iteration_count = 0
-          processed_ids = Set(Int64).new
+          processed_ids = Set(String).new # Use String for universal PK type support
 
           loop do
             iteration_count += 1
@@ -469,7 +488,8 @@ module CQL
             break if batch.empty?
 
             # Check if we're processing the same records again (infinite loop detection)
-            batch_ids = batch.compact_map(&.id).map(&.to_i64).to_set
+            # Use .to_s for universal PK type support (works with Int32, Int64, UUID, String/ULID)
+            batch_ids = batch.compact_map(&.id).map(&.to_s).to_set
             if batch_ids.subset_of?(processed_ids)
               # We're processing the same records again, break to avoid infinite loop
               break
@@ -477,9 +497,9 @@ module CQL
 
             batch.each do |model_record|
               if id = model_record.id
-                id_i64 = id.to_i64
-                unless processed_ids.includes?(id_i64)
-                  processed_ids.add(id_i64)
+                id_str = id.to_s
+                unless processed_ids.includes?(id_str)
+                  processed_ids.add(id_str)
                   yield model_record
                 end
               end
@@ -495,6 +515,7 @@ module CQL
         # Process records in batches
         # - **@param** batch_size [Int32] Size of each batch
         # - **@yield** [Array(T)] Each batch of records
+        # NOTE: Uses String-based ID comparison to support all PK types (Int32, Int64, UUID, ULID)
         def find_in_batches(batch_size : Int32 = 1000, & : Array(T) ->)
           # Ensure we have a consistent ordering to avoid infinite loops
           # If no ordering is specified, order by primary key (usually id)
@@ -503,7 +524,7 @@ module CQL
           offset = 0
           max_iterations = 10000 # Safety limit to prevent infinite loops
           iteration_count = 0
-          processed_ids = Set(Int64).new
+          processed_ids = Set(String).new # Use String for universal PK type support
 
           loop do
             iteration_count += 1
@@ -513,7 +534,8 @@ module CQL
             break if batch.empty?
 
             # Check if we're processing the same records again (infinite loop detection)
-            batch_ids = batch.compact_map(&.id).map(&.to_i64).to_set
+            # Use .to_s for universal PK type support (works with Int32, Int64, UUID, String/ULID)
+            batch_ids = batch.compact_map(&.id).map(&.to_s).to_set
             if batch_ids.subset_of?(processed_ids)
               # We're processing the same records again, break to avoid infinite loop
               break
@@ -522,7 +544,7 @@ module CQL
             # Filter out already processed records
             new_records = batch.reject do |record|
               if id = record.id
-                processed_ids.includes?(id.to_i64)
+                processed_ids.includes?(id.to_s)
               else
                 false
               end
@@ -531,7 +553,7 @@ module CQL
             # Add new record IDs to processed set
             new_records.each do |record|
               if id = record.id
-                processed_ids.add(id.to_i64)
+                processed_ids.add(id.to_s)
               end
             end
 

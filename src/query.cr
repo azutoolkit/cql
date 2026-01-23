@@ -513,6 +513,46 @@ module CQL
       self
     end
 
+    # Adds a greater-than condition for the specified field.
+    # Useful for cursor-based pagination and range queries.
+    # - **@param** field [Symbol | String] The column to compare
+    # - **@param** value [DB::Any] The value to compare against
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    # ```
+    # # Find records with id greater than 100
+    # User.query.where_gt(:id, 100).all(User)
+    # ```
+    def where_gt(field : Symbol | String, value : DB::Any)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      gt_condition = Expression::Compare.new(col_expr, ">", value)
+      merge_where_condition(gt_condition)
+      self
+    end
+
+    # Adds a less-than condition for the specified field.
+    # Useful for cursor-based pagination and range queries.
+    # - **@param** field [Symbol | String] The column to compare
+    # - **@param** value [DB::Any] The value to compare against
+    # - **@return** [Query] The query object
+    #
+    # **Example**
+    # ```
+    # # Find records with id less than 100
+    # User.query.where_lt(:id, 100).all(User)
+    # ```
+    def where_lt(field : Symbol | String, value : DB::Any)
+      column = find_column(field)
+      col_alias_str = find_alias_for_table(column.table.not_nil!)
+      col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      lt_condition = Expression::Compare.new(col_expr, "<", value)
+      merge_where_condition(lt_condition)
+      self
+    end
+
     # Adds a JOIN to the query with automatic relationship detection.
     # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
     # - **@return** [Query] The query object

@@ -12,6 +12,7 @@ require "./relations"
 require "./scopes"
 require "./transactional"
 require "./optimistic_locking"
+require "./pagination"
 
 module CQL
   alias Model = CQL::ActiveRecord::Model
@@ -71,6 +72,7 @@ module CQL
         include CQL::ActiveRecord::Relations
         include CQL::ActiveRecord::Scopes
         include CQL::ActiveRecord::Transactional
+        include CQL::ActiveRecord::Pagination
       end
     end
   end

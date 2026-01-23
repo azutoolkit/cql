@@ -1,5 +1,28 @@
 module CQL
   module ActiveRecord
+    # Insertable module provides create! methods for ActiveRecord models.
+    #
+    # ## UUID/ULID Generation in Transactions
+    #
+    # **Important Note:** UUIDs and ULIDs are generated client-side BEFORE the INSERT
+    # statement is executed. This design ensures cross-database compatibility (SQLite,
+    # PostgreSQL, MySQL) by storing these IDs as strings.
+    #
+    # **Transaction Behavior:**
+    # - If a transaction rolls back after UUID/ULID generation, the generated ID is
+    #   not reused. This is expected behavior and does not cause data integrity issues.
+    # - The UUID/ULID address space is large enough (128 bits for UUID, 128 bits for
+    #   ULID) that "wasted" IDs are statistically insignificant.
+    # - For Int32/Int64 primary keys, the database handles ID generation via
+    #   auto-increment, so rollbacks do not waste IDs at the application level.
+    #
+    # **Example with transactions:**
+    # ```
+    # User.transaction do |tx|
+    #   user = User.create!(name: "Alice")  # UUID generated here
+    #   tx.rollback                          # UUID is "wasted" but harmless
+    # end
+    # ```
     module Insertable
       macro included
         # Find a record by attributes or create it if not found
@@ -70,13 +93,14 @@ module CQL
               .commit
               .last_insert_id # Int64
 
-            actual_pk = {% if Pk == Int32 %}
-                          pk_id.to_i32
-                        {% else %}
-                          pk_id
-                        {% end %}
-
-            {{@type.id}}.find!(actual_pk.as(Pk))
+            {% if Pk == Int32 %}
+              if pk_id > Int32::MAX || pk_id < Int32::MIN
+                raise CQL::Error.new("Primary key overflow: #{pk_id} exceeds Int32 range")
+              end
+              {{@type.id}}.find!(pk_id.to_i32)
+            {% else %}
+              {{@type.id}}.find!(pk_id.as(Pk))
+            {% end %}
           {% end %}
         end
 
@@ -131,13 +155,14 @@ module CQL
               .commit
               .last_insert_id # Int64
 
-            actual_pk = {% if Pk == Int32 %}
-                          pk_id.to_i32
-                        {% else %}
-                          pk_id
-                        {% end %}
-
-            {{@type.id}}.find!(actual_pk.as(Pk))
+            {% if Pk == Int32 %}
+              if pk_id > Int32::MAX || pk_id < Int32::MIN
+                raise CQL::Error.new("Primary key overflow: #{pk_id} exceeds Int32 range")
+              end
+              {{@type.id}}.find!(pk_id.to_i32)
+            {% else %}
+              {{@type.id}}.find!(pk_id.as(Pk))
+            {% end %}
           {% end %}
         end
 
@@ -193,13 +218,14 @@ module CQL
               .values(filtered_attrs)
               .last_insert_id
 
-            new_id = {% if Pk == Int32 %}
-                       id.to_i32
-                     {% else %}
-                       id
-                     {% end %}
-
-            record.id = new_id.as(Pk)
+            {% if Pk == Int32 %}
+              if id > Int32::MAX || id < Int32::MIN
+                raise CQL::Error.new("Primary key overflow: #{id} exceeds Int32 range")
+              end
+              record.id = id.to_i32
+            {% else %}
+              record.id = id.as(Pk)
+            {% end %}
           {% end %}
 
           record.as({{@type.id}})
