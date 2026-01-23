@@ -322,7 +322,13 @@ module CQL
       if value.is_a?(Array)
         Expression::InCondition.new(Expression::Column.new(column), value)
       else
-        Expression::Compare.new(Expression::Column.new(column), "=", value)
+        # Convert UUID to string for DB compatibility
+        val = if value.is_a?(UUID)
+                value.to_s.as(DB::Any)
+              else
+                value
+              end
+        Expression::Compare.new(Expression::Column.new(column), "=", val)
       end
     end
 
