@@ -19,8 +19,8 @@ module CQL
     # **Example with transactions:**
     # ```
     # User.transaction do |tx|
-    #   user = User.create!(name: "Alice")  # UUID generated here
-    #   tx.rollback                          # UUID is "wasted" but harmless
+    #   user = User.create!(name: "Alice") # UUID generated here
+    #   tx.rollback                        # UUID is "wasted" but harmless
     # end
     # ```
     module Insertable
