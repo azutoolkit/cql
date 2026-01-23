@@ -375,6 +375,27 @@ describe CQL::Query do
       select_query.should eq({output.strip, [10, 20]})
     end
 
+    it "generates correct PostgreSQL placeholders for LIMIT and OFFSET" do
+      generator = Expression::Generator.new(CQL::Adapter::Postgres)
+      limit_node = Expression::Limit.new(10, 20)
+      result = limit_node.accept(generator)
+
+      result.should eq(" LIMIT $1 OFFSET $2")
+      generator.params.should eq([10, 20] of DB::Any)
+    end
+
+    it "generates correct PostgreSQL placeholders with prior params" do
+      generator = Expression::Generator.new(CQL::Adapter::Postgres)
+      generator.params << "value1"
+      generator.params << "value2"
+
+      limit_node = Expression::Limit.new(10, 20)
+      result = limit_node.accept(generator)
+
+      result.should eq(" LIMIT $3 OFFSET $4")
+      generator.params.should eq(["value1", "value2", 10, 20] of DB::Any)
+    end
+
     it "handles multiple GROUP BY columns" do
       select_query = Northwind.query
         .from(:orders)

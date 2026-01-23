@@ -337,16 +337,16 @@ module Expression
     end
 
     def visit(node : Limit) : String
-      # Add params first
       @params << node.limit
+      limit_placeholder = placeholder
+
       offset_placeholder = nil
       if node.offset
         @params << node.offset
         offset_placeholder = placeholder
       end
 
-      # Use dialect to format limit/offset
-      @dialect.format_limit_offset(placeholder, offset_placeholder)
+      @dialect.format_limit_offset(limit_placeholder, offset_placeholder)
     end
 
     def visit(node : Top) : String
