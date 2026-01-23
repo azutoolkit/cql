@@ -11,6 +11,24 @@ Soft deletes allow you to mark records as deleted without actually removing them
 - **Compliance**: Meet regulatory requirements for data retention
 - **Referential integrity**: Avoid orphaned records in related tables
 
+## Quick Start
+
+> **Important:** This module is NOT automatically included when you use `CQL::ActiveRecord::Model`.
+> You must explicitly include it in models that need soft delete functionality.
+
+```crystal
+struct User
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context AppDB, :users
+
+  property name : String
+  property email : String
+  # deleted_at property is automatically added by SoftDeletable
+end
+```
+
 ## Basic Setup
 
 ### 1. Database Schema
@@ -285,27 +303,123 @@ end
 
 If you're adding soft deletes to an existing model:
 
-1. Add the `deleted_at` column:
+### Complete Migration Example
 
 ```crystal
-class AddDeletedAtToUsers < CQL::Migration(1)
+class AddSoftDeletesToUsers < CQL::Migration(20240120)
   def up
     schema.alter :users do
       add_column :deleted_at, Time, null: true
+    end
+
+    # Add index for query performance
+    schema.alter :users do
+      create_index :idx_users_deleted_at, [:deleted_at]
     end
   end
 
   def down
     schema.alter :users do
+      drop_index :idx_users_deleted_at
       drop_column :deleted_at
     end
   end
 end
 ```
 
+Run the migration:
+
+```crystal
+migrator = CQL::Migrator.new(AppDB)
+migrator.up
+```
+
+### Migration Checklist
+
+1. Add the `deleted_at` column with the migration above
 2. Include the `SoftDeletable` module in your model
 3. Update any direct SQL queries to account for soft deletes
 4. Test thoroughly to ensure existing functionality isn't broken
+
+## Relationships and Soft Deletes
+
+### Querying Associations
+
+When a parent model uses soft deletes, associations need special handling:
+
+```crystal
+struct Post
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context AppDB, :posts
+
+  has_many :comments, Comment, foreign_key: :post_id
+
+  property title : String
+end
+
+# Normal query excludes soft-deleted posts
+user.posts.all  # Only active posts
+
+# Include soft-deleted posts
+Post.with_deleted.where(user_id: user.id).all
+```
+
+### Cascading Soft Deletes
+
+To soft-delete associated records when a parent is soft-deleted:
+
+```crystal
+struct Post
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context AppDB, :posts
+
+  has_many :comments, Comment, foreign_key: :post_id
+
+  after_destroy :soft_delete_comments
+
+  private def soft_delete_comments
+    comments.each(&.delete!)
+    true
+  end
+end
+```
+
+## Combining with OptimisticLocking
+
+You can use both modules together for maximum data integrity:
+
+```crystal
+struct User
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+  include CQL::ActiveRecord::OptimisticLocking
+
+  db_context AppDB, :users
+
+  property name : String
+  property email : String
+  property version : Int32?
+
+  optimistic_locking version_column: :version
+end
+```
+
+Required schema:
+
+```crystal
+table :users do
+  primary :id, Int32
+  column :name, String
+  column :email, String
+  column :deleted_at, Time, null: true
+  lock_version :version
+  timestamps
+end
+```
 
 ## Limitations
 

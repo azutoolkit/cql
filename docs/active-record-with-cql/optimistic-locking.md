@@ -2,6 +2,48 @@
 
 Optimistic locking is a concurrency control strategy that allows multiple transactions to proceed without blocking each other, while still preventing conflicts from concurrent updates. CQL provides built-in support for optimistic locking through a version column mechanism.
 
+## Quick Start
+
+> **Important:** This module is NOT automatically included when you use `CQL::ActiveRecord::Model`.
+> You must explicitly include it in models that need concurrent update protection.
+
+### Step 1: Add version column to your table
+
+```crystal
+table :users do
+  primary :id, Int64
+  column :name, String
+  lock_version :version  # Adds integer column with default 1
+end
+```
+
+### Step 2: Include the module in your model
+
+```crystal
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::OptimisticLocking
+
+  db_context AppDB, :users
+
+  property name : String
+  property version : Int32?
+
+  optimistic_locking version_column: :version
+end
+```
+
+### Step 3: Handle conflicts
+
+```crystal
+begin
+  user.update!
+rescue CQL::OptimisticLockError
+  user.reload!  # Get latest version
+  # Re-apply changes and retry
+end
+```
+
 ## How It Works
 
 1. A version column (e.g., an integer) is added to your database table.
@@ -51,6 +93,33 @@ The `lock_version` method accepts the following parameters:
 - `default` (DB::Any): The default value for new records (default: `1`).
 - `index` (Bool): Whether to create an index on this column (default: `false`). Indexing might be beneficial if you query by version, but it's not strictly necessary for the locking mechanism itself.
 
+### Adding Optimistic Locking to Existing Tables
+
+Use a CQL migration to add the version column to an existing table:
+
+```crystal
+class AddVersionToUsers < CQL::Migration(20240115)
+  def up
+    schema.alter :users do
+      add_column :version, Int32, default: 1, null: false
+    end
+  end
+
+  def down
+    schema.alter :users do
+      drop_column :version
+    end
+  end
+end
+```
+
+Run the migration:
+
+```crystal
+migrator = CQL::Migrator.new(AppDB)
+migrator.up
+```
+
 ### 2. Use Optimistic Locking with Raw Queries
 
 When using raw queries, you can use the `with_optimistic_lock` method on the `Update` object:
@@ -82,17 +151,18 @@ If another process has already updated the record (version is no longer 5), a `C
 For Active Record models, include the `CQL::ActiveRecord::OptimisticLocking` module and define which column to use with the `optimistic_locking` macro:
 
 ```crystal
-class User < CQL::ActiveRecord::Base # Assuming Base is your base AR class
+struct User
+  include CQL::ActiveRecord::Model(Int64)
   include CQL::ActiveRecord::OptimisticLocking
 
   # db_context points to your schema and table
-  db_context MY_SCHEMA, :users # Replace MY_SCHEMA with your actual schema variable
+  db_context AppDB, :users
 
   # Define properties matching your table columns
   property id : Int64?
   property name : String?
   property email : String?
-  property version : Int32? # This will hold the lock version
+  property version : Int32?  # This will hold the lock version
 
   # Configure optimistic locking
   optimistic_locking version_column: :version
