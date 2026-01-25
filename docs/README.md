@@ -1,373 +1,126 @@
----
-icon: database
----
-
 # CQL (Crystal Query Language)
 
 A high-performance, type-safe ORM for Crystal applications.
 
 Build fast, reliable database applications with compile-time safety and exceptional performance.
 
-[![Type Safety](https://img.shields.io/badge/Type_Safety-Compile_Time-blue)](#type-safety-at-compile-time) [![Database Support](https://img.shields.io/badge/Databases-PostgreSQL%20%7C%20MySQL%20%7C%20SQLite-green)](#database-support)
+## Quick Navigation
 
----
+| **I want to...** | **Go to...** |
+|------------------|--------------|
+| Learn CQL from scratch | [Tutorials](tutorials/README.md) |
+| Accomplish a specific task | [How-to Guides](how-to/README.md) |
+| Look up API details | [Reference](reference/README.md) |
+| Understand concepts | [Explanation](explanation/README.md) |
 
-## What Makes CQL Special?
+## Installation
 
-CQL brings compile-time safety and performance optimization to Crystal applications. Unlike traditional ORMs that check for errors at runtime, CQL validates your queries, relationships, and data access patterns before your code executes.
-
-```crystal
-# Type-safe queries that catch errors at compile time
-users = User.where(active: true)      # Type checked
-           .order(created_at: :desc)  # Validates column exists
-           .limit(10)                 # Validates parameter type
-           .all
-
-# This would fail at COMPILE TIME, not runtime:
-# User.where(nonexistent: true)      # Compile error!
-# User.where(age: "invalid")         # Type mismatch caught early!
-```
-
----
-
-## Key Features & Benefits
-
-### Performance Optimized
-
-- Zero-allocation queries through Crystal's compile-time optimizations
-- Connection pooling built-in for high-concurrency applications
-- Query caching with multiple cache backends (Memory, Redis)
-- N+1 query detection and performance monitoring tools
-
-### Type Safety at Compile Time
-
-- Catch bugs early - invalid queries fail at compile time
-- Full IDE support with autocompletion and refactoring
-- Relationship safety - no more runtime association errors
-- Query validation - SQL structure validated before deployment
-
-### Developer Experience
-
-- ActiveRecord-style API - familiar patterns for Rails developers
-- Automatic schema management - migrations with rollback support
-- Rich query DSL - expressive and readable database queries
-- Built-in validations - data integrity without boilerplate
-
-### Production Ready
-
-- PostgreSQL, MySQL, SQLite support through Crystal DB drivers
-- Transaction management with rollback safety
-- Performance monitoring and query analysis tools
-- Multiple design patterns - Active Record, Repository, Data Mapper support
-
----
-
-## Quick Start
-
-Get up and running in under 5 minutes:
-
-### Try CQL Interactively
-
-Explore CQL features with our interactive examples runner:
-
-```bash
-# Clone the repository
-git clone https://github.com/azutoolkit/cql
-cd cql
-
-# Run the interactive examples
-crystal examples/run_examples.cr
-```
-
-Choose from organized categories:
-
-- **Basic Examples** - Simple caching and core concepts
-- **Advanced Caching** - Enterprise-grade caching patterns
-- **Configuration** - Environment setup and best practices
-- **Migrations** - Database schema evolution
-- **Performance** - Monitoring and optimization
-- **Framework Integration** - Web framework examples
-- **Complete Blog App** - Full-featured application demo
-
-### 1. Add to Your Project
+Add CQL to your `shard.yml`:
 
 ```yaml
-# shard.yml
 dependencies:
   cql:
     github: azutoolkit/cql
     version: ~> 0.0.435
-  pg: # PostgreSQL driver
+
+  # Choose your database driver:
+  pg:  # PostgreSQL
     github: will/crystal-pg
-    version: ~> 0.26.0
+    version: "~> 0.26.0"
 ```
 
-### 2. Define Your Schema
+Then run:
+
+```shell
+shards install
+```
+
+[Full installation guide](installation.md)
+
+## Quick Start
 
 ```crystal
-# Set up your database schema
-BlogDB = CQL::Schema.define(
-  :blog_schema,
+require "cql"
+require "pg"
+
+# Define your database
+MyDB = CQL::Schema.define(
+  :my_db,
   adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]
+  uri: "postgres://localhost/myapp"
 ) do
-  table :users do
-    primary :id, Int64
-    text :name
-    text :email
-    boolean :active, default: "1"
-    timestamps
-  end
-
-  table :posts do
-    primary :id, Int64
-    text :title
-    text :content
-    bigint :user_id
-    boolean :published, default: "0"
-    timestamps
-    foreign_key [:user_id], references: :users, references_columns: [:id]
-  end
 end
-```
 
-### 3. Create Your First Model
-
-```crystal
+# Define a model
 struct User
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :users
+  db_context MyDB, :users
 
-  getter id : Int64?
-  getter name : String
-  getter email : String
-  getter active : Bool = true
-  getter created_at : Time?
-  getter updated_at : Time?
-
-  # Type-safe relationships
-  has_many :posts, foreign_key: :user_id
-
-  # Built-in validations
-  validate :name, presence: true, size: 2..50
-  validate :email, presence: true, match: /@/
-
-  def initialize(@name : String, @email : String, @active : Bool = true)
-  end
-end
-```
-
-### 4. Start Building
-
-```crystal
-# Create records with validation
-user = User.create!(name: "Alice", email: "alice@example.com")
-
-# Type-safe queries
-active_users = User.where(active: true)
-                  .order(created_at: :desc)
-                  .limit(50)
-                  .all
-
-# Work with relationships
-user = User.find!(1)
-posts = user.posts.all
-
-puts "User #{user.name} has #{posts.size} posts"
-```
-
----
-
-## Database Support
-
-Supported databases with their Crystal DB drivers:
-
-| Database       | Driver    | Connection String Example             |
-| -------------- | --------- | ------------------------------------- |
-| **PostgreSQL** | `pg`      | `postgres://user:pass@localhost/mydb` |
-| **MySQL**      | `mysql`   | `mysql://user:pass@localhost/mydb`    |
-| **SQLite**     | `sqlite3` | `sqlite3://./database.db`             |
-
----
-
-## Advanced Features
-
-### Relationships Made Simple
-
-```crystal
-# Define relationships with type safety
-struct Post
-  include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :posts
-
-  getter id : Int64?
-  getter title : String
-  getter content : String
-  getter user_id : Int64
-  getter published : Bool = false
-
-  belongs_to :user, User, foreign_key: :user_id
-  has_many :comments, Comment, foreign_key: :post_id
-
-  def initialize(@title : String, @content : String, @user_id : Int64)
-  end
-end
-
-# Work with relationships efficiently
-post = Post.find!(1)
-author = post.user                    # Type: User
-comments = post.comments.all          # Type: Array(Comment)
-```
-
-### Powerful Query DSL
-
-```crystal
-# Complex queries with full type safety
-recent_posts = Post.where(published: true)
-                  .where { users.created_at >= 1.month.ago }
-                  .order(created_at: :desc)
-                  .limit(100)
-                  .all
-
-# Use the CQL Query builder for complex joins
-posts_with_authors = BlogDB.query
-  .from(:posts)
-  .join(:users) { |j| j.posts.user_id.eq(j.users.id) }
-  .where{ posts.published: true }
-  .select(posts: [:title, :content], users: [:name])
-  .all({title: String, content: String, name: String})
-```
-
-### Automatic Schema Management
-
-```crystal
-# Migrations with full rollback support
-class CreateUsers < CQL::Migration(1)
-  def up
-    schema.create :users do
-      primary :id, Int64, auto_increment: true
-      text :name, null: false
-      text :email, null: false
-      boolean :active, default: true
-      timestamps
-    end
-
-    schema.alter :users do
-      create_index :idx_users_email, [:email], unique: true
-    end
-
-    schema.users.create!
-  end
-
-  def down
-    schema.users.drop!
-  end
-end
-```
-
-### Built-in Validations
-
-```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :users
-
-  # ... properties ...
-
-  # Comprehensive validation support
-  validate :name, presence: true, size: 2..50
-  validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
-  validate :age, gt: 0, lt: 120
-  validate :password_confirmation, confirmation: :password
-  validate :terms, accept: true
+  property id : Int64?
+  property name : String
+  property email : String
 
   def initialize(@name : String, @email : String)
   end
 end
 
-# Validate before saving
-user = User.new(name: "Alice", email: "alice@example.com")
-if user.valid?
-  user.save!
-else
-  puts user.errors.messages
-end
+# Use it
+MyDB.init
+user = User.create!(name: "Alice", email: "alice@example.com")
+puts "Created user #{user.id}: #{user.name}"
 ```
 
----
+## Documentation Structure
 
-## Why Choose CQL?
+### Tutorials
 
-### For High-Performance Applications
+**Learning-oriented** - Step-by-step guides for beginners
 
-- APIs serving high request volumes
-- Real-time applications requiring low latency
-- Data-intensive processing applications
-- Microservices architecture
+- [Your First CQL App](tutorials/getting-started/your-first-cql-app.md) - Build your first application
+- [Building a Blog](tutorials/building-a-blog/01-project-setup.md) - Complete multi-part tutorial
 
-### For Enterprise Development
+### How-to Guides
 
-- Large team collaboration with type safety
-- Long-term maintenance requirements
-- Complex business logic with data integrity
-- Compliance and audit requirements
+**Task-oriented** - Practical steps to accomplish specific goals
 
-### For Modern Development
+- [Models](how-to/models/define-model.md) - Define, validate, and enhance models
+- [Relationships](how-to/relationships/belongs-to.md) - Set up associations
+- [Querying](how-to/querying/find-records.md) - Find and filter data
+- [Migrations](how-to/migrations/create-migration.md) - Manage schema changes
 
-- Type-safe development practices
-- DevOps and CI/CD pipeline integration
-- Container-based deployment strategies
-- Cloud-native architecture patterns
+### Reference
 
----
+**Information-oriented** - Technical descriptions and specifications
 
-## Complete Documentation
+- [Quick Reference](reference/quick-reference.md) - Common patterns at a glance
+- [Glossary](reference/glossary.md) - Terminology definitions
+- [Error Codes](reference/error-codes.md) - Error messages explained
 
-### Getting Started
+### Explanation
 
-| **New to CQL?**                                                           | **Migrating?**                                     |
-| ------------------------------------------------------------------------- | -------------------------------------------------- |
-| [Interactive Examples](../examples/) (`crystal examples/run_examples.cr`) | [From ActiveRecord](guides/migration-guide.md)     |
-| [Installation](installation.md)                                           | [From Other ORMs](guides/migration-guide.md)       |
-| [Getting Started](guides/getting-started.md)                              | [Feature Comparison](guides/feature-comparison.md) |
-| [First Application](guides/active-record-with-cql/)                       | [Complete Examples](../examples/)                  |
+**Understanding-oriented** - Conceptual discussions
 
-### Core Features
+- [What is an ORM?](explanation/concepts/what-is-orm.md) - ORM fundamentals
+- [Active Record Pattern](explanation/design-patterns/active-record.md) - Design pattern overview
 
-| **Foundation**                            | **Active Record**                                                 | **Advanced**                                      |
-| ----------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------- |
-| [Configuration](guides/configuration.md)  | [Models & CRUD](guides/active-record-with-cql/defining-models.md) | [Performance](guides/performance-optimization.md) |
-| [Schemas](core-concepts/schemas.md)       | [Querying](guides/active-record-with-cql/queryable.md)            | [Caching](guides/caching-guide.md)                |
-| [Migrations](core-concepts/migrations.md) | [Relationships](guides/active-record-with-cql/relations/)         | [Security](guides/security-guide.md)              |
+## Key Features
 
-### Quick Reference
+- **Type Safety** - Catch errors at compile time
+- **Multiple Databases** - PostgreSQL, MySQL, SQLite
+- **Active Record** - Familiar patterns for rapid development
+- **Migrations** - Version-controlled schema changes
+- **Validations** - Built-in data integrity
+- **Relationships** - belongs_to, has_one, has_many, many-to-many
+- **Soft Deletes** - Mark records as deleted
+- **Optimistic Locking** - Prevent concurrent update conflicts
 
-| **I want to...**                    | **Go to...**                                                                                                       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Set up a new project**            | [Installation](installation.md) → [Getting Started](guides/getting-started.md)                                     |
-| **Define models and relationships** | [Models](guides/active-record-with-cql/defining-models.md) → [Relations](guides/active-record-with-cql/relations/) |
-| **Build complex queries**           | [Queryable](guides/active-record-with-cql/queryable.md) → [Performance](guides/performance-optimization.md)        |
-| **Handle database changes**         | [Migrations](guides/active-record-with-cql/migrations.md) → [Schema Management](core-concepts/schemas.md)          |
-| **Deploy to production**            | [Security](guides/security-guide.md) → [Best Practices](guides/best-practices.md)                                  |
+## Getting Help
 
----
+- [FAQ](resources/faq.md) - Frequently asked questions
+- [Troubleshooting](how-to/troubleshooting/connection-errors.md) - Common issues
+- [Community](resources/community.md) - Get support
+- [GitHub Issues](https://github.com/azutoolkit/cql/issues) - Report bugs
 
-## Ready to Get Started?
+## License
 
-```crystal
-# Try the interactive examples first
-crystal examples/run_examples.cr
-
-# Or install CQL and start building
-shards install
-```
-
-**[Try Interactive Examples →](../examples/) • [Start with Installation →](installation.md)**
-
----
-
-Built with Crystal's performance and safety in mind.
-
-All examples are tested with the latest CQL version.
-
-**[Documentation](guides/getting-started.md) • [Examples](examples/) • [FAQ](faqs.md) • [Issues](troubleshooting.md)**
+CQL is available under the MIT license.

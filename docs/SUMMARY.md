@@ -1,95 +1,126 @@
 # Table of contents
 
-- [README](README.md)
-- [Introduction](introduction.md)
+- [CQL Documentation](README.md)
 - [Installation](installation.md)
-- [Quick Reference](reference-and-utilities/quick-reference.md)
 
-## Foundation
+## Tutorials
 
-- [Core Concepts Overview](foundation/core-concepts.md)
-- [Schema Definition](foundation/schemas.md)
-- [Database Initialization](foundation/initializing-the-database.md)
-- [Schema Alterations](foundation/altering-the-schema.md)
-- [Migrations](foundation/migrations.md)
-- [CRUD Operations](foundation/crud-operations/README.md)
-  - [Creating Records](foundation/crud-operations/creating-records.md)
-  - [Reading Records](foundation/crud-operations/reading-records.md)
-  - [Updating Records](foundation/crud-operations/updating-records.md)
-  - [Deleting Records](foundation/crud-operations/deleting-records.md)
-- [Design Patterns](foundation/patterns/README.md)
-  - [Active Record Pattern](foundation/patterns/active-record.md)
-  - [Entity Framework Pattern](foundation/patterns/entity-framework.md)
-  - [Repository Pattern](foundation/patterns/repository.md)
+- [Tutorials Overview](tutorials/README.md)
+- [Getting Started](tutorials/getting-started/your-first-cql-app.md)
+  - [Your First CQL App](tutorials/getting-started/your-first-cql-app.md)
+  - [Adding CQL to Existing Project](tutorials/getting-started/adding-cql-to-existing-project.md)
+- [Building a Blog](tutorials/building-a-blog/01-project-setup.md)
+  - [Part 1: Project Setup](tutorials/building-a-blog/01-project-setup.md)
+  - [Part 2: Database Schema](tutorials/building-a-blog/02-database-schema.md)
+  - [Part 3: Models and Relationships](tutorials/building-a-blog/03-models-and-relationships.md)
+  - [Part 4: CRUD Operations](tutorials/building-a-blog/04-crud-operations.md)
+  - [Part 5: Adding Features](tutorials/building-a-blog/05-adding-features.md)
+- [Real-World Examples](tutorials/real-world-examples/migration-workflows.md)
+  - [Migration Workflows](tutorials/real-world-examples/migration-workflows.md)
+  - [Performance Monitoring](tutorials/real-world-examples/performance-monitoring.md)
 
-## Getting Started
+## How-to Guides
 
-- [Getting Started Guide](getting-started/getting-started.md)
-- [Guides Overview](getting-started/guides.md)
-- [Configuration](getting-started/configuration.md)
-- [Architecture Overview](getting-started/architecture-overview.md)
-- [Best Practices](getting-started/best-practices.md)
-- [Feature Comparison](getting-started/feature-comparison.md)
+- [How-to Overview](how-to/README.md)
 
-## Active Record with CQL
+### Models
 
-- [Active Record Overview](active-record-with-cql/active-record-with-cql.md)
-- [Defining Models](active-record-with-cql/defining-models.md)
-- [CRUD Operations](active-record-with-cql/crud-operations.md)
-- [Querying & Scopes](active-record-with-cql/queryable.md)
-- [Complex Queries](active-record-with-cql/complex-queries.md)
-- [Validations](active-record-with-cql/validations.md)
-- [Relationships](active-record-with-cql/relations/README.md)
-  - [Belongs To](active-record-with-cql/relations/belongsto.md)
-  - [Has One](active-record-with-cql/relations/hasone.md)
-  - [Has Many](active-record-with-cql/relations/hasmany.md)
-  - [Many To Many](active-record-with-cql/relations/manytomany.md)
-- [Callbacks](active-record-with-cql/callbacks.md)
-- [Transactions](active-record-with-cql/transactions.md)
-- [Persistence Details](active-record-with-cql/persistence-details.md)
-- [Optimistic Locking](active-record-with-cql/optimistic-locking.md)
-- [Query Scopes](active-record-with-cql/scopes.md)
-- [Soft Deletes](active-record-with-cql/soft-deletes.md)
-- [Touch](active-record-with-cql/touch.md)
-- [Integrated Migration Workflow](active-record-with-cql/integrated-migration-workflow.md)
+- [Define a Model](how-to/models/define-model.md)
+- [Add Validations](how-to/models/add-validations.md)
+- [Use Callbacks](how-to/models/use-callbacks.md)
+- [Implement Soft Deletes](how-to/models/soft-delete.md)
+- [Add Optimistic Locking](how-to/models/optimistic-locking.md)
+- [Use Timestamps](how-to/models/timestamps.md)
 
-## Database Management
+### Relationships
 
-- [Configure Migration Integration](database-management/configure-migration-integration.md)
-- [Migrations](database-management/migrations.md)
-- [Migration Best Practices](database-management/handling-migrations.md)
-- [Migration Guide](database-management/migration-guide.md)
-- [Schema Dump](database-management/schema-dump.md)
+- [Set Up Belongs To](how-to/relationships/belongs-to.md)
+- [Set Up Has One](how-to/relationships/has-one.md)
+- [Set Up Has Many](how-to/relationships/has-many.md)
+- [Set Up Many-to-Many](how-to/relationships/many-to-many.md)
 
-## Caching & Performance
+### Querying
 
-- [Caching Guide](caching-and-performance/caching-guide.md)
-- [Centralized Cache Configuration](caching-and-performance/centralized-cache-configuration.md)
-- [Per-Request Query Caching](caching-and-performance/per-request-query-caching.md)
-- [Redis Cache Configuration](caching-and-performance/redis-cache-configuration.md)
+- [Find Records](how-to/querying/find-records.md)
+- [Filter with Where Clauses](how-to/querying/filter-records.md)
+- [Build Complex Queries](how-to/querying/complex-queries.md)
+- [Create Query Scopes](how-to/querying/scopes.md)
+- [Paginate Results](how-to/querying/pagination.md)
+- [Use Cursor Pagination](how-to/querying/cursor-pagination.md)
 
-## Advanced Topics
+### Data Operations
 
-- [Performance Optimization](advanced-topics/performance-optimization.md)
-- [Testing Strategies](advanced-topics/testing-strategies.md)
-- [Security Guide](advanced-topics/security-guide.md)
+- [Create Records](how-to/data-operations/create.md)
+- [Update Records](how-to/data-operations/update.md)
+- [Delete Records](how-to/data-operations/delete.md)
+- [Use Transactions](how-to/data-operations/transactions.md)
 
-## Examples & Tutorials
+### Migrations
 
-- [Examples Overview](examples-and-tutorials/examples.md)
-- [Detailed Examples](examples-and-tutorials/examples-1/README.md)
-  - [Blog Engine Example](examples-and-tutorials/examples-1/blog-engine.md)
-  - [Configuration Example](examples-and-tutorials/examples-1/configuration-example.md)
-  - [Generated Schema Example](examples-and-tutorials/examples-1/generated-schema-example.md)
-  - [Logger Report Example](examples-and-tutorials/examples-1/logger-report-example.md)
-  - [Migration Configuration Example](examples-and-tutorials/examples-1/migration-configuration-example.md)
-  - [Migrator Config Example](examples-and-tutorials/examples-1/migrator-config-example.md)
-  - [Performance Monitoring Example](examples-and-tutorials/examples-1/performance-monitoring-example.md)
-  - [PostgreSQL Migration Workflow](examples-and-tutorials/examples-1/postgresql-migration-workflow.md)
-  - [Schema Migration Workflow](examples-and-tutorials/examples-1/schema-migration-workflow.md)
+- [Create a Migration](how-to/migrations/create-migration.md)
+- [Run Migrations](how-to/migrations/run-migrations.md)
+- [Rollback Migrations](how-to/migrations/rollback.md)
+- [Add Columns](how-to/migrations/add-columns.md)
+- [Create Indexes](how-to/migrations/indexes.md)
 
-## Help & Resources
+### Configuration
 
-- [Community](help-and-resources/community.md)
-- [Troubleshooting](help-and-resources/troubleshooting.md)
-- [Frequently Asked Questions](help-and-resources/faqs.md)
+- [Configure Database Connection](how-to/configuration/database-connection.md)
+- [Set Up Connection Pooling](how-to/configuration/connection-pooling.md)
+- [Configure Multiple Environments](how-to/configuration/environments.md)
+- [Enable SSL Connections](how-to/configuration/ssl.md)
+
+### Caching
+
+- [Enable Query Caching](how-to/caching/query-cache.md)
+- [Configure Redis Cache](how-to/caching/redis.md)
+- [Use Per-Request Caching](how-to/caching/per-request.md)
+
+### Performance
+
+- [Optimize Queries](how-to/performance/optimize-queries.md)
+- [Avoid N+1 Queries](how-to/performance/n-plus-one.md)
+- [Monitor Performance](how-to/performance/monitoring.md)
+
+### Testing
+
+- [Test Models](how-to/testing/test-models.md)
+- [Set Up Test Databases](how-to/testing/test-database.md)
+
+### Troubleshooting
+
+- [Fix Connection Errors](how-to/troubleshooting/connection-errors.md)
+- [Fix Migration Errors](how-to/troubleshooting/migration-errors.md)
+- [Fix Validation Errors](how-to/troubleshooting/validation-errors.md)
+
+## Reference
+
+- [Reference Overview](reference/README.md)
+- [Quick Reference](reference/quick-reference.md)
+
+### API Reference
+
+- [Migration DSL](reference/api/migration-dsl.md)
+- [Validation Options](reference/api/validation-options.md)
+- [Callback Hooks](reference/api/callback-hooks.md)
+
+### Resources
+
+- [Glossary](reference/glossary.md)
+- [Error Codes](reference/error-codes.md)
+
+## Explanation
+
+- [Explanation Overview](explanation/README.md)
+- [Concepts](explanation/concepts/what-is-orm.md)
+  - [What is an ORM?](explanation/concepts/what-is-orm.md)
+- [Design Patterns](explanation/design-patterns/active-record.md)
+  - [Active Record Pattern](explanation/design-patterns/active-record.md)
+  - [Repository Pattern](explanation/design-patterns/repository.md)
+
+## Resources
+
+- [Resources Overview](resources/README.md)
+- [FAQ](resources/faq.md)
+- [Community](resources/community.md)
+- [Contributing](resources/contributing.md)

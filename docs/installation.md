@@ -1,7 +1,3 @@
----
-icon: gear
----
-
 # Installation
 
 Complete setup guide for CQL with PostgreSQL, MySQL, and SQLite.
