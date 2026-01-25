@@ -77,9 +77,9 @@ User.where(active: true)
 
 ```crystal
 # Define
-belongs_to :user, User, foreign_key: :user_id
-has_one :profile, Profile, foreign_key: :user_id
-has_many :posts, Post, foreign_key: :user_id
+belongs_to :user, User, :user_id
+has_one :profile, Profile, :user_id
+has_many :posts, Post, :user_id
 
 # Use
 user.posts.all

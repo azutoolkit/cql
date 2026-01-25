@@ -312,7 +312,7 @@ struct Post
   property updated_at : Time?
 
   # Associations
-  belongs_to :user, User, foreign_key: :user_id
+  belongs_to :user, User, :user_id
 
   def initialize(@title : String, @body : String, @user_id : Int64)
   end
@@ -336,7 +336,7 @@ struct User
   property updated_at : Time?
 
   # Associations
-  has_many :posts, foreign_key: :user_id
+  has_many :posts, Post, :user_id
 
   def initialize(@name : String, @email : String, @active : Bool = false)
   end
@@ -390,7 +390,7 @@ struct User
   property created_at : Time?
   property updated_at : Time?
 
-  has_many :posts, foreign_key: :user_id
+  has_many :posts, Post, :user_id
 
   # Add validations
   validate :name, presence: true, size: (1..100)

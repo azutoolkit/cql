@@ -163,7 +163,7 @@ struct Post
 
   db_context MyDB, :posts
 
-  has_many :comments, Comment, foreign_key: :post_id
+  has_many :comments, Comment, :post_id
 
   after_destroy :soft_delete_comments
 

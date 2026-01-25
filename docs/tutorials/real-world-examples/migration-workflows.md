@@ -107,7 +107,7 @@ struct Tag
   property created_at : Time?
   property updated_at : Time?
 
-  has_many :post_tags, PostTag, foreign_key: :tag_id
+  has_many :post_tags, PostTag, :tag_id
 
   def initialize(@name : String)
     @slug = name.downcase.gsub(/[^a-z0-9]+/, "-").strip("-")
@@ -122,8 +122,8 @@ struct PostTag
   property tag_id : Int64
   property created_at : Time?
 
-  belongs_to :post, Post, foreign_key: :post_id
-  belongs_to :tag, Tag, foreign_key: :tag_id
+  belongs_to :post, Post, :post_id
+  belongs_to :tag, Tag, :tag_id
 
   def initialize(@post_id : Int64, @tag_id : Int64)
   end

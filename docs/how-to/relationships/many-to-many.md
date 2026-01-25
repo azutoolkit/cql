@@ -55,7 +55,7 @@ struct Post
   property id : Int64?
   property title : String
 
-  has_many :post_tags, PostTag, foreign_key: :post_id
+  has_many :post_tags, PostTag, :post_id
 
   def initialize(@title : String)
   end
@@ -89,7 +89,7 @@ struct Tag
   property id : Int64?
   property name : String
 
-  has_many :post_tags, PostTag, foreign_key: :tag_id
+  has_many :post_tags, PostTag, :tag_id
 
   def initialize(@name : String)
   end
@@ -114,8 +114,8 @@ struct PostTag
   property tag_id : Int64
   property created_at : Time?
 
-  belongs_to :post, Post, foreign_key: :post_id
-  belongs_to :tag, Tag, foreign_key: :tag_id
+  belongs_to :post, Post, :post_id
+  belongs_to :tag, Tag, :tag_id
 
   def initialize(@post_id : Int64, @tag_id : Int64)
   end

@@ -44,7 +44,7 @@ struct User
   property id : Int64?
   property name : String
 
-  has_many :posts, Post, foreign_key: :user_id
+  has_many :posts, Post, :user_id
 
   def initialize(@name : String)
   end
@@ -59,7 +59,7 @@ struct Post
   property title : String
   property body : String
 
-  belongs_to :user, User, foreign_key: :user_id
+  belongs_to :user, User, :user_id
 
   def initialize(@title : String, @body : String, @user_id : Int64)
   end

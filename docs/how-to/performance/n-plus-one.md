@@ -22,13 +22,13 @@ With 100 posts, this runs 101 queries.
 
 ## Use Eager Loading
 
-Load relationships upfront with a single query.
+Load relationships upfront with batch queries using `preload`.
 
-### includes (Preload)
+### Basic Preload
 
 ```crystal
 # 2 queries total: posts + users
-posts = Post.includes(:user).all
+posts = Post.preload(:user).all
 
 posts.each do |post|
   puts post.user.name  # No additional query
@@ -40,23 +40,8 @@ end
 ```crystal
 # Load multiple associations
 posts = Post
-  .includes(:user, :comments)
+  .preload(:user, :comments)
   .all
-```
-
-### Nested Relationships
-
-```crystal
-# Load nested associations
-posts = Post
-  .includes(comments: :user)
-  .all
-
-posts.each do |post|
-  post.comments.each do |comment|
-    puts comment.user.name  # Already loaded
-  end
-end
 ```
 
 ## Use Joins for Filtering
@@ -73,12 +58,11 @@ posts = Post
 
 ## Select Only Needed Columns
 
-Reduce memory when eager loading:
+Reduce memory by selecting specific columns:
 
 ```crystal
 posts = Post
-  .includes(:user)
-  .select("posts.*, users.name as user_name")
+  .select(:id, :title, :user_id)
   .all
 ```
 
@@ -123,7 +107,7 @@ SELECT * FROM users WHERE id = 3
 
 ```crystal
 # Controller
-@posts = Post.includes(:user, :comments).all
+@posts = Post.preload(:user, :comments).all
 
 # View - no additional queries
 <% @posts.each do |post| %>
@@ -132,20 +116,24 @@ SELECT * FROM users WHERE id = 3
 <% end %>
 ```
 
-### Counter Caches
+### Manual Counter Columns
 
-For counting associations, use counter caches:
+For frequently accessed counts, add a counter column and maintain it manually:
 
 ```crystal
-# Add column
-add_column :posts, :comments_count, Int32, default: 0
-
-# Model configuration
-struct Post
-  has_many :comments, Comment, foreign_key: :post_id, counter_cache: true
+# Add column in migration
+schema.alter :posts do
+  add_column :comments_count, Int32, default: 0
 end
 
-# Now post.comments_count uses cached value
+# Update counter when adding comments
+def create_comment(post : Post, content : String)
+  Comment.create!(content: content, post_id: post.id.not_nil!)
+  post.comments_count = post.comments.count.to_i32
+  post.save!
+end
+
+# Now use post.comments_count instead of post.comments.count
 ```
 
 ### Aggregations

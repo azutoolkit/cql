@@ -47,7 +47,7 @@ struct Comment
   property body : String
   property post_id : Int64
 
-  belongs_to :post, Post, foreign_key: :post_id
+  belongs_to :post, Post, :post_id
 
   def initialize(@body : String, @post_id : Int64)
   end
@@ -125,7 +125,7 @@ struct Comment
   # ...
   property user_id : Int64?
 
-  belongs_to :user, User, foreign_key: :user_id
+  belongs_to :user, User, :user_id
 
   def initialize(@body : String, @post_id : Int64, @user_id : Int64? = nil)
   end

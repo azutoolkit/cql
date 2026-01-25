@@ -74,7 +74,7 @@ user.force_delete!   # Permanently removes from database
 With foreign key cascade:
 
 ```crystal
-# If posts have: on_delete: "CASCADE"
+# If posts have: on_delete: :cascade
 user = User.find!(1)
 user.delete!  # Also deletes all user's posts
 ```

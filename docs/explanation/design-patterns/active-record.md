@@ -126,8 +126,8 @@ struct Post
   property body : String
   property user_id : Int64
 
-  belongs_to :user, User, foreign_key: :user_id
-  has_many :comments, Comment, foreign_key: :post_id
+  belongs_to :user, User, :user_id
+  has_many :comments, Comment, :post_id
 
   validate :title, presence: true
 
@@ -187,8 +187,8 @@ struct Order
   property status : String = "pending"
   property total : BigDecimal = BigDecimal.new(0)
 
-  belongs_to :user, User, foreign_key: :user_id
-  has_many :order_items, OrderItem, foreign_key: :order_id
+  belongs_to :user, User, :user_id
+  has_many :order_items, OrderItem, :order_id
 
   validate :status, in: ["pending", "paid", "shipped", "completed", "cancelled"]
 

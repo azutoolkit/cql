@@ -45,18 +45,18 @@ validate :tags, size: 1..5                # Array size
 
 **Error:** "field_name must be between X and Y characters"
 
-### min / max
+### gt / gte / lt / lte
 
 Validates numeric values are within bounds.
 
 ```crystal
-validate :age, min: 0
-validate :age, max: 150
-validate :quantity, min: 1, max: 100
-validate :price, min: 0.01
+validate :age, gte: 0                # Greater than or equal to 0
+validate :age, lte: 150              # Less than or equal to 150
+validate :quantity, gte: 1, lte: 100 # Between 1 and 100
+validate :price, gt: 0               # Greater than 0
 ```
 
-**Error:** "field_name must be at least X" / "field_name must be at most X"
+**Error:** "field_name must be greater than X" / "field_name must be less than or equal to X"
 
 ### in
 
@@ -70,28 +70,25 @@ validate :priority, in: [1, 2, 3, 4, 5]
 
 **Error:** "field_name must be one of: X, Y, Z"
 
-### unique
+### exclude
 
-Validates that a value is unique in the database.
+Validates that a value is not in a list of excluded values.
 
 ```crystal
-validate :email, unique: true
-validate :username, unique: true
-validate :slug, unique: true
+validate :username, exclude: ["admin", "root", "system"]
+validate :status, exclude: ["deleted"]
 ```
 
-**Note:** Performs a database query on each validation.
-
-**Error:** "field_name has already been taken"
+**Error:** "field_name must not be included in [X, Y, Z]"
 
 ## Combining Validations
 
 Multiple validations can be applied to a single field:
 
 ```crystal
-validate :email, presence: true, match: /@/, unique: true
+validate :email, presence: true, match: /@/
 validate :username, presence: true, size: 3..20, match: /^[a-z0-9_]+$/
-validate :age, presence: true, min: 0, max: 150
+validate :age, presence: true, gte: 0, lte: 150
 ```
 
 ## Model Example
@@ -121,12 +118,8 @@ struct User
   validate :username, size: 3..20
   validate :password, size: 8..128
 
-  # Uniqueness
-  validate :email, unique: true
-  validate :username, unique: true
-
   # Numeric constraints
-  validate :age, min: 0, max: 150
+  validate :age, gte: 0, lte: 150
 
   # Allowed values
   validate :role, in: ["admin", "moderator", "user"]

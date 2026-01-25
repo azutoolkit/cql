@@ -275,7 +275,7 @@ Add relationship navigation:
 # Update User model
 struct User
   # ...existing code...
-  has_many :orders, Order, foreign_key: :user_id
+  has_many :orders, Order, :user_id
 end
 
 # Now you can do

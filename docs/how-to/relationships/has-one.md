@@ -48,7 +48,7 @@ struct User
   property id : Int64?
   property name : String
 
-  has_one :profile, Profile, foreign_key: :user_id
+  has_one :profile, Profile, :user_id
 
   def initialize(@name : String)
   end
@@ -63,7 +63,7 @@ struct Profile
   property bio : String?
   property avatar_url : String?
 
-  belongs_to :user, User, foreign_key: :user_id
+  belongs_to :user, User, :user_id
 
   def initialize(@user_id : Int64, @bio : String? = nil, @avatar_url : String? = nil)
   end

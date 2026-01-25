@@ -33,8 +33,8 @@ struct User
   property updated_at : Time?
 
   # Relationships
-  has_many :posts, Post, foreign_key: :user_id
-  has_many :comments, Comment, foreign_key: :user_id
+  has_many :posts, Post, :user_id
+  has_many :comments, Comment, :user_id
 
   def initialize(
     @username : String,
@@ -84,7 +84,7 @@ struct Category
   property updated_at : Time?
 
   # Relationships
-  has_many :posts, Post, foreign_key: :category_id
+  has_many :posts, Post, :category_id
 
   def initialize(@name : String, @slug : String? = nil)
     @slug ||= generate_slug(@name)
@@ -122,9 +122,9 @@ struct Post
   property updated_at : Time?
 
   # Relationships
-  belongs_to :user, User, foreign_key: :user_id
-  belongs_to :category, Category, foreign_key: :category_id
-  has_many :comments, Comment, foreign_key: :post_id
+  belongs_to :user, User, :user_id
+  belongs_to :category, Category, :category_id
+  has_many :comments, Comment, :post_id
 
   def initialize(
     @title : String,
@@ -189,8 +189,8 @@ struct Comment
   property updated_at : Time?
 
   # Relationships
-  belongs_to :post, Post, foreign_key: :post_id
-  belongs_to :user, User, foreign_key: :user_id
+  belongs_to :post, Post, :post_id
+  belongs_to :user, User, :user_id
 
   def initialize(
     @content : String,
@@ -352,7 +352,7 @@ crystal src/test_models.cr
 ### belongs_to
 
 ```crystal
-belongs_to :user, User, foreign_key: :user_id
+belongs_to :user, User, :user_id
 ```
 
 This creates a `user` method that returns the associated User (or nil):
@@ -365,7 +365,7 @@ author = post.user  # Returns User?
 ### has_many
 
 ```crystal
-has_many :posts, Post, foreign_key: :user_id
+has_many :posts, Post, :user_id
 ```
 
 This creates a `posts` method that returns a query builder:
