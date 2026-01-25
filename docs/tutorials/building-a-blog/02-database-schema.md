@@ -49,24 +49,24 @@ Create the first migration for the users table:
 # migrations/001_create_users.cr
 class CreateUsers < CQL::Migration(1)
   def up
-    schema.create :users do
+    schema.table :users do
       primary :id, Int64, auto_increment: true
-      text :username, null: false
-      text :email, null: false
-      text :first_name, null: true
-      text :last_name, null: true
-      boolean :active, default: true
+      column :username, String, null: false
+      column :email, String, null: false
+      column :first_name, String, null: true
+      column :last_name, String, null: true
+      column :active, Bool, default: true
       timestamps
+
+      index [:email], unique: true
+      index [:username], unique: true
     end
 
-    schema.alter :users do
-      create_index :idx_users_email, [:email], unique: true
-      create_index :idx_users_username, [:username], unique: true
-    end
+    schema.users.create!
   end
 
   def down
-    schema.drop :users
+    schema.users.drop!
   end
 end
 ```
@@ -84,20 +84,20 @@ Key points:
 # migrations/002_create_categories.cr
 class CreateCategories < CQL::Migration(2)
   def up
-    schema.create :categories do
+    schema.table :categories do
       primary :id, Int64, auto_increment: true
-      text :name, null: false
-      text :slug, null: false
+      column :name, String, null: false
+      column :slug, String, null: false
       timestamps
+
+      index [:slug], unique: true
     end
 
-    schema.alter :categories do
-      create_index :idx_categories_slug, [:slug], unique: true
-    end
+    schema.categories.create!
   end
 
   def down
-    schema.drop :categories
+    schema.categories.drop!
   end
 end
 ```
@@ -110,37 +110,36 @@ The `slug` column stores URL-friendly versions of category names (e.g., "Web Dev
 # migrations/003_create_posts.cr
 class CreatePosts < CQL::Migration(3)
   def up
-    schema.create :posts do
+    schema.table :posts do
       primary :id, Int64, auto_increment: true
-      text :title, null: false
-      text :content, null: false
-      boolean :published, default: false
-      bigint :views_count, default: 0_i64
-      bigint :user_id, null: false
-      bigint :category_id, null: true
+      column :title, String, null: false
+      column :content, String, null: false
+      column :published, Bool, default: false
+      column :views_count, Int64, default: 0_i64
+      column :user_id, Int64, null: false
+      column :category_id, Int64, null: true
       timestamps
 
-      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: "CASCADE"
-      foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: "SET NULL"
+      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
+      foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: :set_null
+      index [:user_id]
+      index [:category_id]
+      index [:published]
     end
 
-    schema.alter :posts do
-      create_index :idx_posts_user_id, [:user_id]
-      create_index :idx_posts_category_id, [:category_id]
-      create_index :idx_posts_published, [:published]
-    end
+    schema.posts.create!
   end
 
   def down
-    schema.drop :posts
+    schema.posts.drop!
   end
 end
 ```
 
 Key points:
 - Foreign keys establish relationships with users and categories
-- `on_delete: "CASCADE"` deletes posts when the author is deleted
-- `on_delete: "SET NULL"` keeps posts when a category is deleted (just nullifies the reference)
+- `on_delete: :cascade` deletes posts when the author is deleted
+- `on_delete: :set_null` keeps posts when a category is deleted (just nullifies the reference)
 - Indexes on foreign keys improve query performance
 - Index on `published` helps filter posts efficiently
 
@@ -150,25 +149,24 @@ Key points:
 # migrations/004_create_comments.cr
 class CreateComments < CQL::Migration(4)
   def up
-    schema.create :comments do
+    schema.table :comments do
       primary :id, Int64, auto_increment: true
-      text :content, null: false
-      bigint :post_id, null: false
-      bigint :user_id, null: true  # Allow anonymous comments
+      column :content, String, null: false
+      column :post_id, Int64, null: false
+      column :user_id, Int64, null: true  # Allow anonymous comments
       timestamps
 
-      foreign_key [:post_id], references: :posts, references_columns: [:id], on_delete: "CASCADE"
-      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: "SET NULL"
+      foreign_key [:post_id], references: :posts, references_columns: [:id], on_delete: :cascade
+      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :set_null
+      index [:post_id]
+      index [:user_id]
     end
 
-    schema.alter :comments do
-      create_index :idx_comments_post_id, [:post_id]
-      create_index :idx_comments_user_id, [:user_id]
-    end
+    schema.comments.create!
   end
 
   def down
-    schema.drop :comments
+    schema.comments.drop!
   end
 end
 ```

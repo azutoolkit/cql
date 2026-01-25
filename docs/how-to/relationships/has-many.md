@@ -12,25 +12,24 @@ Use `has_many` when:
 ## Schema Setup
 
 ```crystal
-schema.create :users do
+schema.table :users do
   primary :id, Int64, auto_increment: true
-  text :name
+  column :name, String
   timestamps
 end
+schema.users.create!
 
-schema.create :posts do
+schema.table :posts do
   primary :id, Int64, auto_increment: true
-  bigint :user_id, null: false
-  text :title
-  text :body
+  column :user_id, Int64, null: false
+  column :title, String
+  column :body, String
   timestamps
 
   foreign_key [:user_id], references: :users, references_columns: [:id]
+  index [:user_id]
 end
-
-schema.alter :posts do
-  create_index :idx_posts_user_id, [:user_id]
-end
+schema.posts.create!
 ```
 
 ## Define the Relationship
@@ -142,9 +141,9 @@ user.posts.all.each(&.delete!)
 Configure foreign key to cascade deletes:
 
 ```crystal
-schema.create :posts do
+schema.table :posts do
   # ...
-  foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: "CASCADE"
+  foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
 end
 ```
 

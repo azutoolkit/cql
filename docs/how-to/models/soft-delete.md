@@ -7,12 +7,13 @@ This guide shows you how to implement soft deletes so records are marked as dele
 Your table needs a `deleted_at` timestamp column:
 
 ```crystal
-schema.create :users do
+schema.table :users do
   primary :id, Int64, auto_increment: true
-  text :name
-  timestamp :deleted_at, null: true
+  column :name, String
+  column :deleted_at, Time, null: true
   timestamps
 end
+schema.users.create!
 ```
 
 ## Enable Soft Deletes

@@ -128,22 +128,21 @@ mkdir -p migrations
 # migrations/001_create_users.cr
 class CreateUsers < CQL::Migration(1)
   def up
-    schema.create :users do
+    schema.table :users do
       primary :id, Int64, auto_increment: true
-      text :name, null: false
-      text :email, null: false
-      boolean :active, default: false
+      column :name, String, null: false
+      column :email, String, null: false
+      column :active, Bool, default: false
       timestamps  # Creates created_at and updated_at columns
+
+      index [:email], unique: true
     end
 
-    # Add indexes for better performance
-    schema.alter :users do
-      create_index :idx_users_email, [:email], unique: true
-    end
+    schema.users.create!
   end
 
   def down
-    schema.drop :users
+    schema.users.drop!
   end
 end
 ```
@@ -276,23 +275,22 @@ Let's add posts to demonstrate relationships. First, create the migration:
 # migrations/002_create_posts.cr
 class CreatePosts < CQL::Migration(2)
   def up
-    schema.create :posts do
+    schema.table :posts do
       primary :id, Int64, auto_increment: true
-      text :title, null: false
-      text :body, null: false
-      bigint :user_id, null: false
+      column :title, String, null: false
+      column :body, String, null: false
+      column :user_id, Int64, null: false
       timestamps
 
-      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: "CASCADE"
+      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
+      index [:user_id]
     end
 
-    schema.alter :posts do
-      create_index :idx_posts_user_id, [:user_id]
-    end
+    schema.posts.create!
   end
 
   def down
-    schema.drop :posts
+    schema.posts.drop!
   end
 end
 ```

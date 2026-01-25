@@ -25,7 +25,7 @@ migrator.mark_as_applied(migration_number)
 
 3. Drop and recreate (development only):
 ```crystal
-schema.drop :users if schema.table_exists?(:users)
+schema.users.drop! if schema.table?(:users)
 ```
 
 ## Common Error: Table Does Not Exist
@@ -150,7 +150,7 @@ bigint :user_id, null: true
 
 3. Use ON DELETE CASCADE or SET NULL:
 ```crystal
-foreign_key [:user_id], references: :users, on_delete: "SET NULL"
+foreign_key [:user_id], references: :users, on_delete: :set_null
 ```
 
 ## Debugging Migrations
@@ -197,7 +197,7 @@ DELETE FROM cql_schema_migrations WHERE version = 5;
 
 3. Drop partially created objects:
 ```crystal
-schema.drop :partial_table if schema.table_exists?(:partial_table)
+schema.partial_table.drop! if schema.table?(:partial_table)
 ```
 
 4. Re-run migration:

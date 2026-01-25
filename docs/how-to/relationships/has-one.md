@@ -14,25 +14,24 @@ The other model holds the foreign key.
 ## Schema Setup
 
 ```crystal
-schema.create :users do
+schema.table :users do
   primary :id, Int64, auto_increment: true
-  text :name
+  column :name, String
   timestamps
 end
+schema.users.create!
 
-schema.create :profiles do
+schema.table :profiles do
   primary :id, Int64, auto_increment: true
-  bigint :user_id, null: false
-  text :bio
-  text :avatar_url
-  timestamps
+  column :user_id, Int64, null: false
+  column :bio, String
+  column :avatar_url, String
 
   foreign_key [:user_id], references: :users, references_columns: [:id]
+  index [:user_id], unique: true
+  timestamps
 end
-
-schema.alter :profiles do
-  create_index :idx_profiles_user_id, [:user_id], unique: true
-end
+schema.profiles.create!
 ```
 
 Note: The unique index ensures only one profile per user.

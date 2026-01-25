@@ -7,11 +7,12 @@ This guide shows you how to use automatic timestamps for tracking when records a
 Use the `timestamps` helper in your table definition:
 
 ```crystal
-schema.create :posts do
+schema.table :posts do
   primary :id, Int64, auto_increment: true
-  text :title
+  column :title, String
   timestamps  # Adds created_at and updated_at columns
 end
+schema.posts.create!
 ```
 
 This creates two columns:

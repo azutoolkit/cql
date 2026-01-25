@@ -16,20 +16,22 @@ The model with `belongs_to` holds the foreign key.
 Create tables with a foreign key column:
 
 ```crystal
-schema.create :posts do
+schema.table :posts do
   primary :id, Int64, auto_increment: true
-  text :title
+  column :title, String
   timestamps
 end
+schema.posts.create!
 
-schema.create :comments do
+schema.table :comments do
   primary :id, Int64, auto_increment: true
-  text :body
-  bigint :post_id, null: false
+  column :body, String
+  column :post_id, Int64, null: false
   timestamps
 
   foreign_key [:post_id], references: :posts, references_columns: [:id]
 end
+schema.comments.create!
 ```
 
 ## Define the Relationship
@@ -114,9 +116,9 @@ comment.save!  # post_id is now set
 For optional relationships, make the foreign key nullable:
 
 ```crystal
-schema.create :comments do
+schema.table :comments do
   # ...
-  bigint :user_id, null: true  # Optional
+  column :user_id, Int64, null: true  # Optional
 end
 
 struct Comment

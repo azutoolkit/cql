@@ -19,44 +19,54 @@ migrations/
 # migrations/001_create_users.cr
 class CreateUsers < CQL::Migration(1)
   def up
-    schema.create :users do
+    schema.table :users do
       primary :id, Int64, auto_increment: true
-      text :name, null: false
-      text :email, null: false
+      column :name, String, null: false
+      column :email, String, null: false
       timestamps
     end
+
+    schema.users.create!
   end
 
   def down
-    schema.drop :users
+    schema.users.drop!
   end
 end
 ```
 
 ## Migration Number
 
-The number in `CQL::Migration(N)` must be unique and sequential:
+The number in `CQL::Migration(N)` must be unique. Use sequential numbers or timestamps:
 
 ```crystal
-class CreateUsers < CQL::Migration(1)      # First migration
-class CreatePosts < CQL::Migration(2)      # Second migration
-class AddIndexes < CQL::Migration(3)       # Third migration
+class CreateUsers < CQL::Migration(1)              # Sequential
+class CreatePosts < CQL::Migration(2)
+class AddIndexes < CQL::Migration(20250125120000)  # Timestamp format
 ```
 
 ## Create Table
 
 ```crystal
 def up
-  schema.create :posts do
+  schema.table :posts do
     primary :id, Int64, auto_increment: true
-    text :title, null: false
-    text :body, null: false
-    boolean :published, default: false
-    bigint :user_id, null: false
+    column :title, String, null: false
+    column :body, String, null: false
+    column :published, Bool, default: false
+    column :user_id, Int64, null: false
     timestamps
 
     foreign_key [:user_id], references: :users, references_columns: [:id]
+    index [:user_id]
+    index [:published]
   end
+
+  schema.posts.create!
+end
+
+def down
+  schema.posts.drop!
 end
 ```
 
@@ -104,13 +114,13 @@ end
 class AddPostsForeignKey < CQL::Migration(6)
   def up
     schema.alter :posts do
-      add_foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: "CASCADE"
+      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
     end
   end
 
   def down
     schema.alter :posts do
-      drop_foreign_key [:user_id]
+      drop_foreign_key :fk_posts_user_id
     end
   end
 end
@@ -140,13 +150,13 @@ end
 class ChangeViewsCount < CQL::Migration(8)
   def up
     schema.alter :posts do
-      change_column :views_count, Int64, default: 0_i64
+      change_column :views_count, Int64
     end
   end
 
   def down
     schema.alter :posts do
-      change_column :views_count, Int32, default: 0
+      change_column :views_count, Int32
     end
   end
 end
@@ -177,7 +187,7 @@ Create a simple test:
 ```crystal
 # Test migration
 MyDB.init
-migrator = MyDB.migrator(config)
+migrator = MyDB.migrator
 migrator.up
 
 # Check table exists
@@ -189,3 +199,4 @@ User.count  # Should not raise
 - [Run Migrations](run-migrations.md)
 - [Rollback Migrations](rollback.md)
 - [Add Columns](add-columns.md)
+- [Migration DSL Reference](../../reference/api/migration-dsl.md)

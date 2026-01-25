@@ -87,7 +87,7 @@ Some migrations can't be rolled back:
 ```crystal
 class DropLegacyTable < CQL::Migration(10)
   def up
-    schema.drop :legacy_users
+    schema.legacy_users.drop!
   end
 
   def down

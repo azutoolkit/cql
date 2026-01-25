@@ -41,20 +41,20 @@ Create migrations in the correct order:
 # migrations/005_create_tags.cr
 class CreateTags < CQL::Migration(5)
   def up
-    schema.create :tags do
+    schema.table :tags do
       primary :id, Int64, auto_increment: true
-      text :name, null: false
-      text :slug, null: false
+      column :name, String, null: false
+      column :slug, String, null: false
       timestamps
+
+      index [:slug], unique: true
     end
 
-    schema.alter :tags do
-      create_index :idx_tags_slug, [:slug], unique: true
-    end
+    schema.tags.create!
   end
 
   def down
-    schema.drop :tags
+    schema.tags.drop!
   end
 end
 ```
@@ -63,24 +63,23 @@ end
 # migrations/006_create_post_tags.cr
 class CreatePostTags < CQL::Migration(6)
   def up
-    schema.create :post_tags do
-      bigint :post_id, null: false
-      bigint :tag_id, null: false
-      timestamp :created_at
+    schema.table :post_tags do
+      column :post_id, Int64, null: false
+      column :tag_id, Int64, null: false
+      column :created_at, Time
 
-      foreign_key [:post_id], references: :posts, references_columns: [:id], on_delete: "CASCADE"
-      foreign_key [:tag_id], references: :tags, references_columns: [:id], on_delete: "CASCADE"
+      foreign_key [:post_id], references: :posts, references_columns: [:id], on_delete: :cascade
+      foreign_key [:tag_id], references: :tags, references_columns: [:id], on_delete: :cascade
+      index [:post_id]
+      index [:tag_id]
+      index [:post_id, :tag_id], unique: true
     end
 
-    schema.alter :post_tags do
-      create_index :idx_post_tags_post, [:post_id]
-      create_index :idx_post_tags_tag, [:tag_id]
-      create_index :idx_post_tags_unique, [:post_id, :tag_id], unique: true
-    end
+    schema.post_tags.create!
   end
 
   def down
-    schema.drop :post_tags
+    schema.post_tags.drop!
   end
 end
 ```

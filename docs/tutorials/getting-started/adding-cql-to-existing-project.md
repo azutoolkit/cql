@@ -164,24 +164,23 @@ mkdir -p migrations
 # migrations/001_create_orders.cr
 class CreateOrders < CQL::Migration(1)
   def up
-    schema.create :orders do
+    schema.table :orders do
       primary :id, Int64, auto_increment: true
-      bigint :user_id, null: false
-      decimal :total, precision: 10, scale: 2
-      text :status, default: "pending"
+      column :user_id, Int64, null: false
+      column :total, Float64
+      column :status, String, default: "pending"
       timestamps
 
       foreign_key [:user_id], references: :users, references_columns: [:id]
+      index [:user_id]
+      index [:status]
     end
 
-    schema.alter :orders do
-      create_index :idx_orders_user_id, [:user_id]
-      create_index :idx_orders_status, [:status]
-    end
+    schema.orders.create!
   end
 
   def down
-    schema.drop :orders
+    schema.orders.drop!
   end
 end
 ```

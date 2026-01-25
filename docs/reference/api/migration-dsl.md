@@ -2,183 +2,267 @@
 
 Complete reference for the CQL Migration DSL (Domain Specific Language).
 
-## Table Methods
+## Migration Class
 
-### create_table
-
-Creates a new database table.
+Migrations inherit from `CQL::Migration(VERSION)` where VERSION is an integer (typically a timestamp):
 
 ```crystal
-create_table :users do |t|
-  t.column :name, String
-  t.column :email, String
-  t.column :age, Int32?
-  t.timestamps
+class CreateUsers < CQL::Migration(20250125001401)
+  def up
+    # Apply changes
+  end
+
+  def down
+    # Rollback changes
+  end
 end
 ```
 
-**Options:**
-- `id: Bool` - Whether to auto-create an `id` primary key (default: true)
-- `primary_key: Symbol` - Custom primary key name
+## Creating Tables
 
-### drop_table
+### schema.table
 
-Removes a table from the database.
+Defines a new table structure:
 
 ```crystal
-drop_table :users
+class CreateUsers < CQL::Migration(1)
+  def up
+    schema.table :users do
+      primary :id, Int64, auto_increment: true
+      column :name, String, null: false
+      column :email, String, null: false
+      column :active, Bool, default: true
+      timestamps
+
+      index [:email], unique: true
+    end
+
+    schema.users.create!
+  end
+
+  def down
+    schema.users.drop!
+  end
+end
 ```
 
-### rename_table
-
-Renames an existing table.
-
-```crystal
-rename_table :users, :accounts
-```
+**Key methods:**
+- `schema.table :name do ... end` - Define table structure
+- `schema.table_name.create!` - Execute CREATE TABLE
+- `schema.table_name.drop!` - Execute DROP TABLE
 
 ## Column Methods
 
+### primary
+
+Defines the primary key column:
+
+```crystal
+primary :id, Int64                        # Default auto_increment: true
+primary :id, Int32, auto_increment: true
+primary :uuid, String, auto_increment: false
+```
+
+**Parameters:**
+- `name` - Column name (Symbol)
+- `type` - Crystal type (Int32, Int64, String)
+- `auto_increment` - Enable auto-increment (default: true)
+
 ### column
 
-Adds a column to a table.
+Adds a column to the table:
 
 ```crystal
-t.column :name, String                    # Required string
-t.column :bio, String?                    # Nullable string
-t.column :active, Bool, default: true     # With default
-t.column :score, Int32, null: false       # Explicit NOT NULL
+column :name, String                      # Required string
+column :bio, String, null: true           # Nullable
+column :active, Bool, default: true       # With default
+column :email, String, null: false, unique: true
+column :score, Int32, default: 0, index: true
 ```
 
-**Supported Types:**
+**Options:**
+| Option | Type | Description |
+|--------|------|-------------|
+| `null` | Bool | Allow NULL values (default: false) |
+| `default` | T | Default value |
+| `unique` | Bool | Add unique constraint |
+| `index` | Bool | Create index on column |
+| `size` | Int32 | Column size (for VARCHAR) |
+| `as` | String | SQL column alias |
+
+### Type-Specific Column Methods
+
+CQL provides helper methods for common column types:
+
+```crystal
+# String types
+varchar :name, size: 255
+text :description
+
+# Numeric types
+integer :age, null: false, default: 18
+bigint :balance, default: 0
+float :price, default: 0.0
+double :rating
+real :measurement
+
+# Other types
+boolean :active, default: true
+timestamp :created_at
+date :birthday
+json :metadata
+```
+
+### Supported Types
+
 | Crystal Type | SQL Type |
 |--------------|----------|
-| `String` | `VARCHAR(255)` / `TEXT` |
-| `Int32` | `INTEGER` |
-| `Int64` | `BIGINT` |
-| `Float64` | `DOUBLE PRECISION` |
-| `Bool` | `BOOLEAN` |
-| `Time` | `TIMESTAMP` |
-| `UUID` | `UUID` (PostgreSQL) |
-
-**Options:**
-- `null: Bool` - Allow NULL values
-- `default: T` - Default value
-- `size: Int32` - Column size (for strings)
-- `unique: Bool` - Add unique constraint
-- `index: Bool` - Create an index
-
-### add_column
-
-Adds a column to an existing table.
-
-```crystal
-add_column :users, :phone, String?
-add_column :users, :verified, Bool, default: false
-```
-
-### remove_column
-
-Removes a column from a table.
-
-```crystal
-remove_column :users, :phone
-```
-
-### rename_column
-
-Renames a column.
-
-```crystal
-rename_column :users, :name, :full_name
-```
-
-### change_column
-
-Modifies a column's type or constraints.
-
-```crystal
-change_column :users, :bio, String, size: 1000
-```
-
-## Index Methods
-
-### add_index
-
-Creates an index on one or more columns.
-
-```crystal
-add_index :users, :email                      # Single column
-add_index :users, [:last_name, :first_name]   # Composite
-add_index :users, :email, unique: true        # Unique index
-add_index :users, :name, name: "idx_user_name" # Named index
-```
-
-**Options:**
-- `unique: Bool` - Create unique index
-- `name: String` - Custom index name
-
-### remove_index
-
-Removes an index.
-
-```crystal
-remove_index :users, :email
-remove_index :users, name: "idx_user_name"
-```
-
-## Timestamps
+| `Int32` | INTEGER |
+| `Int64` | BIGINT |
+| `Float32` | FLOAT |
+| `Float64` | DOUBLE PRECISION |
+| `String` | VARCHAR / TEXT |
+| `Bool` | BOOLEAN |
+| `Time` | TIMESTAMP |
+| `Date` | DATE |
+| `JSON::Any` | JSON / JSONB |
 
 ### timestamps
 
-Adds `created_at` and `updated_at` columns.
+Adds `created_at` and `updated_at` columns:
 
 ```crystal
-create_table :posts do |t|
-  t.column :title, String
-  t.timestamps
+schema.table :posts do
+  primary :id, Int64
+  column :title, String
+  timestamps
 end
 ```
 
-Generates:
-- `created_at : Time?` - Set on record creation
-- `updated_at : Time?` - Set on every update
+Both columns are timestamps with current timestamp as default.
 
-## Foreign Keys
+## Index Methods
 
-### add_foreign_key
+### index
 
-Creates a foreign key constraint.
+Creates an index within a table definition:
 
 ```crystal
-add_foreign_key :posts, :users
-add_foreign_key :comments, :posts, column: :article_id
-add_foreign_key :orders, :users, on_delete: :cascade
+schema.table :users do
+  column :email, String
+  column :first_name, String
+  column :last_name, String
+
+  index [:email], unique: true            # Unique index
+  index [:email]                          # Regular index
+  index [:first_name, :last_name]         # Composite index
+end
 ```
 
-**Options:**
-- `column: Symbol` - Custom foreign key column name
-- `primary_key: Symbol` - Custom primary key column
-- `on_delete: Symbol` - `:cascade`, `:nullify`, `:restrict`
-- `on_update: Symbol` - `:cascade`, `:nullify`, `:restrict`
+### create_index / drop_index
 
-### remove_foreign_key
-
-Removes a foreign key constraint.
+Manage indexes in alter operations:
 
 ```crystal
-remove_foreign_key :posts, :users
+schema.alter :users do
+  create_index :email_idx, [:email], unique: true
+  drop_index :email_idx
+end
 ```
 
-## Raw SQL
+## Foreign Key Methods
 
-### execute
+### foreign_key
 
-Executes raw SQL.
+Creates a foreign key constraint:
 
 ```crystal
-execute "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""
-execute "UPDATE users SET role = 'member' WHERE role IS NULL"
+schema.table :posts do
+  primary :id, Int64
+  column :user_id, Int64, null: false
+  column :category_id, Int64, null: true
+
+  foreign_key [:user_id], references: :users, references_columns: [:id]
+  foreign_key [:category_id], references: :categories, references_columns: [:id]
+end
+```
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `columns` | Array(Symbol) | Local column(s) |
+| `references` | Symbol | Target table |
+| `references_columns` | Array(Symbol) | Target column(s) |
+| `on_delete` | Symbol | `:cascade`, `:restrict`, `:set_null`, `:no_action` |
+| `on_update` | Symbol | `:cascade`, `:restrict`, `:set_null`, `:no_action` |
+| `name` | String | Optional constraint name |
+
+### Composite Foreign Keys
+
+```crystal
+foreign_key [:order_id, :product_id],
+  references: :order_items,
+  references_columns: [:o_id, :p_id]
+```
+
+## Altering Tables
+
+### schema.alter
+
+Modifies an existing table:
+
+```crystal
+class AddPhoneToUsers < CQL::Migration(2)
+  def up
+    schema.alter :users do
+      add_column :phone, String, null: true
+      add_column :age, Int32, null: true, default: 18
+    end
+  end
+
+  def down
+    schema.alter :users do
+      drop_column :phone
+      drop_column :age
+    end
+  end
+end
+```
+
+### Alter Operations
+
+| Method | Description |
+|--------|-------------|
+| `add_column :name, Type, options` | Add a new column |
+| `drop_column :name` | Remove a column |
+| `rename_column :old, :new` | Rename a column |
+| `change_column :name, NewType` | Change column type |
+| `create_index :name, [:cols]` | Create an index |
+| `drop_index :name` | Drop an index |
+| `foreign_key [:cols], references: :table` | Add foreign key |
+| `drop_foreign_key :name` | Drop foreign key |
+| `rename_table :new_name` | Rename the table |
+| `unique_constraint [:cols]` | Add unique constraint |
+| `check_constraint "expression"` | Add check constraint |
+
+### Alter Examples
+
+```crystal
+schema.alter :users do
+  # Columns
+  add_column :phone, String, null: true
+  drop_column :legacy_field
+  rename_column :email, :user_email
+  change_column :age, String
+
+  # Indexes
+  create_index :phone_idx, [:phone]
+  drop_index :old_idx
+
+  # Foreign keys
+  foreign_key [:department_id], references: :departments, on_delete: :cascade
+  drop_foreign_key :fk_old_reference
+end
 ```
 
 ## Complete Example
@@ -186,32 +270,66 @@ execute "UPDATE users SET role = 'member' WHERE role IS NULL"
 ```crystal
 class CreateBlogSchema < CQL::Migration(1)
   def up
-    create_table :users do |t|
-      t.column :email, String, unique: true
-      t.column :name, String
-      t.column :role, String, default: "member"
-      t.timestamps
-    end
+    # Create users table
+    schema.table :users do
+      primary :id, Int64, auto_increment: true
+      column :email, String, null: false
+      column :username, String, null: false
+      column :role, String, default: "member"
+      timestamps
 
-    create_table :posts do |t|
-      t.column :user_id, Int64
-      t.column :title, String
-      t.column :body, String, size: 10000
-      t.column :published, Bool, default: false
-      t.column :published_at, Time?
-      t.timestamps
+      index [:email], unique: true
+      index [:username], unique: true
     end
+    schema.users.create!
 
-    add_index :posts, :user_id
-    add_index :posts, :published
-    add_foreign_key :posts, :users, on_delete: :cascade
+    # Create posts table
+    schema.table :posts do
+      primary :id, Int64, auto_increment: true
+      column :user_id, Int64, null: false
+      column :title, String, null: false
+      column :body, String, null: false
+      column :published, Bool, default: false
+      column :views_count, Int64, default: 0
+      timestamps
+
+      foreign_key [:user_id], references: :users, references_columns: [:id]
+      index [:user_id]
+      index [:published]
+    end
+    schema.posts.create!
   end
 
   def down
-    drop_table :posts
-    drop_table :users
+    schema.posts.drop!
+    schema.users.drop!
   end
 end
+```
+
+## Migration Execution
+
+```crystal
+migrator = schema.migrator
+
+# Apply migrations
+migrator.up                    # Apply all pending
+migrator.up(1)                 # Apply 1 migration
+
+# Rollback migrations
+migrator.down                  # Rollback all
+migrator.down(1)               # Rollback 1 migration
+migrator.rollback              # Alias for down(1)
+
+# Other operations
+migrator.redo                  # Rollback and reapply last
+migrator.up_to(version)        # Apply up to specific version
+migrator.down_to(version)      # Rollback to specific version
+
+# Status
+migrator.applied_migrations    # List applied migrations
+migrator.pending_migrations    # List pending migrations
+migrator.last                  # Get last applied migration
 ```
 
 ## See Also

@@ -108,15 +108,16 @@ before_destroy :cleanup
 ```crystal
 class CreateUsers < CQL::Migration(1)
   def up
-    schema.create :users do
+    schema.table :users do
       primary :id, Int64, auto_increment: true
-      text :name, null: false
+      column :name, String, null: false
       timestamps
     end
+    schema.users.create!
   end
 
   def down
-    schema.drop :users
+    schema.users.drop!
   end
 end
 ```

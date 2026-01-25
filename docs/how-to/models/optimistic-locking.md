@@ -14,12 +14,13 @@ Use optimistic locking when:
 Your table needs a version column:
 
 ```crystal
-schema.create :users do
+schema.table :users do
   primary :id, Int64, auto_increment: true
-  text :name
+  column :name, String
   lock_version :version  # Adds integer column with default 1
   timestamps
 end
+schema.users.create!
 ```
 
 Or add to an existing table:

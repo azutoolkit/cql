@@ -90,17 +90,14 @@ class AddCategoryToPosts < CQL::Migration(9)
   def up
     schema.alter :posts do
       add_column :category_id, Int64, null: true
-    end
-
-    schema.alter :posts do
       create_index :idx_posts_category_id, [:category_id]
-      add_foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: "SET NULL"
+      foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: :set_null
     end
   end
 
   def down
     schema.alter :posts do
-      drop_foreign_key [:category_id]
+      drop_foreign_key :fk_posts_category_id
       drop_index :idx_posts_category_id
       drop_column :category_id
     end
