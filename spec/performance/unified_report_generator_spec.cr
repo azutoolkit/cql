@@ -8,7 +8,7 @@ private def build_test_report(
   slow_queries = 5,
   errors = 2,
   issues = [] of CQL::Performance::Issue,
-  metadata = {} of String => String
+  metadata = {} of String => String,
 ) : CQL::Performance::PerformanceReport
   CQL::Performance::PerformanceReport.new(
     duration: duration,
@@ -24,7 +24,7 @@ private def build_test_issue(
   type = :slow_query,
   severity = :high,
   message = "Query exceeded threshold",
-  details = {"table" => "users"} of String => String
+  details = {"table" => "users"} of String => String,
 ) : CQL::Performance::Issue
   CQL::Performance::Issue.new(
     type: type,

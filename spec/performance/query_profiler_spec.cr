@@ -382,11 +382,11 @@ describe CQL::Performance::QueryProfiler do
       config.log_slow_queries = false
       profiler = CQL::Performance::QueryProfiler.new(config)
 
-      [50, 200, 100, 150].each_with_index do |ms, i|
+      [50, 200, 100, 150].each_with_index do |millis, index|
         profiler.record_query(
-          sql: "SELECT * FROM table_#{i}",
+          sql: "SELECT * FROM table_#{index}",
           params: [] of DB::Any,
-          execution_time: ms.milliseconds
+          execution_time: millis.milliseconds
         )
       end
 

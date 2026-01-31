@@ -105,10 +105,10 @@ describe CQL::Performance::Config do
   describe "#configure" do
     it "yields self for DSL-style configuration" do
       config = CQL::Performance::Config.new
-      config.configure do |c|
-        c.monitoring.enabled = false
-        c.profiling.slow_query_threshold = 200.milliseconds
-        c.detection.threshold = 5
+      config.configure do |cfg|
+        cfg.monitoring.enabled = false
+        cfg.profiling.slow_query_threshold = 200.milliseconds
+        cfg.detection.threshold = 5
       end
 
       config.monitoring.enabled?.should be_false
@@ -119,9 +119,9 @@ describe CQL::Performance::Config do
 
   describe "block initializer" do
     it "accepts a configuration block" do
-      config = CQL::Performance::Config.new do |c|
-        c.monitoring.enabled = false
-        c.logging.enabled = true
+      config = CQL::Performance::Config.new do |cfg|
+        cfg.monitoring.enabled = false
+        cfg.logging.enabled = true
       end
 
       config.monitoring.enabled?.should be_false
