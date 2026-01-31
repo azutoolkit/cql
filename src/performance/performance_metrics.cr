@@ -343,15 +343,15 @@ module CQL::Performance
     end
 
     # Get summary metrics for quick overview
-    def summary : Hash(String, String | Int32 | Int64 | Float64)
+    def summary : Hash(String, String | Int64 | Float64)
       {
         "total_queries"       => @query_metrics.total_queries,
         "slow_queries"        => @query_metrics.slow_queries,
         "error_rate_percent"  => @query_metrics.error_rate,
         "avg_query_time_ms"   => @query_metrics.avg_execution_time.total_milliseconds,
-        "n_plus_one_patterns" => @n_plus_one_metrics.total_patterns,
+        "n_plus_one_patterns" => @n_plus_one_metrics.total_patterns.to_i64,
         "health_score"        => @health_metrics.overall_health_score.to_s,
-        "total_issues"        => @health_metrics.total_issues,
+        "total_issues"        => @health_metrics.total_issues.to_i64,
         "uptime_seconds"      => @system_metrics.uptime.total_seconds,
       }
     end

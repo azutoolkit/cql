@@ -8,6 +8,7 @@ module CQL::Performance
                               error : String? = nil) : Void
     abstract def statistics
     abstract def slowest_queries(limit : Int32) : Array(QueryData)
+    abstract def stats_trackers : Hash(String, StatsTracker)
     abstract def issues : Array(Issue)
     abstract def clear : Void
   end

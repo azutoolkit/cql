@@ -78,49 +78,64 @@ module CQL::Performance
     property max_time : Time::Span = Time::Span.zero
     property errors : Int64 = 0
 
+    @mutex : Mutex = Mutex.new
+
     def record(duration : Time::Span, error : Bool = false)
-      @total_count += 1
-      @total_time += duration
-      @min_time = [@min_time, duration].min
-      @max_time = [@max_time, duration].max
-      @errors += 1 if error
+      @mutex.synchronize do
+        @total_count += 1
+        @total_time += duration
+        @min_time = [@min_time, duration].min
+        @max_time = [@max_time, duration].max
+        @errors += 1 if error
+      end
     end
 
     def avg_time : Time::Span
+      @mutex.synchronize { unsafe_avg_time }
+    end
+
+    def error_rate : Float64
+      @mutex.synchronize { unsafe_error_rate }
+    end
+
+    def reset
+      @mutex.synchronize do
+        @total_count = 0
+        @total_time = Time::Span.zero
+        @min_time = Time::Span::MAX
+        @max_time = Time::Span.zero
+        @errors = 0
+      end
+    end
+
+    def to_h : Hash(String, String | Int64 | Float64)
+      @mutex.synchronize do
+        {
+          "total_count"   => @total_count,
+          "total_time_ms" => @total_time.total_milliseconds,
+          "avg_time_ms"   => unsafe_avg_time.total_milliseconds,
+          "min_time_ms"   => @min_time == Time::Span::MAX ? 0.0 : @min_time.total_milliseconds,
+          "max_time_ms"   => @max_time.total_milliseconds,
+          "error_count"   => @errors,
+          "error_rate"    => unsafe_error_rate,
+        } of String => String | Int64 | Float64
+      end
+    end
+
+    private def unsafe_avg_time : Time::Span
       return Time::Span.zero if @total_count == 0
       @total_time / @total_count
     end
 
-    def error_rate : Float64
+    private def unsafe_error_rate : Float64
       return 0.0 if @total_count == 0
       (@errors.to_f64 / @total_count) * 100
-    end
-
-    def reset
-      @total_count = 0
-      @total_time = Time::Span.zero
-      @min_time = Time::Span::MAX
-      @max_time = Time::Span.zero
-      @errors = 0
-    end
-
-    def to_h : Hash(String, String | Int64 | Float64)
-      {
-        "total_count"   => @total_count,
-        "total_time_ms" => @total_time.total_milliseconds,
-        "avg_time_ms"   => avg_time.total_milliseconds,
-        "min_time_ms"   => @min_time == Time::Span::MAX ? 0.0 : @min_time.total_milliseconds,
-        "max_time_ms"   => @max_time.total_milliseconds,
-        "error_count"   => @errors,
-        "error_rate"    => error_rate,
-      } of String => String | Int64 | Float64
     end
   end
 
   # Base performance component with common functionality
   abstract class BasePerformanceComponent
     include TimingUtils
-    include SQLUtils
 
     Log = ::Log.for(self)
 
@@ -141,26 +156,47 @@ module CQL::Performance
     @cache : Hash(K, V) = {} of K => V
     @max_size : Int32
     @access_order : Array(K) = [] of K
+    @mutex : Mutex = Mutex.new
 
     def initialize(@max_size : Int32 = 1000)
     end
 
     def get(key : K, &) : V
-      if value = @cache[key]?
-        # Move to end for LRU
-        @access_order.delete(key)
-        @access_order << key
-        value
-      else
-        value = yield
-        set(key, value)
-        value
+      @mutex.synchronize do
+        if value = @cache[key]?
+          # Move to end for LRU
+          @access_order.delete(key)
+          @access_order << key
+          return value
+        end
       end
+
+      value = yield
+
+      @mutex.synchronize do
+        unsafe_set(key, value)
+      end
+
+      value
     end
 
     def set(key : K, value : V) : Void
+      @mutex.synchronize { unsafe_set(key, value) }
+    end
+
+    def clear
+      @mutex.synchronize do
+        @cache.clear
+        @access_order.clear
+      end
+    end
+
+    def size : Int32
+      @mutex.synchronize { @cache.size }
+    end
+
+    private def unsafe_set(key : K, value : V) : Void
       if @cache.size >= @max_size && !@cache.has_key?(key)
-        # Remove least recently used
         if oldest = @access_order.shift?
           @cache.delete(oldest)
         end
@@ -169,15 +205,6 @@ module CQL::Performance
       @cache[key] = value
       @access_order.delete(key)
       @access_order << key
-    end
-
-    def clear
-      @cache.clear
-      @access_order.clear
-    end
-
-    def size : Int32
-      @cache.size
     end
   end
 

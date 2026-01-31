@@ -25,10 +25,14 @@ module CQL::Performance
     @recent_queries : Array(String) = [] of String
     @patterns : Array(NPlusOnePattern) = [] of NPlusOnePattern
     @config : Config::Detection
-    @detection_window : Int32 = 10 # Look at last N queries
+    @detection_window : Int32
+    @mutex : Mutex = Mutex.new
+
+    MAX_PATTERNS = 100
 
     def initialize(@config : Config::Detection = Config::Detection.new)
       super()
+      @detection_window = @config.detection_window
     end
 
     # Direct method call for query recording
@@ -37,66 +41,87 @@ module CQL::Performance
       return if should_ignore?(sql)
 
       normalized = SQLUtils.normalize_sql(sql)
-      @recent_queries << normalized
+      should_log = false
+      log_query = ""
+      log_count = 0
 
-      # Keep window size manageable
-      if @recent_queries.size > @detection_window * 2
-        @recent_queries = @recent_queries.last(@detection_window)
+      @mutex.synchronize do
+        @recent_queries << normalized
+
+        # Keep window size manageable
+        if @recent_queries.size > @detection_window * 2
+          @recent_queries = @recent_queries.last(@detection_window)
+        end
+
+        should_log, log_query, log_count = detect_patterns
       end
 
-      detect_patterns
+      if should_log
+        log_detection(log_query, log_count)
+      end
     end
 
     # Mark relation loading boundaries
     def start_relation_loading(relation_name : String, parent_model : String) : Void
       return unless @enabled
-      # Add marker to help identify relation loading patterns
-      @recent_queries << "-- RELATION START: #{parent_model}.#{relation_name}"
+      @mutex.synchronize do
+        @recent_queries << "-- RELATION START: #{parent_model}.#{relation_name}"
+      end
     end
 
     def end_relation_loading : Void
       return unless @enabled
-      @recent_queries << "-- RELATION END"
+      @mutex.synchronize do
+        @recent_queries << "-- RELATION END"
+      end
     end
 
     # Get detected patterns
     def patterns : Array(NPlusOnePattern)
-      @patterns.dup
+      @mutex.synchronize { @patterns.dup }
     end
 
     # Get performance issues
     def issues : Array(Issue)
-      @patterns.map do |pattern|
-        severity = case pattern.repetition_count
-                   when 2..5   then :low
-                   when 6..20  then :medium
-                   when 21..50 then :high
-                   else             :critical
-                   end
+      @mutex.synchronize do
+        @patterns.map do |pattern|
+          severity = case pattern.repetition_count
+                     when 2..5   then :low
+                     when 6..20  then :medium
+                     when 21..50 then :high
+                     else             :critical
+                     end
 
-        Issue.new(
-          type: :n_plus_one,
-          severity: severity,
-          message: "N+1 pattern detected: Query repeated #{pattern.repetition_count} times",
-          details: {
-            "parent_query"   => SQLUtils.truncate_sql(pattern.parent_query),
-            "repeated_query" => SQLUtils.truncate_sql(pattern.repeated_query),
-            "repetitions"    => pattern.repetition_count.to_s,
-          },
-          timestamp: pattern.timestamp
-        )
+          Issue.new(
+            type: :n_plus_one,
+            severity: severity,
+            message: "N+1 pattern detected: Query repeated #{pattern.repetition_count} times",
+            details: {
+              "parent_query"   => SQLUtils.truncate_sql(pattern.parent_query),
+              "repeated_query" => SQLUtils.truncate_sql(pattern.repeated_query),
+              "repetitions"    => pattern.repetition_count.to_s,
+            },
+            timestamp: pattern.timestamp
+          )
+        end
       end
     end
 
     # Clear all data
     def clear : Void
-      @recent_queries.clear
-      @patterns.clear
-      reset
+      @mutex.synchronize do
+        @recent_queries.clear
+        @patterns.clear
+        reset
+      end
     end
 
-    private def detect_patterns
-      return if @recent_queries.size < @config.threshold + 1
+    private def detect_patterns : Tuple(Bool, String, Int32)
+      should_log = false
+      log_query = ""
+      log_count = 0
+
+      return {false, "", 0} if @recent_queries.size < @config.threshold + 1
 
       # Look for repeated queries in recent window
       last_queries = @recent_queries.last(@detection_window)
@@ -119,21 +144,26 @@ module CQL::Performance
         existing = @patterns.find { |pattern| pattern.repeated_query == query }
         if existing.nil?
           @patterns << NPlusOnePattern.new(parent, query, count)
-          log_detection(query, count) if @config.strict_mode?
+          cleanup_patterns if @patterns.size > MAX_PATTERNS
+          if @config.strict_mode?
+            should_log = true
+            log_query = query
+            log_count = count
+          end
         elsif existing.repetition_count < count
           # Update count if increased
           @patterns.delete(existing)
           @patterns << NPlusOnePattern.new(parent, query, count)
         end
       end
+
+      {should_log, log_query, log_count}
     end
 
     private def find_parent_query(repeated_query : String, queries : Array(String)) : String
-      # Look for query before the first occurrence of repeated query
       first_index = queries.index(repeated_query)
       return "Unknown" unless first_index && first_index > 0
 
-      # Walk back to find non-repeated query
       (first_index - 1).downto(0) do |i|
         query = queries[i]
         next if query == repeated_query || query.starts_with?("-- RELATION")
@@ -146,6 +176,10 @@ module CQL::Performance
     private def should_ignore?(sql : String) : Bool
       normalized = sql.strip.upcase
       @config.ignore_patterns.any? { |pattern| normalized.starts_with?(pattern) }
+    end
+
+    private def cleanup_patterns
+      @patterns = @patterns.last(MAX_PATTERNS)
     end
 
     private def log_detection(query : String, count : Int32)

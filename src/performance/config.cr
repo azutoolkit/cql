@@ -49,6 +49,7 @@ module CQL::Performance
       property threshold : Int32 = 2
       property? strict_mode : Bool = false
       property ignore_patterns : Array(String) = ["COMMIT", "BEGIN", "ROLLBACK"]
+      property detection_window : Int32 = 10
     end
 
     # SQL logging configuration
@@ -152,7 +153,10 @@ module CQL::Performance
     def self.from_env : self
       config = new
 
-      # Override with environment variables if present
+      # Apply environment defaults first
+      config.apply_environment_defaults
+
+      # Then override with explicit environment variables
       if val = ENV["CQL_MONITORING_ENABLED"]?
         config.monitoring.enabled = val.downcase == "true"
       end
@@ -165,7 +169,6 @@ module CQL::Performance
         config.profiling.slow_query_threshold = val.to_i.milliseconds
       end
 
-      config.apply_environment_defaults
       config
     end
 

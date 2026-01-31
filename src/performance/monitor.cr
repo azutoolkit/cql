@@ -13,35 +13,6 @@ require "./interfaces"
 require "../cache/cache_store"
 
 module CQL::Performance
-  # Cache statistics tracker
-  struct CacheStats
-    property hits : Atomic(Int64) = Atomic(Int64).new(0)
-    property misses : Atomic(Int64) = Atomic(Int64).new(0)
-
-    def record_hit
-      @hits.add(1)
-    end
-
-    def record_miss
-      @misses.add(1)
-    end
-
-    def hit_rate : Float64
-      total = total_requests
-      return 0.0 if total == 0
-      (@hits.get.to_f / total) * 100.0
-    end
-
-    def total_requests : Int64
-      @hits.get + @misses.get
-    end
-
-    def clear
-      @hits.set(0)
-      @misses.set(0)
-    end
-  end
-
   # Monitor with dependency injection
   class Monitor
     include TimingUtils
@@ -56,7 +27,6 @@ module CQL::Performance
     @start_time : Time = Time.utc
     @context : String? = nil
     @error_count : Atomic(Int32) = Atomic(Int32).new(0)
-    @cache_stats : CacheStats = CacheStats.new
 
     def initialize(
       config : Config = Config.from_env,
@@ -180,10 +150,6 @@ module CQL::Performance
       @detector
     end
 
-    def cache_stats : CacheStats
-      @cache_stats
-    end
-
     def error_count : Int32
       @error_count.get
     end
@@ -192,7 +158,6 @@ module CQL::Performance
     def clear
       @profiler.try(&.clear)
       @detector.try(&.clear)
-      @cache_stats.clear
       @error_count.set(0)
     end
 
@@ -261,8 +226,8 @@ module CQL::Performance
       all_issues.concat(@profiler.try(&.issues) || [] of Issue)
       all_issues.concat(@detector.try(&.issues) || [] of Issue)
 
-      # Convert stats to StatsTracker format
-      stats = {} of String => StatsTracker
+      # Get stats trackers from profiler
+      stats = @profiler.try(&.stats_trackers) || {} of String => StatsTracker
 
       PerformanceReport.new(
         duration: duration,
@@ -274,8 +239,6 @@ module CQL::Performance
         metadata: {
           "environment"        => ENV["CRYSTAL_ENV"]? || "development",
           "monitoring_enabled" => enabled?.to_s,
-          "cache_hit_rate"     => @cache_stats.hit_rate.round(2).to_s,
-          "cache_requests"     => @cache_stats.total_requests.to_s,
           "error_count"        => @error_count.get.to_s,
         }
       )
@@ -368,7 +331,7 @@ module CQL::Performance
     monitor.metrics
   end
 
-  def self.metrics_summary : Hash(String, String | Int64 | Float64)
+  def self.metrics_summary : Hash(String, String | Int32 | Int64 | Float64)
     monitor.metrics_summary
   end
 

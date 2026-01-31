@@ -21,6 +21,23 @@ module CQL::Performance
                    @issues = [] of Issue, @stats = {} of String => StatsTracker,
                    @metadata = {} of String => String)
     end
+
+    def to_h : Hash(String, JSON::Any)
+      {
+        "timestamp"     => JSON::Any.new(@timestamp.to_rfc3339),
+        "duration_ms"   => JSON::Any.new(@duration.total_milliseconds),
+        "total_queries" => JSON::Any.new(@total_queries.to_i64),
+        "slow_queries"  => JSON::Any.new(@slow_queries.to_i64),
+        "errors"        => JSON::Any.new(@errors.to_i64),
+        "issues"        => JSON::Any.new(@issues.map { |i| JSON::Any.new(i.type.to_s) }),
+        "stats"         => JSON::Any.new(@stats.transform_values { |v| JSON::Any.new(v.to_h.to_json) }),
+        "metadata"      => JSON::Any.new(@metadata.transform_values { |v| JSON::Any.new(v) }),
+      }
+    end
+
+    def to_json : String
+      to_h.to_json
+    end
   end
 
   # Performance issue structure
@@ -242,51 +259,67 @@ module CQL::Performance
   # Console logger formatter with beautiful output
   class ConsoleReportFormatter < ReportFormatter
     def format(report : PerformanceReport) : String
-      # Output directly to console
-      puts ("\n" + "═" * 80).colorize(:cyan)
-      puts "🚀 CQL PERFORMANCE REPORT".colorize(:cyan).bold
-      puts ("═" * 80).colorize(:cyan)
+      String.build do |str|
+        str << ("\n" + "═" * 80).colorize(:cyan).to_s
+        str << "\n"
+        str << "🚀 CQL PERFORMANCE REPORT".colorize(:cyan).bold.to_s
+        str << "\n"
+        str << ("═" * 80).colorize(:cyan).to_s
 
-      puts "\n📊 OVERVIEW".colorize(:blue).bold
-      puts ("─" * 20).colorize(:blue)
-      puts "  ⏰ Generated: #{report.timestamp.to_s.colorize(:white).bold}"
-      puts "  ⚡ Duration: #{format_duration(report.duration).colorize(:green)}"
-      puts "  📈 Total Queries: #{report.total_queries.to_s.colorize(:white).bold}"
-      puts "  🐌 Slow Queries: #{report.slow_queries.to_s.colorize(:yellow)}"
-      puts "  ❌ Errors: #{report.errors.to_s.colorize(:red)}"
+        str << "\n\n"
+        str << "📊 OVERVIEW".colorize(:blue).bold.to_s
+        str << "\n"
+        str << ("─" * 20).colorize(:blue).to_s
+        str << "\n"
+        str << "  ⏰ Generated: #{report.timestamp.to_s.colorize(:white).bold}\n"
+        str << "  ⚡ Duration: #{format_duration(report.duration).colorize(:green)}\n"
+        str << "  📈 Total Queries: #{report.total_queries.to_s.colorize(:white).bold}\n"
+        str << "  🐌 Slow Queries: #{report.slow_queries.to_s.colorize(:yellow)}\n"
+        str << "  ❌ Errors: #{report.errors.to_s.colorize(:red)}\n"
 
-      if report.issues.any?
-        puts "\n⚠️  PERFORMANCE ISSUES".colorize(:red).bold
-        puts ("─" * 25).colorize(:red)
+        if report.issues.any?
+          str << "\n"
+          str << "⚠️  PERFORMANCE ISSUES".colorize(:red).bold.to_s
+          str << "\n"
+          str << ("─" * 25).colorize(:red).to_s
+          str << "\n"
 
-        report.issues.group_by(&.severity).each do |severity, issues|
-          color = severity_color(severity)
-          puts "  #{severity_emoji(severity)} #{severity.to_s.upcase.colorize(color).bold}: #{issues.size.to_s.colorize(color)} issues"
-        end
-
-        puts "\n🔍 DETAILS".colorize(:yellow).bold
-        puts ("─" * 15).colorize(:yellow)
-
-        report.issues.each_with_index do |issue, i|
-          color = severity_color(issue.severity)
-          puts "\n  #{i + 1}. #{severity_emoji(issue.severity)} #{issue.type.to_s.colorize(color).bold}"
-          puts "     #{"Message:".colorize(:cyan)} #{issue.message}"
-          issue.details.each do |key, value|
-            puts "     #{(key + ":").colorize(:cyan)} #{value}"
+          report.issues.group_by(&.severity).each do |severity, issues|
+            color = severity_color(severity)
+            str << "  #{severity_emoji(severity)} #{severity.to_s.upcase.colorize(color).bold}: #{issues.size.to_s.colorize(color)} issues\n"
           end
+
+          str << "\n"
+          str << "🔍 DETAILS".colorize(:yellow).bold.to_s
+          str << "\n"
+          str << ("─" * 15).colorize(:yellow).to_s
+          str << "\n"
+
+          report.issues.each_with_index do |issue, i|
+            color = severity_color(issue.severity)
+            str << "\n  #{i + 1}. #{severity_emoji(issue.severity)} #{issue.type.to_s.colorize(color).bold}\n"
+            str << "     #{"Message:".colorize(:cyan)} #{issue.message}\n"
+            issue.details.each do |key, value|
+              str << "     #{(key + ":").colorize(:cyan)} #{value}\n"
+            end
+          end
+        else
+          str << "\n"
+          str << "✅ EXCELLENT PERFORMANCE!".colorize(:green).bold.to_s
+          str << "\n"
+          str << ("─" * 30).colorize(:green).to_s
+          str << "\n"
+          str << "  🎉 No performance issues detected\n"
+          str << "  🚀 Your queries are running smoothly\n"
         end
-      else
-        puts "\n✅ EXCELLENT PERFORMANCE!".colorize(:green).bold
-        puts ("─" * 30).colorize(:green)
-        puts "  🎉 No performance issues detected"
-        puts "  🚀 Your queries are running smoothly"
+
+        str << "\n"
+        str << ("═" * 80).colorize(:cyan).to_s
+        str << "\n"
+        str << "🔧 Report generated at #{Time.utc.to_s("%H:%M:%S")}".colorize(:cyan).to_s
+        str << "\n"
+        str << ("═" * 80 + "\n").colorize(:cyan).to_s
       end
-
-      puts ("\n" + "═" * 80).colorize(:cyan)
-      puts "🔧 Report generated at #{Time.utc.to_s("%H:%M:%S")}".colorize(:cyan)
-      puts ("═" * 80 + "\n").colorize(:cyan)
-
-      "" # Return empty string since we printed to console
     end
 
     private def severity_color(severity : Symbol) : Symbol
