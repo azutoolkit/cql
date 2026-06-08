@@ -127,6 +127,23 @@ end
 
 ## Schema Errors
 
+### SchemaMappingError
+
+Raised when strict schema mapping validation is enabled and a model getter type does not match the schema column type.
+
+Enable strict validation with:
+
+```bash
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
+```
+
+**Common causes:**
+- Model property type differs from the column type in `CQL::Schema.define`
+- `db_context` points at the wrong table
+- A schema was changed but the model was not updated
+
+**Solution:** Update the model property type or the schema column type so they agree.
+
 ### TableNotFound
 
 Raised when referencing a table that doesn't exist.
@@ -138,6 +155,33 @@ Raised when referencing a table that doesn't exist.
 Raised when referencing a column that doesn't exist.
 
 **Solution:** Check column name spelling and run migrations.
+
+## Compile-Time Association Errors
+
+### CQL belongs_to error
+
+Raised at compile time when a `belongs_to` declaration is malformed or type-unsafe.
+
+**Common causes:**
+- Association name is not a symbol literal
+- Foreign key is not a symbol literal
+- The model does not define the foreign key getter/property
+- Foreign key type does not match the target model primary key type
+
+**Solution:** Add a typed foreign key property and make it match the target model primary key type.
+
+### CQL has_many error
+
+Raised at compile time when a `has_many` declaration is malformed or type-unsafe.
+
+**Common causes:**
+- Association name is not a symbol literal
+- `foreign_key` is not a symbol literal
+- `dependent` option is unsupported
+- Target model does not define the foreign key getter/property
+- Target foreign key type does not match the parent model primary key type
+
+**Solution:** Add the target foreign key property and make it match the parent model primary key type.
 
 ## Configuration Errors
 

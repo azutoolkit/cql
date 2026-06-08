@@ -29,8 +29,42 @@ module CQL::ActiveRecord::Relations
     # end
     # ```
     macro has_many(name, type, foreign_key = nil, dependent = :nullify, inverse_of = nil, scope = nil)
+      {% valid_dependents = %w(destroy delete_all nullify restrict_with_error) %}
+      {% unless name.is_a?(SymbolLiteral) %}
+        {{ raise "CQL has_many error in #{@type}: association name must be a symbol literal, for example `has_many :posts, Post`." }}
+      {% end %}
+      {% unless foreign_key == nil || foreign_key.is_a?(SymbolLiteral) %}
+        {{ raise "CQL has_many error in #{@type}: foreign_key must be a symbol literal, for example `has_many :posts, Post, foreign_key: :user_id`." }}
+      {% end %}
+      {% unless dependent.is_a?(SymbolLiteral) && valid_dependents.includes?(dependent.id.stringify) %}
+        {{ raise "CQL has_many error in #{@type}: unsupported dependent option `#{dependent}`. Supported options: #{valid_dependents.join(", ")}." }}
+      {% end %}
+
       # Determine foreign key name if not provided
       {% fk = foreign_key || "#{@type.name.underscore.id}_id".id %}
+
+      module ::CQL::ActiveRecord::AssociationRegistry::{{@type.name.gsub(/::/, "__").id}}__has_many__{{name.id}}
+        KIND = :has_many
+        OWNER = {{@type}}
+        TARGET = {{type}}
+        ASSOCIATION = {{name}}
+        FOREIGN_KEY = {{fk}}
+      end
+
+      {% if target_model = type.resolve? %}
+        {% parent_id_getter = @type.methods.find { |method| method.name == "id!" && method.args.empty? } %}
+        {% target_fk_getter = target_model.methods.find { |method| method.name == fk.id.stringify && method.args.empty? } %}
+        {% unless target_fk_getter %}
+          {{ raise "CQL has_many error in #{@type}: target model #{type} does not define foreign key `#{fk}`. Add a typed getter/property to #{type}, for example `property #{fk} : #{parent_id_getter ? parent_id_getter.return_type : "ParentPk"}?`." }}
+        {% end %}
+        {% if parent_id_getter %}
+          {% fk_type = target_fk_getter.return_type.stringify.split("|").map(&.strip).reject { |part| part == "Nil" || part == "::Nil" }.join(" | ") %}
+          {% pk_type = (@type.constant(:CQL_PRIMARY_KEY_TYPE) || parent_id_getter.return_type).stringify.split("|").map(&.strip).reject { |part| part == "Nil" || part == "::Nil" }.join(" | ") %}
+          {% unless fk_type == pk_type %}
+            {{ raise "CQL has_many error in #{@type}: target foreign key #{type}##{fk.id} type " + fk_type + " does not match #{@type}.id! primary key type " + pk_type + ". Change `#{fk}` to " + pk_type + " or update the parent model primary key type." }}
+          {% end %}
+        {% end %}
+      {% end %}
 
       # Define an instance variable to memoize the collection
       @[DB::Field(ignore: true)]

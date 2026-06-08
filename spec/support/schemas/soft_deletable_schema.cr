@@ -4,7 +4,7 @@ require "../../spec_helper"
 SoftDeletableDB = CQL::Schema.define(
   :soft_deletable_database,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://spec/support/db/soft_deletable_spec.db"
+  uri: spec_sqlite_uri("soft_deletable_spec.db")
 ) do
   table :users do
     primary :id, Int32

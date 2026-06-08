@@ -7,6 +7,7 @@ require "ulid"
 require "uuid"
 require "./ulid_compat"
 require "colorize"
+require "./compat"
 
 require "./expression"
 require "./exceptions"

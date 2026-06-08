@@ -36,7 +36,7 @@ module CQL
       @access_order = [] of String # Track access order for O(1) LRU eviction
       @tag_index = {} of String => Set(String)
       @version_store = {} of String => Int64
-      @mutex = Mutex.new
+      @mutex = CQL::Compat::Mutex.new
       @max_size : Int32?
       @stats = {
         "hits"      => 0_i64,

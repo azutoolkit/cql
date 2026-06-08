@@ -4,7 +4,7 @@ require "./spec_helper"
 PersistenceTestDB = CQL::Schema.define(
   :persistence_test_db,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3:./spec/support/db/persistence_spec.db"
+  uri: spec_sqlite_uri("persistence_spec.db")
 ) do
   table :persistence_users do
     primary :id, Int64, auto_increment: true

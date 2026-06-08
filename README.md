@@ -23,6 +23,9 @@ A high-performance, type-safe ORM for Crystal applications that combines compile
 ### Type Safety
 
 - Catch errors at compile time - invalid queries fail before deployment
+- Compile-time relationship integrity checks for `belongs_to` and `has_many`
+- Foreign-key/primary-key mismatches fail with clear CQL errors, including forward-declared target models
+- Optional strict schema/model mapping validation for production boot checks
 - Full IDE autocompletion support for queries and relationships
 - Safe refactoring - rename columns/tables with confidence
 - No runtime surprises - association errors caught early
@@ -39,7 +42,8 @@ A high-performance, type-safe ORM for Crystal applications that combines compile
 - **Type-Safe ORM**: Leverage Crystal's static type system for compile-time safety
 - **High Performance**: 4x faster than traditional ORMs with compile-time optimizations
 - **Active Record Pattern**: Intuitive Active Record API with full CRUD operations
-- **Smart Relationships**: Support for `belongs_to`, `has_one`, `has_many`, and `many_to_many` with automatic N+1 prevention
+- **Smart Relationships**: Support for `belongs_to`, `has_one`, `has_many`, and `many_to_many` with compile-time FK/PK validation and automatic N+1 prevention
+- **Schema Mapping Guardrails**: Opt-in validation checks model getter types against schema column types at application boot
 - **Comprehensive Validations**: Built-in validation system with custom validator support
 - **Lifecycle Callbacks**: Before/after hooks for validation, save, create, update, and destroy
 - **Intelligent Migrations**: Schema evolution tools with automatic rollback support
@@ -71,6 +75,37 @@ Real-world benchmarks (1M records, complex queries):
 | **PostgreSQL** | Full          | JSONB, Arrays, Advanced Types     |
 | **MySQL**      | Full          | Complete MySQL support            |
 | **SQLite**     | Full          | Perfect for development & testing |
+
+## Safety Guardrails
+
+CQL validates relationship declarations during compilation. If a relation points at an incompatible key type, compilation fails with a CQL-specific error instead of a deep Crystal macro stack:
+
+```crystal
+class User
+  include CQL::ActiveRecord::Model(Int64)
+end
+
+class Post
+  include CQL::ActiveRecord::Model(Int32)
+
+  property user_id : Int32?
+
+  # Compile-time error:
+  # CQL belongs_to error in Post: foreign key `:user_id` type Int32
+  # does not match User.id! primary key type Int64.
+  belongs_to :user, User, :user_id
+end
+```
+
+The check also works when the associated model is defined later in the program, as long as it is required before compilation finishes.
+
+For stricter deployment checks, enable schema mapping validation:
+
+```bash
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
+```
+
+When enabled, CQL compares model getter types with the table metadata from `db_context` and raises a clear `CQL schema mapping error` for mismatches. This mode is opt-in so existing applications can intentionally omit database columns from models or use nilable transient fields before persistence.
 
 ## Installation
 

@@ -1,7 +1,7 @@
 TableDB = CQL::Schema.define(
   name: :tabledb,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://spec/support/db/tabledb.db") do
+  uri: spec_sqlite_uri("tabledb.db")) do
   table :customers do
     primary :id, Int32
     column :name, String

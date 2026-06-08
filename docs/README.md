@@ -106,6 +106,8 @@ puts "Created user #{user.id}: #{user.name}"
 ## Key Features
 
 - **Type Safety** - Catch errors at compile time
+- **Relationship Integrity** - Validate `belongs_to` and `has_many` foreign-key/primary-key types during compilation
+- **Schema Mapping Checks** - Opt-in boot validation for model getter types against schema columns
 - **Multiple Databases** - PostgreSQL, MySQL, SQLite
 - **Active Record** - Familiar patterns for rapid development
 - **Migrations** - Version-controlled schema changes

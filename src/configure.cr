@@ -1,5 +1,6 @@
 require "log"
 require "mutex"
+require "./compat"
 require "./migrations"
 require "./cache/*"
 require "./configure/*"
@@ -35,7 +36,7 @@ module CQL
   # ```
   module Configure
     # Thread-safe mutex for configuration access
-    @@config_mutex = Mutex.new
+    @@config_mutex = CQL::Compat::Mutex.new
     @@config_instance : Config? = nil
 
     # 🎯 Main configuration class - optimized for developer experience

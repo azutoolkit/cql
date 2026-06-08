@@ -26,7 +26,7 @@ module CQL::Performance
     @patterns : Array(NPlusOnePattern) = [] of NPlusOnePattern
     @config : Config::Detection
     @detection_window : Int32
-    @mutex : Mutex = Mutex.new
+    @mutex : CQL::Compat::Mutex = CQL::Compat::Mutex.new
 
     MAX_PATTERNS = 100
 

@@ -31,7 +31,7 @@ module CQL
 
       @cache = {} of String => QueryCacheEntry
       @request_id : String?
-      @mutex = Mutex.new
+      @mutex = CQL::Compat::Mutex.new
       @max_size : Int32
       @enabled : Bool = true
       @stats = {

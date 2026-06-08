@@ -217,6 +217,12 @@ module CQL
       end
 
       macro validate(attribute, **options)
+        {% valid_predicates = %w(eq exclude gt gte in lt lte match size presence required confirmation accept) %}
+        {% for predicate, expected_value in options %}
+          {% unless ["message", "on"].includes?(predicate.stringify) || valid_predicates.includes?(predicate.stringify) %}
+            {{ raise "CQL validation error in #{@type}: unsupported predicate `#{predicate}` for `#{attribute}`. Supported predicates: #{valid_predicates.join(", ")}." }}
+          {% end %}
+        {% end %}
         {% SCHEMA_VALIDATIONS[attribute] = options %}
       end
 
@@ -228,6 +234,18 @@ module CQL
 
       macro create_validator
         {% type_validator = @type %}
+        {% for name, options in type_validator.constant(:SCHEMA_VALIDATIONS) %}
+          {% unless type_validator.methods.any? { |method| method.name == name.id.stringify } %}
+            {{ raise "CQL validation error in #{type_validator}: unknown attribute `#{name}`. Define a readable property or getter for `#{name}` before calling `validate :#{name}`." }}
+          {% end %}
+          {% for predicate, expected_value in options %}
+            {% if predicate.stringify == "confirmation" %}
+              {% unless type_validator.methods.any? { |method| method.name == expected_value.id.stringify } %}
+                {{ raise "CQL validation error in #{type_validator}: confirmation target `#{expected_value}` for `#{name}` does not exist. Define a readable property or getter for `#{expected_value}` before the validation." }}
+              {% end %}
+            {% end %}
+          {% end %}
+        {% end %}
 
         class Validator
           def self.validate(instance : {{type_validator}}, context = nil)

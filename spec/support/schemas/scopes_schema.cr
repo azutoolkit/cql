@@ -3,7 +3,7 @@ module MyApp
   DB = CQL::Schema.define(
     name: :scopes_spec_my_app,
     adapter: CQL::Adapter::SQLite,
-    uri: "sqlite3://spec/support/db/scopes_spec.db") do
+    uri: spec_sqlite_uri("scopes_spec.db")) do
     table :scopes_posts do
       primary :id, Int64
       varchar :title

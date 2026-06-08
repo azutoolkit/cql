@@ -86,6 +86,31 @@ user.posts.all
 post.user
 ```
 
+Relationship declarations are compile-time checked. `belongs_to` and `has_many` raise CQL-specific compile errors when foreign-key and primary-key types do not match:
+
+```crystal
+class User
+  include CQL::ActiveRecord::Model(Int64)
+end
+
+class Post
+  include CQL::ActiveRecord::Model(Int32)
+
+  property user_id : Int32?
+
+  # Compile-time error: user_id must match User's Int64 primary key.
+  belongs_to :user, User, :user_id
+end
+```
+
+## Schema Mapping Validation
+
+```bash
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
+```
+
+When enabled, CQL checks model getter types against the schema table bound with `db_context` and raises `CQL schema mapping error` for mismatches.
+
 ## Validations
 
 ```crystal

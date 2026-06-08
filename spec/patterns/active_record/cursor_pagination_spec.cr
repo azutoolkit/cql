@@ -6,7 +6,7 @@ require "../../spec_helper"
 CursorPaginationDB = CQL::Schema.define(
   :cursor_pagination_db,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://./spec/support/db/cursor_pagination.db"
+  uri: spec_sqlite_uri("cursor_pagination.db")
 ) do
   table :cursor_test_records do
     primary :id, Int64, auto_increment: true

@@ -37,7 +37,7 @@ module CQL::Performance
     @slow_queries : Array(QueryData) = [] of QueryData
     @slow_queries_sorted : Array(QueryData)? = nil
     @config : Config::Profiling
-    @mutex : Mutex = Mutex.new
+    @mutex : CQL::Compat::Mutex = CQL::Compat::Mutex.new
 
     MAX_SLOW_QUERIES = 1000
 

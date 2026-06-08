@@ -78,6 +78,22 @@ end
 - `belongs_to`: The model has a foreign key column (e.g., Comment has `post_id`)
 - `has_many`: The other model has the foreign key (e.g., Post has many Comments)
 
+### Why does my relationship fail at compile time?
+
+CQL validates relationship metadata during compilation. A `belongs_to` or `has_many` declaration fails if the foreign key is missing, the macro arguments are malformed, or the foreign key type does not match the related model's primary key type.
+
+For example, a `Post` with `property user_id : Int32?` cannot belong to a `User` that includes `CQL::ActiveRecord::Model(Int64)`. Change the foreign key to `Int64?` or change the related model primary key type.
+
+### How do I check model/schema type drift?
+
+Enable strict schema mapping validation during CI, staging, or application boot:
+
+```bash
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
+```
+
+This compares model getter types with the schema table configured by `db_context` and raises a clear `CQL schema mapping error` if they differ.
+
 ### How do I eager load associations?
 
 Load related IDs first, then batch load:

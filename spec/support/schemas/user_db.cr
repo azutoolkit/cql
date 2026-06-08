@@ -2,7 +2,7 @@
 UserDB = CQL::Schema.define(
   :data,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://spec/support/db/user_db.db") do
+  uri: spec_sqlite_uri("user_db.db")) do
   table :users do
     primary :id, Int32
     column :name, String, null: true

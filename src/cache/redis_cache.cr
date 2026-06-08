@@ -15,7 +15,7 @@ module CQL
         "deletes"   => 0_i64,
         "evictions" => 0_i64,
       }
-      @mutex = Mutex.new
+      @mutex = CQL::Compat::Mutex.new
 
       # Configuration for Redis connection
       class Config

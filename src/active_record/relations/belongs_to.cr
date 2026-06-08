@@ -24,6 +24,36 @@ module CQL::ActiveRecord::Relations
     # end
     # ```
     macro belongs_to(assoc, klass, foreign_key, optional = true, cache = true)
+      {% unless assoc.is_a?(SymbolLiteral) %}
+        {{ raise "CQL belongs_to error in #{@type}: association name must be a symbol literal, for example `belongs_to :user, User, :user_id`." }}
+      {% end %}
+      {% unless foreign_key.is_a?(SymbolLiteral) %}
+        {{ raise "CQL belongs_to error in #{@type}: foreign_key must be a symbol literal, for example `belongs_to :user, User, :user_id`." }}
+      {% end %}
+
+      module ::CQL::ActiveRecord::AssociationRegistry::{{@type.name.gsub(/::/, "__").id}}__belongs_to__{{assoc.id}}
+        KIND = :belongs_to
+        OWNER = {{@type}}
+        TARGET = {{klass}}
+        ASSOCIATION = {{assoc}}
+        FOREIGN_KEY = {{foreign_key}}
+      end
+
+      {% if target_model = klass.resolve? %}
+        {% fk_getter = @type.methods.find { |method| method.name == foreign_key.id.stringify && method.args.empty? } %}
+        {% unless fk_getter %}
+          {{ raise "CQL belongs_to error in #{@type}: foreign key `#{foreign_key}` is not defined. Add a typed getter/property before the association, for example `property #{foreign_key.id} : #{klass}.id_type?`." }}
+        {% end %}
+        {% target_id_getter = target_model.methods.find { |method| method.name == "id!" && method.args.empty? } %}
+        {% if target_id_getter %}
+          {% fk_type = fk_getter.return_type.stringify.split("|").map(&.strip).reject { |part| part == "Nil" || part == "::Nil" }.join(" | ") %}
+          {% pk_type = (target_model.constant(:CQL_PRIMARY_KEY_TYPE) || target_id_getter.return_type).stringify.split("|").map(&.strip).reject { |part| part == "Nil" || part == "::Nil" }.join(" | ") %}
+          {% unless fk_type == pk_type %}
+            {{ raise "CQL belongs_to error in #{@type}: foreign key `#{foreign_key}` type " + fk_type + " does not match #{klass}.id! primary key type " + pk_type + ". Change `#{foreign_key}` to " + pk_type + " or update the target model primary key type." }}
+          {% end %}
+        {% end %}
+      {% end %}
+
       # Cache variable for the associated record (if caching enabled)
       {% if cache %}
         @[DB::Field(ignore: true)]
@@ -84,12 +114,12 @@ module CQL::ActiveRecord::Relations
             @{{foreign_key.id}} = nil
           else
             ensure_persisted(record)
-            @{{foreign_key.id}} = safe_id(record, Int32)
+            @{{foreign_key.id}} = safe_id(record, typeof(record.id!))
           end
         {% else %}
           # For non-optional associations, record cannot be nil
           ensure_persisted(record)
-          @{{foreign_key.id}} = safe_id(record, Int32)
+          @{{foreign_key.id}} = safe_id(record, typeof(record.id!))
         {% end %}
 
         {% if cache %}
@@ -142,7 +172,8 @@ module CQL::ActiveRecord::Relations
         {% end %}
 
         result = safe_db_operation do
-          record_id = safe_id(current_record{% unless optional %}.not_nil!{% end %}, Int32)
+          record = current_record{% unless optional %}.not_nil!{% end %}
+          record_id = safe_id(record, typeof(record.id!))
           {{klass.id}}.delete!(record_id).rows_affected > 0
         end
 

@@ -641,7 +641,7 @@ module CQL
     # Generates the SQL to create the table.
     # Includes column definitions and foreign key constraints.
     def create_sql
-      Expression::CreateTable.new(self).accept(schema.gen).to_s
+      Expression::CreateTable.new(self).accept(schema.new_generator).to_s
     end
 
     # Generates the SQL to drop the table.
@@ -658,7 +658,7 @@ module CQL
     # => "DROP TABLE users;"
     # ```
     def drop_sql
-      Expression::DropTable.new(self).accept(schema.gen).to_s
+      Expression::DropTable.new(self).accept(schema.new_generator).to_s
     end
 
     # Generates the SQL to truncate the table.
@@ -672,7 +672,7 @@ module CQL
     # => "TRUNCATE TABLE users;"
     # ```
     def truncate_sql
-      Expression::TruncateTable.new(self).accept(schema.gen).to_s
+      Expression::TruncateTable.new(self).accept(schema.new_generator).to_s
     end
 
     # Creates the table in the database.

@@ -5,8 +5,8 @@ require "../spec_helper"
 
 PostgresUuidDB = CQL::Schema.define(
   :postgres_uuid_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]? || "postgres://localhost/cql_test"
+  adapter: postgres_available? ? CQL::Adapter::Postgres : CQL::Adapter::SQLite,
+  uri: postgres_available? ? postgres_database_url : "sqlite3:///tmp/cql_postgres_uuid_fallback.db"
 ) do
   table :postgres_uuid_sessions do
     primary :id, String, auto_increment: false
@@ -29,17 +29,23 @@ class PostgresUuidSession
 end
 
 describe "PostgreSQL UUID Primary Keys" do
+  before_each do
+    require_postgres!
+  end
+
   before_all do
-    PostgresUuidDB.postgres_uuid_sessions.drop!
-    PostgresUuidDB.postgres_uuid_sessions.create!
+    if postgres_available?
+      PostgresUuidDB.postgres_uuid_sessions.drop!
+      PostgresUuidDB.postgres_uuid_sessions.create!
+    end
   end
 
   after_all do
-    PostgresUuidDB.postgres_uuid_sessions.drop!
+    PostgresUuidDB.postgres_uuid_sessions.drop! if postgres_available?
   end
 
   after_each do
-    PostgresUuidSession.delete_all
+    PostgresUuidSession.delete_all if postgres_available?
   end
 
   describe "CREATE operations" do

@@ -1,3 +1,5 @@
+require "../compat"
+
 module CQL
   module Cache
     # Interface defining the contract for cache implementations

@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migration system with rollback support
 - Support for Active Record, Repository, and Data Mapper patterns
 - Full support for PostgreSQL, MySQL, and SQLite
+- Compile-time FK/PK validation for `belongs_to` and `has_many`, including associations whose target model is defined later in the program
+- Opt-in schema mapping validation via `CQL_VALIDATE_SCHEMA_MAPPINGS=1`
 - **New API methods for consistency (v0.0.436+)**:
   - `Query#get!` - Raises exception if scalar value not found (matches `first!` pattern)
   - `Query#where_null(field)` - Explicit IS NULL condition for better clarity
@@ -37,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Modernized configuration API with smart defaults
 - Improved connection pool management
 - Better type safety through Crystal's type system
+- Clearer CQL-specific compile-time errors for malformed relationship macros
 
 ### Deprecated
 

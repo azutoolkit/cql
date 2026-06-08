@@ -198,19 +198,20 @@ describe "CQL Advanced Caching" do
   end
 
   describe "VersionInvalidation" do
-    strategy = CQL::Cache::VersionInvalidation.new
-
     it "generates version metadata" do
+      strategy = CQL::Cache::VersionInvalidation.new
       metadata = strategy.generate_metadata("key1")
       metadata["version"].should eq("0") # Initial version
     end
 
     it "doesn't invalidate current version" do
+      strategy = CQL::Cache::VersionInvalidation.new
       metadata = strategy.generate_metadata("key1")
       strategy.should_invalidate?("key1", metadata).should be_false
     end
 
     it "invalidates old versions" do
+      strategy = CQL::Cache::VersionInvalidation.new
       # Get initial metadata
       metadata = strategy.generate_metadata("key1")
 

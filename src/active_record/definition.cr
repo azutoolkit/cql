@@ -23,6 +23,15 @@ module CQL
           @@table = table
         end
 
+        {% verbatim do %}
+          macro db_context(schema, table)
+            CQL_SCHEMA_CONTEXT = {{schema}}
+            CQL_TABLE_NAME = {{table}}
+
+            self.db_context({{schema}}, {{table}})
+          end
+        {% end %}
+
         # Return the schema for the model
         # - **@return** [CQL::Schema] The schema
         #
@@ -94,6 +103,38 @@ module CQL
           instance.attributes(hash_attrs) if instance.responds_to?(:attributes)
           instance
         end
+
+        {% verbatim do %}
+          macro finished
+            {% if schema = @type.constant(:CQL_SCHEMA_CONTEXT) %}
+              {% table = @type.constant(:CQL_TABLE_NAME) %}
+              {% getter_types = {} of String => String %}
+              {% for method in @type.methods %}
+                {% if method.args.empty? && !method.name.ends_with?("=") && method.return_type %}
+                  {% if method.name == "id" && @type.constant(:CQL_PRIMARY_KEY_TYPE) %}
+                    {% return_type = @type.constant(:CQL_PRIMARY_KEY_TYPE).stringify + " | ::Nil" %}
+                  {% else %}
+                    {% return_type = method.return_type.stringify %}
+                  {% end %}
+                  {% getter_types[method.name] = return_type %}
+                {% end %}
+              {% end %}
+
+              if ENV["CQL_VALIDATE_SCHEMA_MAPPINGS"]? == "1"
+                CQL::ActiveRecord::SchemaValidator.validate_model!(
+                  {{@type.name.stringify}},
+                  {{schema}},
+                  {{table}},
+                  {
+                    {% for name, type in getter_types %}
+                      {{name.stringify}} => {{type}},
+                    {% end %}
+                  } of String => String
+                )
+              end
+            {% end %}
+          end
+        {% end %}
       end
     end
   end

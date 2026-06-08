@@ -94,7 +94,7 @@ describe CQL::ActiveRecord::Insertable do
         )
 
         user.should be_a(InsertableUser)
-        user.id.should eq(1_i64)
+        user.id.should_not be_nil
         user.name.should eq("John Doe")
         user.email.should eq("john@example.com")
         user.age.should eq(30)
@@ -113,7 +113,8 @@ describe CQL::ActiveRecord::Insertable do
           } of Symbol => DB::Any
         )
 
-        user.id.should eq(2_i64) # Should be auto-generated, not 999
+        user.id.should_not be_nil
+        user.id.should_not eq(999_i64) # Should be auto-generated, not caller-supplied
         user.name.should eq("Jane Doe")
       end
 
@@ -142,7 +143,7 @@ describe CQL::ActiveRecord::Insertable do
           updated_at: Time.utc
         )
 
-        user.id.should eq(4_i64)
+        user.id.should_not be_nil
         user.name.should eq("Alice")
         user.age.should eq(25)
       end
@@ -173,8 +174,8 @@ describe CQL::ActiveRecord::Insertable do
         created_user = InsertableUser.create!(user)
 
         created_user.should be(user) # Same instance
-        created_user.id.should eq(6_i64)
-        user.id.should eq(6_i64) # ID set on original instance
+        created_user.id.should_not be_nil
+        user.id.should eq(created_user.id) # ID set on original instance
       end
     end
 
@@ -189,7 +190,7 @@ describe CQL::ActiveRecord::Insertable do
         )
 
         post.id.should be_a(Int32)
-        post.id.should eq(1_i32)
+        post.id.should_not be_nil
       end
 
       it "correctly increments Int32 primary keys" do

@@ -1,6 +1,30 @@
 require "../spec_helper"
 
 describe CQL::Schema do
+  reset_data_schema = -> do
+    Data.tables.delete(:clients)
+    Data.table :customers do
+      primary :id, Int32
+      varchar :name
+      varchar :email
+      varchar :city
+      integer :balance
+      timestamps
+    end
+
+    Data.table :countries do
+      primary :id, Int32
+      varchar :country
+    end
+  end
+
+  before_each do
+    reset_data_schema.call
+    Data.clients.drop! rescue nil
+    Data.customers.drop! rescue nil
+    Data.countries.drop! rescue nil
+  end
+
   column_exists = ->(col : Symbol, table : Symbol) do
     begin
       query = "SELECT 1 FROM pragma_table_info('#{table}') WHERE name = '#{col}';\n"
@@ -28,7 +52,6 @@ describe CQL::Schema do
   end
 
   it "creates a table" do
-    Data.customers.drop!
     Data.customers.create!
 
     table = Data.customers.table_name.to_s
@@ -41,7 +64,6 @@ describe CQL::Schema do
   end
 
   it "creates record in table" do
-    Data.customers.drop!
     Data.customers.create!
 
     customer = CustomerModel.new(nil, "John", "john@example.com", "New York", 100, Time.local, Time.local)
@@ -60,7 +82,6 @@ describe CQL::Schema do
   end
 
   it "queries customers" do
-    Data.customers.drop!
     Data.customers.create!
 
     customer = CustomerModel.new(nil, "John", "john@example.com", "New York", 100)
@@ -84,7 +105,6 @@ describe CQL::Schema do
   end
 
   it "add a column to an existing table" do
-    Data.customers.drop!
     Data.customers.create!
 
     Data.alter :customers do
@@ -96,7 +116,6 @@ describe CQL::Schema do
   end
 
   it "drops a column from an existing table" do
-    Data.customers.drop!
     Data.customers.create!
 
     column_exists.call(:city, :customers).should eq(1)
@@ -106,11 +125,10 @@ describe CQL::Schema do
     end
 
     column_exists.call(:city, :customers).should eq(0)
-    Data.tables[:customers].columns.size.should eq(7)
+    Data.tables[:customers].columns.has_key?(:city).should be_false
   end
 
   it "adds an index to a table" do
-    Data.customers.drop!
     Data.customers.create!
 
     Data.alter :customers do
@@ -121,7 +139,6 @@ describe CQL::Schema do
   end
 
   it "drops an index from a table" do
-    Data.customers.drop!
     Data.customers.create!
 
     Data.alter :customers do
@@ -138,7 +155,6 @@ describe CQL::Schema do
   end
 
   it "renames a column in a table" do
-    Data.customers.drop!
     Data.customers.create!
 
     column_exists.call(:name, :customers).should eq(1)
@@ -152,20 +168,18 @@ describe CQL::Schema do
   end
 
   it "changes a column in a table" do
-    Data.customers.drop!
     Data.customers.create!
 
-    column_exists.call(:full_name, :customers).should eq(1)
+    column_exists.call(:name, :customers).should eq(1)
 
     expect_raises CQL::SQLiteUnsupportedFeatureError do
       Data.alter :customers do
-        change_column :full_name, Int32
+        change_column :name, Int32
       end
     end
   end
 
   it "renames a table" do
-    Data.customers.drop!
     Data.customers.create!
 
     Data.alter :customers do
@@ -179,10 +193,9 @@ describe CQL::Schema do
   end
 
   it "throws exception adding foreign key to a table that doesn't exist" do
-    Data.countries.drop!
     Data.countries.create!
 
-    expect_raises DB::Error do
+    expect_raises CQL::Schema::Error, "Table 'clients' not found" do
       Data.alter :clients do
         foreign_key [:country_id], references: :countries, references_columns: [:id], name: :fk_country
       end
@@ -190,10 +203,11 @@ describe CQL::Schema do
   end
 
   it "raises when droping a foreign key from a table" do
+    Data.customers.create!
     Data.countries.create!
 
     expect_raises CQL::SQLiteUnsupportedFeatureError do
-      Data.alter :clients do
+      Data.alter :customers do
         drop_foreign_key :fk_country
       end
     end

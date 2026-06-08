@@ -36,7 +36,7 @@ module CQL
     # Uses version numbers to invalidate cache entries
     class VersionInvalidation < InvalidationStrategy
       @version_store = {} of String => Int64
-      @mutex = Mutex.new
+      @mutex = CQL::Compat::Mutex.new
 
       def should_invalidate?(key : String, metadata : Hash(String, String)) : Bool
         return true unless cached_version_str = metadata["version"]?
@@ -79,7 +79,7 @@ module CQL
     class TransactionAwareInvalidation
       @pending_invalidations = Set(String).new
       @pending_tag_invalidations = Set(String).new
-      @mutex = Mutex.new
+      @mutex = CQL::Compat::Mutex.new
       @base_strategy : InvalidationStrategy
 
       def initialize(@base_strategy : InvalidationStrategy)

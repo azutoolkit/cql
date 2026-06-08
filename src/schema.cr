@@ -67,7 +67,7 @@ module CQL
 
     # Fiber-local connection storage for thread-safe transaction handling
     @fiber_connections = {} of Fiber => DB::Connection
-    @fiber_mutex = Mutex.new
+    @fiber_mutex = CQL::Compat::Mutex.new
 
     # Creates a new expression generator for thread-safe SQL generation.
     # Each call returns a fresh Generator instance to avoid state corruption

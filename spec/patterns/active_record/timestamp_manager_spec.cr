@@ -6,7 +6,7 @@ require "../../../src/active_record/timestamp_manager"
 TestTimestampDB = CQL::Schema.define(
   :test_timestamp_db,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3:./spec/support/db/timestamp_manager_spec.db"
+  uri: spec_sqlite_uri("timestamp_manager_spec.db")
 ) do
   table :articles do
     primary

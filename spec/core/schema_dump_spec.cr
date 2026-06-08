@@ -3,10 +3,9 @@ require "../spec_helper"
 describe CQL::SchemaDump do
   describe "SQLite schema dumping" do
     it "can dump a SQLite database schema" do
-      # Use the existing UserDB test database
       UserDB.build # Make sure the database exists
 
-      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://spec/support/db/user_db.db")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, spec_sqlite_uri("user_db.db"))
 
       # Generate schema content
       schema_content = dumper.generate_schema_content(:TestDB, :test_db)
@@ -28,7 +27,7 @@ describe CQL::SchemaDump do
     it "can dump schema to file" do
       UserDB.build # Make sure the database exists
 
-      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://spec/support/db/user_db.db")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, spec_sqlite_uri("user_db.db"))
 
       test_file = "spec/support/generated_test_schema.cr"
       dumper.dump_to_file(test_file, :TestSchema, :test_schema)
@@ -46,7 +45,7 @@ describe CQL::SchemaDump do
     it "handles foreign keys correctly" do
       UserDB.build # Make sure the database exists
 
-      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://spec/support/db/user_db.db")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, spec_sqlite_uri("user_db.db"))
 
       schema_content = dumper.generate_schema_content(:TestDB, :test_db)
 
@@ -62,7 +61,7 @@ describe CQL::SchemaDump do
     it "maps SQLite types correctly through schema generation" do
       UserDB.build # Make sure the database exists
 
-      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://spec/support/db/user_db.db")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, spec_sqlite_uri("user_db.db"))
 
       schema_content = dumper.generate_schema_content(:TestDB, :test_db)
 

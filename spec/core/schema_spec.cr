@@ -1,7 +1,8 @@
 require "../spec_helper"
 
 describe CQL::Schema do
-  db_file = "spec/support/db/test.db"
+  db_file = File.join(CQLSpecSupport.sqlite_db_dir, "test.db")
+  db_uri = "sqlite3://#{db_file}"
 
   after_each do
     File.delete(db_file) if File.exists?(db_file)
@@ -9,14 +10,14 @@ describe CQL::Schema do
 
   describe "initialization" do
     it "creates a schema with valid name and URI" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users do
           primary :id, Int32
           column :name, String
         end
       end
       schema.name.should eq :test_db
-      schema.uri.should eq "sqlite3://#{db_file}"
+      schema.uri.should eq db_uri
       schema.adapter.should eq CQL::Adapter::SQLite
       schema.version.should eq "1.0"
     end
@@ -57,7 +58,7 @@ describe CQL::Schema do
 
   describe "table operations" do
     it "creates and manages tables" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users do
           primary :id, Int32
           column :name, String
@@ -85,7 +86,7 @@ describe CQL::Schema do
     end
 
     it "builds schema and creates tables in database" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users do
           primary :id, Int32
           column :name, String
@@ -100,7 +101,7 @@ describe CQL::Schema do
     end
 
     it "handles table aliases" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users, as: :u do
           primary :id, Int32
           column :name, String
@@ -114,7 +115,7 @@ describe CQL::Schema do
 
   describe "query operations" do
     it "executes SQL statements" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users do
           primary :id, Int32
           column :name, String
@@ -129,7 +130,7 @@ describe CQL::Schema do
     end
 
     it "handles query errors gracefully" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users do
           primary :id, Int32
           column :name, String
@@ -142,7 +143,7 @@ describe CQL::Schema do
     end
 
     it "creates and executes queries" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users_2 do
           primary :id, Int32
           column :name, String
@@ -164,7 +165,7 @@ describe CQL::Schema do
 
   describe "alter table operations" do
     it "alters table structure" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users do
           primary :id, Int32
           column :name, String
@@ -186,7 +187,7 @@ describe CQL::Schema do
     end
 
     it "raises error when altering non-existent table" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users do
           primary :id, Int32
           column :name, String

@@ -3,14 +3,15 @@
 
 require "log"
 require "colorize"
+require "../compat"
 
 module CQL::Performance
   # Timing utilities
   module TimingUtils
     def measure_execution(&)
-      start_time = Time.monotonic
+      start_time = Time.instant
       result = yield
-      execution_time = Time.monotonic - start_time
+      execution_time = Time.instant - start_time
       {result, execution_time}
     end
 
@@ -78,7 +79,7 @@ module CQL::Performance
     property max_time : Time::Span = Time::Span.zero
     property errors : Int64 = 0
 
-    @mutex : Mutex = Mutex.new
+    @mutex : CQL::Compat::Mutex = CQL::Compat::Mutex.new
 
     def record(duration : Time::Span, error : Bool = false)
       @mutex.synchronize do
@@ -156,7 +157,7 @@ module CQL::Performance
     @cache : Hash(K, V) = {} of K => V
     @max_size : Int32
     @access_order : Array(K) = [] of K
-    @mutex : Mutex = Mutex.new
+    @mutex : CQL::Compat::Mutex = CQL::Compat::Mutex.new
 
     def initialize(@max_size : Int32 = 1000)
     end

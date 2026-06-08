@@ -14,9 +14,17 @@ Example.table :user_pref do
 end
 
 describe CQL::Schema do
+  before_each do
+    require_postgres!
+  end
+
   context "handles json fields" do
-    Example.user_pref.drop!
-    Example.user_pref.create!
+    before_all do
+      if postgres_available?
+        Example.user_pref.drop!
+        Example.user_pref.create!
+      end
+    end
 
     it "inserts a record with a json field" do
       payload_json = %({"theme":"dark"})

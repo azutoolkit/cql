@@ -92,6 +92,7 @@
 - [Fix Connection Errors](how-to/troubleshooting/connection-errors.md)
 - [Fix Migration Errors](how-to/troubleshooting/migration-errors.md)
 - [Fix Validation Errors](how-to/troubleshooting/validation-errors.md)
+- [Fix Schema Mapping Errors](how-to/troubleshooting/schema-mapping-errors.md)
 
 ## Reference
 

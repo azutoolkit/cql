@@ -9,6 +9,33 @@ Use `has_many` when:
 - A Post has many Comments
 - A Category has many Products
 
+## Compile-Time Safety
+
+CQL validates `has_many` declarations during compilation:
+
+- The association name must be a symbol literal.
+- The `foreign_key` option must be a symbol literal when provided.
+- The `dependent` option must be one of `:destroy`, `:delete_all`, `:nullify`, or `:restrict_with_error`.
+- If the target model is available during compilation, the target foreign key type must match the parent model primary key type.
+
+Example:
+
+```crystal
+class Post
+  include CQL::ActiveRecord::Model(Int64)
+
+  has_many :comments, Comment, foreign_key: :post_id
+end
+
+class Comment
+  include CQL::ActiveRecord::Model(Int32)
+
+  property post_id : Int32?
+end
+```
+
+This fails at compile time because `Comment#post_id` is `Int32` while `Post` uses an `Int64` primary key. Change `post_id` to `Int64?` or change the parent primary key type.
+
 ## Schema Setup
 
 ```crystal

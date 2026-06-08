@@ -40,6 +40,14 @@ db_context MyDB, :users
 
 This connects the model to a specific schema and table.
 
+CQL also records this mapping for optional strict schema validation. To verify model getter types against schema column types when your application boots, run with:
+
+```bash
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
+```
+
+This raises a `CQL schema mapping error` if a model getter type disagrees with the schema column type. The check is opt-in because many applications intentionally omit database columns from a model or allow nil values while a record is transient.
+
 ### 3. Define Properties
 
 ```crystal
@@ -172,8 +180,11 @@ found = User.find(user.id)
 
 **"Type mismatch"**: Crystal property types must match database column types.
 
+**"CQL schema mapping error"**: You enabled `CQL_VALIDATE_SCHEMA_MAPPINGS=1` and a model getter type does not match the schema column type. Update either the schema or the model property type.
+
 ## Related
 
 - [Add Validations](add-validations.md)
 - [Use Callbacks](use-callbacks.md)
 - [Set Up Relationships](../relationships/belongs-to.md)
+- [Fix Schema Mapping Errors](../troubleshooting/schema-mapping-errors.md)

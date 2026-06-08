@@ -71,13 +71,13 @@ module CQL
       def self.with_cache(key : String, ttl : Time::Span = @@default_ttl, as_kind : Class? = nil, &)
         return yield unless @@enabled
 
-        start_time = Time.monotonic
+        start_time = Time.instant
         @@stats.total_requests += 1
 
         # Check if cached
         if cached_value = cache_store.get(key)
           @@stats.hits += 1
-          @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
+          @@stats.total_cache_time += (Time.instant - start_time).total_seconds
           begin
             return JSON.parse(cached_value)
           rescue JSON::ParseException
@@ -87,12 +87,12 @@ module CQL
 
         # Cache miss - execute block and cache result
         @@stats.misses += 1
-        cache_time = Time.monotonic - start_time
+        cache_time = Time.instant - start_time
         @@stats.total_cache_time += cache_time.total_seconds
 
-        execution_start = Time.monotonic
+        execution_start = Time.instant
         result = yield
-        execution_time = Time.monotonic - execution_start
+        execution_time = Time.instant - execution_start
         @@stats.total_execution_time += execution_time.total_seconds
 
         # Cache the result
@@ -119,7 +119,7 @@ module CQL
       def self.cache(cache_name : String, params : Hash, ttl : Time::Span = @@default_ttl, &)
         return yield unless @@enabled
 
-        start_time = Time.monotonic
+        start_time = Time.instant
         @@stats.total_requests += 1
 
         cache_key = generate_cache_key(cache_name, params)
@@ -127,7 +127,7 @@ module CQL
         # Check if cached
         if cached_value = cache_store.get(cache_key)
           @@stats.hits += 1
-          @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
+          @@stats.total_cache_time += (Time.instant - start_time).total_seconds
           begin
             return JSON.parse(cached_value)
           rescue JSON::ParseException
@@ -137,12 +137,12 @@ module CQL
 
         # Cache miss - execute block and cache result
         @@stats.misses += 1
-        cache_time = Time.monotonic - start_time
+        cache_time = Time.instant - start_time
         @@stats.total_cache_time += cache_time.total_seconds
 
-        execution_start = Time.monotonic
+        execution_start = Time.instant
         result = yield
-        execution_time = Time.monotonic - execution_start
+        execution_time = Time.instant - execution_start
         @@stats.total_execution_time += execution_time.total_seconds
 
         cache_value = serialize_for_cache(result)
@@ -187,12 +187,12 @@ module CQL
       def self.get(key : String) : Array(DB::Any)?
         return nil unless @@enabled
 
-        start_time = Time.monotonic
+        start_time = Time.instant
         @@stats.total_requests += 1
 
         if cached_value = cache_store.get(key)
           @@stats.hits += 1
-          @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
+          @@stats.total_cache_time += (Time.instant - start_time).total_seconds
           begin
             parsed = JSON.parse(cached_value).as_a
             return parsed.map do |item|
@@ -219,7 +219,7 @@ module CQL
         end
 
         @@stats.misses += 1
-        @@stats.total_cache_time += (Time.monotonic - start_time).total_seconds
+        @@stats.total_cache_time += (Time.instant - start_time).total_seconds
         nil
       end
 

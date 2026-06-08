@@ -11,6 +11,34 @@ Use `belongs_to` when:
 
 The model with `belongs_to` holds the foreign key.
 
+## Compile-Time Safety
+
+CQL validates `belongs_to` declarations during compilation:
+
+- The association name must be a symbol literal.
+- The foreign key must be a symbol literal.
+- The model must define a getter/property for the foreign key.
+- If the target model is available during compilation, the foreign key type must match the target model primary key type.
+
+This catches mistakes before the application starts:
+
+```crystal
+class User
+  include CQL::ActiveRecord::Model(Int64)
+end
+
+class Comment
+  include CQL::ActiveRecord::Model(Int32)
+
+  property user_id : Int32?
+
+  # Raises at compile time because user_id is Int32 but User uses Int64 IDs.
+  belongs_to :user, User, :user_id
+end
+```
+
+The error message tells you which foreign key is wrong and which type to use. Forward-declared targets are also checked after all model files are loaded, provided the target type is required before compilation finishes.
+
 ## Schema Setup
 
 Create tables with a foreign key column:

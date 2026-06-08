@@ -1,7 +1,7 @@
 Data = CQL::Schema.define(
   :data,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://spec/support/db/data.db") do
+  uri: spec_sqlite_uri("data.db")) do
   table :customers do
     primary :id, Int32
     varchar :name

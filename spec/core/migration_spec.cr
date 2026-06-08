@@ -1,7 +1,12 @@
 require "../spec_helper"
 
 describe CQL::Migration do
-  migrator = Northwind.migrator
+  migrator = Northwind.migrator(CQL::MigratorConfig.new(auto_sync: false))
+
+  before_each do
+    migrator.down rescue nil
+    Northwind.users.drop! rescue nil
+  end
 
   it "has a migration" do
     CQL::Migrator.migrations.size.should eq(2)
@@ -15,6 +20,8 @@ describe CQL::Migration do
   end
 
   it "migrates down" do
+    migrator.up
+
     migrator.down
 
     migrator.last.should eq(nil)
@@ -23,7 +30,9 @@ describe CQL::Migration do
   end
 
   it "rolls back" do
-    migrator.rollback
+    migrator.up
+
+    migrator.rollback(2)
 
     migrator.last.try(&.version).should eq(nil)
     migrator.applied_migrations.map(&.version).should eq([] of Int32)
@@ -42,6 +51,8 @@ describe CQL::Migration do
   end
 
   it "migrates down to a specific version" do
+    migrator.up
+
     migrator.down_to(CreateUsersMigration.version)
 
     migrator.last.try(&.version).should eq(CreateUsersMigration.version)
