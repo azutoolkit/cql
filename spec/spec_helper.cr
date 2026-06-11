@@ -24,7 +24,7 @@ module CQLSpecSupport
     return cached unless cached.nil?
 
     @@postgres_available = begin
-      DB.open(postgres_database_url) do |db|
+      DB.open(postgres_database_url) do
         db.scalar("SELECT 1")
         true
       end
