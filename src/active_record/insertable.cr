@@ -90,8 +90,7 @@ module CQL
             pk_id = CQL::Insert.new(schema)
               .into(table_name)
               .values(insertable_attrs)
-              .commit
-              .last_insert_id # Int64
+              .last_insert_id(as: Pk) # RETURNING on PostgreSQL/CockroachDB, where commit.last_insert_id is always 0
 
             {% if Pk == Int32 %}
               if pk_id > Int32::MAX || pk_id < Int32::MIN
@@ -152,8 +151,7 @@ module CQL
             pk_id = CQL::Insert.new(schema)
               .into(table_name)
               .values(fields_hash)
-              .commit
-              .last_insert_id # Int64
+              .last_insert_id(as: Pk) # RETURNING on PostgreSQL/CockroachDB, where commit.last_insert_id is always 0
 
             {% if Pk == Int32 %}
               if pk_id > Int32::MAX || pk_id < Int32::MIN
