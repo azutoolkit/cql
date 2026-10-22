@@ -73,7 +73,7 @@ module CQL
           end
         end
       else
-        self.commit.last_insert_id
+        commit.last_insert_id
       end
     end
 

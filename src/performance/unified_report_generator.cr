@@ -139,15 +139,14 @@ module CQL::Performance
           "slow_queries"  => report.slow_queries,
           "errors"        => report.errors,
         },
-        "issues" => report.issues.map { |issue|
-          {
-            "type"      => issue.type.to_s,
-            "severity"  => issue.severity.to_s,
-            "message"   => issue.message,
-            "details"   => issue.details,
-            "timestamp" => issue.timestamp.to_rfc3339,
-          }
-        },
+        "issues" => report.issues.map { |issue| # ameba:disable Style/MultilineCurlyBlock
+ {
+          "type"      => issue.type.to_s,
+          "severity"  => issue.severity.to_s,
+          "message"   => issue.message,
+          "details"   => issue.details,
+          "timestamp" => issue.timestamp.to_rfc3339,
+        } },
         "stats"    => report.stats.transform_values(&.to_h),
         "metadata" => report.metadata,
       }.to_json

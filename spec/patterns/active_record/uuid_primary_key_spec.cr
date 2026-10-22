@@ -189,14 +189,14 @@ describe "UUID Primary Key Support" do
 
   describe "multiple record creation" do
     it "generates unique UUIDs for 10 records" do
-      sessions = 10.times.map do |i|
+      sessions = Array.new(10) do |i|
         UuidSession.create!(
           token: "token#{i}",
           user_id: i.to_i64,
           created_at: Time.utc,
           updated_at: Time.utc
         )
-      end.to_a
+      end
 
       ids = sessions.map(&.id!)
       ids.uniq.size.should eq(10)

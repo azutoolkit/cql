@@ -160,7 +160,7 @@ module Expression
 
     # Format default values efficiently with proper escaping
     protected def format_default_value(value : DB::Any?) : String?
-      return nil if value.nil?
+      return if value.nil?
 
       case value
       when String

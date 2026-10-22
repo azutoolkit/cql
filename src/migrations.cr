@@ -106,8 +106,8 @@ module CQL
     # Subclasses MUST define @@version
     def self.version : Int64
       @@version
-    rescue ex : Exception
-      raise NotImplementedError.new("#{self.name} must define @@version as Int64")
+    rescue Exception
+      raise NotImplementedError.new("#{name} must define @@version as Int64")
     end
   end
 
@@ -332,7 +332,7 @@ module CQL
     # @return [Migration.class | Nil]
     def last : BaseMigration.class | Nil
       last_record = repo.last
-      return nil if last_record.nil?
+      return if last_record.nil?
 
       Migrator.migrations.find { |migration| migration.version == last_record.version }
     rescue DB::NoResultsError | CQL::Schema::ConnectionError

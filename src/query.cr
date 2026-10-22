@@ -347,11 +347,11 @@ module CQL
           @aggr_columns << build_aggr_expression(key, value)
         else
           if value.is_a?(Array(Symbol))
-            value.map { |name|
+            value.each do |name|
               column = find_column(name, key.to_s)
               @columns << column
               @column_aliases[column] = key.to_s
-            }
+            end
           else
             column = find_column(key)
             @columns << column
@@ -1162,7 +1162,7 @@ module CQL
     end
 
     private def build_group_by
-      return nil if @group_by.empty?
+      return if @group_by.empty?
       group_cols = @group_by.map do |base_col|
         # find_alias_for_table returns String alias
         col_alias_str = find_alias_for_table(base_col.table.not_nil!)
@@ -1173,7 +1173,7 @@ module CQL
     end
 
     private def build_order_by
-      return nil if @order_by.empty?
+      return if @order_by.empty?
       order_exprs = @order_by.map do |base_col, direction|
         # find_alias_for_table returns String alias
         col_alias_str = find_alias_for_table(base_col.table.not_nil!)
@@ -1366,9 +1366,6 @@ module CQL
       fk_owning_table = fk.table
       fk_referenced_table_name_sym = fk.references_table
 
-      owning_alias_str : String? = nil
-      other_alias_str : String? = nil
-
       begin
         owning_alias_str = find_alias_for_table(fk_owning_table) # Returns String
         # Referenced table name is Symbol, need to find its String alias
@@ -1379,7 +1376,7 @@ module CQL
           owning_alias_str = target_alias_str
           other_alias_str = referenced_alias_str
         end
-      rescue e : KeyError # Owning table not found, so it must be the target
+      rescue KeyError # Owning table not found, so it must be the target
         owning_alias_str = target_alias_str
         other_alias_str = find_alias_for_table_name(fk_referenced_table_name_sym) # Returns String?
       end

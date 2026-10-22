@@ -201,7 +201,7 @@ module CQL::Performance
     end
 
     private def extract_rows_affected(result) : Int64?
-      return nil unless result.responds_to?(:rows_affected)
+      return unless result.responds_to?(:rows_affected)
       result.rows_affected.to_i64
     rescue
       nil
@@ -259,8 +259,6 @@ module CQL::Performance
       # Check if cache is available and configured
       if CQL::Cache::CacheStore.config
         CQL::Cache::CacheStore.instance
-      else
-        nil
       end
     rescue
       nil

@@ -143,7 +143,7 @@ module CQL
     def foreign_key(
       columns local_columns : Array(Symbol),
       references references_table : Symbol,
-      references_columns : Array(Symbol) | Symbol | Nil = nil,
+      references_columns : (Array(Symbol) | Symbol)? = nil,
       name : Symbol? = nil,            # Use Symbol? for name
       on_delete : Symbol = :no_action, # Use Symbol for actions
       on_update : Symbol = :no_action, # Use Symbol for actions
@@ -176,7 +176,7 @@ module CQL
     def foreign_key(
       column local_column : Symbol,
       references references_table : Symbol,
-      references_columns : Array(Symbol) | Symbol | Nil = nil,
+      references_columns : (Array(Symbol) | Symbol)? = nil,
       name : Symbol? = nil,
       on_delete : Symbol = :no_action,
       on_update : Symbol = :no_action,
@@ -230,7 +230,7 @@ module CQL
     def drop_index(name : Symbol)
       index = Index.new(@table, [] of Symbol, false, name.to_s)
       @actions << Expression::DropIndex.new(index)
-    rescue exception
+    rescue
       Log.error { "Index #{name} does not exist in table #{@table}" }
     end
 

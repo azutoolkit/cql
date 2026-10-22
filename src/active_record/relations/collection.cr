@@ -291,11 +291,9 @@ module CQL::ActiveRecord::Relations
     # - **return** : Target?
     def find_by(**attributes)
       safe_db_operation do
-        begin
-          @query.where({@key => @id}).where(**attributes).first(Target)
-        rescue DB::NoResultsError
-          nil
-        end
+        @query.where({@key => @id}).where(**attributes).first(Target)
+      rescue DB::NoResultsError
+        nil
       end
     end
 
