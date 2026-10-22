@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: crystallang/crystal:1.20.2
+      image: crystallang/crystal:1.22.0
 
     services:
       postgres:
