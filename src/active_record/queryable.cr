@@ -68,6 +68,10 @@ module CQL
         # Create a QueryBuilder and execute select with hash syntax
         # - **@param** fields [Hash] The fields to select using hash syntax
         # - **@return** [QueryBuilder(T)] The query builder instance
+        def self.select(*columns : Symbol)
+          query.select(*columns)
+        end
+
         def self.select(**fields)
           query.select(**fields)
         end
@@ -77,6 +81,11 @@ module CQL
         # - **@return** [QueryBuilder(T)] The query builder instance
         def self.where(conditions : Hash(String | Symbol, DB::Any | Array(DB::Any)))
           query.where(conditions)
+        end
+
+        # A raw SQL fragment with bound `?` / `:name` values (`sql` must be a literal).
+        def self.where(__sql sql : String, *positional, **named)
+          query.where(sql, *positional, **named)
         end
 
         # Create a QueryBuilder and execute where with hash syntax
@@ -89,8 +98,8 @@ module CQL
         # Create a QueryBuilder and execute where with block
         # - **@yield** [FilterBuilder] The block to build conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.where(&block : -> Expression::ConditionBuilder)
-          query.where(&block)
+        def self.where(&)
+          query.where { |columns| with columns yield columns }
         end
 
         def self.where_like(field : Symbol | String, pattern : String)
@@ -142,8 +151,8 @@ module CQL
         # Create a QueryBuilder and execute having on it
         # - **@yield** [HavingBuilder] The block to build having conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.having(&block)
-          query.having(&block)
+        def self.having(&)
+          query.having { |builder| with builder yield builder }
         end
 
         # Create a QueryBuilder and execute distinct on it

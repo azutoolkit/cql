@@ -172,6 +172,45 @@ module Expression
       end
     end
 
+    def display_name : String
+      "PostgreSQL"
+    end
+
+    def format_ilike(column : String, placeholder : String) : String
+      "#{column} ILIKE #{placeholder}"
+    end
+
+    # PostgreSQL takes the path as a text[] literal: `{a,b,0}`.
+    def json_path_param(path : Expression::JsonPath) : String
+      "{#{path.segments.join(",")}}"
+    end
+
+    def format_json_text(column : String, path_placeholder : String) : String
+      "#{column} #>> #{path_placeholder}::text[]"
+    end
+
+    def format_json_contains(column : String, placeholder : String) : String
+      "#{column} @> #{placeholder}::jsonb"
+    end
+
+    def format_geo_within(column : String, longitude : String, latitude : String, meters : String) : String
+      point = "ST_SetSRID(ST_MakePoint(#{longitude}::float8, #{latitude}::float8), 4326)::geography"
+      "ST_DWithin(#{column}::geography, #{point}, #{meters}::float8)"
+    end
+
+    def format_not_ilike(column : String, placeholder : String) : String
+      "#{column} NOT ILIKE #{placeholder}"
+    end
+
+    def format_distinct_on(columns : Array(String)) : String
+      "DISTINCT ON (#{columns.join(", ")}) "
+    end
+
+    # PostgreSQL returns one text column per plan line.
+    def format_plan_row(columns : Array(String)) : String
+      columns.first
+    end
+
     def format_returning(columns : Array(String)) : String
       return "" if columns.empty?
       " RETURNING #{columns.join(", ")}"
@@ -182,12 +221,16 @@ module Expression
 
       build_sql(values.size * 32) do |str|
         str << " VALUES "
+        # `placeholders` is a flat list spanning every row, so each row must
+        # read from its own offset (otherwise rows reuse the first row's `$n`).
+        offset = 0
         values.each_with_index do |row, i|
           str << "("
           row.size.times do |j|
-            str << placeholders[j]
+            str << placeholders[offset + j]
             str << ", " if j < row.size - 1
           end
+          offset += row.size
           str << ")"
           str << ", " if i < values.size - 1
         end

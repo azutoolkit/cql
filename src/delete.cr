@@ -15,6 +15,10 @@ module CQL
   # delete.from(:users).where(id: 1).commit
   # ```
   class Delete
+    include Pinnable
+
+    getter schema : Schema
+
     @table : Expression::Table? = nil
     @where : Expression::Where? = nil
     @back : Set(Expression::Column) = Set(Expression::Column).new
@@ -49,11 +53,7 @@ module CQL
     # ```
     def commit
       query, params = to_sql
-      CQL::Performance.track(query, params) do
-        @schema.exec_query do |conn|
-          conn.exec(query, args: params)
-        end
-      end
+      CQL::Execution.run(executor, query, params, :delete) { |connection| connection.exec(query, args: params) }
     end
 
     # Generates the SQL query and parameters
@@ -147,7 +147,13 @@ module CQL
       end
 
       builder = with Expression::FilterBuilder.new(query_tables_hash) yield
-      @where = Expression::Where.new(builder.condition)
+      merge_where(builder.condition)
+      self
+    end
+
+    # A raw SQL fragment with bound `?` / `:name` values (`sql` must be a literal).
+    def where(__sql sql : String, *positional, **named)
+      merge_where(Expression::Raw.build(sql, positional, named))
       self
     end
 
@@ -170,7 +176,7 @@ module CQL
         condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
       end
 
-      @where = Expression::Where.new(condition.not_nil!)
+      merge_where(condition.not_nil!)
 
       self
     end
@@ -193,7 +199,7 @@ module CQL
         condition = condition ? Expression::And.new(condition.not_nil!, expr) : expr
       end
 
-      @where = Expression::Where.new(condition.not_nil!)
+      merge_where(condition.not_nil!)
 
       self
     end
@@ -230,6 +236,15 @@ module CQL
       Expression::Delete.new(@table.not_nil!, @where, @back, @using)
     end
 
+    # Chained `where` calls are ANDed together, matching `Query#where`.
+    private def merge_where(condition : Expression::Condition) : Nil
+      @where = if existing = @where
+                 Expression::Where.new(Expression::And.new(existing.condition, condition))
+               else
+                 Expression::Where.new(condition)
+               end
+    end
+
     private def where_hash
       where_hash = Hash(Symbol, Table).new
       tbl = @table.not_nil!.table
@@ -264,7 +279,8 @@ module CQL
     end
 
     private def find_column(name : Symbol) : BaseColumn
-      @table.not_nil!.table.columns[name] || raise "Column #{name} not found"
+      table = @table.not_nil!.table
+      table.columns[name]? || raise ArgumentError.new("Column #{name} not found in #{table.table_name}")
     end
   end
 end

@@ -61,7 +61,7 @@ describe "ActiveRecord::QueryBuilder" do
 
     it "can build IS NOT NULL" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
-      builder.where {
+      builder = builder.where {
         TestUser.table_column(:name).is_not_null
       }
       builder.to_sql.should eq("SELECT users.id, users.name, users.email, users.age, users.password, users.created_at, \
@@ -70,7 +70,7 @@ describe "ActiveRecord::QueryBuilder" do
 
     it "can build IS NULL" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
-      builder.where {
+      builder = builder.where {
         TestUser.table_column(:name).null
       }
       builder.to_sql.should eq("SELECT users.id, users.name, users.email, users.age, users.password, users.created_at, \

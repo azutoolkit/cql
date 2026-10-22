@@ -206,6 +206,48 @@ module Expression
       end
     end
 
+    def display_name : String
+      "SQLite"
+    end
+
+    def format_json_text(column : String, path_placeholder : String) : String
+      "CAST(json_extract(#{column}, #{path_placeholder}) AS TEXT)"
+    end
+
+    # json_extract turns JSON booleans into 1 and 0.
+    def json_text_value(value : Expression::JsonEquals::Value) : String
+      case value
+      in true                   then "1"
+      in false                  then "0"
+      in String, Int64, Float64 then value.to_s
+      end
+    end
+
+    def format_lock(lock : Expression::RowLock) : String
+      raise CQL::DialectError.new(display_name, "row locking (FOR UPDATE / FOR SHARE)", "SQLite serializes writers; use a transaction instead.")
+    end
+
+    def explain(sql : String, analyze : Bool) : String
+      raise CQL::DialectError.new("SQLite", "EXPLAIN ANALYZE", "Use EXPLAIN without analyze, or run the query under a timer.") if analyze
+      "EXPLAIN QUERY PLAN #{sql}"
+    end
+
+    # `EXPLAIN QUERY PLAN` rows are (id, parent, unused, detail).
+    def format_plan_row(columns : Array(String)) : String
+      columns.last
+    end
+
+    # SQLite rejects parentheses around compound members, so a grouped operand
+    # becomes a derived table instead.
+    def wrap_compound_operand(sql : String) : String
+      "SELECT * FROM (#{sql})"
+    end
+
+    # SQLite requires a LIMIT before OFFSET, so use the "no limit" sentinel.
+    def format_offset_only(offset : DB::Any) : String
+      " LIMIT -1 OFFSET #{offset}"
+    end
+
     def format_returning(columns : Array(String)) : String
       # SQLite doesn't support RETURNING clause before version 3.35.0
       if !columns.empty?
@@ -221,12 +263,16 @@ module Expression
 
       build_sql(values.size * 16) do |str|
         str << " VALUES "
+        # `placeholders` is a flat list spanning every row, so each row must
+        # read from its own offset (otherwise rows reuse the first row's `$n`).
+        offset = 0
         values.each_with_index do |row, i|
           str << "("
           row.size.times do |j|
-            str << placeholders[j]
+            str << placeholders[offset + j]
             str << ", " if j < row.size - 1
           end
+          offset += row.size
           str << ")"
           str << ", " if i < values.size - 1
         end

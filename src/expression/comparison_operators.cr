@@ -45,8 +45,9 @@ module Expression
   class Like < Condition
     getter column : BaseColumn
     getter value : String
+    getter? insensitive : Bool
 
-    def initialize(@column : BaseColumn, @value : String)
+    def initialize(@column : BaseColumn, @value : String, @insensitive : Bool = false)
     end
 
     def accept(visitor : Visitor)
@@ -57,8 +58,9 @@ module Expression
   class NotLike < Condition
     getter column : BaseColumn
     getter value : String
+    getter? insensitive : Bool
 
-    def initialize(@column : BaseColumn, @value : String)
+    def initialize(@column : BaseColumn, @value : String, @insensitive : Bool = false)
     end
 
     def accept(visitor : Visitor)
