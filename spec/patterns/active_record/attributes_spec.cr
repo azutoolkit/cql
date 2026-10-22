@@ -11,7 +11,7 @@ describe CQL::ActiveRecord::Attributes do
       attrs[:email].should eq("test@example.com")
       attrs[:age].should eq(30)
       attrs[:password].should eq("password123")
-      attrs[:id].should eq(nil)
+      attrs[:id].should be_nil
     end
 
     it "includes all model properties in the returned hash" do

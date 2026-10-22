@@ -62,7 +62,7 @@ module CQL
             end
           end
           result
-        rescue ex : Redis::Error
+        rescue Redis::Error
           @mutex.synchronize do
             @stats["hits"] -= 1
             @stats["misses"] += 1
@@ -84,7 +84,7 @@ module CQL
             @redis.set(prefixed_key, value)
           end
           true
-        rescue ex : Redis::Error
+        rescue Redis::Error
           false
         end
       end
@@ -98,7 +98,7 @@ module CQL
         begin
           result = @redis.del(prefixed_key)
           result > 0
-        rescue ex : Redis::Error
+        rescue Redis::Error
           false
         end
       end
@@ -107,7 +107,7 @@ module CQL
         prefixed_key = prefixed_key(key)
         begin
           @redis.exists(prefixed_key) > 0
-        rescue ex : Redis::Error
+        rescue Redis::Error
           false
         end
       end
@@ -120,7 +120,7 @@ module CQL
           @redis.del(keys)
         end
         true
-      rescue ex : Redis::Error
+      rescue Redis::Error
         false
       end
 
@@ -136,7 +136,7 @@ module CQL
             redis_value = values[index]?
             result[original_key] = redis_value ? redis_value.to_s : nil
           end
-        rescue ex : Redis::Error
+        rescue Redis::Error
           # If batch operation fails, fall back to individual gets
           keys.each do |key|
             result[key] = get(key)
@@ -163,7 +163,7 @@ module CQL
             @redis.mset(prefixed_data)
           end
           true
-        rescue ex : Redis::Error
+        rescue Redis::Error
           false
         end
       end
@@ -174,7 +174,7 @@ module CQL
         prefixed_keys = keys.map { |key| prefixed_key(key) }
         begin
           @redis.del(prefixed_keys).to_i32
-        rescue ex : Redis::Error
+        rescue Redis::Error
           # If batch operation fails, fall back to individual deletes
           count = 0
           keys.each do |key|
@@ -200,7 +200,7 @@ module CQL
           key_tags_key = "#{prefixed_key}:tags"
           @redis.sadd(key_tags_key, tags)
           true
-        rescue ex : Redis::Error
+        rescue Redis::Error
           false
         end
       end
@@ -230,7 +230,7 @@ module CQL
             # Remove the tag key itself
             @redis.del(tag_key)
           end
-        rescue ex : Redis::Error
+        rescue Redis::Error
           # Return whatever we managed to invalidate
         end
 
@@ -247,7 +247,7 @@ module CQL
         begin
           version_str = @redis.get(version_key)
           version_str ? version_str.to_i64? : nil
-        rescue ex : Redis::Error
+        rescue Redis::Error
           nil
         end
       end
@@ -256,7 +256,7 @@ module CQL
         version_key = "#{@key_prefix}:version:#{key}"
         begin
           @redis.incr(version_key)
-        rescue ex : Redis::Error
+        rescue Redis::Error
           1_i64
         end
       end
@@ -296,7 +296,7 @@ module CQL
                 end
               end
             end
-          rescue ex : Redis::Error
+          rescue Redis::Error
             # Redis info not available, continue with basic stats
           end
 
@@ -314,14 +314,14 @@ module CQL
           key_str.includes?(":tag:") || key_str.includes?(":version:") || key_str.ends_with?(":tags")
         end
         actual_keys.size
-      rescue ex : Redis::Error
+      rescue Redis::Error
         0
       end
 
       # Health check method
       def ping : Bool
         @redis.ping == "PONG"
-      rescue ex : Redis::Error
+      rescue Redis::Error
         false
       end
 

@@ -101,7 +101,7 @@ module CQL
     def foreign_key(
       columns local_columns : Array(Symbol),
       references references_table : Symbol,
-      references_columns : Array(Symbol) | Symbol | Nil = nil,
+      references_columns : (Array(Symbol) | Symbol)? = nil,
       name : String? = nil,
       on_delete : Symbol = :no_action,
       on_update : Symbol = :no_action,
@@ -140,7 +140,7 @@ module CQL
     def foreign_key(
       column local_column : Symbol,
       references references_table : Symbol,
-      references_columns : Array(Symbol) | Symbol | Nil = nil,
+      references_columns : (Array(Symbol) | Symbol)? = nil,
       name : String? = nil,
       on_delete : Symbol = :no_action,
       on_update : Symbol = :no_action,

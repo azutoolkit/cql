@@ -56,7 +56,7 @@ module CQL
             if entry.expired?
               remove_entry(key)
               @stats["misses"] += 1
-              return nil
+              return
             end
 
             entry.touch

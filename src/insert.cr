@@ -81,7 +81,7 @@ module CQL
         query, params = back(:id).to_sql
         CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one(query, args: params, as: type) }
       else
-        self.commit.last_insert_id
+        commit.last_insert_id
       end
     end
 
