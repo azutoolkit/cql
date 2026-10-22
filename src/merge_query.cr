@@ -20,6 +20,8 @@ module CQL
       end
 
       merge_distinct
+      merge_locking
+      merge_ctes
       merge_collections
       merge_query_tables
       merge_where_clause
@@ -32,15 +34,32 @@ module CQL
       @current_query
     end
 
+    # A lock is a safety guarantee: a locked scope merged into another stays locked.
+    private def merge_locking
+      @current_query.row_lock = @other_query.row_lock || @current_query.row_lock
+      @current_query.distinct_on.concat(@other_query.distinct_on).uniq!(&.object_id)
+    end
+
     private def merge_distinct
       # Uses the 'distinct=' setter on Query (to be added via 'property' macro)
       @current_query.distinct = @current_query.distinct? || @other_query.distinct?
     end
 
+    # CTEs travel with the query that uses them; the same name must mean the same CTE.
+    private def merge_ctes
+      @other_query.ctes.each do |cte|
+        existing = @current_query.ctes.find { |current| current.name == cte.name }
+        raise ArgumentError.new("Merge conflict: CTE #{cte.name} is defined differently in both queries") if existing && existing.object_id != cte.object_id
+        @current_query.ctes << cte unless existing
+      end
+      @other_query.derived_tables.each { |name, table| @current_query.derived_tables[name] ||= table }
+      @current_query.recursive = @current_query.recursive? || @other_query.recursive?
+    end
+
     private def merge_collections
       # These directly modify collections obtained via getters. This is okay.
       @current_query.columns.concat(@other_query.columns).uniq!(&.object_id)
-      @current_query.aggr_columns.concat(@other_query.aggr_columns).uniq!(&.object_id)
+      @current_query.select_expressions.concat(@other_query.select_expressions).uniq!(&.object_id)
       @current_query.joins.concat(@other_query.joins).uniq!(&.object_id)
     end
 

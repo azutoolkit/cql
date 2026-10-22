@@ -76,6 +76,36 @@ module Expression
       ConditionBuilder.new(NotLike.new(self, pattern))
     end
 
+    # JSON documents: the value at *path* (a key, an index, or a list of them) equals
+    # *value*, compared as text.
+    def json_eq(path : JsonPath::Segment | Array(JsonPath::Segment), value : String | Int | Float | Bool) : ConditionBuilder
+      typed = case value
+              in Int          then value.to_i64
+              in Float        then value.to_f64
+              in String, Bool then value
+              end
+      ConditionBuilder.new(JsonEquals.new(self, JsonPath.parse(path), typed))
+    end
+
+    # JSON documents: this column contains *value* (anything JSON-serializable).
+    def json_contains(value) : ConditionBuilder
+      ConditionBuilder.new(JsonContains.new(self, value.to_json))
+    end
+
+    # Geospatial: this point column is within *meters* of (longitude, latitude).
+    def within_distance(longitude : Float64, latitude : Float64, meters : Number) : ConditionBuilder
+      ConditionBuilder.new(GeoWithin.new(self, longitude, latitude, meters.to_f))
+    end
+
+    # Case-insensitive LIKE (ILIKE where the database has it).
+    def ilike(pattern : String) : ConditionBuilder
+      ConditionBuilder.new(Like.new(self, pattern, insensitive: true))
+    end
+
+    def not_ilike(pattern : String) : ConditionBuilder
+      ConditionBuilder.new(NotLike.new(self, pattern, insensitive: true))
+    end
+
     def null : ConditionBuilder
       ConditionBuilder.new(IsNull.new(self))
     end
@@ -122,5 +152,7 @@ module Expression
     INNER
     LEFT
     RIGHT
+    FULL
+    CROSS
   end
 end

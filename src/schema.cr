@@ -1,3 +1,4 @@
+require "./executor"
 # Standard Lib
 require "db"
 require "uri"
@@ -37,6 +38,8 @@ module CQL
   # ```
   # The `Schema` class represents a database schema.
   class Schema
+    include Executor
+
     Log = CQL.config.logger
 
     class Error < CQL::Error; end
@@ -58,6 +61,13 @@ module CQL
 
     # - **@return** [Adapter] the database adapter (default: `Adapter::SQLite`)
     getter adapter : Adapter = Adapter::SQLite
+
+    # - **@return** [Bool] whether generated SQL quotes table, column and alias
+    #   names (opt-in; needed for reserved words such as `order` or `group`).
+    #   Applies to queries and DML (SELECT/INSERT/UPDATE/DELETE); DDL emitted by
+    #   `build`, migrations and `alter` is not quoted yet, so create such tables
+    #   with raw SQL or a quoted migration.
+    getter quote_identifiers : Bool = false
 
     # - **@return** [Hash(Symbol, Table)] the tables in the schema
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
@@ -81,7 +91,7 @@ module CQL
     # sql, params = query.to_sql(gen)
     # ```
     def new_generator : Expression::Generator
-      Expression::Generator.new(@adapter)
+      Expression::Generator.new(@adapter, @quote_identifiers)
     end
 
     # Returns a generator for SQL expression building.
@@ -131,8 +141,8 @@ module CQL
     #   end
     # end
     # ```
-    def self.define(name : Symbol, uri : String, adapter : Adapter, version : String = "1.0", &)
-      schema = new(name, uri, adapter, version)
+    def self.define(name : Symbol, uri : String, adapter : Adapter, version : String = "1.0", quote_identifiers : Bool = false, &)
+      schema = new(name, uri, adapter, version, quote_identifiers)
       with schema yield
       schema
     end
@@ -148,9 +158,9 @@ module CQL
     # ```
     # schema = CQL::Schema.new(:northwind, "sqlite3://db.sqlite3")
     # ```
-    def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0")
+    def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0", @quote_identifiers : Bool = false)
       validate_uri!
-      @db = DB.open(@uri)
+      @db = DB.open(@adapter.driver_uri(@uri))
     end
 
     def dialect
@@ -167,6 +177,10 @@ module CQL
         # Valid SQLite URI
       when "postgres", "postgresql"
         raise InvalidURIError.new("Missing host in PostgreSQL URI") unless uri.host
+      when "mysql"
+        raise InvalidURIError.new("Missing host in MySQL URI") unless uri.host.presence
+      when "cockroachdb"
+        raise InvalidURIError.new("Missing host in CockroachDB URI") unless uri.host.presence
       else
         raise InvalidURIError.new("Unsupported database type: #{uri.scheme}")
       end
@@ -197,16 +211,20 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      if conn = active_connection
-        conn.exec(sql)
+      Execution.run(self, sql, [] of DB::Any, :ddl, track: false) { |connection| connection.exec(sql) }
+    end
+
+    # Yields the fiber's transaction connection, or else one pooled connection, to pin statements to it with `using(connection)`
+    # (e.g. inside a transaction started on that connection).
+    def with_connection(&)
+      if connection = active_connection
+        yield connection
       else
-        @db.using_connection do |db_conn|
-          db_conn.exec(sql)
-        end
+        @db.using_connection { |pooled| yield pooled }
       end
     end
 
-    def exec_query(&)
+    def exec_query(& : DB::Connection -> _)
       # Performance monitoring will be handled by individual query methods
       # that call this method, as we don't have access to SQL/params here
       if conn = active_connection

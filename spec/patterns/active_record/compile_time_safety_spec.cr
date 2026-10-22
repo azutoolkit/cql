@@ -1,32 +1,8 @@
 require "../../spec_helper"
 
-private def compile_snippet(source : String)
-  path = File.join(Dir.current, ".tmp_cql_compile_safety_#{Random.rand(1_000_000)}.cr")
-  output = IO::Memory.new
-  error = IO::Memory.new
-
-  File.write(path, source)
-  status = Process.run("crystal", ["build", path, "--no-codegen"], output: output, error: error)
-  {status.success?, output.to_s, error.to_s}
-ensure
-  File.delete(path) if path && File.exists?(path)
-end
-
-private def run_snippet(source : String)
-  path = File.join(Dir.current, ".tmp_cql_runtime_safety_#{Random.rand(1_000_000)}.cr")
-  output = IO::Memory.new
-  error = IO::Memory.new
-
-  File.write(path, source)
-  status = Process.run("crystal", ["run", path], output: output, error: error)
-  {status.success?, output.to_s, error.to_s}
-ensure
-  File.delete(path) if path && File.exists?(path)
-end
-
 describe "CQL compile-time safety" do
   it "raises a clear error for unsupported validation predicates" do
-    success, _output, error = compile_snippet <<-CRYSTAL
+    success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"
 
       class BrokenValidation
@@ -44,7 +20,7 @@ describe "CQL compile-time safety" do
   end
 
   it "raises a clear error for malformed belongs_to declarations" do
-    success, _output, error = compile_snippet <<-CRYSTAL
+    success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"
 
       class BrokenBelongsTo
@@ -62,7 +38,7 @@ describe "CQL compile-time safety" do
   end
 
   it "raises a clear error for unsupported has_many dependent options" do
-    success, _output, error = compile_snippet <<-CRYSTAL
+    success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"
 
       class BrokenHasMany
@@ -78,7 +54,7 @@ describe "CQL compile-time safety" do
   end
 
   it "raises a clear error when belongs_to foreign key type does not match target primary key type" do
-    success, _output, error = compile_snippet <<-CRYSTAL
+    success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"
 
       class MismatchedUser
@@ -100,7 +76,7 @@ describe "CQL compile-time safety" do
   end
 
   it "raises a clear error when a later-defined belongs_to target has a mismatched primary key type" do
-    success, _output, error = compile_snippet <<-CRYSTAL
+    success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"
 
       class ForwardPost
@@ -122,7 +98,7 @@ describe "CQL compile-time safety" do
   end
 
   it "raises a clear error when has_many target foreign key type does not match parent primary key type" do
-    success, _output, error = compile_snippet <<-CRYSTAL
+    success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"
 
       class MismatchedComment
@@ -144,7 +120,7 @@ describe "CQL compile-time safety" do
   end
 
   it "raises a clear error when a later-defined has_many target has a mismatched foreign key type" do
-    success, _output, error = compile_snippet <<-CRYSTAL
+    success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"
 
       class ForwardPost
@@ -167,7 +143,7 @@ describe "CQL compile-time safety" do
 
   it "raises a clear schema mapping error when model getter type does not match schema column type" do
     db_path = File.join(Dir.tempdir, "cql_broken_schema_#{Random.rand(1_000_000)}.db")
-    success, _output, error = run_snippet <<-CRYSTAL
+    success, _output, error = Snippets.run <<-CRYSTAL
       require "sqlite3"
       require "./src/cql"
 

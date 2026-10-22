@@ -8,6 +8,7 @@ module Expression
     getter values : Array(Array(DB::Any))
     getter back : Array(BaseColumn)
     getter query : Query?
+    getter conflict : OnConflict?
 
     def initialize(
       @table : Table,
@@ -15,6 +16,7 @@ module Expression
       @values : Array(Array(DB::Any)) = [] of Array(DB::Any),
       @back : Array(BaseColumn) = Array(BaseColumn).new,
       @query : Query? = nil,
+      @conflict : OnConflict? = nil,
     )
     end
 
@@ -24,6 +26,7 @@ module Expression
       values : Array(Array(DB::Any)) = [] of Array(DB::Any),
       back : Array(Column) = [] of Column,
       query : Query? = nil,
+      @conflict : OnConflict? = nil,
     )
       @table = table
       @columns = columns.map(&.as(BaseColumn)).to_set
@@ -82,6 +85,26 @@ module Expression
       @where = where
       @back = back.map(&.as(BaseColumn)).to_set
       @using = using
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
+  # What an INSERT does when a row with the same *target* already exists:
+  # nothing, or update the *refreshed* columns from the incoming row and set
+  # the *assignments* to explicit values.
+  class OnConflict < Node
+    getter target : Array(BaseColumn)
+    getter refreshed : Array(BaseColumn)
+    getter assignments : Array(Setter)
+
+    def initialize(@target : Array(BaseColumn), @refreshed : Array(BaseColumn) = [] of BaseColumn, @assignments : Array(Setter) = [] of Setter)
+    end
+
+    def do_nothing? : Bool
+      refreshed.empty? && assignments.empty?
     end
 
     def accept(visitor : Visitor)

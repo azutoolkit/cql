@@ -48,13 +48,13 @@ A high-performance, type-safe ORM for Crystal applications that combines compile
 - **Lifecycle Callbacks**: Before/after hooks for validation, save, create, update, and destroy
 - **Intelligent Migrations**: Schema evolution tools with automatic rollback support
 - **Schema Dump**: Reverse-engineer existing databases into CQL schema definitions
-- **Flexible Querying**: Fluent query builder with complex joins, subqueries, and raw SQL support
+- **Typed Query DSL**: `User.query.where { (age >= 18) & (status == "active") }` with compile-time column and type checks, association joins, CTEs, window functions, set operations, upsert, JSON/geo predicates and safe bound raw fragments (see the [before/after guide](docs/explanation/dsl-before-after.md) and `playground/cql_demo.cr`)
 - **Transaction Support**: Full ACID transaction support with nested transactions (savepoints)
 - **Optimistic Locking**: Built-in support for optimistic concurrency control
 - **Query Scopes**: Reusable query scopes for common filtering patterns
 - **Advanced Caching**: Multi-layer caching with Redis and memory cache support
 - **Performance Monitoring**: Built-in query profiling, N+1 detection, and optimization suggestions
-- **Multi-Database**: Support for PostgreSQL, MySQL, and SQLite with dialect-specific optimizations
+- **Multi-Database**: Support for PostgreSQL, MySQL, SQLite and CockroachDB with dialect-specific optimizations
 - **Flexible Primary Keys**: Support for Int32, Int64, UUID, and ULID primary keys
 
 ## Performance Comparison
@@ -534,16 +534,11 @@ fragment_cache.invalidate_tags(["user:#{user.id}", "posts"])
 ### Performance Monitoring
 
 ```crystal
-# Performance monitoring
-monitor = CQL::Performance::PerformanceMonitor.new
-
-# Real-time query monitoring
-monitor.on_query_executed do |event|
-  if event.duration > 100.milliseconds
-    puts "🐌 Slow query detected: #{event.sql} (#{event.duration}ms)"
-    puts "💡 Consider adding an index or optimizing the query"
-  end
+# Subscribe to every statement (selects, DML, DDL, explain)
+CQL::Telemetry.subscribe("slow") do |event|
+  puts "Slow query: #{event.sql} (#{event.duration.total_milliseconds}ms)" if event.duration > 100.milliseconds
 end
+CQL::Telemetry.alert_on_slow(100.milliseconds) { |event| Log.warn { event.sql } }
 
 # Automatic N+1 query detection
 detector = CQL::Performance::NPlusOneDetector.new

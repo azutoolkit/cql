@@ -3,6 +3,13 @@ require "../constraint"
 module Expression
   # Handles general dialect-specific functionalities like placeholders and structure dumps.
   module GeneralDialect
+    # Quotes an identifier (table, column or alias name) for this dialect,
+    # doubling any embedded quote character. Only used when the schema opts in
+    # with `quote_identifiers: true`.
+    def quote_identifier(name : String) : String
+      %("#{name.gsub('"', "\"\"")}")
+    end
+
     # Formats a placeholder for prepared statements based on the dialect's syntax
     # and the parameter index
     abstract def placeholder_format(param_index : Int32) : String
@@ -117,6 +124,96 @@ module Expression
   module QueryDialect
     # Formats the LIMIT and OFFSET clauses.
     abstract def format_limit_offset(limit : DB::Any, offset : DB::Any?) : String
+
+    # The statement that asks the database for its execution plan.
+    def explain(sql : String, analyze : Bool) : String
+      "EXPLAIN #{"ANALYZE " if analyze}#{sql}"
+    end
+
+    # One plan row (all columns as text) as a single line.
+    def format_plan_row(columns : Array(String)) : String
+      columns.join(" | ")
+    end
+
+    # How the incoming row's value of *column* is referenced in an upsert's update list.
+    def excluded_reference(column : String) : String
+      "EXCLUDED.#{column}"
+    end
+
+    def format_on_conflict_nothing(target : Array(String)) : String
+      " ON CONFLICT (#{target.join(", ")}) DO NOTHING"
+    end
+
+    def format_on_conflict_update(target : Array(String), assignments : Array(String)) : String
+      " ON CONFLICT (#{target.join(", ")}) DO UPDATE SET #{assignments.join(", ")}"
+    end
+
+    # Case-insensitive LIKE; databases without ILIKE compare lower-cased values.
+    def format_ilike(column : String, placeholder : String) : String
+      "LOWER(#{column}) LIKE LOWER(#{placeholder})"
+    end
+
+    def format_not_ilike(column : String, placeholder : String) : String
+      "LOWER(#{column}) NOT LIKE LOWER(#{placeholder})"
+    end
+
+    # JSON path as the bound parameter the dialect's extract function expects.
+    def json_path_param(path : Expression::JsonPath) : String
+      path.segments.reduce("$") { |text, segment| segment.is_a?(Int32) ? "#{text}[#{segment}]" : "#{text}.#{segment}" }
+    end
+
+    # How a value compared against extracted JSON text is bound.
+    def json_text_value(value : Expression::JsonEquals::Value) : String
+      value.to_s
+    end
+
+    # The value at a JSON path, as text.
+    def format_json_text(column : String, path_placeholder : String) : String
+      raise CQL::DialectError.new(display_name, "JSON path comparison")
+    end
+
+    def format_json_contains(column : String, placeholder : String) : String
+      raise CQL::DialectError.new(display_name, "JSON containment")
+    end
+
+    def format_geo_within(column : String, longitude : String, latitude : String, meters : String) : String
+      raise CQL::DialectError.new(display_name, "geospatial distance filters")
+    end
+
+    # The product name used in error messages.
+    def display_name : String
+      self.class.name.split("::").last.chomp("Dialect")
+    end
+
+    def join_keyword(type : Expression::JoinType) : String
+      " #{type.to_s.upcase} JOIN "
+    end
+
+    def format_distinct_on(columns : Array(String)) : String
+      raise CQL::DialectError.new(display_name, "DISTINCT ON", "Use a window function (ROW_NUMBER() OVER (PARTITION BY ...)) and keep row number 1.")
+    end
+
+    # Trailing row-lock clause (FOR UPDATE / FOR SHARE ...).
+    def format_lock(lock : Expression::RowLock) : String
+      wait = case lock.wait
+             in .wait?        then ""
+             in .skip_locked? then " SKIP LOCKED"
+             in .no_wait?     then " NOWAIT"
+             end
+      " FOR #{lock.mode.to_s.upcase}#{wait}"
+    end
+
+    # Groups a set operation operand that has its own ORDER BY / LIMIT or is itself
+    # a set operation.
+    def wrap_compound_operand(sql : String) : String
+      "(#{sql})"
+    end
+
+    # Formats an OFFSET clause that has no accompanying LIMIT.
+    # PostgreSQL accepts a bare OFFSET; dialects that require a LIMIT override this.
+    def format_offset_only(offset : DB::Any) : String
+      " OFFSET #{offset}"
+    end
 
     # Formats the LIKE operator.
     abstract def format_like(column : String, placeholder : String) : String

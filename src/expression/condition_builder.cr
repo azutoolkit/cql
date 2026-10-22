@@ -21,6 +21,11 @@ module Expression
       combine(other, Or)
     end
 
+    # `NOT (condition)`; Crystal does not allow redefining `!`.
+    def not : ConditionBuilder
+      ConditionBuilder.new(Not.new(@condition))
+    end
+
     private def combine(other : ConditionBuilder, combinator : Class) : ConditionBuilder
       ConditionBuilder.new(combinator.new(@condition, other.condition))
     end
