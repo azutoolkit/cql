@@ -106,7 +106,69 @@ describe CQL::Postgres::Wire::Frontend do
   end
 end
 
+# A stream with no buffer to peek into, which forces the copying read path.
+private class PlainIO < IO
+  def initialize(@inner : IO::Memory)
+  end
+
+  def read(slice : Bytes) : Int32
+    @inner.read(slice)
+  end
+
+  def write(slice : Bytes) : Nil
+  end
+end
+
+private def data_row_frame(fields : Array(String?)) : Bytes
+  payload = IO::Memory.new
+  payload.write_bytes(fields.size.to_i16, IO::ByteFormat::NetworkEndian)
+  fields.each do |field|
+    payload.write_bytes(field ? field.bytesize : -1, IO::ByteFormat::NetworkEndian)
+    payload << field if field
+  end
+  body = payload.to_slice
+  frame = IO::Memory.new
+  frame.write_byte('D'.ord.to_u8)
+  frame.write_bytes(body.size + 4, IO::ByteFormat::NetworkEndian)
+  frame.write(body)
+  frame.to_slice
+end
+
 describe CQL::Postgres::Wire::Backend do
+  it "reads buffered DataRows in place and gets the same rows as the copying path" do
+    stream = IO::Memory.new
+    [["one", nil], ["two", "bb"]].each { |row| stream.write(data_row_frame(row)) }
+    stream.write(Bytes['Z'.ord.to_u8, 0, 0, 0, 5, 'I'.ord.to_u8])
+    bytes = stream.to_slice
+
+    [IO::Memory.new(bytes.dup), PlainIO.new(IO::Memory.new(bytes.dup))].each do |source|
+      rows = 2.times.map { Wire::Backend.read(source).as(Wire::Backend::DataRow).values.map { |field| field.try { |value| String.new(value) } } }.to_a
+      rows.should eq [["one", nil], ["two", "bb"]]
+      Wire::Backend.read(source).as(Wire::Backend::ReadyForQuery).status.should eq 'I'
+    end
+  end
+
+  it "reads DataRows that straddle or exceed the stream's buffer through a small-buffered pipe" do
+    rows = [["alpha", nil, "x" * 40], ["b"], ["y" * 300, "z"]]
+    [7, 16, 100].each do |buffer_size|
+      reader, writer = IO.pipe
+      reader.buffer_size = buffer_size
+      spawn do
+        rows.each { |row| writer.write(data_row_frame(row)) }
+        writer.close
+      end
+      read = rows.size.times.map { Wire::Backend.read(reader).as(Wire::Backend::DataRow).values.map { |field| field.try { |value| String.new(value) } } }.to_a
+      read.should eq rows
+      expect_raises(IO::EOFError) { Wire::Backend.read(reader) }
+    end
+  end
+
+  it "does not take the in-place path for a DataRow with a hostile or incomplete frame" do
+    expect_raises(CQL::Postgres::ProtocolError, /invalid message length/) { Wire::Backend.read(IO::Memory.new(Bytes['D'.ord.to_u8, 0x7f, 0xff, 0xff, 0xff])) }
+    truncated = data_row_frame(["abcdef"])[0, 9]
+    expect_raises(IO::EOFError) { Wire::Backend.read(IO::Memory.new(truncated)) }
+  end
+
   it "decodes authentication requests" do
     backend('R', "00000000").should be_a Wire::Backend::AuthenticationOk
     backend('R', "00000003").should be_a Wire::Backend::AuthenticationCleartext
@@ -195,12 +257,12 @@ describe CQL::Postgres::Wire::Backend do
   it "reads every 16-bit count as unsigned" do
     expect_raises(CQL::Postgres::ProtocolError, /truncated/) { backend('t', "8000" + "00000017") }
     expect_raises(CQL::Postgres::ProtocolError) { backend('T', "ffff") }
-    expect_raises(CQL::Postgres::ProtocolError, /truncated/) { backend('D', "8000") }
+    expect_raises(CQL::Postgres::ProtocolError, /truncated/) { backend('D', "8000").as(Wire::Backend::DataRow).values }
     backend('G', "00" + "ffff").as(Wire::Backend::CopyResponse).column_count.should eq 65535
   end
 
   it "reads field counts as unsigned and only -1 as NULL" do
-    expect_raises(CQL::Postgres::ProtocolError, /invalid field length -2/) { backend('D', "0001" + "fffffffe") }
+    expect_raises(CQL::Postgres::ProtocolError, /invalid field length -2/) { backend('D', "0001" + "fffffffe").as(Wire::Backend::DataRow).values }
     backend('t', "0000").as(Wire::Backend::ParameterDescription).type_oids.should be_empty
   end
 
@@ -284,6 +346,14 @@ describe CQL::Postgres::Types do
   it "lets applications register a codec for their own type" do
     Types.register(777_001_u32, binary: false) { |bytes| Shout.new(String.new(bytes)) }
     Types.codec_for(777_001_u32).decode.call("abc".to_slice).as(Shout).text.should eq "ABC"
+  end
+
+  it "hands registered (non-borrowing) codecs their own copy of the bytes" do
+    Types.register(777_002_u32) { |bytes| bytes }
+    source = Bytes[1, 2, 3]
+    kept = Types.codec_for(777_002_u32).decode.call(source).as(Bytes)
+    source[0] = 9_u8
+    kept.should eq Bytes[1, 2, 3]
   end
 
   it "does not let a decoded bytea pin the message buffer" do

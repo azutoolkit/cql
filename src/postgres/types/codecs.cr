@@ -6,6 +6,7 @@ require "./param"
 require "./decimal_text"
 require "../../compat"
 require "../errors"
+require "../wire/reader"
 
 module CQL::Postgres::Types
   # Include in a class or struct that a registered codec returns.
@@ -31,15 +32,19 @@ module CQL::Postgres::Types
   @@codecs = {} of UInt32 => Codec
   @@registration = CQL::Compat::Mutex.new
 
-  # Adds or replaces the decoding of a type, e.g. an extension type. The table
+  # Adds or replaces the decoding of a type, e.g. an extension type. The bytes a
+  # decoder receives are a private copy unless the codec is registered with
+  # `borrowed: true` (the built-in ones are), which hands out a view of the
+  # connection's receive buffer that is only valid during the call. The table
   # is replaced as a whole, so readers on other fibers or threads never see it
   # half-edited.
   #
   # ```
   # CQL::Postgres::Types.register(oid, binary: false) { |bytes| MyType.parse(String.new(bytes)) } # MyType includes Types::Custom
   # ```
-  def self.register(oid : UInt32, binary : Bool = true, &decode : Bytes -> Value) : Nil
-    @@registration.synchronize { @@codecs = @@codecs.merge({oid => Codec.new(binary, decode)}) }
+  def self.register(oid : UInt32, binary : Bool = true, borrowed : Bool = false, &decode : Bytes -> Value) : Nil
+    decoder = borrowed ? decode : ->(bytes : Bytes) { decode.call(bytes.dup).as(Value) }
+    @@registration.synchronize { @@codecs = @@codecs.merge({oid => Codec.new(binary, decoder)}) }
   end
 
   # Types without a codec arrive as text and decode to String.
@@ -49,7 +54,14 @@ module CQL::Postgres::Types
 
   def self.read_int(type : T.class, bytes : Bytes) : T forall T
     raise ProtocolError.new("expected #{sizeof(T)} bytes for #{T}, got #{bytes.size}") unless bytes.size == sizeof(T)
-    IO::ByteFormat::NetworkEndian.decode(type, bytes)
+    bits = Wire::Reader.big_endian(bytes)
+    {% if T == Float32 %}
+      bits.to_u32!.unsafe_as(Float32)
+    {% elsif T == Float64 %}
+      bits.unsafe_as(Float64)
+    {% else %}
+      T.new!(bits)
+    {% end %}
   end
 
   def self.microseconds_since_epoch(bytes : Bytes) : Time
@@ -78,20 +90,20 @@ module CQL::Postgres::Types
     Time::Span.new(seconds: micros // 1_000_000, nanoseconds: (micros % 1_000_000) * 1000)
   end
 
-  register(OID::BOOL) { |bytes| read_int(UInt8, bytes) != 0 }
+  register(OID::BOOL, borrowed: true) { |bytes| read_int(UInt8, bytes) != 0 }
   register(OID::BYTEA, &.dup)
-  register(OID::INT2) { |bytes| read_int(Int16, bytes) }
-  register(OID::INT4) { |bytes| read_int(Int32, bytes) }
-  register(OID::INT8) { |bytes| read_int(Int64, bytes) }
-  register(OID::OID) { |bytes| read_int(UInt32, bytes) }
-  register(OID::FLOAT4) { |bytes| read_int(Float32, bytes) }
-  register(OID::FLOAT8) { |bytes| read_int(Float64, bytes) }
-  register(OID::UUID) { |bytes| bytes.size == 16 ? UUID.new(bytes) : raise(ProtocolError.new("expected 16 bytes for uuid, got #{bytes.size}")) }
-  register(OID::DATE) { |bytes| date(bytes) }
-  register(OID::TIMESTAMP) { |bytes| microseconds_since_epoch(bytes) }
-  register(OID::TIMESTAMPTZ) { |bytes| microseconds_since_epoch(bytes) }
-  register(OID::TIME) { |bytes| span_from_microseconds(read_int(Int64, bytes)) }
-  register(OID::NUMERIC, binary: false) { |bytes| DecimalText.new(String.new(bytes)) }
-  register(OID::JSON, binary: false) { |bytes| parse_json(bytes) }
-  register(OID::JSONB, binary: false) { |bytes| parse_json(bytes) }
+  register(OID::INT2, borrowed: true) { |bytes| read_int(Int16, bytes) }
+  register(OID::INT4, borrowed: true) { |bytes| read_int(Int32, bytes) }
+  register(OID::INT8, borrowed: true) { |bytes| read_int(Int64, bytes) }
+  register(OID::OID, borrowed: true) { |bytes| read_int(UInt32, bytes) }
+  register(OID::FLOAT4, borrowed: true) { |bytes| read_int(Float32, bytes) }
+  register(OID::FLOAT8, borrowed: true) { |bytes| read_int(Float64, bytes) }
+  register(OID::UUID, borrowed: true) { |bytes| bytes.size == 16 ? UUID.new(bytes) : raise(ProtocolError.new("expected 16 bytes for uuid, got #{bytes.size}")) }
+  register(OID::DATE, borrowed: true) { |bytes| date(bytes) }
+  register(OID::TIMESTAMP, borrowed: true) { |bytes| microseconds_since_epoch(bytes) }
+  register(OID::TIMESTAMPTZ, borrowed: true) { |bytes| microseconds_since_epoch(bytes) }
+  register(OID::TIME, borrowed: true) { |bytes| span_from_microseconds(read_int(Int64, bytes)) }
+  register(OID::NUMERIC, binary: false, borrowed: true) { |bytes| DecimalText.new(String.new(bytes)) }
+  register(OID::JSON, binary: false, borrowed: true) { |bytes| parse_json(bytes) }
+  register(OID::JSONB, binary: false, borrowed: true) { |bytes| parse_json(bytes) }
 end

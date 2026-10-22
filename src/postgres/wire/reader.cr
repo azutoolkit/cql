@@ -20,19 +20,31 @@ module CQL::Postgres::Wire
     end
 
     def uint16 : UInt16
-      IO::ByteFormat::NetworkEndian.decode(UInt16, take(2))
+      Reader.big_endian(take(2)).to_u16!
     end
 
     def int16 : Int16
-      IO::ByteFormat::NetworkEndian.decode(Int16, take(2))
+      Reader.big_endian(take(2)).to_i16!
     end
 
     def int32 : Int32
-      IO::ByteFormat::NetworkEndian.decode(Int32, take(4))
+      Reader.big_endian(take(4)).to_i32!
     end
 
     def uint32 : UInt32
-      IO::ByteFormat::NetworkEndian.decode(UInt32, take(4))
+      Reader.big_endian(take(4)).to_u32!
+    end
+
+    # Up to 8 bytes as one big-endian unsigned number. Shifting is several times
+    # cheaper than IO::ByteFormat, which copies through a StaticArray.
+    def self.big_endian(bytes : Bytes) : UInt64
+      value = 0_u64
+      index = 0
+      while index < bytes.size
+        value = value &* 256_u64 &+ bytes.unsafe_fetch(index)
+        index += 1
+      end
+      value
     end
 
     def char : Char
@@ -56,7 +68,7 @@ module CQL::Postgres::Wire
     # The returned slices alias the message payload; nothing copies them.
     private def take(count : Int32) : Bytes
       raise ProtocolError.new("message truncated") if count < 0 || count > remaining
-      @bytes[@pos, count].tap { @pos += count }
+      Bytes.new(@bytes.to_unsafe + @pos, count, read_only: @bytes.read_only?).tap { @pos += count }
     end
   end
 end

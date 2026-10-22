@@ -111,10 +111,12 @@ module CQL::Postgres
     end
 
     private def decode(row : Wire::Backend::DataRow, columns : Array(Column)) : Array(Types::Value)
-      raise ProtocolError.new("row has #{row.values.size} values for #{columns.size} columns") unless row.values.size == columns.size
-      Array(Types::Value).new(columns.size) do |index|
-        row.values[index].try { |bytes| columns[index].codec.decode.call(bytes) }
+      raise ProtocolError.new("row has #{row.size} values for #{columns.size} columns") unless row.size == columns.size
+      values = Array(Types::Value).new(columns.size)
+      row.each_field do |field|
+        values << field.try { |bytes| columns[values.size].codec.decode.call(bytes) }
       end
+      values
     end
 
     private def run_simple(sql : String) : Array(Result)

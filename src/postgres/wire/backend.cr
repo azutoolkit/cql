@@ -53,8 +53,30 @@ module CQL::Postgres::Wire
       include Message
     end
 
-    record DataRow, values : Array(Bytes?) do
+    # One row, left as the message payload and read field by field so a large
+    # result does not allocate an intermediate array per row.
+    record DataRow, payload : Bytes do
       include Message
+
+      def size : Int32
+        Reader.new(payload).uint16.to_i
+      end
+
+      # Yields each field's bytes, nil for NULL.
+      def each_field(& : Bytes? ->) : Nil
+        reader = Reader.new(payload)
+        reader.uint16.times do
+          length = reader.int32
+          raise ProtocolError.new("invalid field length #{length}") if length < -1
+          yield(length == -1 ? nil : reader.bytes(length))
+        end
+      end
+
+      def values : Array(Bytes?)
+        fields = Array(Bytes?).new(size)
+        each_field { |field| fields << field }
+        fields
+      end
     end
 
     record CommandComplete, tag : String do
@@ -103,8 +125,28 @@ module CQL::Postgres::Wire
     # are refused, and big payloads are buffered only as they arrive so a
     # hostile length cannot reserve memory the peer never sends.
     def self.read(io : IO, max_size : Int32 = MAX_MESSAGE_SIZE) : Message
-      type = io.read_byte || raise IO::EOFError.new("server closed the connection")
-      length = io.read_bytes(Int32, IO::ByteFormat::NetworkEndian)
+      read_buffered_data_row(io, max_size) || read_message(io, max_size)
+    end
+
+    # A DataRow that already sits whole in the stream's buffer is read in place,
+    # as asyncpg does for result rows: no payload allocation and no copy. Its
+    # payload is borrowed from that buffer and valid only until the next read,
+    # which is fine because the session decodes every row immediately.
+    private def self.read_buffered_data_row(io : IO, max_size : Int32) : DataRow?
+      buffered = io.peek
+      return unless buffered && buffered.size >= 5 && buffered.unsafe_fetch(0) == 'D'.ord
+      length = Reader.big_endian(Bytes.new(buffered.to_unsafe + 1, 4)).to_i32!
+      return unless 4 <= length && length - 4 <= max_size && buffered.size - 1 >= length
+      payload = Bytes.new(buffered.to_unsafe + 5, length - 4)
+      io.skip(1 + length)
+      DataRow.new(payload)
+    end
+
+    private def self.read_message(io : IO, max_size : Int32) : Message
+      header = uninitialized UInt8[5]
+      io.read_fully(header.to_slice)
+      type = header[0]
+      length = Reader.big_endian(header.to_slice[1, 4]).to_i32!
       raise ProtocolError.new("invalid message length #{length}") unless 4 <= length && length - 4 <= max_size
       decode(type.chr, Reader.new(read_payload(io, length - 4)))
     end
@@ -124,7 +166,7 @@ module CQL::Postgres::Wire
       when 'Z'      then ready_for_query(reader)
       when 'v'      then negotiate_protocol_version(reader)
       when 'T'      then row_description(reader)
-      when 'D'      then data_row(reader)
+      when 'D'      then DataRow.new(reader.rest)
       when 'C'      then CommandComplete.new(reader.cstring)
       when 'E'      then ErrorResponse.new(error_fields(reader))
       when 'N'      then NoticeResponse.new(error_fields(reader))
@@ -174,15 +216,6 @@ module CQL::Postgres::Wire
         Field.new(name, type_oid)
       end
       RowDescription.new(fields)
-    end
-
-    private def self.data_row(reader : Reader) : DataRow
-      values = Array(Bytes?).new(reader.uint16.to_i) do
-        length = reader.int32
-        raise ProtocolError.new("invalid field length #{length}") if length < -1
-        length == -1 ? nil : reader.bytes(length)
-      end
-      DataRow.new(values)
     end
 
     private def self.ready_for_query(reader : Reader) : ReadyForQuery
