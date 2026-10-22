@@ -131,6 +131,16 @@ module CQL::Performance
   # JSON report formatter
   class JSONReportFormatter < ReportFormatter
     def format(report : PerformanceReport) : String
+      issues = report.issues.map do |issue|
+        {
+          "type"      => issue.type.to_s,
+          "severity"  => issue.severity.to_s,
+          "message"   => issue.message,
+          "details"   => issue.details,
+          "timestamp" => issue.timestamp.to_rfc3339,
+        }
+      end
+
       {
         "timestamp"        => report.timestamp.to_rfc3339,
         "duration_seconds" => report.duration.total_seconds,
@@ -139,14 +149,7 @@ module CQL::Performance
           "slow_queries"  => report.slow_queries,
           "errors"        => report.errors,
         },
-        "issues" => report.issues.map { |issue| # ameba:disable Style/MultilineCurlyBlock
- {
-          "type"      => issue.type.to_s,
-          "severity"  => issue.severity.to_s,
-          "message"   => issue.message,
-          "details"   => issue.details,
-          "timestamp" => issue.timestamp.to_rfc3339,
-        } },
+        "issues"   => issues,
         "stats"    => report.stats.transform_values(&.to_h),
         "metadata" => report.metadata,
       }.to_json
