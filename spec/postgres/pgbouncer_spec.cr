@@ -100,6 +100,32 @@ describe "PgBouncer" do
       end
     end
 
+    it "streams through a portal, which pins the pooler's server connection until the stream ends" do
+      streaming = pooler_session("CQL_PGB_TX_PS")
+      other = pooler_session("CQL_PGB_TX_PS")
+      answered = Channel(Int32).new(1)
+      begin
+        count = streaming.stream("SELECT g::int4 FROM generate_series(1, 3000) g", fetch_size: 100) do |rows|
+          rows.first(150).to_a # two fetches: the portal is suspended between them
+          spawn { answered.send(plus_one(other)) }
+          sleep 300.milliseconds
+          select
+          when answered.receive then fail "another client ran on the single server connection mid-stream"
+          else
+          end
+          rows.to_a.size
+        end
+        count.should eq 2850
+        select
+        when value = answered.receive then value.should eq 2
+        when timeout(5.seconds) then fail "the waiting client was never served after the stream ended"
+        end
+      ensure
+        streaming.close
+        other.close
+      end
+    end
+
     it "rolls back a transaction a pooled engine connection leaves open" do
       url = pooler_url("CQL_PGB_TX_PS", "&pool_size=1")
       pending! "set CQL_PGB_TX_PS (see script/pgbouncer-matrix)" unless url

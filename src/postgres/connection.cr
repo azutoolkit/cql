@@ -71,6 +71,29 @@ module CQL::Postgres
       translating_lost { @session.copy_out(sql) { |chunk| yield chunk } }
     end
 
+    # Runs a query and yields a result set that reads rows from the server
+    # *fetch_size* at a time, so a large result is never held whole. The
+    # connection is busy until the block returns; stopping early is fine. See
+    # `Session#stream` for the details, including the timeout.
+    #
+    # ```
+    # connection.stream("SELECT id, name FROM users WHERE age > $1", 18, fetch_size: 500) do |rows|
+    #   rows.each { puts rows.read(Int64) }
+    # end
+    # ```
+    def stream(sql : String, *args, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
+      stream(sql, args.to_a, fetch_size, timeout) { |rows| yield rows }
+    end
+
+    def stream(sql : String, args : Enumerable, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
+      params = args.map { |arg| Types::ParamEncoder.encode(arg) }.to_a
+      translating_lost do
+        @session.stream(sql, params, fetch_size, timeout: timeout) do |rows|
+          yield ResultSet.new(Statement.new(self, sql, prepared: true), rows)
+        end
+      end
+    end
+
     # Several statements, one network round trip. See `Session#pipeline`.
     def pipeline(statements : Array({String, Array(Types::Param)})) : Array(Result | ServerError)
       translating_lost { @session.pipeline(statements) }

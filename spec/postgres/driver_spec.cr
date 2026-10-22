@@ -45,7 +45,15 @@ describe CQL::Postgres::Driver do
     #  ["application_name", "client_encoding", "database", "protocol", "user"]
   end
 
-  it "opens through crystal-db's registry and pool for cockroachdb:// URLs, a name only this driver registers" do
+  it "leaves the cockroachdb name alone until it is opted in" do
+    before = PG::Driver.registered?("cockroachdb")
+    PG::Driver.register
+    PG::Driver.registered?("cockroachdb").should eq before
+    PG::Driver::NAMES.should eq({"postgres", "postgresql"})
+  end
+
+  it "opens through crystal-db's registry and pool for cockroachdb:// URLs once opted in" do
+    PG::Driver.register_cockroachdb
     accepted = 0
     server = FakePG.start do |client|
       accepted += 1

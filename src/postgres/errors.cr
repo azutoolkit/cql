@@ -10,6 +10,10 @@ module CQL::Postgres
   class ProtocolError < Error
   end
 
+  # A `RowStream` was read after its block ended, or after its statement failed.
+  class StreamClosed < Error
+  end
+
   # The server's first reply to the startup message was not a protocol message
   # at all, e.g. CockroachDB answering an unknown protocol version with HTTP/2.
   class UnrecognizedStartupReply < ProtocolError

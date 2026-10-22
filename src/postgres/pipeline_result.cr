@@ -36,7 +36,7 @@ module CQL::Postgres
     end
 
     private def read_rows(& : ResultSet -> T) : Array(T) forall T
-      rows = ResultSet.new(@statement, @result, detached: true)
+      rows = ResultSet.new(@statement, @result, true)
       Array(T).new(@result.rows.size).tap do |mapped|
         rows.each { mapped << yield rows }
       end

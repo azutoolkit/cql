@@ -83,10 +83,18 @@ module CQL::Postgres::Wire
       end
     end
 
-    def self.execute(io : IO) : Nil
+    # Runs the unnamed portal, returning at most *max_rows* rows (0: all of them).
+    def self.execute(io : IO, max_rows : Int32 = 0) : Nil
       frame(io, 'E') do |body|
         cstring(body, "")
-        int32(body, 0) # no row limit
+        int32(body, max_rows)
+      end
+    end
+
+    def self.close_portal(io : IO) : Nil
+      frame(io, 'C') do |body|
+        body.write_byte('P'.ord.to_u8)
+        cstring(body, "")
       end
     end
 

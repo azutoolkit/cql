@@ -5,7 +5,9 @@
 #
 # Settings (environment): BENCH_OPS (operations per workload, default 5000),
 # BENCH_CONCURRENCY (fibers for the concurrent workload, default 8), BENCH_WARMUP
-# (default 200). Each driver gets a pool as large as the concurrency, filled
+# (default 200), BENCH_STREAM_ROWS (rows of the streaming-memory comparison, default
+# 200000, 0 skips it). The streaming comparison reads peak resident memory from
+# /proc, so it is Linux only. Each driver gets a pool as large as the concurrency, filled
 # before timing. It drops and creates the table `cql_wire_bench_items`. Nothing
 # here is a result: numbers depend on your server, network and build.
 #
@@ -212,7 +214,50 @@ def report(results : Array(Measurement)) : Nil
   end
 end
 
+STREAM_ROWS  = (ENV["BENCH_STREAM_ROWS"]? || "200000").to_i
+STREAM_FETCH = 1000
+
+# Peak resident set size of this process so far (VmHWM), in KiB; nil without /proc.
+def peak_rss_kib : Int64?
+  File.each_line("/proc/self/status") do |line|
+    return line.split[1].to_i64 if line.starts_with?("VmHWM:")
+  end
+  nil
+rescue File::Error
+  nil
+end
+
+# One large result read with Session#stream (STREAM_FETCH rows at a time) and
+# then in full. The high-water mark never falls, so streaming runs first and the
+# difference to the second reading is what whole-result buffering costs.
+def stream_memory_comparison : Nil
+  sql = "SELECT g::int8, repeat('x', 50) || g FROM generate_series(1, #{STREAM_ROWS}) g"
+  engine = CQL::Postgres::AsyncEngine.connect("#{DATABASE_URL}#{DATABASE_URL.includes?('?') ? '&' : '?'}pool_size=1")
+  baseline = peak_rss_kib
+  streamed_rows, buffered_peak, streaming_ms = engine.with_connection do |connection|
+    started = Time.instant
+    count, peak = connection.session.stream(sql, fetch_size: STREAM_FETCH) do |rows|
+      total = 0_i64
+      rows.each { total += 1 }
+      {total, rows.peak_buffered}
+    end
+    {count, peak, (Time.instant - started).total_milliseconds}
+  end
+  after_streaming = peak_rss_kib
+  full_rows, full_ms = engine.with_connection do |connection|
+    started = Time.instant
+    {connection.session.query(sql).rows.size.to_i64, (Time.instant - started).total_milliseconds}
+  end
+  after_full = peak_rss_kib
+  puts "large result, #{STREAM_ROWS} rows of two columns"
+  puts "  %-34s rows held at once %8d   read in %8.1f ms   peak RSS %s" % {"streamed, #{STREAM_FETCH} per fetch", buffered_peak, streaming_ms, after_streaming ? "#{after_streaming} KiB (+#{after_streaming - baseline.not_nil!})" : "n/a"}
+  puts "  %-34s rows held at once %8d   read in %8.1f ms   peak RSS %s" % {"whole result", full_rows, full_ms, after_full ? "#{after_full} KiB (+#{after_full - after_streaming.not_nil!} more)" : "n/a"}
+  puts "  (streamed #{streamed_rows} rows; baseline peak RSS before either: #{baseline || "n/a"} KiB)"
+  engine.close
+end
+
 puts "operations per workload: #{OPS}, concurrency: #{CONCURRENCY}, warm-up: #{WARMUP}"
+stream_memory_comparison if STREAM_ROWS > 0
 contenders = [WireContender.new(DATABASE_URL, CONCURRENCY), PgShardContender.new(DATABASE_URL, CONCURRENCY)] of Contender
 begin
   results = contenders.flat_map { |contender| workloads(contender) }

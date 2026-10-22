@@ -78,11 +78,14 @@ Real-world benchmarks (1M records, complex queries):
 
 ## Native PostgreSQL Driver
 
-This is the default driver for `postgres://`, `postgresql://` and `cockroachdb://` URLs: `require "cql"` loads it and
-registers it with crystal-db, so `CQL::Schema` and `DB.open` use it without the `pg` shard. If your app requires `pg`
-before `cql` (it keeps the names) or after it (it replaces them), the `pg` shard's driver serves `postgres://` and
-`postgresql://` instead, so remove `require "pg"` to switch (`cockroachdb://` is only claimed by this driver; a Schema with
-`CQL::Adapter::CockroachDB` rewrites it to `postgres://`, so it follows the same rule). crystal-db's own pool serves
+This is the default driver for `postgres://` and `postgresql://` URLs: `require "cql"` loads it and registers it with
+crystal-db, so `CQL::Schema` and `DB.open` use it without the `pg` shard. If your app requires `pg` before `cql` (it
+keeps the names) or after it (it replaces them), the `pg` shard's driver serves those URLs instead, so remove
+`require "pg"` to switch, or compile with `-Dcql_no_postgres_driver` to keep this driver out of crystal-db's registry.
+`cockroachdb://` is opt-in, because only CockroachDB 24.3 was checked: call `CQL::Postgres::Driver.register_cockroachdb`
+(or compile with `-Dcql_postgres_driver_cockroachdb`) to let `DB.open("cockroachdb://...")` use it. A Schema with
+`CQL::Adapter::CockroachDB` rewrites its URL to `postgres://`, so it follows the `postgres` rule above, and
+`AsyncEngine.connect("cockroachdb://...")` needs no registration. crystal-db's own pool serves
 `Schema` and `DB.open`; the engine's `pool_size`/`max_queries` options only apply to `AsyncEngine`. Write a literal `+`
 in a user name or password as `%2B` (crystal-db reads `+` as a space). See "CockroachDB", "PostgreSQL versions" and "PgBouncer" below for what was verified against real servers.
 
@@ -108,6 +111,11 @@ end
 # Isolation, access mode, savepoints and commit durability are per transaction.
 engine.transaction(isolation: :serializable, read_only: true) do |tx|
   tx.savepoint { |inner| AppDB.insert.into(:audit).values(note: "tried").using(inner).commit } # undone alone if the block raises
+end
+
+# A large result without holding it all: rows arrive 500 at a time through a portal.
+engine.stream(User.query.where(active: true), fetch_size: 500) do |rows|
+  rows.each { puts rows.read(String) } # stopping early is fine: the connection goes back to the pool in sync
 end
 
 # Many statements, one network round trip (each still reaches telemetry); failures stay isolated.
@@ -157,15 +165,25 @@ Things to know:
   protocol message. Savepoints, `SET LOCAL synchronous_commit`, pipelining, COPY, cancel and `40001` mapping to
   `SerializationFailure` work as on PostgreSQL. Differences: `SELECT 1` is an `int8`, `pg_sleep` returns a bool, the
   default isolation level is serializable, `deferrable: true` is refused, and COPY mistakes come back as a generic
-  `ServerError`. To leave crystal-db's registry alone (so the `pg` shard or another driver serves every URL), compile
-  with `-Dcql_no_postgres_driver`.
+  `ServerError`.
 - `synchronous_commit: false` (or `?synchronous_commit=off` for a whole connection) lets `COMMIT` return before the WAL is
   flushed to disk. It cannot corrupt the database, but commits from the last few hundred milliseconds (up to about three
   times `wal_writer_delay`) can be lost if the server crashes, and a replica or client may have seen them already.
   Use it for data you can recompute; keep the default for money. A transaction-level `SET LOCAL` only affects that one
   transaction.
 
-- A statement's whole result is read into memory; there is no row streaming yet.
+- Ordinary queries (`all`, `to_a`, `exec_query`) read a statement's whole result into memory. For big
+  results use `engine.stream(query_or_sql, fetch_size:)` (a `DB::ResultSet`) or `Session#stream` (an `Iterator` with
+  `peak_buffered` and `rows_read`): Execute with a row limit, at most `fetch_size` rows buffered, and the portal closed
+  when the block ends however early (`Close` before `Sync`, so inside a transaction too), and a stream read after its
+  block raises `StreamClosed`. The connection is busy for the whole block (do not use it inside); `engine.stream` takes its
+  own pooled connection, `tx.stream` uses the transaction's. `timeout:` bounds the whole stream: once it passes, the
+  next fetch raises `QueryTimeout` and the session is dropped unless the server confirmed a cancel.
+  `connection.session.cancel` from another fiber raises `QueryCanceled` if the server is busy fetching (otherwise there
+  is nothing to cancel). COPY cannot be streamed, and a value that cannot be decoded raises after its fetch, with the
+  session kept in sync. Measured with `benchmarks/pg_wire_bench.cr` against
+  PostgreSQL 16 (200000 rows of two columns): 1000 rows held at once and +1.7 MB peak memory streamed, 200000 rows and
+  +45 MB read whole; streaming took 125 ms against 82 ms because of its 200 round trips.
 - Infinite and out-of-range dates and timestamps raise `CQL::Postgres::UnsupportedValue`.
 - Behind PgBouncer in transaction mode use `statement_cache_size=0` (the unnamed statement is used; pipelining needs the
   cache). See "PgBouncer" below.
@@ -186,7 +204,11 @@ Things to know:
   with `max_prepared_statements` above 0, cached statements, pipelining, cancel (with the 4-byte key the pooler hands
   out), `SET LOCAL` and rollback of a leaked transaction all work. In transaction mode without it, named statements
   collide between clients (SQLSTATE `42P05`, and `26000` when a statement is missing on the next server connection):
-  use `statement_cache_size=0` there. Session mode behaves like a direct connection. Not tested: PgBouncer 1.23 and
+  use `statement_cache_size=0` there. Session mode behaves like a direct connection. Streaming works in transaction mode with `max_prepared_statements`, and a
+  stream's portal pins the pooler's server connection until the block ends (another client of a one-connection pool
+  waits for it; checked with `default_pool_size = 1`). `statement_cache_size=0` sends Parse/Describe and Bind in separate
+  transactions, which a pooler with several server connections may route to different ones: only a single server
+  connection was tested. Not tested: PgBouncer 1.23 and
   later, other poolers (Odyssey, pgcat, RDS Proxy), TLS to the pooler.
 - `sslrootcert` adds a CA to the system trust store (Crystal's TLS context cannot drop the system roots); `prefer` and
   `require` encrypt without verifying the server, like libpq.

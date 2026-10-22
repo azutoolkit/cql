@@ -3,6 +3,7 @@ require "openssl"
 require "./config"
 require "./handshake"
 require "./result"
+require "./row_stream"
 require "./statement_cache"
 require "./copy_stream"
 
@@ -394,3 +395,4 @@ end
 require "./session/queries"
 require "./session/pipelining"
 require "./session/copying"
+require "./session/streaming"
