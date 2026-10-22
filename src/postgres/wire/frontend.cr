@@ -1,17 +1,17 @@
 require "../types/param"
+require "../protocol_version"
 require "../errors"
 
 module CQL::Postgres::Wire
   # Encoders for the messages a client sends. Each writes one complete frame
   # to *io*, so several can be buffered and flushed together (pipelining).
   module Frontend
-    PROTOCOL_VERSION =   196608_i32 # 3.0
-    SSL_REQUEST      = 80877103_i32
-    CANCEL_REQUEST   = 80877102_i32
+    SSL_REQUEST    = 80877103_i32
+    CANCEL_REQUEST = 80877102_i32
 
-    def self.startup(io : IO, parameters : Hash(String, String)) : Nil
+    def self.startup(io : IO, parameters : Hash(String, String), version : ProtocolVersion = ProtocolVersion::V3_0) : Nil
       frame(io, nil) do |body|
-        int32(body, PROTOCOL_VERSION)
+        int32(body, version.code)
         parameters.each do |name, value|
           cstring(body, name)
           cstring(body, value)
@@ -24,11 +24,12 @@ module CQL::Postgres::Wire
       frame(io, nil) { |body| int32(body, SSL_REQUEST) }
     end
 
-    def self.cancel_request(io : IO, process_id : Int32, secret_key : Int32) : Nil
+    # The secret key runs to the end of the message (4 bytes before protocol 3.2).
+    def self.cancel_request(io : IO, process_id : Int32, secret_key : Bytes) : Nil
       frame(io, nil) do |body|
         int32(body, CANCEL_REQUEST)
         int32(body, process_id)
-        int32(body, secret_key)
+        body.write(secret_key)
       end
     end
 

@@ -8,7 +8,7 @@ private def decline_tls_then_start_up(client : FakePG::Client) : Nil
   client.read_startup["protocol"].should eq "80877103"
   client.io.write_byte('N'.ord.to_u8)
   client.io.flush
-  client.read_startup["protocol"].should eq "3.0"
+  client.read_startup["protocol"].should eq "3.2"
   client.ok_handshake
 end
 
@@ -49,16 +49,16 @@ describe CQL::Postgres::Transport do
     io = PG::Transport.connect(config)
     PG::Handshake.new(config, io).run
     io.close
-    asked.should eq "3.0"
+    asked.should eq "3.2"
   end
 
   it "sends a CancelRequest with the session's key over a new connection" do
     request = Channel(Hash(String, String)).new(1)
     server = FakePG.start { |client| request.send(client.read_startup) }
-    PG::Transport.cancel(PG::Config.parse(server.url), 4242, 777)
+    PG::Transport.cancel(PG::Config.parse(server.url), 4242, Bytes[0, 0, 3, 9])
     select
     when received = request.receive
-      received.should eq({"protocol" => "cancel", "pid" => "4242", "secret" => "777"})
+      received.should eq({"protocol" => "cancel", "pid" => "4242", "secret" => "00000309"})
     when timeout(2.seconds)
       fail "the server never saw the cancel request"
     end

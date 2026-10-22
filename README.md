@@ -78,7 +78,7 @@ Real-world benchmarks (1M records, complex queries):
 
 ## Native PostgreSQL Driver
 
-`CQL::Postgres::AsyncEngine` speaks the PostgreSQL wire protocol (v3.0) itself, on Crystal fibers and the standard
+`CQL::Postgres::AsyncEngine` speaks the PostgreSQL wire protocol itself (3.2, falling back to 3.0), on Crystal fibers and the standard
 library's event loop, with its own connection pool. It is an opt-in `CQL::Executor`: nothing is loaded unless you require
 it, and SQLite/MySQL users are unaffected. The engine itself needs only the standard library and `db`. A `CQL::Schema`
 for PostgreSQL still opens a crystal-db connection when it is created, so an app that defines schemas also needs the
@@ -105,6 +105,12 @@ results[0].as(CQL::Postgres::PipelineResult).all(as: String)
 
 What it does:
 
+- **Protocol version**: it asks for 3.2 (PostgreSQL 18; longer cancel keys) and follows the server's
+  `NegotiateProtocolVersion`, or retries on 3.0 when an older server or proxy rejects the startup. Pin it with
+  `min_protocol_version` / `max_protocol_version` (`3.0` or `3.2`) in the URL. Covered by byte-fixture and fake-server
+  specs, and by live specs that run against real PostgreSQL 16 and 18 servers; not tried against PgBouncer or other
+  proxies. A server that rejects 3.2 costs every new connection one extra attempt, so set `max_protocol_version=3.0` for it. OAuth authentication (PostgreSQL 18) is not
+  supported.
 - **Protocol**: startup, trust/cleartext/MD5/SCRAM-SHA-256 authentication, TLS through SSLRequest
   (`sslmode=disable|prefer|require|verify-full`), Unix sockets (`?host=/var/run/postgresql`), simple and extended
   queries with per-connection prepared-statement caching, binary results for common types, `COPY` in and out,

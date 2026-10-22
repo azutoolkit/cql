@@ -39,14 +39,20 @@ private def error_for(code : String, extra = {} of Char => String)
 end
 
 describe CQL::Postgres::Wire::Frontend do
+  it "encodes the protocol version in the startup packet" do
+    frame_bytes { |io| Wire::Frontend.startup(io, {"user" => "u"}, CQL::Postgres::ProtocolVersion::V3_2) }.should start_with "0000001000030002"
+    frame_bytes { |io| Wire::Frontend.startup(io, {"user" => "u"}) }.should start_with "0000001000030000"
+  end
+
   it "encodes the v3.0 startup packet" do
     frame_bytes { |io| Wire::Frontend.startup(io, {"user" => "u", "database" => "d"}) }
       .should eq "0000001b0003000075736572007500646174616261736500640000"
   end
 
-  it "encodes SSLRequest and CancelRequest" do
+  it "encodes SSLRequest and CancelRequest, whose secret key runs to the end of the message" do
     frame_bytes { |io| Wire::Frontend.ssl_request(io) }.should eq "0000000804d2162f"
-    frame_bytes { |io| Wire::Frontend.cancel_request(io, 1, 2) }.should eq "0000001004d2162e0000000100000002"
+    frame_bytes { |io| Wire::Frontend.cancel_request(io, 1, Bytes[0, 0, 0, 2]) }.should eq "0000001004d2162e0000000100000002"
+    frame_bytes { |io| Wire::Frontend.cancel_request(io, 1, Bytes[1, 2, 3, 4, 5, 6, 7, 8]) }.should eq "0000001404d2162e000000010102030405060708"
   end
 
   it "encodes simple queries and terminate" do
@@ -191,10 +197,15 @@ describe CQL::Postgres::Wire::Backend do
     CQL::Postgres::ServerError.from(backend('E', fields).as(Wire::Backend::ErrorResponse).fields).should be_a CQL::Postgres::UniqueViolation
   end
 
+  it "decodes a BackendKeyData whose secret key is longer than 4 bytes" do
+    key = backend('K', "00000007" + "00" * 32).as(Wire::Backend::BackendKeyData)
+    key.secret_key.size.should eq 32
+  end
+
   it "decodes ParameterStatus, BackendKeyData and ReadyForQuery" do
     backend('S', "ab".to_slice.hexstring + "00" + "cd".to_slice.hexstring + "00").as(Wire::Backend::ParameterStatus).value.should eq "cd"
     key = backend('K', "00000007" + "00000009").as(Wire::Backend::BackendKeyData)
-    {key.process_id, key.secret_key}.should eq({7, 9})
+    {key.process_id, key.secret_key}.should eq({7, Bytes[0, 0, 0, 9]})
     backend('Z', "49").as(Wire::Backend::ReadyForQuery).status.should eq 'I'
   end
 
@@ -283,7 +294,8 @@ describe CQL::Postgres::Wire::Backend do
   it "rejects unknown types, bad lengths and truncated payloads" do
     expect_raises(CQL::Postgres::ProtocolError, /unexpected message type/) { backend('~') }
     expect_raises(CQL::Postgres::ProtocolError, /invalid message length/) { Wire::Backend.read(IO::Memory.new("5a00000002".hexbytes)) }
-    expect_raises(CQL::Postgres::ProtocolError, /truncated/) { backend('K', "00000007") }
+    expect_raises(CQL::Postgres::ProtocolError, /cancel key/) { backend('K', "00000007") }
+    expect_raises(CQL::Postgres::ProtocolError, /cancel key/) { backend('K', "00000007" + "00" * 257) }
     expect_raises(CQL::Postgres::ProtocolError, /unterminated/) { backend('C', "BEGIN".to_slice.hexstring) }
     expect_raises(IO::EOFError) { Wire::Backend.read(IO::Memory.new) }
   end

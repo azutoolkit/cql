@@ -32,7 +32,7 @@ module CQL::Postgres
 
     # Sends an out-of-band CancelRequest for the session identified by the key.
     # The request itself is never encrypted, as in libpq before version 17.
-    def self.cancel(config : Config, process_id : Int32, secret_key : Int32) : Nil
+    def self.cancel(config : Config, process_id : Int32, secret_key : Bytes) : Nil
       io = open(config)
       Wire::Frontend.cancel_request(io, process_id, secret_key)
       io.flush

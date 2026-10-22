@@ -18,6 +18,10 @@ module CQL::Postgres
   class AuthenticationError < Error
   end
 
+  # The server does not speak a protocol version the connection may use.
+  class UnsupportedProtocol < Error
+  end
+
   # The socket failed or the connection was already closed.
   class ConnectionLost < Error
   end

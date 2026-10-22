@@ -11,21 +11,28 @@ module CQL::Postgres
     # Startup messages are small; refuse anything bigger before authenticating.
     MAX_MESSAGE_SIZE = 64 * 1024
 
-    record Outcome, process_id : Int32, secret_key : Int32, parameters : Hash(String, String), status : Char
+    record Outcome, process_id : Int32, secret_key : Bytes, parameters : Hash(String, String), status : Char,
+      version : ProtocolVersion = ProtocolVersion::V3_0
 
-    def initialize(@config : Config, @io : IO)
+    # Asks for *requested* and settles for the highest version the server offers,
+    # as long as it is not older than the config's minimum.
+    def initialize(@config : Config, @io : IO, @requested : ProtocolVersion = config.max_protocol_version)
       @parameters = {} of String => String
       @process_id = 0
-      @secret_key = 0
+      @secret_key = Bytes.empty
+      @version = @requested
     end
 
     def run : Outcome
-      send { |buffer| Wire::Frontend.startup(buffer, @config.startup_parameters) }
+      send { |buffer| Wire::Frontend.startup(buffer, @config.startup_parameters, @requested) }
       scram = nil
       authenticated = false
       loop do
         case message = Wire::Backend.read(@io, MAX_MESSAGE_SIZE)
-        when Wire::Backend::NoticeResponse, Wire::Backend::NegotiateProtocolVersion
+        when Wire::Backend::NoticeResponse
+        when Wire::Backend::NegotiateProtocolVersion
+          raise ProtocolError.new("protocol negotiation after authentication started") if authenticated || scram
+          negotiate(message)
         when Wire::Backend::AuthenticationOk
           raise ProtocolError.new("the server finished authentication in the middle of SCRAM") if scram && !scram.verified?
           authenticated = true
@@ -44,16 +51,28 @@ module CQL::Postgres
         when Wire::Backend::ParameterStatus
           @parameters[message.name] = message.value
         when Wire::Backend::BackendKeyData
+          raise ProtocolError.new("a #{message.secret_key.size}-byte cancel key is not valid for protocol #{@version}") unless @version.valid_secret_key?(message.secret_key)
           @process_id, @secret_key = message.process_id, message.secret_key
         when Wire::Backend::ReadyForQuery
           raise ProtocolError.new("the server skipped authentication") unless authenticated
-          return Outcome.new(@process_id, @secret_key, @parameters, message.status)
+          return Outcome.new(@process_id, @secret_key, @parameters, message.status, @version)
         when Wire::Backend::ErrorResponse
           raise ServerError.from(message.fields)
         else
           unexpected(message)
         end
       end
+    end
+
+    # The server cannot speak the requested minor version and names the newest it
+    # can. Options it did not recognise are ignored (they are settings the URL
+    # asked for, or names a hostile server made up, so they are only logged).
+    private def negotiate(message : Wire::Backend::NegotiateProtocolVersion) : Nil
+      @version = @requested.negotiated(message.newest_minor)
+      if @version < @config.min_protocol_version
+        raise UnsupportedProtocol.new("the server supports protocol #{@version} at most, but #{@config.min_protocol_version} or newer was required")
+      end
+      Session::Log.warn { "the server ignored these startup options: #{message.unrecognized.join(", ")}" } unless message.unrecognized.empty?
     end
 
     private def begin_scram(message : Wire::Backend::AuthenticationSASL) : Auth::ScramSha256

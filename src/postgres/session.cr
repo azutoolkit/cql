@@ -40,17 +40,34 @@ module CQL::Postgres
 
     getter config : Config
     getter process_id : Int32
-    getter secret_key : Int32
+    getter secret_key : Bytes
+    getter protocol_version : ProtocolVersion
     getter server_parameters : Hash(String, String)
     getter transaction_status : Char
     getter last_used : Time::Instant
     property on_notice : Proc(Hash(Char, String), Nil)? = nil
     property on_notification : Proc(Notification, Nil)? = nil
 
+    # Connects, asking for the newest protocol the config allows. A server that
+    # rejects that version outright (before PostgreSQL 9.3.21, or some poolers)
+    # gets one more try with 3.0 when the config allows it.
     def self.connect(config : Config) : Session
+      requested = config.max_protocol_version
+      attempt(config, requested)
+    rescue ex : ServerError
+      raise ex unless rejected_version?(ex) && requested.try { |version| version > ProtocolVersion::V3_0 } && config.min_protocol_version <= ProtocolVersion::V3_0
+      Log.info { "the server rejected protocol #{requested}; reconnecting with 3.0 (set max_protocol_version=3.0 to skip the first attempt)" }
+      attempt(config, ProtocolVersion::V3_0)
+    end
+
+    private def self.rejected_version?(error : ServerError) : Bool
+      error.sqlstate.in?("0A000", "08P01")
+    end
+
+    private def self.attempt(config : Config, version : ProtocolVersion) : Session
       io = Transport.connect(config)
       begin
-        outcome = Handshake.new(config, io).run
+        outcome = Handshake.new(config, io, version).run
         Transport.relax(io)
         new(config, io, outcome)
       rescue ex
@@ -62,6 +79,7 @@ module CQL::Postgres
     def initialize(@config : Config, @io : IO, outcome : Handshake::Outcome)
       @process_id = outcome.process_id
       @secret_key = outcome.secret_key
+      @protocol_version = outcome.version
       @server_parameters = outcome.parameters
       @transaction_status = outcome.status
       @cache = StatementCache.new(config.statement_cache_size)

@@ -1,3 +1,4 @@
+require "../protocol_version"
 require "./reader"
 
 module CQL::Postgres::Wire
@@ -34,7 +35,7 @@ module CQL::Postgres::Wire
       include Message
     end
 
-    record BackendKeyData, process_id : Int32, secret_key : Int32 do
+    record BackendKeyData, process_id : Int32, secret_key : Bytes do
       include Message
     end
 
@@ -162,7 +163,7 @@ module CQL::Postgres::Wire
       case type
       when 'R'      then authentication(reader)
       when 'S'      then ParameterStatus.new(reader.cstring, reader.cstring)
-      when 'K'      then BackendKeyData.new(reader.int32, reader.int32)
+      when 'K'      then backend_key_data(reader)
       when 'Z'      then ready_for_query(reader)
       when 'v'      then negotiate_protocol_version(reader)
       when 'T'      then row_description(reader)
@@ -216,6 +217,15 @@ module CQL::Postgres::Wire
         Field.new(name, type_oid)
       end
       RowDescription.new(fields)
+    end
+
+    # The key runs to the end of the message: 4 bytes before protocol 3.2, 4 to
+    # 256 after. The handshake checks it against the negotiated version.
+    private def self.backend_key_data(reader : Reader) : BackendKeyData
+      process_id = reader.int32
+      key = reader.rest.dup
+      raise ProtocolError.new("a #{key.size}-byte cancel key is outside the 4 to 256 bytes the protocol allows") unless ProtocolVersion::SECRET_KEY_SIZES_FROM_3_2.includes?(key.size)
+      BackendKeyData.new(process_id, key)
     end
 
     private def self.ready_for_query(reader : Reader) : ReadyForQuery

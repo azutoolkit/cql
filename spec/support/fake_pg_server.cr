@@ -23,11 +23,11 @@ class FakePG
       protocol = IO::ByteFormat::NetworkEndian.decode(Int32, body[0, 4])
       if protocol == 80877102
         return {"protocol" => "cancel", "pid" => IO::ByteFormat::NetworkEndian.decode(Int32, body[4, 4]).to_s,
-                "secret" => IO::ByteFormat::NetworkEndian.decode(Int32, body[8, 4]).to_s}
+                "secret" => body[8..].hexstring}
       end
-      return {"protocol" => protocol.to_s} unless protocol == 196608
+      return {"protocol" => protocol.to_s} unless protocol >> 16 == 3
       pairs = String.new(body[4..]).split('\0')
-      {"protocol" => "3.0"}.merge(pairs.each_slice(2).select { |pair| pair.size == 2 && !pair[0].empty? }.to_h { |pair| {pair[0], pair[1]} })
+      {"protocol" => "#{protocol >> 16}.#{protocol & 0xffff}"}.merge(pairs.each_slice(2).select { |pair| pair.size == 2 && !pair[0].empty? }.to_h { |pair| {pair[0], pair[1]} })
     end
 
     # {type, payload}; nil when the client hung up.
@@ -84,10 +84,10 @@ class FakePG
       send('R', int32(code) + extra)
     end
 
-    def ok_handshake(parameters = {"server_version" => "16.0", "client_encoding" => "UTF8"}, pid = 4242, secret = 777) : Nil
+    def ok_handshake(parameters = {"server_version" => "16.0", "client_encoding" => "UTF8"}, pid = 4242, secret : Int32 | Bytes = 777) : Nil
       auth(0)
       parameters.each { |name, value| send('S', build { |io| cstr(io, name); cstr(io, value) }) }
-      send('K', int32(pid) + int32(secret))
+      send('K', int32(pid) + (secret.is_a?(Bytes) ? secret : int32(secret)))
       ready
     end
 

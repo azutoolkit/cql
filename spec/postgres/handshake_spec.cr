@@ -24,7 +24,7 @@ describe CQL::Postgres::Handshake do
     end
     outcome = handshake(server, password: nil)
     outcome.process_id.should eq 4242
-    outcome.secret_key.should eq 777
+    outcome.secret_key.should eq Bytes[0, 0, 3, 9]
     outcome.status.should eq 'I'
     outcome.parameters["server_version"].should eq "16.0"
     startup.not_nil!.select("user", "database", "client_encoding", "application_name").should eq(
@@ -175,5 +175,93 @@ describe CQL::Postgres::Handshake do
     started = Time.instant
     expect_raises(IO::TimeoutError) { handshake(server, query: "sslmode=disable&connect_timeout=0.2") }
     (Time.instant - started).should be < 1.5.seconds
+  end
+
+  it "asks for protocol 3.2 by default and keeps it when the server accepts" do
+    asked = nil
+    server = FakePG.start do |client|
+      asked = client.read_startup["protocol"]
+      client.ok_handshake(secret: Bytes.new(32, &.to_u8))
+    end
+    outcome = handshake(server)
+    asked.should eq "3.2"
+    outcome.version.should eq CQL::Postgres::ProtocolVersion::V3_2
+    outcome.secret_key.size.should eq 32
+  end
+
+  it "settles for the minor version the server offers in NegotiateProtocolVersion" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.send('v', client.int32(0) + client.int32(0))
+      client.ok_handshake
+    end
+    outcome = handshake(server)
+    outcome.version.should eq CQL::Postgres::ProtocolVersion::V3_0
+    outcome.secret_key.size.should eq 4
+  end
+
+  it "understands the whole-version-number form that servers before PostgreSQL 18 send" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.send('v', client.int32(196608) + client.int32(0))
+      client.ok_handshake
+    end
+    handshake(server).version.should eq CQL::Postgres::ProtocolVersion::V3_0
+  end
+
+  it "reports the options the server did not recognise without failing" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.send('v', client.int32(0) + client.int32(1) + "_pq_.nope\0".to_slice)
+      client.ok_handshake
+    end
+    handshake(server).version.should eq CQL::Postgres::ProtocolVersion::V3_0
+  end
+
+  it "refuses a server that only offers a version older than the configured minimum" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.send('v', client.int32(0) + client.int32(0))
+    end
+    expect_raises(PG::UnsupportedProtocol, /3.0 at most, but 3.2 or newer/) { handshake(server, query: "sslmode=disable&min_protocol_version=3.2") }
+  end
+
+  it "can be pinned to 3.0, which a 3.0 server accepts without negotiation" do
+    asked = nil
+    server = FakePG.start do |client|
+      asked = client.read_startup["protocol"]
+      client.ok_handshake
+    end
+    handshake(server, query: "sslmode=disable&max_protocol_version=3.0").version.should eq CQL::Postgres::ProtocolVersion::V3_0
+    asked.should eq "3.0"
+  end
+
+  it "refuses a version negotiation that arrives after authentication began" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.auth(0)
+      client.send('v', client.int32(0) + client.int32(0))
+    end
+    expect_raises(PG::ProtocolError, /negotiation after authentication/) { handshake(server) }
+  end
+
+  it "rejects a cancel key whose length the negotiated version does not allow" do
+    long_key = FakePG.start do |client|
+      client.read_startup
+      client.send('v', client.int32(0) + client.int32(0))
+      client.ok_handshake(secret: Bytes.new(8))
+    end
+    expect_raises(PG::ProtocolError, /8-byte cancel key is not valid for protocol 3.0/) { handshake(long_key) }
+
+    too_long = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake(secret: Bytes.new(257))
+    end
+    expect_raises(PG::ProtocolError, /257-byte cancel key/) { handshake(too_long) }
+  end
+
+  it "rejects unknown protocol version names in the URL" do
+    expect_raises(ArgumentError, /unsupported protocol version/) { PG::Config.parse("postgres://h/db?max_protocol_version=3.1") }
+    expect_raises(ArgumentError, /newer than max_protocol_version/) { PG::Config.parse("postgres://h/db?min_protocol_version=3.2&max_protocol_version=3.0") }
   end
 end

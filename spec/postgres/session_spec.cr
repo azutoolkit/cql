@@ -414,11 +414,11 @@ describe CQL::Postgres::Session do
   end
 
   it "cancels a statement that exceeds its timeout and stays usable" do
-    cancelled = Channel({Int32, Int32}).new(1)
+    cancelled = Channel({Int32, String}).new(1)
     server = FakePG.start do |client|
       startup = client.read_startup
       if startup["protocol"] == "cancel"
-        cancelled.send({startup["pid"].to_i, startup["secret"].to_i})
+        cancelled.send({startup["pid"].to_i, startup["secret"]})
         next
       end
       client.ok_handshake
@@ -735,14 +735,14 @@ describe CQL::Postgres::Session do
   end
 
   it "closes quietly even when the TLS layer fails to shut down" do
-    outcome = PG::Handshake::Outcome.new(1, 2, {} of String => String, 'I')
+    outcome = PG::Handshake::Outcome.new(1, Bytes[0, 0, 0, 2], {} of String => String, 'I')
     session = PG::Session.new(PG::Config.new, ScriptedIO.new(close_raises: true), outcome)
     session.hard_close
     session.closed?.should be_true
   end
 
   it "reports a failed write as a lost connection, with the session closed" do
-    outcome = PG::Handshake::Outcome.new(1, 2, {} of String => String, 'I')
+    outcome = PG::Handshake::Outcome.new(1, Bytes[0, 0, 0, 2], {} of String => String, 'I')
     session = PG::Session.new(PG::Config.new, ScriptedIO.new(fail_writes_after: 0), outcome)
     expect_raises(PG::ConnectionLost, /Broken pipe/) { session.simple_query("SELECT 1") }
     session.closed?.should be_true
@@ -750,7 +750,7 @@ describe CQL::Postgres::Session do
 
   it "reports a connection that dies while streaming COPY data as lost, not as a raw IO error" do
     copy_in_response = FakePG.frame('G', Bytes[0, 0, 1, 0, 0])
-    outcome = PG::Handshake::Outcome.new(1, 2, {} of String => String, 'I')
+    outcome = PG::Handshake::Outcome.new(1, Bytes[0, 0, 0, 2], {} of String => String, 'I')
     session = PG::Session.new(PG::Config.new, ScriptedIO.new(copy_in_response, fail_writes_after: 1), outcome)
     expect_raises(PG::ConnectionLost, /Broken pipe/) { session.copy_in("COPY t FROM STDIN") { |copy| copy.write(Bytes.new(100_000)) } }
     session.closed?.should be_true
@@ -841,7 +841,7 @@ describe CQL::Postgres::Session do
   end
 
   it "treats a failing TLS stream like any lost connection, on requests and on close" do
-    outcome = PG::Handshake::Outcome.new(1, 2, {} of String => String, 'I')
+    outcome = PG::Handshake::Outcome.new(1, Bytes[0, 0, 0, 2], {} of String => String, 'I')
     session = PG::Session.new(PG::Config.new, ScriptedIO.new(fail_writes_after: 0, tls_failure: true), outcome)
     expect_raises(PG::ConnectionLost, /SSL_write/) { session.simple_query("SELECT 1") }
     session.closed?.should be_true
@@ -867,5 +867,80 @@ describe CQL::Postgres::Session do
     end
     (Time.instant - started).should be < 2.seconds
     session.closed?.should be_true
+  end
+
+  it "retries with protocol 3.0 when the server rejects the newer version outright" do
+    asked = [] of String
+    server = FakePG.start do |client|
+      asked << client.read_startup["protocol"]
+      if asked.size == 1
+        client.error("0A000", "unsupported frontend protocol 3.2: server supports 1.0 to 3.0", {'S' => "FATAL", 'V' => "FATAL"})
+      else
+        client.ok_handshake
+      end
+    end
+    session = connect(server)
+    asked.should eq ["3.2", "3.0"]
+    session.protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_0
+  end
+
+  it "tries exactly twice when both versions are rejected, and not at all when 3.0 is the ceiling" do
+    asked = [] of String
+    server = FakePG.start do |client|
+      asked << client.read_startup["protocol"]
+      client.error("08P01", "unsupported protocol", {'S' => "FATAL", 'V' => "FATAL"})
+    end
+    expect_raises(PG::ServerError, /08P01/) { connect(server) }
+    asked.should eq ["3.2", "3.0"]
+
+    capped = [] of String
+    ceiling = FakePG.start do |client|
+      capped << client.read_startup["protocol"]
+      client.error("0A000", "unsupported frontend protocol", {'S' => "FATAL", 'V' => "FATAL"})
+    end
+    config = PG::Config.parse(ceiling.url(query: "sslmode=disable&max_protocol_version=3.0"))
+    expect_raises(PG::ServerError, /0A000/) { PG::Session.connect(config) }
+    capped.should eq ["3.0"]
+  end
+
+  it "does not retry a rejection when the minimum version forbids 3.0, or for other errors" do
+    asked = [] of String
+    server = FakePG.start do |client|
+      asked << client.read_startup["protocol"]
+      client.error("0A000", "unsupported frontend protocol 3.2", {'S' => "FATAL", 'V' => "FATAL"})
+    end
+    config = PG::Config.parse(server.url(query: "sslmode=disable&min_protocol_version=3.2"))
+    expect_raises(PG::ServerError, /0A000/) { PG::Session.connect(config) }
+    asked.should eq ["3.2"]
+
+    auth_failure = [] of String
+    other = FakePG.start do |client|
+      auth_failure << client.read_startup["protocol"]
+      client.error("28P01", "password authentication failed")
+    end
+    expect_raises(PG::InvalidAuthorization) { connect(other) }
+    auth_failure.should eq ["3.2"]
+  end
+
+  it "cancels with the full secret key of a protocol 3.2 session" do
+    key = Bytes.new(32) { |index| (index + 1).to_u8 }
+    received = Channel(Hash(String, String)).new(1)
+    server = FakePG.start do |client|
+      startup = client.read_startup
+      if startup["protocol"] == "cancel"
+        received.send(startup)
+        next
+      end
+      client.ok_handshake(secret: key)
+    end
+    session = connect(server)
+    session.cancel
+    select
+    when startup = received.receive
+      startup["secret"].should eq key.hexstring
+      startup["pid"].should eq "4242"
+    when timeout(2.seconds)
+      fail "no cancel request arrived"
+    end
   end
 end
