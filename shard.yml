@@ -1,5 +1,5 @@
 name: cql
-version: 0.0.508
+version: 0.0.522
 authors:
   - Elias Perez <eperez@justworks.com>
 crystal: '>= 1.12.2'
@@ -15,7 +15,7 @@ dependencies:
 development_dependencies:
   ameba:
     github: crystal-ameba/ameba
-    version: ~> 1.6.4 # 1.7 no longer builds bin/ameba on install and needs a newer Crystal
+    version: ~> 1.6.4
   sqlite3:
     github: crystal-lang/crystal-sqlite3
   mysql:
