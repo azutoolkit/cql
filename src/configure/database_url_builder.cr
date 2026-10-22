@@ -43,7 +43,8 @@ module CQL::Configure
         config.each { |key, value| params.add(key, value) }
       end
 
-      # Rebuild the URL with parameters
+      # Parameters already in the URL win over configured ones
+      HTTP::Params.parse(uri.query.to_s).each { |key, value| params[key] = value }
       uri.query = params.to_s
       uri.to_s
     end
@@ -52,6 +53,8 @@ module CQL::Configure
       case url
       when .starts_with?("postgresql://"), .starts_with?("postgres://")
         Adapter::Postgres
+      when .starts_with?("cockroachdb://")
+        Adapter::CockroachDB
       when .starts_with?("mysql://")
         Adapter::MySql
       when .starts_with?("sqlite3://")

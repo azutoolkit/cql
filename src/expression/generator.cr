@@ -8,8 +8,14 @@ module Expression
     getter params : Array(DB::Any) = [] of DB::Any
     getter query : String = ""
 
-    def initialize(@adapter : CQL::Adapter = CQL::Adapter::SQLite)
+    def initialize(@adapter : CQL::Adapter = CQL::Adapter::SQLite, @quote_identifiers : Bool = false)
       @dialect = @adapter.dialect
+    end
+
+    # A table, column or alias name as it appears in SQL: quoted when the
+    # schema opted in, verbatim otherwise.
+    private def ident(name) : String
+      @quote_identifiers ? @dialect.quote_identifier(name.to_s) : name.to_s
     end
 
     # Helper method to check if a column is an auto-timestamp column
@@ -18,6 +24,8 @@ module Expression
       %w[created_at updated_at].includes?(column_name)
     end
 
+    # Visits only append to the parameters; `reset` (called by every `to_sql`)
+    # is the one place they are cleared, so subqueries keep the outer values.
     def reset
       @params.clear
       @query = ""
@@ -31,15 +39,16 @@ module Expression
 
     # Template Method for common visit methods
     def visit(node : Query) : String
-      @params.clear
       @query = String.build do |string|
+        string << with_clause(node)
         string << "SELECT "
-        string << "DISTINCT " if node.distinct?
-        # Columns and aggregates now contain Expression::Column nodes potentially with aliases
+        string << "DISTINCT " if node.distinct? && node.distinct_on.empty?
+        string << @dialect.format_distinct_on(node.distinct_on.map(&.accept(self))) unless node.distinct_on.empty?
+        # Columns and select expressions (aggregates, window functions), aliased where given
         columns_sql = node.columns.map(&.accept(self))
-        aggr_sql = node.aggr_columns.map(&.accept(self))
+        expressions_sql = node.select_expressions.map { |expression| select_item(expression) }
 
-        select_parts = columns_sql + aggr_sql
+        select_parts = columns_sql + expressions_sql
         if select_parts.empty?
           string << "*"
         else
@@ -55,17 +64,26 @@ module Expression
         string << node.having.try &.accept(self) if node.having     # Having handles aliases internally
         string << node.order_by.try &.accept(self) if node.order_by # OrderBy handles aliases internally
         string << node.limit.try &.accept(self) if node.limit
+        node.lock.try { |lock| string << @dialect.format_lock(lock) }
       end
+    end
+
+    # An aggregate or window function in the SELECT list, with its optional `AS alias`.
+    private def select_item(expression : SelectExpression) : String
+      sql = expression.accept(self)
+      (name = expression.as_name) ? "#{sql} AS #{ident(name)}" : sql
     end
 
     def visit(node : Join) : String
       String.build do |string|
-        string << " #{node.join_type.to_s.upcase} JOIN "
+        string << @dialect.join_keyword(node.join_type)
         # table node needs to output alias if present
         string << node.table.accept(self)
-        string << " ON "
-        # condition node needs to output aliased columns if present
-        string << node.condition.accept(self)
+        unless node.join_type.cross?
+          string << " ON "
+          # condition node needs to output aliased columns if present
+          string << node.condition.accept(self)
+        end
       end
     end
 
@@ -81,12 +99,13 @@ module Expression
         string << node.table.accept(self)
         string << " ("
         columns.each_with_index do |col, i|
-          string << col.column.name
+          string << ident(col.column.name)
           string << ", " if i < columns.size - 1
         end
         string << ")"
 
         if q = node.query
+          raise ArgumentError.new("ON CONFLICT is not supported with INSERT ... SELECT") if node.conflict
           string << " " << q.accept(self)
         else
           # Store placeholders for values
@@ -95,13 +114,13 @@ module Expression
           # Add all values to params and collect placeholders
           node.values.each do |row|
             row.each do |val|
-              @params << val
-              placeholders << placeholder
+              placeholders << bind(val)
             end
           end
 
           # Use dialect to format insert values
           string << @dialect.format_insert_values(node.values, placeholders)
+          node.conflict.try { |conflict| string << conflict.accept(self) }
 
           # Handle returning clause if needed
           if !node.back.empty?
@@ -135,54 +154,31 @@ module Expression
     end
 
     def visit(node : Column) : String
-      # Assuming Expression::Column now has `alias_name : Symbol?` field
-      String.build do |string|
-        if alias_name = node.alias_name
-          # Use alias if provided
-          string << alias_name
-          string << "."
-          string << node.column.name
-        elsif node.column.name == :*
-          # Handle SELECT *
-          # If an alias exists on the * Column itself (unlikely but possible), use it
-          # Otherwise, just output '*' - the Query builder should have expanded it if specific tables were needed.
-          string << "*"
-        else
-          # No alias provided on the column expression, use the original table name
-          table = node.column.table
-          raise "Internal Error: Column expression missing table context and no alias provided" unless table
-          string << table.table_name
-          string << "."
-          string << node.column.name
-        end
-      end
+      column_reference(node)
     end
 
     def visit(node : BaseColumn) : String
-      # Delegate to the specific column type - this should not be called directly
-      # but is here for completeness
-      visit(node.as(Column))
+      column_reference(node)
     end
 
     def visit(node : TypedColumn) : String
       # TypedColumn behaves the same as Column for SQL generation
-      String.build do |string|
-        if alias_name = node.alias_name
-          # Use alias if provided
-          string << alias_name
-          string << "."
-          string << node.column.name
-        elsif node.column.name == :*
-          # Handle SELECT *
-          string << "*"
-        else
-          # No alias provided on the column expression, use the original table name
-          table = node.column.table
-          raise "Internal Error: Column expression missing table context and no alias provided" unless table
-          string << table.table_name
-          string << "."
-          string << node.column.name
-        end
+      column_reference(node)
+    end
+
+    # `qualifier.column` for a column expression. The qualifier is the table
+    # alias when one is set, otherwise the column's own table name.
+    private def column_reference(node : BaseColumn) : String
+      column_name = node.column.name
+      if alias_name = node.alias_name
+        column_name == :* ? "#{ident(alias_name)}.*" : "#{ident(alias_name)}.#{ident(column_name)}"
+      elsif column_name == :*
+        # SELECT * - the query builder expands it when specific tables are needed
+        "*"
+      else
+        table = node.column.table
+        raise "Internal Error: Column expression missing table context and no alias provided" unless table
+        "#{ident(table.table_name)}.#{ident(column_name)}"
       end
     end
 
@@ -204,22 +200,19 @@ module Expression
       end
     end
 
+    # Always parenthesized: `NOT a AND b` would negate only `a`.
     def visit(node : Not) : String
-      String.build do |string|
-        string << "NOT "
-        string << node.condition.accept(self)
-      end
+      "NOT (#{node.condition.accept(self)})"
     end
 
     def visit(node : Compare) : String
-      @params << node.right
       String.build do |string|
         # Left side is an Expression::Column, which now handles alias
         string << node.left.accept(self)
         string << " "
         string << node.operator
         string << " "
-        string << placeholder
+        string << bind(node.right)
       end
     end
 
@@ -230,8 +223,7 @@ module Expression
         if node.left.is_a?(Expression::BaseColumn) || node.left.is_a?(Condition)
           string << node.left.as(Expression::BaseColumn | Condition).accept(self)
         else
-          @params << node.left.as(DB::Any)
-          string << placeholder
+          string << bind(node.left.as(DB::Any))
         end
         string << " "
         string << node.operator
@@ -239,18 +231,107 @@ module Expression
         if node.right.is_a?(Expression::BaseColumn) || node.right.is_a?(Condition)
           string << node.right.as(Expression::BaseColumn | Condition).accept(self)
         else
-          @params << node.right.as(DB::Any)
-          string << placeholder
+          string << bind(node.right.as(DB::Any))
         end
       end
     end
 
-    def visit(node : Between) : String
-      @params << node.low
-      low_placeholder = placeholder
+    def visit(node : Cte) : String
+      "#{ident(node.name)} AS (#{node.statement.accept(self)})"
+    end
 
-      @params << node.high
-      high_placeholder = placeholder
+    private def with_clause(node : Query) : String
+      return "" if node.ctes.empty?
+      "WITH #{"RECURSIVE " if node.recursive?}#{node.ctes.join(", ", &.accept(self))} "
+    end
+
+    def visit(node : WindowFunction) : String
+      clauses = [partition_clause(node), node.order_by.try(&.accept(self).strip), node.frame.try { |frame| frame_clause(frame) }]
+      "#{window_call(node)} OVER (#{clauses.compact.join(" ")})"
+    end
+
+    private def window_call(node : WindowFunction) : String
+      column = node.column.try(&.accept(self)) || (node.kind.count? ? "*" : nil)
+      arguments = node.kind.ntile? ? [node.argument] : [column, node.argument]
+      "#{node.kind.to_sql}(#{arguments.compact.join(", ")})"
+    end
+
+    private def partition_clause(node : WindowFunction) : String?
+      "PARTITION BY #{node.partition_by.join(", ", &.accept(self))}" unless node.partition_by.empty?
+    end
+
+    private def frame_clause(frame : Frame) : String
+      "#{frame.unit.to_s.upcase} BETWEEN #{frame_bound(frame.from)} AND #{frame_bound(frame.to)}"
+    end
+
+    private def frame_bound(bound : Frame::Bound) : String
+      case bound
+      in Symbol then bound.to_s.tr("_", " ").upcase
+      in Int32  then bound.zero? ? "CURRENT ROW" : "#{bound.abs} #{bound < 0 ? "PRECEDING" : "FOLLOWING"}"
+      end
+    end
+
+    def visit(node : JsonEquals) : String
+      column = node.column.accept(self)
+      path = bind(@dialect.json_path_param(node.path))
+      "#{@dialect.format_json_text(column, path)} = #{bind(@dialect.json_text_value(node.value))}"
+    end
+
+    def visit(node : JsonContains) : String
+      @dialect.format_json_contains(node.column.accept(self), bind(node.json))
+    end
+
+    def visit(node : GeoWithin) : String
+      column = node.column.accept(self)
+      @dialect.format_geo_within(column, bind(node.longitude), bind(node.latitude), bind(node.meters))
+    end
+
+    def visit(node : OnConflict) : String
+      target = node.target.map { |column| ident(column.column.name) }
+      return @dialect.format_on_conflict_nothing(target) if node.do_nothing?
+
+      refreshed = node.refreshed.map { |column| name = ident(column.column.name); "#{name} = #{@dialect.excluded_reference(name)}" }
+      @dialect.format_on_conflict_update(target, refreshed + node.assignments.map(&.accept(self)))
+    end
+
+    def visit(node : SetOperation) : String
+      @query = "#{set_operand(node.left)} #{node.operator.to_sql} #{set_operand(node.right)}"
+    end
+
+    # Operands that are themselves set operations, or that carry ORDER BY /
+    # LIMIT, are grouped so those clauses stay on the operand and the chain keeps
+    # its left-to-right meaning (INTERSECT otherwise binds tighter).
+    private def set_operand(node : Statement) : String
+      sql = node.accept(self)
+      node.needs_grouping_as_operand? ? @dialect.wrap_compound_operand(sql) : sql
+    end
+
+    def visit(node : Raw) : String
+      String.build do |sql|
+        node.fragments.each_with_index do |fragment, index|
+          sql << fragment
+          append_binding(sql, node.bindings[index]) if index < node.bindings.size
+        end
+      end
+    end
+
+    # Binds one value, or a comma-separated list of placeholders for an array.
+    private def append_binding(sql : IO, value : Raw::Value) : Nil
+      case value
+      when Array then value.join(sql, ", ") { |item, io| io << bind(item) }
+      else            sql << bind(value)
+      end
+    end
+
+    private def bind(value : DB::Any) : String
+      @params << value
+      placeholder
+    end
+
+    def visit(node : Between) : String
+      low_placeholder = bind(node.low)
+
+      high_placeholder = bind(node.high)
 
       String.build do |string|
         string << node.column.accept(self)
@@ -262,15 +343,13 @@ module Expression
     end
 
     def visit(node : Like) : String
-      @params << node.value
-      # Column node handles alias
-      @dialect.format_like(node.column.accept(self), placeholder)
+      column = node.column.accept(self)
+      node.insensitive? ? @dialect.format_ilike(column, bind(node.value)) : @dialect.format_like(column, bind(node.value))
     end
 
     def visit(node : NotLike) : String
-      @params << node.value
-      # Column node handles alias
-      @dialect.format_not_like(node.column.accept(self), placeholder)
+      column = node.column.accept(self)
+      node.insensitive? ? @dialect.format_not_ilike(column, bind(node.value)) : @dialect.format_not_like(column, bind(node.value))
     end
 
     def visit(node : InCondition) : String
@@ -279,8 +358,7 @@ module Expression
         string << node.column.accept(self)
         string << " IN ("
         node.values.each_with_index do |value, i|
-          @params << value
-          string << placeholder
+          string << bind(value)
           string << ", " if i < node.values.size - 1
         end
         string << ")"
@@ -340,13 +418,16 @@ module Expression
     end
 
     def visit(node : Limit) : String
-      @params << node.limit
-      limit_placeholder = placeholder
+      unless node.limit
+        # OFFSET with no LIMIT: the dialect decides how to express "unbounded".
+        return @dialect.format_offset_only(bind(node.offset.not_nil!))
+      end
+
+      limit_placeholder = bind(node.limit)
 
       offset_placeholder = nil
       if node.offset
-        @params << node.offset
-        offset_placeholder = placeholder
+        offset_placeholder = bind(node.offset)
       end
 
       @dialect.format_limit_offset(limit_placeholder, offset_placeholder)
@@ -374,14 +455,18 @@ module Expression
       # Only output alias if it differs from the table name
       String.build do |string|
         table_name = node.table.table_name.to_s
-        string << table_name
+        string << ident(table_name)
         # Only add AS clause if alias is different from the table name
         if alias_name = node.alias_name
           if alias_name != table_name
-            string << " AS " << alias_name
+            string << " AS " << ident(alias_name)
           end
         end
       end
+    end
+
+    def visit(node : Subquery) : String
+      "(#{node.statement.accept(self)}) AS #{ident(node.alias_name)}"
     end
 
     def visit(node : Null) : String
@@ -394,9 +479,7 @@ module Expression
     end
 
     def visit(node : Is) : String
-      @params << node.value
-      # Column node handles alias
-      "#{node.column.accept(self)} IS #{placeholder}"
+      "#{node.column.accept(self)} IS #{bind(node.value)}"
     end
 
     def visit(node : IsNull) : String
@@ -405,9 +488,7 @@ module Expression
     end
 
     def visit(node : IsNot) : String
-      @params << node.value
-      # Column node handles alias
-      "#{node.column.accept(self)} IS NOT #{placeholder}"
+      "#{node.column.accept(self)} IS NOT #{bind(node.value)}"
     end
 
     def visit(node : IsNotNull) : String
@@ -420,14 +501,9 @@ module Expression
     end
 
     def visit(node : Count) : String
-      # Check if the column being counted is the special '*' placeholder
-      if node.column.column.name == :*
-        # Generate standard COUNT(*) SQL
-        @dialect.format_count("*")
-      else
-        # Otherwise, process the column expression normally (handles aliases)
-        @dialect.format_count(node.column.accept(self))
-      end
+      # COUNT(*) for the special '*' placeholder, otherwise the column (alias-aware)
+      counted = node.column.column.name == :* ? "*" : node.column.accept(self)
+      @dialect.format_count(node.distinct? ? "DISTINCT #{counted}" : counted)
     end
 
     def visit(node : Max) : String
@@ -451,9 +527,7 @@ module Expression
     end
 
     def visit(node : Setter) : String
-      @params << node.value
-      # If node.column changes to Expression::Column, this needs update
-      "#{node.column.column.name} = #{placeholder}"
+      "#{ident(node.column.column.name)} = #{bind(node.value)}"
     end
 
     def visit(node : Update) : String
@@ -477,7 +551,7 @@ module Expression
 
     def visit(node : CreateIndex) : String
       @query = @dialect.create_index(
-        node.index.index_name.to_s,
+        CQL::Identifier.validate!(node.index.index_name.to_s, "index name"),
         node.index.table.table_name.to_s,
         node.index.columns.map(&.to_s),
         node.index.unique?
@@ -511,6 +585,7 @@ module Expression
         # Define foreign keys (if any)
         unless node.table.foreign_keys.empty?
           fks_sql = node.table.foreign_keys.map do |foreign_key|
+            validate_foreign_key!(foreign_key)
             @dialect.define_foreign_key(foreign_key)
           end
           definitions.concat(fks_sql)
@@ -519,6 +594,8 @@ module Expression
         # Define unique constraints (if any)
         unless node.table.unique_constraints.empty?
           unique_sql = node.table.unique_constraints.map do |unique_constraint|
+            validate_optional!(unique_constraint.name, "unique constraint name")
+            unique_constraint.columns.each { |col| CQL::Identifier.validate!(col.to_s, "column name") }
             @dialect.define_unique_constraint(unique_constraint)
           end
           definitions.concat(unique_sql)
@@ -527,6 +604,7 @@ module Expression
         # Define check constraints (if any)
         unless node.table.check_constraints.empty?
           check_sql = node.table.check_constraints.map do |check_constraint|
+            validate_optional!(check_constraint.name, "check constraint name")
             @dialect.define_check_constraint(check_constraint)
           end
           definitions.concat(check_sql)
@@ -566,20 +644,20 @@ module Expression
     end
 
     def visit(node : DropIndex) : String
-      @dialect.drop_index(node.index.index_name, node.index.table.table_name.to_s)
+      @dialect.drop_index(CQL::Identifier.validate_qualified!(node.index.index_name.to_s, "index name"), node.index.table.table_name.to_s)
     end
 
     def visit(node : RenameColumn) : String
       @dialect.rename_column(
         node.table_name,
-        node.old_name,
-        node.new_name,
+        CQL::Identifier.validate!(node.old_name.to_s, "column name"),
+        CQL::Identifier.validate!(node.new_name.to_s, "column name"),
         node.column.type,
       )
     end
 
     def visit(node : RenameTable) : String
-      @dialect.rename_table(node.table.table_name.to_s, node.new_name)
+      @dialect.rename_table(node.table.table_name.to_s, CQL::Identifier.validate!(node.new_name.to_s, "table name"))
     end
 
     def visit(node : ChangeColumn) : String
@@ -610,8 +688,9 @@ module Expression
       on_delete_sql = node.fk.on_delete.to_s.upcase.gsub("_", " ")
       on_update_sql = node.fk.on_update.to_s.upcase.gsub("_", " ")
 
+      validate_foreign_key!(node.fk)
       @dialect.add_foreign_key(
-        node.fk.name || "fk_#{node.fk.table.table_name}_#{node.fk.columns.join("_")}", # Provide default name if nil
+        CQL::Identifier.validate!(node.fk.name || "fk_#{node.fk.table.table_name}_#{node.fk.columns.join("_")}", "foreign key name"), # Provide default name if nil
         node.fk.table.table_name.to_s,
         node.fk.columns.map(&.to_s),
         node.fk.references_table.to_s,
@@ -621,8 +700,20 @@ module Expression
       )
     end
 
+    # Foreign key parts that are spliced into DDL as identifiers.
+    private def validate_foreign_key!(fk : CQL::ForeignKey) : Nil
+      validate_optional!(fk.name, "foreign key name")
+      fk.columns.each { |col| CQL::Identifier.validate!(col.to_s, "column name") }
+      CQL::Identifier.validate!(fk.references_table.to_s, "table name")
+      fk.references_columns.each { |col| CQL::Identifier.validate!(col.to_s, "column name") }
+    end
+
+    private def validate_optional!(name : String?, kind : String) : Nil
+      CQL::Identifier.validate!(name, kind) if name
+    end
+
     def visit(node : DropForeignKey) : String
-      @dialect.drop_foreign_key(node.table, node.fk)
+      @dialect.drop_foreign_key(node.table, CQL::Identifier.validate!(node.fk, "foreign key name"))
     end
   end
 end

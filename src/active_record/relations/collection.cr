@@ -483,6 +483,11 @@ module CQL::ActiveRecord::Relations
       @query.where({@key => @id}).where(**conditions)
     end
 
+    # A raw SQL fragment with bound `?` / `:name` values, scoped to this association.
+    def where(__sql sql : String, *positional, **named)
+      @query.where({@key => @id}).where(sql, *positional, **named)
+    end
+
     # Apply a limit to the query
     # - **param** : limit_count (Int32)
     # - **return** : CQL::Query

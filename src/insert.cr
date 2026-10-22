@@ -41,13 +41,25 @@ module CQL
   #   ).commit
   # ```
   class Insert
+    include Pinnable
+
     Log = CQL.config.logger
 
     @table : Table? = nil
     @columns : Set(Expression::Column) = Set(Expression::Column).new
     @values : Array(Array(DB::Any)) = Array(Array(DB::Any)).new
+    # Column names (in order) established by the first row; later rows are
+    # aligned to this order and must provide exactly the same columns.
+    @column_order : Array(Symbol) = [] of Symbol
     @back : Array(Expression::Column) = Array(Expression::Column).new
     @query : Query? = nil
+    # Upsert: the conflict target, then what to do about it (nil = not chosen yet).
+    @conflict_target : Array(Expression::Column) = [] of Expression::Column
+    @refreshed : Array(Expression::Column)? = nil
+    @refresh_all = false
+    @overrides : Array(Expression::Setter) = [] of Expression::Setter
+
+    getter schema : Schema
 
     def initialize(@schema : Schema)
     end
@@ -63,15 +75,11 @@ module CQL
     # insert.into(:users).values(name: "John", age: 30).last_insert_id
     # ```
     def last_insert_id(as type : PrimaryKeyType = Int64)
-      if adapter.postgres?
+      if adapter.postgres_compatible?
         # Reset to ensure nothing else but the :id is returned
         @back = Array(Expression::Column).new
         query, params = back(:id).to_sql
-        CQL::Performance.track(query, params) do
-          @schema.exec_query do |conn|
-            conn.query_one(query, args: params, as: type)
-          end
-        end
+        CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one(query, args: params, as: type) }
       else
         commit.last_insert_id
       end
@@ -98,11 +106,7 @@ module CQL
     def commit
       query, params = to_sql
 
-      CQL::Performance.track(query, params) do
-        @schema.exec_query do |conn|
-          conn.exec(query, args: params)
-        end
-      end
+      CQL::Execution.run(executor, query, params, :insert) { |connection| connection.exec(query, args: params) }
     rescue ex
       Log.error { "Insert failed: #{ex.message}" }
       raise ex
@@ -205,6 +209,39 @@ module CQL
       self
     end
 
+    # Starts an upsert: what to do when a row with the same *columns* already
+    # exists. Follow with `do_nothing` or `do_update`.
+    #
+    # ```
+    # insert.into(:users).values(email: e, name: n).on_conflict(:email).do_update(:name)
+    # ```
+    def on_conflict(*columns : Symbol) : self
+      conflict_target(columns)
+    end
+
+    def do_nothing : self
+      require_conflict_target!("do_nothing")
+      @refreshed = [] of Expression::Column
+      @refresh_all = false
+      @overrides.clear
+      self
+    end
+
+    # Updates the existing row: *refresh* columns take the incoming value (all
+    # non-target columns when none are given), *set* columns take explicit values.
+    def do_update(*refresh, **set) : self
+      update_columns(refresh, set)
+    end
+
+    # Inserts many rows, updating *update* columns (default: every other column; an
+    # empty list means do nothing) of rows that already exist for *conflict*.
+    def upsert(rows : Array(Hash(Symbol, DB::Any)), conflict : Array(Symbol), update : Array(Symbol)? = nil) : self
+      values(rows)
+      conflict_target(conflict)
+      return do_nothing if update && update.empty?
+      update_columns(update || [] of Symbol, NamedTuple.new)
+    end
+
     # Build the insert statement object
     # **@return** [Expression::Insert] The insert statement
     #
@@ -216,7 +253,7 @@ module CQL
     def build
       Expression::Insert.new(
         Expression::Table.new(@table.not_nil!),
-        @columns, @values, @back, build_query
+        @columns, @values, @back, build_query, build_conflict
       )
     end
 
@@ -237,6 +274,51 @@ module CQL
       {generator.query, generator.params}
     end
 
+    private def conflict_target(columns) : self
+      raise ArgumentError.new("on_conflict needs at least one column") if columns.empty?
+      @conflict_target = column_expressions(columns)
+      @refreshed = nil
+      @refresh_all = false
+      @overrides.clear
+      self
+    end
+
+    private def update_columns(refresh, set) : self
+      require_conflict_target!("do_update")
+      @refreshed = column_expressions(refresh)
+      @refresh_all = refresh.empty? && set.empty?
+      @overrides.clear
+      set.each { |column, value| @overrides << Expression::Setter.new(Expression::Column.new(find_column(column)), value.as(DB::Any)) }
+      self
+    end
+
+    private def column_expressions(names) : Array(Expression::Column)
+      columns = [] of Expression::Column
+      names.each { |name| columns << Expression::Column.new(find_column(name)) }
+      columns
+    end
+
+    private def require_conflict_target!(action : String) : Nil
+      raise ArgumentError.new("Call on_conflict(...) before #{action}") if @conflict_target.empty?
+    end
+
+    private def build_conflict : Expression::OnConflict?
+      return if @conflict_target.empty?
+      refreshed = @refreshed || raise ArgumentError.new("on_conflict needs do_nothing or do_update")
+      if @refresh_all
+        refreshed = refresh_all_columns
+        raise ArgumentError.new("do_update has no columns to update") if refreshed.empty?
+      end
+
+      Expression::OnConflict.new(@conflict_target.map(&.as(Expression::BaseColumn)), refreshed.map(&.as(Expression::BaseColumn)), @overrides.dup)
+    end
+
+    # Every inserted column that is not part of the conflict target.
+    private def refresh_all_columns : Array(Expression::Column)
+      target_names = @conflict_target.map(&.column.name)
+      @columns.reject { |column| target_names.includes?(column.column.name) }.to_a
+    end
+
     private def build_query
       if query = @query
         query.build
@@ -244,23 +326,27 @@ module CQL
     end
 
     private def build_values(fields)
-      keys = Set(Expression::Column).new
-
-      fields.each do |field, _|
-        column = find_column(field)
-        keys << Expression::Column.new(column)
+      pairs = [] of {Symbol, DB::Any}
+      fields.each do |field, value|
+        pairs << {field, value.is_a?(JSON::Any) ? value.to_json.as(DB::Any) : value.as(DB::Any)}
       end
 
-      @columns = keys if @columns.empty?
-
-      vals = fields.values.map do |v|
-        if v.is_a?(JSON::Any)
-          v.to_json.as(DB::Any)
-        else
-          v.as(DB::Any)
+      if @column_order.empty?
+        # Resolve every column before touching state so a bad column leaves the
+        # insert unchanged.
+        columns = pairs.map { |(field, _)| Expression::Column.new(find_column(field)) }
+        columns.each { |column| @columns << column }
+        @column_order = pairs.map(&.[0])
+      else
+        names = pairs.map(&.[0])
+        unless names.size == @column_order.size && (names - @column_order).empty?
+          raise ArgumentError.new(
+            "All rows in a bulk insert must have the same columns: expected #{@column_order.join(", ")}, got #{names.join(", ")}")
         end
+        pairs = @column_order.map { |name| pairs.find! { |(field, _)| field == name } }
       end
-      @values << vals.to_a
+
+      @values << pairs.map(&.[1])
     end
 
     private def find_table(table : Symbol) : Table
@@ -268,7 +354,8 @@ module CQL
     end
 
     private def find_column(column : Symbol) : BaseColumn
-      @table.not_nil!.columns[column] || raise "Column #{column} not found"
+      table = @table.not_nil!
+      table.columns[column]? || raise ArgumentError.new("Column #{column} not found in #{table.table_name}")
     end
   end
 end

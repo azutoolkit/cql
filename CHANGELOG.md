@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Typed model DSL: `Model.query.where { (age >= 18) & (status == "active") }` with bare column names typed to the column (unknown columns and type mismatches are compile errors), `order_by(created_at: :desc)` checked at compile time, `joins(:assoc) { ... }` / `left_joins`, `to_a`, and `Model.cql_columns` / `cql_association` metadata.
+- Telemetry: `CQL::Telemetry.subscribe`, `alert_on_slow`, `log_queries`, `with_context` and an abstract `Tracer` for OpenTelemetry-style adapters; parameters are not captured unless `capture_params` is on.
+- Unified execution: every statement runs through `CQL::Execution.run`; `Schema#with_connection` and `query.using(connection)` pin an explicit connection (e.g. a transaction).
+- Safe raw SQL fragments: `where("lower(name) = ? AND age > :age", "ada", age: 18)` on `Query`, `QueryBuilder`, models, associations, `Update` and `Delete`, plus `raw(...)` inside `where { }` blocks and `CQL.raw`. Values are always bound as parameters (arrays expand to `IN (?)` lists, `??` is a literal `?`, quoted text and comments are skipped); a value given in the wrong placeholder style raises instead of being dropped. The fragment text must be a literal, never built from user input. `nil` binds NULL (`name = ?` never matches it; use `IS NOT DISTINCT FROM ?`).
+- Window functions: `query.window(:row_number, as: :dept_rank, partition_by: :dept, order_by: {salary: :desc})`, aggregates over a window (`window(:sum, :salary, as: :running, order_by: :id, rows: {:unbounded_preceding, 0})`), `lag`/`lead`/`first_value`/`last_value`/`ntile`/`rank`/`dense_rank`/`percent_rank`/`cume_dist` and ROWS/RANGE frames. Needs MySQL 8.0+ and SQLite 3.25+. On MySQL, avoid window function names (`rank`, `row_number`, ...) as aliases unless `quote_identifiers` is on.
+- Upsert and bulk upsert: `insert.on_conflict(:email).do_update(:name, visits: 1)`, `.do_nothing`, and `insert.upsert(rows, conflict: [:email], update: [:name])` (`ON CONFLICT` on PostgreSQL/SQLite, `ON DUPLICATE KEY UPDATE` on MySQL). Not supported with `INSERT ... SELECT`. Needs SQLite 3.24+. On MySQL the conflict target is ignored: any unique key triggers `ON DUPLICATE KEY UPDATE`.
+- CockroachDB: `CQL::Adapter::CockroachDB` (`cockroachdb://` URLs, opened through the PostgreSQL driver) with a dialect that inherits PostgreSQL's SQL (`Int32` columns are declared `INT4`, since CockroachDB's `INTEGER` is 64-bit); it shares PostgreSQL's query features, but `structure_dump` is unsupported. The CA path is passed as `sslrootcert`.
+- Row locking `query.lock(:update | :share, skip_locked:, nowait:)` (PostgreSQL, MySQL, CockroachDB; SQLite raises `CQL::DialectError`), `distinct_on(:col)` (PostgreSQL, CockroachDB), `FULL` and `CROSS` joins (`full(:t) { |j| ... }`, `cross(:t)`; MySQL has no FULL JOIN).
+- Predicates: `ilike` / `not_ilike` (native `ILIKE` on PostgreSQL, `LOWER()` comparison elsewhere), `not(...)` / `.not` on conditions, `count(:col, distinct: true)`.
+- JSON: `col.json_eq(path, value)` (value at a key/index path compared as text) and `col.json_contains(json)` (PostgreSQL `@>`, MySQL `JSON_CONTAINS`; not on SQLite), with the path always bound as a parameter. Geospatial: `col.within_distance(longitude, latitude, meters)` (`ST_DWithin` on geography for PostgreSQL/CockroachDB, `ST_Distance_Sphere` with a long-lat point on MySQL 8.0.13+; the MySQL form is unverified against a live server and expects an SRID 4326 column).
+- Set operations: `union`, `union_all`, `intersect`, `except` on queries and on each other (`CompoundQuery`), executable like any query. Operands with their own `ORDER BY`/`LIMIT` or nested set operations are grouped (derived tables on SQLite). Ordering the combined result is not supported yet. MySQL needs 8.0.31+ for `INTERSECT`/`EXCEPT` and 8.0.18+ for `EXPLAIN ANALYZE`.
+- `query.to_sql(for: CQL::Adapter::Postgres)` renders SQL for another dialect without a connection, and `query.explain(analyze: false)` returns the database's execution plan (SQLite `EXPLAIN QUERY PLAN`, PostgreSQL/MySQL `EXPLAIN [ANALYZE]`).
+- Common table expressions and derived tables: `query.with(:totals, subquery).from(:totals)`, `with_recursive(:tree, anchor) { |step| ... }` for `WITH RECURSIVE`, and `from(subquery, as: :alias)`. The CTE/subquery's selected columns (and aliased aggregates) are addressable in the DSL like any table. `with(:b) { |scope| ... }` builds a CTE that can read earlier ones, and `query.nested` gives subqueries access to the query's CTEs. Available on `CQL::Query` (not on `QueryBuilder`/models yet). Needs MySQL 8.0+ and SQLite 3.8.3+.
+- `CQL::Executable`: one shared implementation of `all`, `get`, `each`, `to_sql` and `explain` (result cache and performance tracking included) for every executable statement.
+
 - Comprehensive CHANGELOG.md for tracking changes
 - Performance monitoring system with N+1 query detection
 - Multi-layer caching architecture (memory, Redis, fragment, request-scoped)
@@ -33,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Behavior change:** `QueryBuilder#select(:a, :b)` now returns a builder whose results are `Model::Row` records (unselected columns are `nil`) instead of hydrating a full model that failed for non-nilable attributes. `QueryBuilder#where { }` now yields typed bare columns; `ids` goes through the executor. Use `Model.query.select(...)` results as `Model::Row`, not `Model`.
+- **`QueryBuilder#where { }`, `join { }`, `left { }`, `right { }` return a new builder** like every other builder method; they no longer also mutate the receiver. Use the returned value.
+- `NOT (...)` conditions are always parenthesized (`NOT a AND b` negated only `a`).
+- `Insert`/`Update`/`Delete` raise `ArgumentError` ("Column x not found in table") for an unknown column; they used to raise `KeyError`, so a `rescue KeyError` around them must change.
+- `Query#first` no longer temporarily rewrites the query's limit; it runs a copy with `LIMIT 1`.
+- Aggregates accept `as:` (a Symbol) for a select-list alias: `count(:id, as: :n)`.
+- Opt-in identifier quoting: `CQL::Schema.define(..., quote_identifiers: true)` quotes table, column and alias names (double quotes, backticks on MySQL). Default is off, so generated SQL is unchanged. Quoting covers queries and DML only; DDL (`build`, migrations, `alter`) is not quoted yet.
+
 - Improved error handling with detailed exception hierarchy
 - Enhanced N+1 query detection with better pattern recognition
 - Optimized expression builder architecture
@@ -54,11 +77,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Subqueries (`IN (SELECT ...)`, `EXISTS`, `INSERT ... SELECT`) no longer discard the parameters bound by the enclosing query (SELECT, UPDATE and DELETE), and PostgreSQL `$n` numbering now continues across them.
+- Multi-row `INSERT` on PostgreSQL numbers each row's placeholders (it emitted `($1,$2),($1,$2)`); rows are aligned by column name and rows with a different column set raise `ArgumentError`.
+- `OFFSET` without `LIMIT` is no longer dropped (bare `OFFSET` on PostgreSQL, `LIMIT -1` on SQLite, maximum `LIMIT` on MySQL).
+- Block DSL qualifies columns with the table alias (`from(customers: :c).where { c.city == ... }`).
+- `Update#where` / `Delete#where` AND with earlier conditions instead of replacing them.
+- `QueryBuilder#having` builds a `HAVING` clause (it called `where`); `reverse_order` and `unscope` work; aggregates, `ids` and `reorder` no longer alter the builder they are called on.
+- `mysql://` URIs are accepted by `Schema` (an empty host is rejected).
+- `QueryBuilder#pick` no longer alters the builder it is called on; `Model.having` accepts implicit-self blocks.
+
 - Connection pool configuration consistency
 - Transaction rollback handling
 - Error context in exception messages
 
 ### Security
+
+- DDL identifiers that cannot be bound as parameters are now validated: index, foreign key, unique/check constraint names, rename targets and foreign key table/column names must match `[A-Za-z_][A-Za-z0-9_]*` (`DROP INDEX` also accepts one `schema.` qualifier). Anything else raises `ArgumentError` instead of being spliced into SQL. Names with other characters (hyphens, dots, spaces, non-ASCII) previously produced broken unquoted SQL.
+- Aggregate aliases (`count(:id, as: "n")`) are validated the same way.
 
 - SQL injection prevention in query builder
 - Parameterized query support

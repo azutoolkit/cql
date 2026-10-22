@@ -48,7 +48,7 @@ module CQL::ActiveRecord::Relations
         OWNER = {{@type}}
         TARGET = {{type}}
         ASSOCIATION = {{name}}
-        FOREIGN_KEY = {{fk}}
+        FOREIGN_KEY = :{{fk.id}}
       end
 
       {% if target_model = type.resolve? %}

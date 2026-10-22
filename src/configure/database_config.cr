@@ -66,7 +66,7 @@ module CQL::Configure
   class DatabaseConfigFactory
     def self.create(adapter : Adapter) : DatabaseConfig
       case adapter
-      when Adapter::Postgres
+      when Adapter::Postgres, Adapter::CockroachDB
         PostgreSQLConfig.new
       when Adapter::MySql
         MySQLConfig.new

@@ -87,7 +87,7 @@ module CQL
       case @adapter
       when CQL::Adapter::SQLite
         inspect_sqlite_tables
-      when CQL::Adapter::Postgres
+      when CQL::Adapter::Postgres, CQL::Adapter::CockroachDB
         inspect_postgres_tables
       when CQL::Adapter::MySql
         inspect_mysql_tables
@@ -351,7 +351,7 @@ module CQL
         when "JSON"             then "JSON::Any"
         else                         "String"
         end
-      when CQL::Adapter::Postgres
+      when CQL::Adapter::Postgres, CQL::Adapter::CockroachDB
         case downcase_type
         when "integer"                                          then "Int32"
         when "bigint"                                           then "Int64"
@@ -447,7 +447,7 @@ module CQL
 
     # Helper method to open database connection with proper error handling
     private def open_database_connection(uri : String) : DB::Database
-      DB.open(uri)
+      DB.open(@adapter.driver_uri(uri))
     rescue ex : Exception
       raise Error.new("Failed to connect to database: #{ex.message}")
     end
