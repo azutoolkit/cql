@@ -32,8 +32,8 @@ module CQL
         @@cache_store = nil
       end
 
-      # Get the cache store instance
-      private def self.cache_store : CacheInterface
+      # Direct access to the underlying cache store for advanced usage
+      def self.cache_store : CacheInterface
         @@cache_store ||= CacheStore.instance
       end
 
@@ -185,7 +185,7 @@ module CQL
       # - **@param** key [String] The cache key
       # - **@return** [Array(DB::Any)?] The cached result or nil if not found
       def self.get(key : String) : Array(DB::Any)?
-        return nil unless @@enabled
+        return unless @@enabled
 
         start_time = Time.instant
         @@stats.total_requests += 1
@@ -214,7 +214,7 @@ module CQL
           rescue JSON::ParseException
             @@stats.hits -= 1
             @@stats.misses += 1
-            return nil
+            return
           end
         end
 
@@ -343,11 +343,6 @@ module CQL
           io << "Total Execution Time: #{stats["total_execution_time_ms"]} ms\n"
           io << "Default TTL: #{stats["default_ttl_seconds"]} seconds\n"
         end
-      end
-
-      # Direct access to underlying cache store for advanced usage
-      def self.cache_store : CacheInterface
-        cache_store
       end
     end
   end

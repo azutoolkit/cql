@@ -119,10 +119,8 @@ describe CQL::Performance::Monitor do
       monitor = CQL::Performance::Monitor.new(config: config)
 
       2.times do
-        begin
-          monitor.monitor_query("SELECT bad") { raise RuntimeError.new("fail") }
-        rescue RuntimeError
-        end
+        monitor.monitor_query("SELECT bad") { raise RuntimeError.new("fail") }
+      rescue RuntimeError
       end
 
       monitor.error_count.should eq(2)

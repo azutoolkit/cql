@@ -41,11 +41,9 @@ describe "CQL::ActiveRecord::TimestampManager" do
   end
 
   after_each do
-    begin
-      TestTimestampDB.articles.drop!
-    rescue
-      # Table doesn't exist, that's fine
-    end
+    TestTimestampDB.articles.drop!
+  rescue
+    # Table doesn't exist, that's fine
   end
 
   describe "timestamp preparation" do

@@ -24,7 +24,7 @@ describe CQL::Migration do
 
     migrator.down
 
-    migrator.last.should eq(nil)
+    migrator.last.should be_nil
     migrator.applied_migrations.size.should eq(0)
     migrator.applied_migrations.map(&.version).should eq([] of Int32)
   end
@@ -34,7 +34,7 @@ describe CQL::Migration do
 
     migrator.rollback(2)
 
-    migrator.last.try(&.version).should eq(nil)
+    migrator.last.try(&.version).should be_nil
     migrator.applied_migrations.map(&.version).should eq([] of Int32)
   end
 

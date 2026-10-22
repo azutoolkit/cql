@@ -198,9 +198,6 @@ module CQL
           end
 
           deleted_target_record
-        else
-          # Return nil to indicate no association was removed
-          nil
         end
       end
 
@@ -322,17 +319,15 @@ module CQL
         else
           record_id = safe_id(record, Pk)
           safe_db_operation do
-            begin
-              result = CQL::Query
-                .new(Through.schema)
-                .from(@through_table)
-                .where({@key => @id, @target_key => record_id})
-                .limit(1)
-                .first(Through)
-              !result.nil?
-            rescue DB::NoResultsError
-              false
-            end
+            result = CQL::Query
+              .new(Through.schema)
+              .from(@through_table)
+              .where({@key => @id, @target_key => record_id})
+              .limit(1)
+              .first(Through)
+            !result.nil?
+          rescue DB::NoResultsError
+            false
           end
         end
       end
@@ -430,7 +425,7 @@ module CQL
             record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
           end.compact
 
-          return nil if target_ids.empty?
+          return if target_ids.empty?
 
           # Query target records with the given attributes and IDs
           begin

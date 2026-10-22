@@ -86,8 +86,8 @@ module CQL
       end
 
       # Get cached result for a query
-      def get(sql : String, params : Array(DB::Any)) : Array(DB::Any) | DB::Any | Nil
-        return nil unless @enabled
+      def get(sql : String, params : Array(DB::Any)) : (Array(DB::Any) | DB::Any)?
+        return unless @enabled
 
         key = cache_key(sql, params)
 
@@ -98,7 +98,7 @@ module CQL
             return entry.result
           else
             @stats["misses"] += 1
-            return nil
+            return
           end
         end
       end

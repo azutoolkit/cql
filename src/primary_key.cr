@@ -24,7 +24,7 @@ module CQL
     end
 
     def as_name
-      @as_name || "pk_#{name.to_s[0..2]}_#{self.object_id}"
+      @as_name || "pk_#{name.to_s[0..2]}_#{object_id}"
     end
   end
 end

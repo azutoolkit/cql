@@ -6,7 +6,7 @@ class TestAcceptanceUser
 
   property name : String?
   property email : String?
-  property terms_accepted : Bool | String | Nil
+  property terms_accepted : Bool | String?
 
   validate :terms_accepted, accept: true, message: "Terms must be accepted"
 

@@ -15,3 +15,32 @@ Naming/PredicateName:
 
 Naming/QueryBoolMethods:
   Enabled: false
+
+# `{{call.id}}` without inner spaces is the idiom used across the shards; the style rule would
+# rewrite hundreds of macro bodies for no gain.
+Lint/WhitespaceAroundMacroExpression:
+  Enabled: false
+
+Style/HeredocIndent:
+  Enabled: false
+
+# `: Void` is part of the public Performance interfaces; changing it would break implementers.
+Lint/VoidOutsideLib:
+  Enabled: false
+
+# Specs rescue to assert, branch on purpose after expect_raises and keep blocks readable.
+Lint/UnusedRescueVariable:
+  Excluded:
+    - spec/**/*.cr
+
+Lint/UnreachableCode:
+  Excluded:
+    - spec/**/*.cr
+
+Style/MultilineCurlyBlock:
+  Excluded:
+    - spec/**/*.cr
+
+# Its autocorrect rewrites `any?` to `present?`, which Enumerable and the query types do not have.
+Performance/AnyInsteadOfPresent:
+  Enabled: false

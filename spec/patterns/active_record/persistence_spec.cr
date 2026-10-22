@@ -74,12 +74,10 @@ describe CQL::ActiveRecord::Persistence do
   end
 
   after_each do
-    begin
-      PersistenceTestDB.persistence_users.drop!
-      PersistenceTestDB.persistence_articles.drop!
-    rescue
-      # Tables don't exist, that's fine
-    end
+    PersistenceTestDB.persistence_users.drop!
+    PersistenceTestDB.persistence_articles.drop!
+  rescue
+    # Tables don't exist, that's fine
   end
 
   describe "reload!" do

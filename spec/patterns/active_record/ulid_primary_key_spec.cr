@@ -85,14 +85,14 @@ describe "ULID Primary Key Support" do
       end
 
       it "generates unique ULIDs for each record" do
-        events = 10.times.map do |i|
+        events = Array.new(10) do |i|
           UlidEvent.create!(
             event_type: "event#{i}",
             payload: "{}",
             created_at: Time.utc,
             updated_at: Time.utc
           )
-        end.to_a
+        end
 
         ids = events.map(&.id!)
         ids.uniq.size.should eq(10)
@@ -218,14 +218,14 @@ describe "ULID Primary Key Support" do
 
   describe "multiple record creation" do
     it "generates unique ULIDs for 20 records" do
-      events = 20.times.map do |i|
+      events = Array.new(20) do |i|
         UlidEvent.create!(
           event_type: "bulk_event_#{i}",
           payload: "{\"index\": #{i}}",
           created_at: Time.utc,
           updated_at: Time.utc
         )
-      end.to_a
+      end
 
       ids = events.map(&.id!)
       ids.uniq.size.should eq(20)
