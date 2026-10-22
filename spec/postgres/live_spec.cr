@@ -13,6 +13,16 @@ private LIVE_URL = postgres_database_url
 
 private module LiveServer
   @@reachable : Bool? = nil
+  @@cockroach : Bool? = nil
+
+  def self.cockroach? : Bool
+    cached = @@cockroach
+    return cached unless cached.nil?
+    @@cockroach = begin
+      session = PG::Session.connect(PG::Config.parse(LIVE_URL))
+      session.query("SELECT version()").rows.first.first.to_s.includes?("CockroachDB").tap { session.close }
+    end
+  end
 
   def self.reachable? : Bool
     cached = @@reachable
@@ -28,6 +38,12 @@ end
 
 private def live_postgres? : Bool
   LiveServer.reachable?
+end
+
+# CockroachDB speaks the PostgreSQL protocol but not all of PostgreSQL: LISTEN/NOTIFY is missing,
+# `SELECT 1` is an int8, pg_sleep returns a bool and the default isolation level is serializable.
+private def cockroach? : Bool
+  LiveServer.cockroach?
 end
 
 private def require_live! : Nil
@@ -177,6 +193,27 @@ describe "CQL::Postgres against a live server" do
     session.close
   end
 
+  it "maps a serialization conflict (write skew between two serializable transactions) to SerializationFailure" do
+    require_live!
+    first = live_session
+    second = live_session
+    [first, second].each do |session|
+      session.simple_query("BEGIN ISOLATION LEVEL SERIALIZABLE")
+      session.query("SELECT count(*) FROM #{TABLE}")
+    end
+    first.query("INSERT INTO #{TABLE} (name) VALUES ('first')")
+    first.simple_query("COMMIT")
+    error = expect_raises(PG::SerializationFailure) do
+      second.query("INSERT INTO #{TABLE} (name) VALUES ('second')")
+      second.simple_query("COMMIT")
+    end
+    error.sqlstate.should eq "40001"
+    second.simple_query("ROLLBACK") if second.in_transaction?
+    second.query("SELECT count(*) FROM #{TABLE}").rows.should eq [[1_i64]]
+    first.close
+    second.close
+  end
+
   it "re-prepares a cached statement after the table's shape changed" do
     require_live!
     session = live_session
@@ -218,7 +255,7 @@ describe "CQL::Postgres against a live server" do
     expect_raises(ArgumentError, /NUL/) { session.pipeline([{"SELECT 1", [] of PG::Types::Param}, {"SELECT 'a\0'", [] of PG::Types::Param}]) }
     expect_raises(PG::UnsupportedValue) { session.pipeline([{"SELECT 'infinity'::timestamptz", [] of PG::Types::Param}, {"SELECT 2", [] of PG::Types::Param}]) }
     session.query("SELECT 42").rows.should eq [[42]]
-    expect_raises(PG::QueryCanceled) { session.query("COPY #{TABLE} FROM STDIN") }
+    expect_raises(cockroach? ? PG::ServerError : PG::QueryCanceled) { session.query("COPY #{TABLE} FROM STDIN") }
     session.query("SELECT 43").rows.should eq [[43]]
     session.close
   end
@@ -247,6 +284,7 @@ describe "CQL::Postgres against a live server" do
 
   it "delivers NOTIFY and server notices to callbacks" do
     require_live!
+    pending! "CockroachDB has no LISTEN/NOTIFY" if cockroach?
     listener = live_session
     notifications = [] of String
     notices = [] of String
@@ -289,7 +327,7 @@ describe "CQL::Postgres against a live server" do
         LiveSchema.query.from(:cql_wire_live_accounts).select(:name).order(name: :asc),
         LiveSchema.query.from(:cql_wire_live_accounts).select(:id, :name, :balance).where(name: "ada"),
       ])
-      failing = engine.pipeline([{"SELECT nope FROM cql_wire_live_accounts", [] of ::DB::Any}, {"SELECT 1", [] of ::DB::Any}])
+      failing = engine.pipeline([{"SELECT nope FROM cql_wire_live_accounts", [] of ::DB::Any}, {"SELECT 1::int4", [] of ::DB::Any}])
     ensure
       CQL::Telemetry.reset!
     end
@@ -325,7 +363,7 @@ describe "CQL::Postgres against a live server" do
       tx.exec_query(&.scalar("SHOW synchronous_commit")).should eq "off"
     end
     engine.exec_query(&.scalar("SHOW synchronous_commit")).should eq "on"
-    engine.exec_query(&.scalar("SHOW transaction_isolation")).should eq "read committed"
+    engine.exec_query(&.scalar("SHOW transaction_isolation")).should eq(cockroach? ? "serializable" : "read committed")
     denied = expect_raises(PG::ServerError) do
       engine.transaction(read_only: true) do |tx|
         LiveSchema.insert.into(:cql_wire_live_accounts).values(name: "denied").using(tx).commit
@@ -383,7 +421,7 @@ describe "CQL::Postgres against a live server" do
     engine = PG::AsyncEngine.connect("#{LIVE_URL}#{LIVE_URL.includes?('?') ? '&' : '?'}pool_size=4")
     done = Channel(Int64).new
     40.times do |index|
-      spawn { done.send(engine.exec_query(&.query_one("SELECT pg_sleep(0.01), $1::int8", index.to_i64, as: {String, Int64}))[1]) }
+      spawn { done.send(engine.exec_query(&.query_one("SELECT pg_sleep(0.01)::text, $1::int8", index.to_i64, as: {String, Int64}))[1]) }
     end
     40.times.sum { done.receive }.should eq (0...40).sum
     engine.pool.stats.in_use.should eq 0

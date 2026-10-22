@@ -903,6 +903,67 @@ describe CQL::Postgres::Session do
     capped.should eq ["3.0"]
   end
 
+  it "retries with protocol 3.0 when the first reply is not a protocol message (CockroachDB answers HTTP/2)" do
+    asked = [] of String
+    server = FakePG.start do |client|
+      asked << client.read_startup["protocol"]
+      if asked.size == 1
+        client.io.write(Bytes[0, 0, 0x12, 0x04, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0x40, 0, 0, 3, 0x7f])
+      else
+        client.ok_handshake
+      end
+    end
+    connect(server).protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_0
+    asked.should eq ["3.2", "3.0"]
+  end
+
+  it "retries once when the first reply is garbage, never a third time, and not when 3.0 is the floor or ceiling" do
+    garbage = Bytes[0, 0, 0x12, 0x04, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0x40, 0, 0, 3, 0x7f]
+    asked = [] of String
+    server = FakePG.start do |client|
+      asked << client.read_startup["protocol"]
+      client.io.write(garbage)
+    end
+    expect_raises(PG::UnrecognizedStartupReply) { connect(server) }
+    asked.should eq ["3.2", "3.0"]
+
+    floor = [] of String
+    pinned = FakePG.start do |client|
+      floor << client.read_startup["protocol"]
+      client.io.write(garbage)
+    end
+    expect_raises(PG::UnrecognizedStartupReply) { PG::Session.connect(PG::Config.parse(pinned.url(query: "sslmode=disable&min_protocol_version=3.2"))) }
+    expect_raises(PG::UnrecognizedStartupReply) { PG::Session.connect(PG::Config.parse(pinned.url(query: "sslmode=disable&max_protocol_version=3.0"))) }
+    floor.should eq ["3.2", "3.0"]
+  end
+
+  it "keeps garbage that arrives after a valid message a plain protocol error" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.auth(0)
+      client.io.write(Bytes[0, 0, 0x12, 0x04, 0, 0, 0, 0])
+    end
+    error = expect_raises(PG::ProtocolError) { connect(server) }
+    error.should_not be_a PG::UnrecognizedStartupReply
+  end
+
+  it "explains prepared-statement collisions behind a transaction-mode pooler" do
+    PG::ServerError.from({'S' => "ERROR", 'C' => "42P05", 'M' => "prepared statement \"cql_1\" already exists"}).message.to_s.should contain "statement_cache_size=0"
+    PG::ServerError.from({'S' => "ERROR", 'C' => "26000", 'M' => "prepared statement \"cql_1\" does not exist"}).message.to_s.should contain "statement_cache_size=0"
+  end
+
+  it "starts cockroachdb:// URLs at protocol 3.0" do
+    PG::Config.parse("cockroachdb://root@h/db").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_0
+    PG::Config.parse("cockroachdb://root@h/db?max_protocol_version=3.2").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_2
+    PG::Config.parse("postgres://root@h/db").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_2
+  end
+
+  it "recognises a stale plan by the server's message when the routine is not reported" do
+    error = PG::ServerError.from({'S' => "ERROR", 'C' => "0A000", 'M' => "cached plan must not change result type"})
+    error.stale_plan?.should be_true
+    PG::ServerError.from({'S' => "ERROR", 'C' => "0A000", 'M' => "feature not supported"}).stale_plan?.should be_false
+  end
+
   it "does not retry a rejection when the minimum version forbids 3.0, or for other errors" do
     asked = [] of String
     server = FakePG.start do |client|

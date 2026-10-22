@@ -84,8 +84,7 @@ before `cql` (it keeps the names) or after it (it replaces them), the `pg` shard
 `postgresql://` instead, so remove `require "pg"` to switch (`cockroachdb://` is only claimed by this driver; a Schema with
 `CQL::Adapter::CockroachDB` rewrites it to `postgres://`, so it follows the same rule). crystal-db's own pool serves
 `Schema` and `DB.open`; the engine's `pool_size`/`max_queries` options only apply to `AsyncEngine`. Write a literal `+`
-in a user name or password as `%2B` (crystal-db reads `+` as a space). CQL has only been run against CockroachDB
-through a protocol fake, never a real CockroachDB server; see "CockroachDB" below.
+in a user name or password as `%2B` (crystal-db reads `+` as a space). See "CockroachDB", "PostgreSQL versions" and "PgBouncer" below for what was verified against real servers.
 
 `CQL::Postgres::AsyncEngine` speaks the PostgreSQL wire protocol itself (3.2, falling back to 3.0), on Crystal fibers and the standard
 library's event loop, with its own connection pool. It is also a `CQL::Executor` (`query.using(engine)`); SQLite/MySQL users are unaffected. The engine itself needs only the standard library and `db`. A `CQL::Schema`
@@ -121,8 +120,7 @@ What it does:
 - **Protocol version**: it asks for 3.2 (PostgreSQL 18; longer cancel keys) and follows the server's
   `NegotiateProtocolVersion`, or retries on 3.0 when an older server or proxy rejects the startup. Pin it with
   `min_protocol_version` / `max_protocol_version` (`3.0` or `3.2`) in the URL. Covered by byte-fixture and fake-server
-  specs, and by live specs that run against real PostgreSQL 16 and 18 servers; not tried against PgBouncer or other
-  proxies. A server that rejects 3.2 costs every new connection one extra attempt, so set `max_protocol_version=3.0` for it. OAuth authentication (PostgreSQL 18) is not
+  specs, and by live specs against real PostgreSQL 11 to 18 servers, PgBouncer 1.22 and CockroachDB (see below). A server that rejects 3.2 costs every new connection one extra attempt, so set `max_protocol_version=3.0` for it. OAuth authentication (PostgreSQL 18) is not
   supported.
 - **Protocol**: startup, trust/cleartext/MD5/SCRAM-SHA-256 authentication, TLS through SSLRequest
   (`sslmode=disable|prefer|require|verify-full`), Unix sockets (`?host=/var/run/postgresql`), simple and extended
@@ -150,11 +148,17 @@ What it does:
 
 Things to know:
 
-- **CockroachDB** speaks the PostgreSQL wire protocol, and `CQL::Adapter::CockroachDB` engines use this driver. What is
-  verified: startup, authentication and queries against PostgreSQL 16 and 18, and URL/driver handling for
-  `cockroachdb://` with a fake server. Not verified: anything against a real CockroachDB server (none was available).
-  Expect differences there: `deferrable: true` is refused, and settings such as `synchronous_commit` and `COPY` details may not behave as on PostgreSQL; `statement_cache_size=0` turns prepared-statement caching off if you hit trouble.
-
+- **CockroachDB**: verified against a real CockroachDB v24.3.5 single node (insecure mode, so no TLS or password
+  authentication): `spec/postgres/live_spec.cr` passes there, except the LISTEN/NOTIFY example, which stays pending
+  because CockroachDB has no LISTEN. CockroachDB answers a protocol 3.2 startup with HTTP/2 bytes instead of an error;
+  `cockroachdb://` URLs given to `DB.open` or `AsyncEngine.connect` therefore start at 3.0 (a `Schema` on
+  `CQL::Adapter::CockroachDB` uses a `postgres://` URL, so it starts at 3.2 and pays one failed attempt per new
+  connection; put `max_protocol_version=3.0` in its URL to avoid that), and the driver also falls back to 3.0 whenever the first reply is not a
+  protocol message. Savepoints, `SET LOCAL synchronous_commit`, pipelining, COPY, cancel and `40001` mapping to
+  `SerializationFailure` work as on PostgreSQL. Differences: `SELECT 1` is an `int8`, `pg_sleep` returns a bool, the
+  default isolation level is serializable, `deferrable: true` is refused, and COPY mistakes come back as a generic
+  `ServerError`. To leave crystal-db's registry alone (so the `pg` shard or another driver serves every URL), compile
+  with `-Dcql_no_postgres_driver`.
 - `synchronous_commit: false` (or `?synchronous_commit=off` for a whole connection) lets `COMMIT` return before the WAL is
   flushed to disk. It cannot corrupt the database, but commits from the last few hundred milliseconds (up to about three
   times `wal_writer_delay`) can be lost if the server crashes, and a replica or client may have seen them already.
@@ -164,7 +168,26 @@ Things to know:
 - A statement's whole result is read into memory; there is no row streaming yet.
 - Infinite and out-of-range dates and timestamps raise `CQL::Postgres::UnsupportedValue`.
 - Behind PgBouncer in transaction mode use `statement_cache_size=0` (the unnamed statement is used; pipelining needs the
-  cache). This is by design and has not been tried against PgBouncer itself.
+  cache). See "PgBouncer" below.
+- **PostgreSQL versions** (`script/pg-matrix start` then `run` starts one server per major and runs
+  `spec/postgres/matrix_spec.cr` plus `live_spec.cr` against each; all measured on Linux x86_64 with the binaries named):
+
+  | PostgreSQL | protocol used | cancel key | SCRAM / MD5 / cleartext | `live_spec.cr` (23 examples) |
+  |---|---|---|---|---|
+  | 11.22, 12.22, 13.23 (end of life) | 3.0 (server answers `NegotiateProtocolVersion`) | 4 bytes | pass | pass |
+  | 14.24, 15.19, 16.15, 17.11 | 3.0 (same) | 4 bytes | pass | pass |
+  | 18.6 | 3.2 | 32 bytes | pass | pass |
+
+  Each version also passes: re-preparing after a schema change, pipelining and failure isolation, COPY in and out,
+  cancel after a statement timeout, and `synchronous_commit: false` per transaction (`SHOW` reads `off` inside and `on`
+  after). Which majors upstream still supports changes yearly; check postgresql.org/support/versioning.
+- **PgBouncer** 1.22 (`script/pgbouncer-matrix`, spec `spec/postgres/pgbouncer_spec.cr`, real PgBouncer in front of
+  PostgreSQL 16): it answers a 3.2 startup with `FATAL 08P01 bad packet header` and closes, and the driver reconnects with 3.0. In transaction mode
+  with `max_prepared_statements` above 0, cached statements, pipelining, cancel (with the 4-byte key the pooler hands
+  out), `SET LOCAL` and rollback of a leaked transaction all work. In transaction mode without it, named statements
+  collide between clients (SQLSTATE `42P05`, and `26000` when a statement is missing on the next server connection):
+  use `statement_cache_size=0` there. Session mode behaves like a direct connection. Not tested: PgBouncer 1.23 and
+  later, other poolers (Odyssey, pgcat, RDS Proxy), TLS to the pooler.
 - `sslrootcert` adds a CA to the system trust store (Crystal's TLS context cannot drop the system roots); `prefer` and
   `require` encrypt without verifying the server, like libpq.
 - `playground/postgres_async_demo.cr` is a runnable tour, and `benchmarks/pg_wire_bench.cr` compares the engine with
@@ -172,11 +195,11 @@ Things to know:
   `DATABASE_URL=postgres://... crystal run --release benchmarks/pg_wire_bench.cr`. Numbers depend on your hardware and
   network, so none are quoted here.
 
-Verified against PostgreSQL 16.15 only, on one machine; CI has not run this yet. The live specs in
-`spec/postgres/live_spec.cr` (types, errors, transactions, pipelining, COPY, cancellation, pool, `NOTIFY`) run when
-`DATABASE_URL` points at a server and are pending otherwise. Authentication methods, TLS modes and Unix sockets were also
-tried by hand against that server, but their specs use byte-level fixtures and an in-process fake server. Other
-PostgreSQL versions, PgBouncer and CockroachDB (`AsyncEngine.new(pool, CQL::Adapter::CockroachDB)`) are untested.
+Verified on one Linux machine; CI has not run this yet. The live specs in `spec/postgres/live_spec.cr` (types, errors,
+transactions, pipelining, COPY, cancellation, pool, `NOTIFY`) run when `DATABASE_URL` points at a server and are pending
+otherwise; the PostgreSQL, PgBouncer and CockroachDB results above come from running them against real servers.
+TLS modes and Unix sockets were tried by hand against PostgreSQL 16 earlier and otherwise have byte-level fixture and
+fake-server specs only. CockroachDB was tested without TLS or passwords.
 
 ## Safety Guardrails
 

@@ -10,6 +10,11 @@ module CQL::Postgres
   class ProtocolError < Error
   end
 
+  # The server's first reply to the startup message was not a protocol message
+  # at all, e.g. CockroachDB answering an unknown protocol version with HTTP/2.
+  class UnrecognizedStartupReply < ProtocolError
+  end
+
   # A valid PostgreSQL value Crystal cannot represent (infinite or far-out dates).
   class UnsupportedValue < Error
   end
@@ -49,6 +54,8 @@ module CQL::Postgres
       "42P01" => "undefined table", "42703" => "undefined column", "42601" => "syntax error",
       "42501" => "insufficient privilege", "22P02" => "invalid text representation",
       "40001" => "serialization failure", "40P01" => "deadlock detected", "40" => "transaction rollback",
+      "42P05" => "prepared statement already exists (behind a transaction-mode pooler? set statement_cache_size=0)",
+      "26000" => "prepared statement does not exist (behind a transaction-mode pooler? set statement_cache_size=0)",
       "22" => "data exception", "42" => "syntax error or access rule violation", "P0" => "PL/pgSQL error",
     }
 
@@ -85,9 +92,10 @@ module CQL::Postgres
     end
 
     # The server's cached plan became invalid after a schema change; preparing
-    # the statement again fixes it.
+    # the statement again fixes it. PostgreSQL names the routine; CockroachDB
+    # only sends the same message text.
     def stale_plan? : Bool
-      sqlstate == "0A000" && routine == "RevalidateCachedQuery"
+      sqlstate == "0A000" && (routine == "RevalidateCachedQuery" || server_message == "cached plan must not change result type")
     end
 
     # Subclass per SQLSTATE where one exists, else per SQLSTATE class.

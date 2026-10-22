@@ -21,6 +21,7 @@ module CQL::Postgres
       @process_id = 0
       @secret_key = Bytes.empty
       @version = @requested
+      @heard = false
     end
 
     def run : Outcome
@@ -28,7 +29,7 @@ module CQL::Postgres
       scram = nil
       authenticated = false
       loop do
-        case message = Wire::Backend.read(@io, MAX_MESSAGE_SIZE)
+        case message = read_message
         when Wire::Backend::NoticeResponse
         when Wire::Backend::NegotiateProtocolVersion
           raise ProtocolError.new("protocol negotiation after authentication started") if authenticated || scram
@@ -62,6 +63,14 @@ module CQL::Postgres
           unexpected(message)
         end
       end
+    end
+
+    # A first reply that does not parse means the peer is not speaking the
+    # protocol version we asked for (see `UnrecognizedStartupReply`).
+    private def read_message
+      Wire::Backend.read(@io, MAX_MESSAGE_SIZE).tap { @heard = true }
+    rescue ex : ProtocolError
+      raise @heard ? ex : UnrecognizedStartupReply.new(ex.message)
     end
 
     # The server cannot speak the requested minor version and names the newest it

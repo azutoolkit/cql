@@ -94,6 +94,7 @@ module CQL::Postgres
       ssl_mode = SSLMode.parse_mode(pop(params, "sslmode") || "prefer")
       ssl_root_cert = pop(params, "sslrootcert")
       raise ArgumentError.new("sslrootcert needs sslmode=verify-full; other modes do not verify the server") if ssl_root_cert && !ssl_mode.verify_full?
+      driver_options["max_protocol_version"] ||= "3.0" if uri.scheme == "cockroachdb"
       new(
         host: pop(params, "host") || uri.hostname.presence.try { |host| URI.decode(host) } || ENV["PGHOST"]? || "localhost",
         port: number(pop(params, "port"), "port") || uri.port || ENV["PGPORT"]?.try(&.to_i?) || 5432,

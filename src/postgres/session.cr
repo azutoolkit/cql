@@ -56,14 +56,18 @@ module CQL::Postgres
     def self.connect(config : Config) : Session
       requested = config.max_protocol_version
       attempt(config, requested)
-    rescue ex : ServerError
+    rescue ex : ServerError | UnrecognizedStartupReply
       raise ex unless rejected_version?(ex) && requested.try { |version| version > ProtocolVersion::V3_0 } && config.min_protocol_version <= ProtocolVersion::V3_0
       Log.info { "the server rejected protocol #{requested}; reconnecting with 3.0 (set max_protocol_version=3.0 to skip the first attempt)" }
       attempt(config, ProtocolVersion::V3_0)
     end
 
-    private def self.rejected_version?(error : ServerError) : Bool
-      error.sqlstate.in?("0A000", "08P01")
+    private def self.rejected_version?(error : Error) : Bool
+      case error
+      when UnrecognizedStartupReply then true
+      when ServerError              then error.sqlstate.in?("0A000", "08P01")
+      else                               false
+      end
     end
 
     private def self.attempt(config : Config, version : ProtocolVersion) : Session

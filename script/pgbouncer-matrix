@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Starts three PgBouncer instances in front of one PostgreSQL server (needs `pgbouncer` installed and the
+# role cql_scram, which `script/pg-matrix run` creates: run that once first) and runs
+# spec/postgres/pgbouncer_spec.cr against them. For throwaway test machines and CI only.
+#
+#   PGB_BACKEND_PORT=5516 script/pgbouncer-matrix start|run|stop
+set -euo pipefail
+
+DIR="${PGB_DIR:-/tmp/cql-pgbouncer}"
+BACKEND_PORT="${PGB_BACKEND_PORT:-5516}"
+# name port pool_mode max_prepared_statements default_pool_size
+INSTANCES=("tx 6501 transaction 0 1" "txps 6502 transaction 100 1" "session 6503 session 0 3")
+
+if [ -L "$DIR" ]; then echo "pgbouncer-matrix: $DIR is a symlink" >&2; exit 1; fi
+PGBOUNCER="$(command -v pgbouncer || true)"
+if [ -z "$PGBOUNCER" ]; then echo "pgbouncer-matrix: pgbouncer is not installed" >&2; exit 1; fi
+
+as_server_user() {
+  if [ "$(id -u)" = 0 ]; then su postgres -s /bin/bash -c "$*"; else bash -c "$*"; fi
+}
+
+start() {
+  mkdir -p "$DIR"
+  if [ "$(id -u)" = 0 ]; then chown postgres "$DIR"; fi
+  echo '"cql_scram" "secret"' > "$DIR/userlist.txt"
+  for instance in "${INSTANCES[@]}"; do
+    read -r name port mode prepared pool <<< "$instance"
+    cat > "$DIR/$name.ini" <<INI
+[databases]
+* = host=127.0.0.1 port=$BACKEND_PORT
+
+[pgbouncer]
+listen_addr = 127.0.0.1
+listen_port = $port
+unix_socket_dir = $DIR
+auth_type = scram-sha-256
+auth_file = $DIR/userlist.txt
+pool_mode = $mode
+max_prepared_statements = $prepared
+default_pool_size = $pool
+max_client_conn = 50
+pidfile = $DIR/$name.pid
+logfile = $DIR/$name.log
+INI
+    if [ "$(id -u)" = 0 ]; then chown postgres "$DIR/$name.ini" "$DIR/userlist.txt"; fi
+    as_server_user "'$PGBOUNCER' -d '$DIR/$name.ini'"
+    for _ in $(seq 50); do (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break; sleep 0.1; done
+    echo "PgBouncer ($mode, max_prepared_statements=$prepared) on 127.0.0.1:$port"
+  done
+}
+
+stop() {
+  for instance in "${INSTANCES[@]}"; do
+    read -r name _ <<< "$instance"
+    if [ -f "$DIR/$name.pid" ]; then kill "$(cat "$DIR/$name.pid")" 2>/dev/null || true; fi
+  done
+}
+
+case "${1:-}" in
+  start) start ;;
+  stop) stop ;;
+  run) CQL_PGB_TX=6501 CQL_PGB_TX_PS=6502 CQL_PGB_SESSION=6503 crystal spec spec/postgres/pgbouncer_spec.cr ;;
+  *) echo "usage: $0 start|run|stop" >&2; exit 2 ;;
+esac

@@ -42,4 +42,7 @@ module CQL::Postgres
   end
 end
 
-CQL::Postgres::Driver.register
+# Compile with `-Dcql_no_postgres_driver` to keep crystal-db's registry untouched.
+{% unless flag?(:cql_no_postgres_driver) %}
+  CQL::Postgres::Driver.register
+{% end %}
