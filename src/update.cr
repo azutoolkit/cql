@@ -208,6 +208,12 @@ module CQL
       self
     end
 
+    # A raw SQL fragment with bound `?` / `:name` values (`sql` must be a literal).
+    def where(__sql sql : String, *positional, **named)
+      merge_where(Expression::Raw.build(sql, positional, named))
+      self
+    end
+
     # Sets the WHERE clause using keyword arguments.
     # - **@param** fields [Hash(Symbol, DB::Any)] the conditions
     # - **@return** [self] the current instance
@@ -346,7 +352,8 @@ module CQL
     end
 
     private def find_column(name : Symbol) : BaseColumn
-      @table.not_nil!.table.columns[name] || raise "Column #{name} not found"
+      table = @table.not_nil!.table
+      table.columns[name]? || raise ArgumentError.new("Column #{name} not found in #{table.table_name}")
     end
 
     private def handle_optimistic_locking

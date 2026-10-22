@@ -81,6 +81,10 @@ module CQL
       Expression::TypedColumn(Type).new(self, @as_name)
     end
 
+    def copy_to(table : Table) : BaseColumn
+      Column(Type).new(@name, nil, @null).tap(&.table=(table))
+    end
+
     # Builds the expression qualified by a *table* alias (e.g. `c.name` for
     # `FROM customers AS c`). The column's own `as:` name is a select-list
     # alias, never a table qualifier, so it is not used here.

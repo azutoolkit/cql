@@ -77,6 +77,11 @@ module CQL
           clone_builder.tap(&.query.where(conditions))
         end
 
+        # A raw SQL fragment with bound `?` / `:name` values (`sql` must be a literal).
+        def where(__sql sql : String, *positional, **named)
+          clone_builder.tap(&.query.where(sql, *positional, **named))
+        end
+
         # Add where conditions with hash syntax
         # - **@param** fields [Hash] The conditions using hash syntax
         # - **@return** [QueryBuilder(T)] Self for chaining

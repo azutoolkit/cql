@@ -1,3 +1,7 @@
+require "./executable"
+require "./compound_query"
+require "./derived_table"
+require "./window_builder"
 require "./base_column"
 require "./table"
 require "./schema"
@@ -57,6 +61,9 @@ module CQL
   # => John
   # ```
   class Query
+    include Executable
+    include SetOperations
+
     getter columns : Array(CQL::BaseColumn) = [] of CQL::BaseColumn
     getter schema : Schema
     # Ensure alias is String
@@ -70,9 +77,15 @@ module CQL
     property limit : Int32? = nil
     property offset : Int32? = nil
     property? distinct : Bool = false
-    getter aggr_columns : Array(Expression::Aggregate) = [] of Expression::Aggregate
+    getter select_expressions : Array(Expression::SelectExpression) = [] of Expression::SelectExpression
     # Store column aliases: column => alias
     getter column_aliases : Hash(CQL::BaseColumn, String) = {} of CQL::BaseColumn => String
+    # CTEs declared on this query, and the tables they expose by name.
+    getter ctes : Array(Expression::Cte) = [] of Expression::Cte
+    getter derived_tables : Hash(Symbol, CQL::Table) = {} of Symbol => CQL::Table
+    property? recursive : Bool = false
+    getter distinct_on : Array(Expression::BaseColumn) = [] of Expression::BaseColumn
+    property row_lock : Expression::RowLock? = nil
 
     # Initializes the `Query` object with the provided schema.
     # - **@param** schema [Schema] The schema object to use for the query
@@ -102,178 +115,23 @@ module CQL
       new_query.limit = @limit
       new_query.offset = @offset
       new_query.distinct = @distinct
-      @aggr_columns.each { |aggr| new_query.aggr_columns << aggr }
+      @select_expressions.each { |aggr| new_query.select_expressions << aggr }
       @column_aliases.each { |key, value| new_query.column_aliases[key] = value }
+      @ctes.each { |cte| new_query.ctes << cte }
+      @derived_tables.each { |name, table| new_query.derived_tables[name] = table }
+      new_query.recursive = recursive?
+      @distinct_on.each { |column| new_query.distinct_on << column }
+      new_query.row_lock = @row_lock
       new_query
     end
 
-    # Executes the query and returns all records.
-    # - **@param** as [Type] The type to cast the results to
-    # - **@return** [Array(Type)] The results of the query
-    #
-    # **Example**
-    #
-    # ```
-    # schema = CQL::Schema.new
-    # query = CQL::Query.new(schema)
-    # query.select(:name, :age).from(:users).all(User)
-    #
-    # => [<User:0x00007f8b1b0b3b00 @name="John", @age=30>, <User:0x00007f8b1b0b3b00 @name="Jane", @age=25>]
-    # ```
-    def all(as as_kind)
-      query, params = to_sql
-
-      CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
-        CQL::Performance.track(query, params) do
-          @schema.exec_query do |conn|
-            conn.query_all(query, args: params, as: as_kind)
-          end
-        end
-      end
+    # The first row mapped to *kind* (the query itself is left untouched).
+    def first(as kind)
+      clone.limit(1).get(kind)
     end
 
-    # - **@param** as [Type] The type to cast the results to
-    # - **@return** [Array(Type)] The results of the query
-    #
-    # **Example**
-    #
-    # ```
-    # schema = CQL::Schema.new
-    # query = CQL::Query.new(schema)
-    # query.select(:name, :age).from(:users).all!(User)
-    #
-    # => [<User:0x00007f8b1b0b3b00 @name="John", @age=30>, <User:0x00007f8b1b0b3b00 @name="Jane", @age=25>]
-    # ```
-    def all!(as as_kind)
-      all(as_kind).not_nil!
-    end
-
-    # Executes the query and returns the first record.
-    # - **@param** as [Type] The type to cast the result to
-    # - **@return** [Type] The first result of the query
-    #
-    # **Example**
-    #
-    # ```
-    # schema = CQL::Schema.new
-    # query = CQL::Query.new(schema)
-    # query.select(:name, :age).from(:users).first(User)
-    #
-    # => <User:0x00007f8b1b0b3b00 @name="John", @age=30>
-    # ```
-    def first(as as_kind)
-      # Temporarily set limit to 1 without cloning to avoid unnecessary allocations
-      original_limit = @limit
-      original_offset = @offset
-      @limit = 1
-
-      begin
-        query_sql, params = to_sql
-        CQL::Cache::RequestQueryCacheHelper.with_cache(query_sql, params) do
-          CQL::Performance.track(query_sql, params) do
-            @schema.exec_query do |conn|
-              conn.query_one?(query_sql, args: params, as: as_kind)
-            end
-          end
-        end
-      ensure
-        # Restore original limit/offset state
-        @limit = original_limit
-        @offset = original_offset
-      end
-    end
-
-    # - **@param** as [Type] The type to cast the result to
-    # - **@return** [Type] The first result of the query
-    #
-    # **Example**
-    #
-    # ```
-    # schema = CQL::Schema.new
-    # query = CQL::Query.new(schema)
-    # query.select(:name, :age).from(:users).first!(User)
-    #
-    # => <User:0x00007f8b1b0b3b00 @name="John", @age=30>
-    # ```
-    def first!(as as_kind)
-      first(as_kind).not_nil!
-    end
-
-    # Executes the query and returns a scalar value.
-    # - **@param** as [Type] The type to cast the result to
-    # - **@return** [Type] The scalar result of the query
-    # Example: `query.get(Int64)`
-    # ```
-    # schema = CQL::Schema.new
-    # query = CQL::Query.new(schema)
-    # query.select(:count).from(:users).get(Int64)
-    #
-    # => 10
-    # ```
-    def get(as as_kind)
-      query, params = to_sql
-      CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
-        CQL::Performance.track(query, params) do
-          @schema.exec_query do |conn|
-            conn.query_one?(query, args: params, as: as_kind)
-          end
-        end
-      end
-    end
-
-    # Executes the query and returns a scalar value, raises if not found.
-    # - **@param** as [Type] The type to cast the result to
-    # - **@return** [Type] The scalar result of the query
-    # - **@raise** [DB::NoResultsError] If no result is found
-    # Example: `query.get!(Int64)`
-    # ```
-    # schema = CQL::Schema.new
-    # query = CQL::Query.new(schema)
-    # query.select(:count).from(:users).get!(Int64)
-    #
-    # => 10
-    # ```
-    def get!(as as_kind)
-      get(as_kind).not_nil!
-    end
-
-    # Iterates over each result and yields it to the provided block.
-    # Example:
-    # ```
-    # query.each(User) do |user|
-    #   puts user.name
-    # end
-    #
-    # => John
-    # ```
-    def each(as as_kind : U.class, &block : U ->) forall U
-      query, params = to_sql
-      CQL::Cache::RequestQueryCacheHelper.with_cache(query, params) do
-        CQL::Performance.track(query, params) do
-          @schema.exec_query do |conn|
-            conn.query_all(query, args: params, as: as_kind).each do |record|
-              block.call record
-            end
-          end
-        end
-      end
-    end
-
-    # Converts the query into an SQL string and its corresponding parameters.
-    # - **@param** gen [Generator] The generator to use for converting the query
-    # - **@return** [Tuple(String, Array(DB::Any))] The SQL query and its parameters
-    #
-    # **Example**
-    #
-    # ```
-    # query.to_sql
-    # => {"SELECT * FROM users WHERE name = ? AND age = ?", ["John", 30]}
-    # ```
-    def to_sql(gen : Expression::Generator? = nil)
-      generator = gen || @schema.new_generator
-      generator.reset
-      build.accept(generator)
-      {generator.query, generator.params}
+    def first!(as kind)
+      first(kind).not_nil!
     end
 
     # Specifies the columns to select.
@@ -308,7 +166,7 @@ module CQL
         if [:count, :sum, :avg, :min, :max].includes?(key) && value.is_a?(Symbol)
           # Aggregates handle alias lookup internally now via build_aggr_expression
           # Use original Symbol key here for aggregate type
-          @aggr_columns << build_aggr_expression(key, value) # Pass Symbol for aggr type
+          @select_expressions << build_aggr_expression(key, value) # Pass Symbol for aggr type
         else
           # key is the alias (String or Symbol -> converted to String)
           table_alias_str = alias_or_aggr_str
@@ -344,7 +202,7 @@ module CQL
     def select(**fields)
       fields.each do |key, value|
         if [:count, :sum, :avg, :min, :max].includes?(key) && value.is_a?(Symbol)
-          @aggr_columns << build_aggr_expression(key, value)
+          @select_expressions << build_aggr_expression(key, value)
         else
           if value.is_a?(Array(Symbol))
             value.map { |name|
@@ -416,6 +274,83 @@ module CQL
       self
     end
 
+    # Uses a subquery as the FROM source: `FROM (SELECT ...) AS alias`. Its selected
+    # columns can be referenced through *alias*.
+    def from(source : Executable, as alias_name : Symbol) : self
+      CQL::Identifier.validate!(alias_name.to_s, "alias")
+      statement = source.build
+      @query_tables.clear
+      @columns.clear
+      @joins.clear
+      table = CQL::DerivedTable.new(@schema, alias_name, statement, inline: true)
+      @query_tables[alias_name.to_s] = {table: table, alias: alias_name.to_s}
+      self
+    end
+
+    # Adds `FUNCTION(...) OVER (PARTITION BY ... ORDER BY ... frame) AS name` to the select list.
+    #
+    # ```
+    # query.window(:row_number, as: :dept_rank, partition_by: :dept, order_by: {salary: :desc})
+    # query.window(:sum, :salary, as: :running, order_by: :id, rows: {:unbounded_preceding, 0})
+    # query.window(:lag, :salary, offset: 1, as: :previous, order_by: :id)
+    # query.window(:ntile, buckets: 4, as: :quartile, order_by: :salary)
+    # ```
+    #
+    # Functions: row_number, rank, dense_rank, percent_rank, cume_dist, ntile,
+    # lag, lead, first_value, last_value, count, sum, avg, min, max. Frame
+    # bounds are offsets (negative = preceding) or `:unbounded_preceding` /
+    # `:unbounded_following`. Without a preceding `select(...)` only the window column
+    # is selected; windows read plain table columns (not aggregates).
+    def window(function : Symbol, column : Symbol? = nil, *, as name : Symbol, offset : Int32? = nil, buckets : Int32? = nil,
+               partition_by : (Symbol | Array(Symbol))? = nil,
+               order_by : (Symbol | Array(Symbol) | Hash(Symbol, Symbol) | NamedTuple)? = nil,
+               rows : Tuple(Int32 | Symbol, Int32 | Symbol)? = nil, range : Tuple(Int32 | Symbol, Int32 | Symbol)? = nil) : self
+      @select_expressions << CQL::WindowBuilder.new(self).build(function, column, name, offset, buckets, partition_by, order_by, rows, range)
+      self
+    end
+
+    # The column as an expression qualified by the alias of its table in this query.
+    def column_expression(name : Symbol | String) : Expression::Column
+      column = find_column(name)
+      Expression::Column.new(column, alias_name: find_alias_for_table(column.table.not_nil!))
+    end
+
+    # Declares `WITH name AS (source)`; *name* can then be used in `from`/`join`
+    # like a table, with the columns *source* selects.
+    #
+    # ```
+    # query.with(:totals, orders.sum(:total, as: :spent).group(:customer_id)).from(:totals)
+    # ```
+    def with(name : Symbol, source : Executable) : self
+      declare(name, source.build)
+      self
+    end
+
+    # Like `with`, building the source from a query that can already see the CTEs
+    # declared so far, so one CTE can read another.
+    def with(name : Symbol, &block : Query -> Executable) : self
+      self.with(name, block.call(nested))
+    end
+
+    # A fresh query that can reference this query's CTEs, for subqueries and CTE bodies.
+    def nested : Query
+      Query.new(@schema).tap { |query| @derived_tables.each { |name, table| query.derived_tables[name] = table } }
+    end
+
+    # Declares `WITH RECURSIVE name AS (anchor UNION [ALL] step)`. The block receives
+    # an empty query that already knows *name*, and returns the recursive step
+    # (which cannot have ORDER BY / LIMIT; put those on the outer query).
+    def with_recursive(name : Symbol, anchor : Query, all : Bool = true, &block : Query -> Query) : self
+      anchor_statement = anchor.build
+      table = CQL::DerivedTable.new(@schema, name, anchor_statement)
+      step = block.call(nested.tap(&.derived_tables[name] = table)).build
+      raise ArgumentError.new("A recursive step cannot have ORDER BY, LIMIT or its own CTEs; apply them to the outer query") if step.needs_grouping_as_operand?
+      operator = all ? Expression::SetOperator::UnionAll : Expression::SetOperator::Union
+      declare(name, Expression::SetOperation.new(anchor_statement, operator, step), table)
+      self.recursive = true
+      self
+    end
+
     # Accept keyword arguments for table/alias pairs
     def from(**tables_with_aliases)
       @query_tables.clear # FROM clause resets tables
@@ -456,6 +391,16 @@ module CQL
       # Get the actual condition from the builder
       new_condition = condition_builder.as(Expression::ConditionBuilder).condition
       merge_where_condition(new_condition)
+      self
+    end
+
+    # A raw SQL fragment with bound `?` / `:name` values, ANDed with other conditions.
+    #
+    # ```
+    # query.where("lower(name) = ? AND age > :age", "ada", age: 18)
+    # ```
+    def where(__sql sql : String, *positional, **named)
+      merge_where_condition(Expression::Raw.build(sql, positional, named))
       self
     end
 
@@ -598,6 +543,21 @@ module CQL
       join_table_block(table_or_alias, Expression::JoinType::RIGHT, &block)
     end
 
+    # Adds a FULL OUTER JOIN using a block for the condition (not supported by MySQL).
+    def full(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
+      join_table_block(table_or_alias, Expression::JoinType::FULL, &block)
+    end
+
+    # Adds a CROSS JOIN (every row paired with every row of *table*).
+    def cross(table_or_alias : Symbol) : self
+      table_name, table_alias = parse_table_or_alias(table_or_alias)
+      table = find_schema_table(table_name)
+      final_alias = determine_alias(table_name, table_alias)
+      ensure_alias_available(final_alias)
+      add_join_expression(table, final_alias, Expression::JoinType::CROSS, Expression::EmptyNode.new)
+      self
+    end
+
     # Adds JOINs to the query using named arguments for table aliasing.
     # - **@param** tables_with_aliases [NamedTuple] Table name => alias
     # - **@return** [Query] The query object
@@ -720,6 +680,24 @@ module CQL
       self
     end
 
+    # PostgreSQL / CockroachDB: keep the first row of each group of equal *columns*
+    # (the order is decided by `order`). Other dialects raise when SQL is generated.
+    def distinct_on(*columns : Symbol) : self
+      @distinct_on.clear
+      columns.each { |name| @distinct_on << column_expression(name) }
+      self
+    end
+
+    # Appends `FOR UPDATE` (or `FOR SHARE`), optionally `SKIP LOCKED` / `NOWAIT`.
+    # SQLite has no row locks and raises when SQL is generated.
+    def lock(mode : Symbol = :update, skip_locked : Bool = false, nowait : Bool = false) : self
+      raise ArgumentError.new("Use skip_locked or nowait, not both") if skip_locked && nowait
+      lock_mode = Expression::LockMode.parse?(mode.to_s) || raise ArgumentError.new("Unknown lock mode #{mode.inspect} (use :update or :share)")
+      wait = skip_locked ? Expression::LockWait::SkipLocked : (nowait ? Expression::LockWait::NoWait : Expression::LockWait::Wait)
+      @row_lock = Expression::RowLock.new(lock_mode, wait)
+      self
+    end
+
     # Replaces the existing order clause with new ordering.
     # - **@param** fields [Symbol*] The fields to order by
     # - **@return** [Query] The query object
@@ -822,7 +800,7 @@ module CQL
     # - **Schema:** Must be the same for both queries.
     # - **Distinct:** Becomes `true` if either query is distinct.
     # - **Select Columns (`@columns`):** Concatenated and uniqued by object identity.
-    # - **Aggregate Columns (`@aggr_columns`):** Concatenated and uniqued by object identity.
+    # - **Aggregate Columns (`@select_expressions`):** Concatenated and uniqued by object identity.
     # - **Query Tables (`@query_tables`):** Merged. Conflicts on alias pointing to different tables raise an error.
     # - **Joins (`@joins`):** Concatenated and uniqued by object identity.
     # - **Where (`@where`):** Conditions are combined using `AND`.
@@ -848,7 +826,7 @@ module CQL
     # query.build
     # => #<Expression::Query:0x00007f8b1b0b3b00>
     # ```
-    def build
+    def build : Expression::Query
       select_cols, aggr_exprs = build_select # Returns Expression::Column with String aliases
 
       Expression::Query.new(
@@ -858,10 +836,14 @@ module CQL
         build_group_by, # Returns Expression::GroupBy with Expression::Column(String alias)
         @having,        # Uses aliased expressions internally (String alias)
         build_order_by, # Returns Expression::OrderBy with Expression::Column(String alias)
-        @joins,         # Join expressions contain String aliases
+        @joins.dup,     # Join expressions contain String aliases
         build_limit,
         distinct?,
-        aggr_exprs # Aggregate expressions contain String aliases
+        aggr_exprs, # Aggregate expressions contain String aliases
+        @ctes.dup,
+        recursive?,
+        @distinct_on.dup,
+        @row_lock
       )
     end
 
@@ -875,9 +857,10 @@ module CQL
     # query.count(:id)
     # => "SELECT COUNT(id) FROM users"
     # ```
-    def count(column : Symbol = :*, as as_name : String? = nil)
-      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
-      @aggr_columns << if column == :*
+    def count(column : Symbol = :*, as as_name : Symbol? = nil, distinct : Bool = false)
+      CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
+      raise ArgumentError.new("COUNT(DISTINCT *) is not valid; name a column") if distinct && column == :*
+      @select_expressions << if column == :*
         first_table_alias = @query_tables.first_key? # Use String key
         raise "Cannot COUNT(*) without a FROM clause" unless first_table_alias
         table_info = @query_tables[first_table_alias]
@@ -889,7 +872,7 @@ module CQL
         base_col = find_column(column)                            # find_column now handles aliases correctly
         col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
         # Pass String alias
-        Expression::Count.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+        Expression::Count.new(Expression::Column.new(base_col, alias_name: col_alias), as_name, distinct)
       end
       self
     end
@@ -904,12 +887,12 @@ module CQL
     # query.from(:users).max(:price)
     # => "SELECT MAX(price) FROM users"
     # ```
-    def max(column : Symbol, as as_name : String? = nil)
-      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
+    def max(column : Symbol, as as_name : Symbol? = nil)
+      CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @aggr_columns << Expression::Max.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+      @select_expressions << Expression::Max.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -923,12 +906,12 @@ module CQL
     # query.min(:price)
     # => "SELECT MIN(price) FROM users"
     # ```
-    def min(column : Symbol, as as_name : String? = nil)
-      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
+    def min(column : Symbol, as as_name : Symbol? = nil)
+      CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @aggr_columns << Expression::Min.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+      @select_expressions << Expression::Min.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -942,12 +925,12 @@ module CQL
     # query.sum(:total_amount)
     # => "SELECT SUM(total_amount) FROM users"
     # ```
-    def sum(column : Symbol, as as_name : String? = nil)
-      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
+    def sum(column : Symbol, as as_name : Symbol? = nil)
+      CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @aggr_columns << Expression::Sum.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+      @select_expressions << Expression::Sum.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -961,12 +944,12 @@ module CQL
     # query.avg(:rating)
     # => "SELECT AVG(rating) FROM users"
     # ```
-    def avg(column : Symbol, as as_name : String? = nil)
-      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
+    def avg(column : Symbol, as as_name : Symbol? = nil)
+      CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @aggr_columns << Expression::Avg.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+      @select_expressions << Expression::Avg.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -979,7 +962,7 @@ module CQL
       end
       from_tables_info = from_table_aliases.map { |alias_str| @query_tables[alias_str] }
       # Create Expression::Table with String alias
-      from_table_expressions = from_tables_info.map { |info| Expression::Table.new(info[:table], info[:alias]) }
+      from_table_expressions = from_tables_info.map { |info| from_source(info[:table], info[:alias]) }
       Expression::From.new(from_table_expressions)
     end
 
@@ -1194,16 +1177,16 @@ module CQL
 
     private def build_select
       selected_columns = [] of Expression::Column
-      aggregate_expressions = [] of Expression::Aggregate
+      aggregate_expressions = [] of Expression::SelectExpression
 
-      @aggr_columns.each do |aggr_node|
+      @select_expressions.each do |aggr_node|
         # Aggregate nodes should already contain Expression::Column with String alias
         aggregate_expressions << aggr_node
       end
 
       if @columns.empty? && aggregate_expressions.empty?
         if @query_tables.empty?
-          return {[] of Expression::Column, [] of Expression::Aggregate}
+          return {[] of Expression::Column, [] of Expression::SelectExpression}
         end
         # Implicit SELECT * using String aliases
         @query_tables.each do |table_alias_str, info|
@@ -1243,8 +1226,23 @@ module CQL
       {selected_columns, aggregate_expressions}
     end
 
+    private def from_source(table : CQL::Table, alias_name : String) : Expression::Table
+      if table.is_a?(CQL::DerivedTable) && (statement = table.subquery)
+        Expression::Subquery.new(statement, table, alias_name)
+      else
+        Expression::Table.new(table, alias_name)
+      end
+    end
+
+    private def declare(name : Symbol, statement : Expression::Statement, table : CQL::Table? = nil) : Nil
+      CQL::Identifier.validate!(name.to_s, "CTE name")
+      raise ArgumentError.new("CTE #{name} is already declared") if @derived_tables.has_key?(name)
+      @derived_tables[name] = table || CQL::DerivedTable.new(@schema, name, statement)
+      @ctes << Expression::Cte.new(name.to_s, statement)
+    end
+
     private def find_schema_table(name : Symbol) : CQL::Table
-      table = @schema.tables[name]?
+      table = @derived_tables[name]? || @schema.tables[name]?
       raise ArgumentError.new("Table '#{name}' not found in schema") unless table
       table
     end

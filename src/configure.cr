@@ -170,6 +170,8 @@ module CQL
         case db
         when .starts_with?("postgresql://"), .starts_with?("postgres://")
           Adapter::Postgres
+        when .starts_with?("cockroachdb://")
+          Adapter::CockroachDB
         when .starts_with?("mysql://")
           Adapter::MySql
         when .starts_with?("sqlite3://")
@@ -193,9 +195,9 @@ module CQL
       # Get database-specific configuration
       def db_config : DatabaseConfig
         case adapter
-        when Adapter::Postgres then postgres
-        when Adapter::MySql    then mysql
-        when Adapter::SQLite   then sqlite
+        when Adapter::Postgres, Adapter::CockroachDB then postgres
+        when Adapter::MySql                          then mysql
+        when Adapter::SQLite                         then sqlite
         else
           raise ArgumentError.new("Unsupported adapter: #{adapter}")
         end

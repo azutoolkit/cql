@@ -79,6 +79,11 @@ module CQL
           query.where(conditions)
         end
 
+        # A raw SQL fragment with bound `?` / `:name` values (`sql` must be a literal).
+        def self.where(__sql sql : String, *positional, **named)
+          query.where(sql, *positional, **named)
+        end
+
         # Create a QueryBuilder and execute where with hash syntax
         # - **@param** fields [Hash] The conditions using hash syntax
         # - **@return** [QueryBuilder(T)] The query builder instance

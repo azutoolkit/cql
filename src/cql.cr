@@ -58,6 +58,27 @@ module CQL
               JSON::Any.class
 
   # :nodoc:
+  POSTGRES_TYPES = {
+    Int32        => "INTEGER",
+    Int64        => "BIGINT",
+    UInt32       => "INTEGER",
+    UInt64       => "BIGINT",
+    Float32      => "REAL",
+    Float64      => "DOUBLE PRECISION",
+    String       => "VARCHAR",
+    Bool         => "BOOLEAN",
+    Time         => "TIMESTAMP",
+    Date         => "DATE",
+    Time::Span   => "INTERVAL",
+    Slice(UInt8) => "BYTEA",
+    JSON::Any    => "JSONB",
+  }
+
+  # CockroachDB's INTEGER is 64-bit, so 32-bit columns are declared INT4 to read back as Int32.
+  # :nodoc:
+  COCKROACH_TYPES = POSTGRES_TYPES.merge({Int32 => "INT4", UInt32 => "BIGINT"})
+
+  # :nodoc:
   DB_TYPE_MAPPING = {
     CQL::Adapter::SQLite => {
       Int32        => "INTEGER",
@@ -89,21 +110,8 @@ module CQL
       Slice(UInt8) => "BLOB",
       JSON::Any    => "JSON",
     },
-    CQL::Adapter::Postgres => {
-      Int32        => "INTEGER",
-      Int64        => "BIGINT",
-      UInt32       => "INTEGER",
-      UInt64       => "BIGINT",
-      Float32      => "REAL",
-      Float64      => "DOUBLE PRECISION",
-      String       => "VARCHAR",
-      Bool         => "BOOLEAN",
-      Time         => "TIMESTAMP",
-      Date         => "DATE",
-      Time::Span   => "INTERVAL",
-      Slice(UInt8) => "BYTEA",
-      JSON::Any    => "JSONB",
-    },
+    CQL::Adapter::Postgres    => POSTGRES_TYPES,
+    CQL::Adapter::CockroachDB => COCKROACH_TYPES,
   }
 
   # Represents a database adapter module.
@@ -111,6 +119,7 @@ module CQL
     SQLite
     MySql
     Postgres
+    CockroachDB
 
     # Returns the SQL type for the given type.
     # @param type [Type] the type
@@ -123,6 +132,16 @@ module CQL
       DB_TYPE_MAPPING[self][type]
     end
 
+    # PostgreSQL and CockroachDB share a wire protocol, `$n` placeholders and RETURNING.
+    def postgres_compatible? : Bool
+      postgres? || cockroach_db?
+    end
+
+    # The scheme crystal-db's driver registry knows for this adapter's URIs.
+    def driver_uri(uri : String) : String
+      cockroach_db? ? uri.sub(/\Acockroachdb:/, "postgres:") : uri
+    end
+
     def dialect
       case self
       when SQLite
@@ -131,6 +150,8 @@ module CQL
         Expression::MySqlDialect.new
       when Postgres
         Expression::PostgresDialect.new
+      when CockroachDB
+        Expression::CockroachDialect.new
       else
         raise "Unsupported adapter: #{self}"
       end

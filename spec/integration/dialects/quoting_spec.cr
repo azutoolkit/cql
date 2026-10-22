@@ -42,7 +42,7 @@ describe "Opt-in identifier quoting" do
     end
 
     it "quotes aggregate aliases but leaves * alone" do
-      sql, _ = Northwind.query.from(:orders).count(as: "n").sum(:total, as: "revenue").to_sql(pg.call)
+      sql, _ = Northwind.query.from(:orders).count(as: :n).sum(:total, as: :revenue).to_sql(pg.call)
       sql.should eq(%(SELECT COUNT(*) AS "n", SUM("orders"."total") AS "revenue" FROM "orders"))
     end
 

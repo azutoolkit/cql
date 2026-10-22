@@ -157,7 +157,7 @@ module CQL
     # ```
     def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0", @quote_identifiers : Bool = false)
       validate_uri!
-      @db = DB.open(@uri)
+      @db = DB.open(@adapter.driver_uri(@uri))
     end
 
     def dialect
@@ -176,6 +176,8 @@ module CQL
         raise InvalidURIError.new("Missing host in PostgreSQL URI") unless uri.host
       when "mysql"
         raise InvalidURIError.new("Missing host in MySQL URI") unless uri.host.presence
+      when "cockroachdb"
+        raise InvalidURIError.new("Missing host in CockroachDB URI") unless uri.host.presence
       else
         raise InvalidURIError.new("Unsupported database type: #{uri.scheme}")
       end

@@ -8,11 +8,12 @@ module CQL::Configure
 
     def apply_to_params(params : HTTP::Params, adapter : Adapter) : Nil
       case adapter
-      when Adapter::Postgres, Adapter::MySql
+      when Adapter::Postgres, Adapter::CockroachDB, Adapter::MySql
         params.add("sslmode", mode)
-        params.add("sslcert", cert_path) if cert_path
-        params.add("sslkey", key_path) if key_path
-        params.add("sslca", ca_path) if ca_path
+        ca_key = adapter.postgres_compatible? ? "sslrootcert" : "sslca"
+        {"sslcert" => cert_path, "sslkey" => key_path, ca_key => ca_path}.each do |key, path|
+          params.add(key, path) if path
+        end
       end
     end
 

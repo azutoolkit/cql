@@ -3,7 +3,7 @@ require "./aggregate_functions"
 
 module Expression
   # Query structure - optimized for memory efficiency
-  class Query < Node
+  class Query < Statement
     getter columns : Array(BaseColumn)
     getter from : From
     getter where : Where? = nil
@@ -13,7 +13,11 @@ module Expression
     getter joins : Array(Join)
     getter limit : Limit? = nil
     getter? distinct : Bool = false
-    getter aggr_columns : Array(Aggregate)
+    getter select_expressions : Array(SelectExpression)
+    getter ctes : Array(Cte)
+    getter? recursive : Bool
+    getter distinct_on : Array(BaseColumn)
+    getter lock : RowLock?
 
     def initialize(
       @columns : Array(BaseColumn),
@@ -25,7 +29,11 @@ module Expression
       @joins : Array(Join),
       @limit : Limit?,
       @distinct : Bool,
-      @aggr_columns : Array(Aggregate),
+      @select_expressions : Array(SelectExpression),
+      @ctes : Array(Cte) = [] of Cte,
+      @recursive : Bool = false,
+      @distinct_on : Array(BaseColumn) = [] of BaseColumn,
+      @lock : RowLock? = nil,
     )
     end
 
@@ -39,7 +47,11 @@ module Expression
       joins : Array(Join) = [] of Join,
       limit : Limit? = nil,
       distinct : Bool = false,
-      aggr_columns : Array(Aggregate) = [] of Aggregate,
+      select_expressions : Array(SelectExpression) = [] of SelectExpression,
+      @ctes : Array(Cte) = [] of Cte,
+      @recursive : Bool = false,
+      @distinct_on : Array(BaseColumn) = [] of BaseColumn,
+      @lock : RowLock? = nil,
     )
       @columns = columns.map(&.as(BaseColumn))
       @from = from
@@ -50,7 +62,17 @@ module Expression
       @joins = joins
       @limit = limit
       @distinct = distinct
-      @aggr_columns = aggr_columns
+      @select_expressions = select_expressions
+    end
+
+    def needs_grouping_as_operand? : Bool
+      !ctes.empty? || !order_by.nil? || !limit.nil?
+    end
+
+    # Selected columns plus aggregates that carry an alias (`sum(:x, as: :y)`).
+    def output_columns : Array(CQL::BaseColumn)
+      named = select_expressions.compact_map { |aggr| aggr.as_name.try { |name| CQL::Column(DB::Any).new(name).as(CQL::BaseColumn) } }
+      columns.map(&.column) + named
     end
 
     def accept(visitor : Visitor)
@@ -150,6 +172,19 @@ module Expression
       def {{call.name.id}} : BaseColumn
         @table.{{call.name.id}}.expression(@alias_name)
       end
+    end
+  end
+
+  # A subquery used as a table: `(SELECT ...) AS alias`.
+  class Subquery < Table
+    getter statement : Statement
+
+    def initialize(@statement : Statement, table : CQL::Table, alias_name : String)
+      super(table, alias_name)
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
     end
   end
 
