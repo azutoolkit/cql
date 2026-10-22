@@ -35,6 +35,8 @@ require "./active_record/soft_deletable"
 require "./performance"
 require "./configure"
 
+# The PostgreSQL developer-experience layer (CQL::Postgres) is opt-in: `require "cql/postgres"`.
+
 module CQL
   # :nodoc:
   alias Date = Time

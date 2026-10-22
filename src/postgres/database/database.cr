@@ -1,0 +1,6 @@
+require "../configuration"
+require "./errors"
+require "./url_resolver"
+require "./registry"
+require "./slow_query"
+require "./connection"
