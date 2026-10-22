@@ -44,11 +44,11 @@ module CQL
         end
       {% end %}
 
-      def ==(value : Nil) : Expression::ConditionBuilder
+      def ==(other : Nil) : Expression::ConditionBuilder
         null
       end
 
-      def !=(value : Nil) : Expression::ConditionBuilder
+      def !=(other : Nil) : Expression::ConditionBuilder
         not_null
       end
 

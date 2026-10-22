@@ -91,7 +91,7 @@ Demo.books.create!
 
 ada = Author.create!(name: "Ada", age: 36, status: "active")
 alan = Author.create!(name: "Alan", age: 41, status: "active")
-kid = Author.create!(name: "Kid", age: 12, status: "pending")
+Author.create!(name: "Kid", age: 12, status: "pending")
 Profile.create!(author_id: ada.id.not_nil!, country: "US")
 Profile.create!(author_id: alan.id.not_nil!, country: "UK")
 Book.create!(title: "Notes", author_id: ada.id.not_nil!, pages: 120)
