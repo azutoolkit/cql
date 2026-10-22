@@ -46,6 +46,9 @@ module CQL
     @table : Table? = nil
     @columns : Set(Expression::Column) = Set(Expression::Column).new
     @values : Array(Array(DB::Any)) = Array(Array(DB::Any)).new
+    # Column names (in order) established by the first row; later rows are
+    # aligned to this order and must provide exactly the same columns.
+    @column_order : Array(Symbol) = [] of Symbol
     @back : Array(Expression::Column) = Array(Expression::Column).new
     @query : Query? = nil
 
@@ -244,23 +247,24 @@ module CQL
     end
 
     private def build_values(fields)
-      keys = Set(Expression::Column).new
-
-      fields.each do |field, _|
-        column = find_column(field)
-        keys << Expression::Column.new(column)
+      pairs = [] of {Symbol, DB::Any}
+      fields.each do |field, value|
+        pairs << {field, value.is_a?(JSON::Any) ? value.to_json.as(DB::Any) : value.as(DB::Any)}
       end
 
-      @columns = keys if @columns.empty?
-
-      vals = fields.values.map do |v|
-        if v.is_a?(JSON::Any)
-          v.to_json.as(DB::Any)
-        else
-          v.as(DB::Any)
+      if @column_order.empty?
+        pairs.each { |(field, _)| @columns << Expression::Column.new(find_column(field)) }
+        @column_order = pairs.map(&.[0])
+      else
+        names = pairs.map(&.[0])
+        unless names.size == @column_order.size && (names - @column_order).empty?
+          raise ArgumentError.new(
+            "All rows in a bulk insert must have the same columns: expected #{@column_order.join(", ")}, got #{names.join(", ")}")
         end
+        pairs = @column_order.map { |name| pairs.find! { |(field, _)| field == name } }
       end
-      @values << vals.to_a
+
+      @values << pairs.map(&.[1])
     end
 
     private def find_table(table : Symbol) : Table

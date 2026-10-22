@@ -875,7 +875,8 @@ module CQL
     # query.count(:id)
     # => "SELECT COUNT(id) FROM users"
     # ```
-    def count(column : Symbol = :*)
+    def count(column : Symbol = :*, as as_name : String? = nil)
+      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
       @aggr_columns << if column == :*
         first_table_alias = @query_tables.first_key? # Use String key
         raise "Cannot COUNT(*) without a FROM clause" unless first_table_alias
@@ -883,12 +884,12 @@ module CQL
         # Use positional arguments for BaseColumn.new
         star_col = Column(Int64).new(:*)
         # Pass String alias
-        Expression::Count.new(Expression::Column.new(star_col, alias_name: table_info[:alias]))
+        Expression::Count.new(Expression::Column.new(star_col, alias_name: table_info[:alias]), as_name)
       else
         base_col = find_column(column)                            # find_column now handles aliases correctly
         col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
         # Pass String alias
-        Expression::Count.new(Expression::Column.new(base_col, alias_name: col_alias))
+        Expression::Count.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       end
       self
     end
@@ -903,11 +904,12 @@ module CQL
     # query.from(:users).max(:price)
     # => "SELECT MAX(price) FROM users"
     # ```
-    def max(column : Symbol)
+    def max(column : Symbol, as as_name : String? = nil)
+      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @aggr_columns << Expression::Max.new(Expression::Column.new(base_col, alias_name: col_alias))
+      @aggr_columns << Expression::Max.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -921,11 +923,12 @@ module CQL
     # query.min(:price)
     # => "SELECT MIN(price) FROM users"
     # ```
-    def min(column : Symbol)
+    def min(column : Symbol, as as_name : String? = nil)
+      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @aggr_columns << Expression::Min.new(Expression::Column.new(base_col, alias_name: col_alias))
+      @aggr_columns << Expression::Min.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -939,11 +942,12 @@ module CQL
     # query.sum(:total_amount)
     # => "SELECT SUM(total_amount) FROM users"
     # ```
-    def sum(column : Symbol)
+    def sum(column : Symbol, as as_name : String? = nil)
+      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @aggr_columns << Expression::Sum.new(Expression::Column.new(base_col, alias_name: col_alias))
+      @aggr_columns << Expression::Sum.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -957,11 +961,12 @@ module CQL
     # query.avg(:rating)
     # => "SELECT AVG(rating) FROM users"
     # ```
-    def avg(column : Symbol)
+    def avg(column : Symbol, as as_name : String? = nil)
+      as_name = CQL::Identifier.validate!(as_name, "alias") if as_name
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @aggr_columns << Expression::Avg.new(Expression::Column.new(base_col, alias_name: col_alias))
+      @aggr_columns << Expression::Avg.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -1184,7 +1189,7 @@ module CQL
     end
 
     private def build_limit
-      Expression::Limit.new(@limit, @offset) if @limit
+      Expression::Limit.new(@limit, @offset) if @limit || @offset
     end
 
     private def build_select

@@ -167,6 +167,8 @@ module CQL
         # Valid SQLite URI
       when "postgres", "postgresql"
         raise InvalidURIError.new("Missing host in PostgreSQL URI") unless uri.host
+      when "mysql"
+        raise InvalidURIError.new("Missing host in MySQL URI") unless uri.host
       else
         raise InvalidURIError.new("Unsupported database type: #{uri.scheme}")
       end

@@ -118,6 +118,12 @@ module Expression
     # Formats the LIMIT and OFFSET clauses.
     abstract def format_limit_offset(limit : DB::Any, offset : DB::Any?) : String
 
+    # Formats an OFFSET clause that has no accompanying LIMIT.
+    # PostgreSQL accepts a bare OFFSET; dialects that require a LIMIT override this.
+    def format_offset_only(offset : DB::Any) : String
+      " OFFSET #{offset}"
+    end
+
     # Formats the LIKE operator.
     abstract def format_like(column : String, placeholder : String) : String
 

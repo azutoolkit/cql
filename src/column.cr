@@ -81,6 +81,13 @@ module CQL
       Expression::TypedColumn(Type).new(self, @as_name)
     end
 
+    # Builds the expression qualified by a *table* alias (e.g. `c.name` for
+    # `FROM customers AS c`). The column's own `as:` name is a select-list
+    # alias, never a table qualifier, so it is not used here.
+    def expression(table_alias : String?) : Expression::BaseColumn
+      Expression::TypedColumn(Type).new(self, table_alias)
+    end
+
     def strict_type
       Type
     end

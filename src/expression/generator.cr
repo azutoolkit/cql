@@ -7,6 +7,10 @@ module Expression
     @dialect : BaseDialect
     getter params : Array(DB::Any) = [] of DB::Any
     getter query : String = ""
+    # Nesting depth of `Query` nodes currently being visited. Parameters are
+    # only reset at the root; subqueries must append to the enclosing list so
+    # outer values and `$n` numbering survive.
+    @query_depth : Int32 = 0
 
     def initialize(@adapter : CQL::Adapter = CQL::Adapter::SQLite)
       @dialect = @adapter.dialect
@@ -21,6 +25,7 @@ module Expression
     def reset
       @params.clear
       @query = ""
+      @query_depth = 0
     end
 
     # Get the appropriate placeholder based on the current parameter index
@@ -31,13 +36,14 @@ module Expression
 
     # Template Method for common visit methods
     def visit(node : Query) : String
-      @params.clear
+      @params.clear if @query_depth == 0
+      @query_depth += 1
       @query = String.build do |string|
         string << "SELECT "
         string << "DISTINCT " if node.distinct?
         # Columns and aggregates now contain Expression::Column nodes potentially with aliases
         columns_sql = node.columns.map(&.accept(self))
-        aggr_sql = node.aggr_columns.map(&.accept(self))
+        aggr_sql = node.aggr_columns.map { |aggr| aggregate_select_item(aggr) }
 
         select_parts = columns_sql + aggr_sql
         if select_parts.empty?
@@ -56,6 +62,14 @@ module Expression
         string << node.order_by.try &.accept(self) if node.order_by # OrderBy handles aliases internally
         string << node.limit.try &.accept(self) if node.limit
       end
+    ensure
+      @query_depth -= 1
+    end
+
+    # An aggregate in the SELECT list, with its optional `AS alias`.
+    private def aggregate_select_item(aggr : Aggregate) : String
+      sql = aggr.accept(self)
+      (name = aggr.as_name) ? "#{sql} AS #{name}" : sql
     end
 
     def visit(node : Join) : String
@@ -340,6 +354,12 @@ module Expression
     end
 
     def visit(node : Limit) : String
+      unless node.limit
+        # OFFSET with no LIMIT: the dialect decides how to express "unbounded".
+        @params << node.offset.not_nil!
+        return @dialect.format_offset_only(placeholder)
+      end
+
       @params << node.limit
       limit_placeholder = placeholder
 

@@ -148,7 +148,7 @@ module Expression
 
     macro method_missing(call)
       def {{call.name.id}} : BaseColumn
-        @table.{{call.name.id}}.expression
+        @table.{{call.name.id}}.expression(@alias_name)
       end
     end
   end

@@ -1,61 +1,25 @@
 require "./base_expression"
 
 module Expression
-  # Aggregate functions
-  alias Aggregate = Count | Max | Min | Sum | Avg
-
-  class Count < Condition
+  # Base of the aggregate functions. Each one wraps a single column and may
+  # carry a select-list alias (`COUNT(id) AS total`). The alias is only
+  # rendered in the SELECT list; inside HAVING the aggregate is emitted
+  # without it.
+  abstract class AggregateFunction < Condition
     getter column : BaseColumn
+    getter as_name : String?
 
-    def initialize(@column : BaseColumn)
-    end
-
-    def accept(visitor : Visitor)
-      visitor.visit(self)
+    def initialize(@column : BaseColumn, @as_name : String? = nil)
     end
   end
 
-  class Max < Condition
-    getter column : BaseColumn
+  alias Aggregate = AggregateFunction
 
-    def initialize(@column : BaseColumn)
+  {% for name in %w[Count Max Min Avg Sum] %}
+    class {{ name.id }} < AggregateFunction
+      def accept(visitor : Visitor)
+        visitor.visit(self)
+      end
     end
-
-    def accept(visitor : Visitor)
-      visitor.visit(self)
-    end
-  end
-
-  class Min < Condition
-    getter column : BaseColumn
-
-    def initialize(@column : BaseColumn)
-    end
-
-    def accept(visitor : Visitor)
-      visitor.visit(self)
-    end
-  end
-
-  class Avg < Condition
-    getter column : BaseColumn
-
-    def initialize(@column : BaseColumn)
-    end
-
-    def accept(visitor : Visitor)
-      visitor.visit(self)
-    end
-  end
-
-  class Sum < Condition
-    getter column : BaseColumn
-
-    def initialize(@column : BaseColumn)
-    end
-
-    def accept(visitor : Visitor)
-      visitor.visit(self)
-    end
-  end
+  {% end %}
 end

@@ -182,12 +182,16 @@ module Expression
 
       build_sql(values.size * 32) do |str|
         str << " VALUES "
+        # `placeholders` is a flat list spanning every row, so each row must
+        # read from its own offset (otherwise rows reuse the first row's `$n`).
+        offset = 0
         values.each_with_index do |row, i|
           str << "("
           row.size.times do |j|
-            str << placeholders[j]
+            str << placeholders[offset + j]
             str << ", " if j < row.size - 1
           end
+          offset += row.size
           str << ")"
           str << ", " if i < values.size - 1
         end
