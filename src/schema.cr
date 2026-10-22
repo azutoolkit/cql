@@ -9,6 +9,7 @@ require "json"
 # Internal CQL Entry Point
 require "./exceptions"
 require "./cql"
+require "./pool_stats"
 
 module CQL
   # The `Schema` class represents a database schema.
@@ -74,6 +75,14 @@ module CQL
 
     # - **@return** [DB::Database] the database connection pool
     private getter db : DB::Database
+
+    # Connection pool occupancy, read without checking out a connection.
+    # All zeros before the first query when the pool was opened with `initial_pool_size=0`.
+    def pool_stats : PoolStats
+      PoolStats.from(@db.pool.stats)
+    rescue # a stats read must never take the caller down (dashboards poll it)
+      PoolStats.new(0, 0, 0, 0)
+    end
 
     # Fiber-local connection storage for thread-safe transaction handling
     @fiber_connections = {} of Fiber => DB::Connection
@@ -289,12 +298,20 @@ module CQL
     #   cnn.exec("UPDATE accounts SET balance = balance - 100 WHERE user_id = ?", 1)
     # end
     # ```
+    #
+    # Publishes `Telemetry::TransactionEvent`s to `Telemetry.subscribe_transactions`
+    # subscribers. A manual `tx.rollback` followed by a normal return still
+    # reports Commit, since CQL cannot see it.
     def transaction(&)
       previous_connection = active_connection
+      observer = Telemetry.begin_transaction(@adapter, !previous_connection.nil?)
       @db.transaction do |tx|
         self.active_connection = tx.connection
         begin
           yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
+        rescue ex
+          observer.try &.failed(ex)
+          raise ex
         ensure
           self.active_connection = previous_connection
         end
@@ -304,6 +321,11 @@ module CQL
       # and perform the rollback without propagating the exception further.
       # We log it for debugging, but don't convert to ConnectionError.
       Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
+    rescue ex
+      observer.try &.failed(ex)
+      raise ex
+    ensure
+      observer.try &.finish
     end
 
     def transaction(tx : DB::Transaction, &)
