@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`QueryBuilder#where { }`, `join { }`, `left { }`, `right { }` return a new builder** like every other builder method; they no longer also mutate the receiver. Use the returned value.
+- Aggregates accept `as:` for a select-list alias: `count(:id, as: "n")`.
+- Opt-in identifier quoting: `CQL::Schema.define(..., quote_identifiers: true)` quotes table, column and alias names (double quotes, backticks on MySQL). Default is off, so generated SQL is unchanged.
+
 - Improved error handling with detailed exception hierarchy
 - Enhanced N+1 query detection with better pattern recognition
 - Optimized expression builder architecture
@@ -54,11 +58,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Subqueries (`IN (SELECT ...)`, `EXISTS`, `INSERT ... SELECT`) no longer discard the parameters bound by the enclosing query, and PostgreSQL `$n` numbering now continues across them.
+- Multi-row `INSERT` on PostgreSQL numbers each row's placeholders (it emitted `($1,$2),($1,$2)`); rows are aligned by column name and rows with a different column set raise `ArgumentError`.
+- `OFFSET` without `LIMIT` is no longer dropped (bare `OFFSET` on PostgreSQL, `LIMIT -1` on SQLite, maximum `LIMIT` on MySQL).
+- Block DSL qualifies columns with the table alias (`from(customers: :c).where { c.city == ... }`).
+- `Update#where` / `Delete#where` AND with earlier conditions instead of replacing them.
+- `QueryBuilder#having` builds a `HAVING` clause (it called `where`); `reverse_order` and `unscope` work; aggregates, `ids` and `reorder` no longer alter the builder they are called on.
+- `mysql://` URIs are accepted by `Schema`.
+
 - Connection pool configuration consistency
 - Transaction rollback handling
 - Error context in exception messages
 
 ### Security
+
+- DDL identifiers that cannot be bound as parameters are now validated: index, foreign key, unique/check constraint names, rename targets and foreign key table/column names must match `[A-Za-z_][A-Za-z0-9_]*` (`DROP INDEX` also accepts one `schema.` qualifier). Anything else raises `ArgumentError` instead of being spliced into SQL. Names with other characters (hyphens, dots, spaces, non-ASCII) previously produced broken unquoted SQL.
+- Aggregate aliases (`count(:id, as: "n")`) are validated the same way.
 
 - SQL injection prevention in query builder
 - Parameterized query support

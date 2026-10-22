@@ -9,6 +9,15 @@ module CQL
       PATTERN.matches?(name)
     end
 
+    QUALIFIED_PATTERN = /\A[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?\z/
+
+    # Like `validate!` but also accepts one `schema.name` qualifier (e.g.
+    # `DROP INDEX myschema.idx_users_email` on PostgreSQL).
+    def self.validate_qualified!(name : String, kind : String = "identifier") : String
+      return name if QUALIFIED_PATTERN.matches?(name)
+      raise ArgumentError.new("Invalid #{kind} #{name.inspect}: expected `name` or `schema.name` using only letters, digits and underscores")
+    end
+
     # Returns *name* unchanged when it is a plain identifier, otherwise raises.
     def self.validate!(name : String, kind : String = "identifier") : String
       return name if valid?(name)

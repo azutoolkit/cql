@@ -480,7 +480,7 @@ module Expression
 
     def visit(node : CreateIndex) : String
       @query = @dialect.create_index(
-        node.index.index_name.to_s,
+        CQL::Identifier.validate!(node.index.index_name.to_s, "index name"),
         node.index.table.table_name.to_s,
         node.index.columns.map(&.to_s),
         node.index.unique?
@@ -514,6 +514,7 @@ module Expression
         # Define foreign keys (if any)
         unless node.table.foreign_keys.empty?
           fks_sql = node.table.foreign_keys.map do |foreign_key|
+            validate_foreign_key!(foreign_key)
             @dialect.define_foreign_key(foreign_key)
           end
           definitions.concat(fks_sql)
@@ -522,6 +523,8 @@ module Expression
         # Define unique constraints (if any)
         unless node.table.unique_constraints.empty?
           unique_sql = node.table.unique_constraints.map do |unique_constraint|
+            validate_optional!(unique_constraint.name, "unique constraint name")
+            unique_constraint.columns.each { |col| CQL::Identifier.validate!(col.to_s, "column name") }
             @dialect.define_unique_constraint(unique_constraint)
           end
           definitions.concat(unique_sql)
@@ -530,6 +533,7 @@ module Expression
         # Define check constraints (if any)
         unless node.table.check_constraints.empty?
           check_sql = node.table.check_constraints.map do |check_constraint|
+            validate_optional!(check_constraint.name, "check constraint name")
             @dialect.define_check_constraint(check_constraint)
           end
           definitions.concat(check_sql)
@@ -569,20 +573,20 @@ module Expression
     end
 
     def visit(node : DropIndex) : String
-      @dialect.drop_index(node.index.index_name, node.index.table.table_name.to_s)
+      @dialect.drop_index(CQL::Identifier.validate_qualified!(node.index.index_name.to_s, "index name"), node.index.table.table_name.to_s)
     end
 
     def visit(node : RenameColumn) : String
       @dialect.rename_column(
         node.table_name,
-        node.old_name,
-        node.new_name,
+        CQL::Identifier.validate!(node.old_name.to_s, "column name"),
+        CQL::Identifier.validate!(node.new_name.to_s, "column name"),
         node.column.type,
       )
     end
 
     def visit(node : RenameTable) : String
-      @dialect.rename_table(node.table.table_name.to_s, node.new_name)
+      @dialect.rename_table(node.table.table_name.to_s, CQL::Identifier.validate!(node.new_name.to_s, "table name"))
     end
 
     def visit(node : ChangeColumn) : String
@@ -613,8 +617,9 @@ module Expression
       on_delete_sql = node.fk.on_delete.to_s.upcase.gsub("_", " ")
       on_update_sql = node.fk.on_update.to_s.upcase.gsub("_", " ")
 
+      validate_foreign_key!(node.fk)
       @dialect.add_foreign_key(
-        node.fk.name || "fk_#{node.fk.table.table_name}_#{node.fk.columns.join("_")}", # Provide default name if nil
+        CQL::Identifier.validate!(node.fk.name || "fk_#{node.fk.table.table_name}_#{node.fk.columns.join("_")}", "foreign key name"), # Provide default name if nil
         node.fk.table.table_name.to_s,
         node.fk.columns.map(&.to_s),
         node.fk.references_table.to_s,
@@ -624,8 +629,20 @@ module Expression
       )
     end
 
+    # Foreign key parts that are spliced into DDL as identifiers.
+    private def validate_foreign_key!(fk : CQL::ForeignKey) : Nil
+      validate_optional!(fk.name, "foreign key name")
+      fk.columns.each { |col| CQL::Identifier.validate!(col.to_s, "column name") }
+      CQL::Identifier.validate!(fk.references_table.to_s, "table name")
+      fk.references_columns.each { |col| CQL::Identifier.validate!(col.to_s, "column name") }
+    end
+
+    private def validate_optional!(name : String?, kind : String) : Nil
+      CQL::Identifier.validate!(name, kind) if name
+    end
+
     def visit(node : DropForeignKey) : String
-      @dialect.drop_foreign_key(node.table, node.fk)
+      @dialect.drop_foreign_key(node.table, CQL::Identifier.validate!(node.fk, "foreign key name"))
     end
   end
 end
