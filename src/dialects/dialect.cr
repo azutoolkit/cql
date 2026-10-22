@@ -3,6 +3,13 @@ require "../constraint"
 module Expression
   # Handles general dialect-specific functionalities like placeholders and structure dumps.
   module GeneralDialect
+    # Quotes an identifier (table, column or alias name) for this dialect,
+    # doubling any embedded quote character. Only used when the schema opts in
+    # with `quote_identifiers: true`.
+    def quote_identifier(name : String) : String
+      %("#{name.gsub('"', "\"\"")}")
+    end
+
     # Formats a placeholder for prepared statements based on the dialect's syntax
     # and the parameter index
     abstract def placeholder_format(param_index : Int32) : String

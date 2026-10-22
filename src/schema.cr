@@ -59,6 +59,10 @@ module CQL
     # - **@return** [Adapter] the database adapter (default: `Adapter::SQLite`)
     getter adapter : Adapter = Adapter::SQLite
 
+    # - **@return** [Bool] whether generated SQL quotes table, column and alias
+    #   names (opt-in; needed for reserved words such as `order` or `group`)
+    getter quote_identifiers : Bool = false
+
     # - **@return** [Hash(Symbol, Table)] the tables in the schema
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
 
@@ -81,7 +85,7 @@ module CQL
     # sql, params = query.to_sql(gen)
     # ```
     def new_generator : Expression::Generator
-      Expression::Generator.new(@adapter)
+      Expression::Generator.new(@adapter, @quote_identifiers)
     end
 
     # Returns a generator for SQL expression building.
@@ -131,8 +135,8 @@ module CQL
     #   end
     # end
     # ```
-    def self.define(name : Symbol, uri : String, adapter : Adapter, version : String = "1.0", &)
-      schema = new(name, uri, adapter, version)
+    def self.define(name : Symbol, uri : String, adapter : Adapter, version : String = "1.0", quote_identifiers : Bool = false, &)
+      schema = new(name, uri, adapter, version, quote_identifiers)
       with schema yield
       schema
     end
@@ -148,7 +152,7 @@ module CQL
     # ```
     # schema = CQL::Schema.new(:northwind, "sqlite3://db.sqlite3")
     # ```
-    def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0")
+    def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0", @quote_identifiers : Bool = false)
       validate_uri!
       @db = DB.open(@uri)
     end

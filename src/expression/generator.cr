@@ -12,8 +12,14 @@ module Expression
     # outer values and `$n` numbering survive.
     @query_depth : Int32 = 0
 
-    def initialize(@adapter : CQL::Adapter = CQL::Adapter::SQLite)
+    def initialize(@adapter : CQL::Adapter = CQL::Adapter::SQLite, @quote_identifiers : Bool = false)
       @dialect = @adapter.dialect
+    end
+
+    # A table, column or alias name as it appears in SQL: quoted when the
+    # schema opted in, verbatim otherwise.
+    private def ident(name) : String
+      @quote_identifiers ? @dialect.quote_identifier(name.to_s) : name.to_s
     end
 
     # Helper method to check if a column is an auto-timestamp column
@@ -69,7 +75,7 @@ module Expression
     # An aggregate in the SELECT list, with its optional `AS alias`.
     private def aggregate_select_item(aggr : Aggregate) : String
       sql = aggr.accept(self)
-      (name = aggr.as_name) ? "#{sql} AS #{name}" : sql
+      (name = aggr.as_name) ? "#{sql} AS #{ident(name)}" : sql
     end
 
     def visit(node : Join) : String
@@ -95,7 +101,7 @@ module Expression
         string << node.table.accept(self)
         string << " ("
         columns.each_with_index do |col, i|
-          string << col.column.name
+          string << ident(col.column.name)
           string << ", " if i < columns.size - 1
         end
         string << ")"
@@ -149,54 +155,31 @@ module Expression
     end
 
     def visit(node : Column) : String
-      # Assuming Expression::Column now has `alias_name : Symbol?` field
-      String.build do |string|
-        if alias_name = node.alias_name
-          # Use alias if provided
-          string << alias_name
-          string << "."
-          string << node.column.name
-        elsif node.column.name == :*
-          # Handle SELECT *
-          # If an alias exists on the * Column itself (unlikely but possible), use it
-          # Otherwise, just output '*' - the Query builder should have expanded it if specific tables were needed.
-          string << "*"
-        else
-          # No alias provided on the column expression, use the original table name
-          table = node.column.table
-          raise "Internal Error: Column expression missing table context and no alias provided" unless table
-          string << table.table_name
-          string << "."
-          string << node.column.name
-        end
-      end
+      column_reference(node)
     end
 
     def visit(node : BaseColumn) : String
-      # Delegate to the specific column type - this should not be called directly
-      # but is here for completeness
-      visit(node.as(Column))
+      column_reference(node)
     end
 
     def visit(node : TypedColumn) : String
       # TypedColumn behaves the same as Column for SQL generation
-      String.build do |string|
-        if alias_name = node.alias_name
-          # Use alias if provided
-          string << alias_name
-          string << "."
-          string << node.column.name
-        elsif node.column.name == :*
-          # Handle SELECT *
-          string << "*"
-        else
-          # No alias provided on the column expression, use the original table name
-          table = node.column.table
-          raise "Internal Error: Column expression missing table context and no alias provided" unless table
-          string << table.table_name
-          string << "."
-          string << node.column.name
-        end
+      column_reference(node)
+    end
+
+    # `qualifier.column` for a column expression. The qualifier is the table
+    # alias when one is set, otherwise the column's own table name.
+    private def column_reference(node : BaseColumn) : String
+      column_name = node.column.name
+      if alias_name = node.alias_name
+        column_name == :* ? "#{ident(alias_name)}.*" : "#{ident(alias_name)}.#{ident(column_name)}"
+      elsif column_name == :*
+        # SELECT * - the query builder expands it when specific tables are needed
+        "*"
+      else
+        table = node.column.table
+        raise "Internal Error: Column expression missing table context and no alias provided" unless table
+        "#{ident(table.table_name)}.#{ident(column_name)}"
       end
     end
 
@@ -394,11 +377,11 @@ module Expression
       # Only output alias if it differs from the table name
       String.build do |string|
         table_name = node.table.table_name.to_s
-        string << table_name
+        string << ident(table_name)
         # Only add AS clause if alias is different from the table name
         if alias_name = node.alias_name
           if alias_name != table_name
-            string << " AS " << alias_name
+            string << " AS " << ident(alias_name)
           end
         end
       end
@@ -473,7 +456,7 @@ module Expression
     def visit(node : Setter) : String
       @params << node.value
       # If node.column changes to Expression::Column, this needs update
-      "#{node.column.column.name} = #{placeholder}"
+      "#{ident(node.column.column.name)} = #{placeholder}"
     end
 
     def visit(node : Update) : String

@@ -88,8 +88,9 @@ module CQL
         # - **@yield** [FilterBuilder] The block to build conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def where(&block : -> Expression::ConditionBuilder)
-          @query = query.where(&block)
-          clone_builder.tap(&.query)
+          builder = clone_builder
+          builder.query.where(&block)
+          builder
         end
 
         # Add LIKE conditions
@@ -156,9 +157,15 @@ module CQL
         # Add having conditions
         # - **@yield** [HavingBuilder] The block to build having conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def having(&block : Expression::HavingBuilder -> Expression::Having)
-          @query = query.where(&block)
-          clone_builder.tap(&.query)
+        #
+        # The block may use implicit self (`having { count(:id) > 1 }`) or take
+        # the builder (`having { |h| h.count(:id) > 1 }`).
+        def having(&)
+          builder = clone_builder
+          having_builder = Expression::HavingBuilder.new(builder.query.query_tables)
+          condition = with having_builder yield having_builder
+          builder.query.having = Expression::Having.new(condition.condition)
+          builder
         end
 
         # Set distinct flag
@@ -179,8 +186,9 @@ module CQL
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
-          @query = query.join(table_or_alias, &block)
-          clone_builder.tap(&.query)
+          builder = clone_builder
+          builder.query.join(table_or_alias, &block)
+          builder
         end
 
         # Execute automatic left join
@@ -202,8 +210,9 @@ module CQL
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
-          @query = query.left(table_or_alias, &block)
-          clone_builder.tap(&.query)
+          builder = clone_builder
+          builder.query.left(table_or_alias, &block)
+          builder
         end
 
         # Execute right join with block conditions
@@ -211,8 +220,9 @@ module CQL
         # - **@yield** [FilterBuilder] The block to build join conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
         def right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> Expression::ConditionBuilder)
-          @query = query.right(table_or_alias, &block)
-          clone_builder.tap(&.query)
+          builder = clone_builder
+          builder.query.right(table_or_alias, &block)
+          builder
         end
 
         # Execute automatic inner join using named arguments for table aliasing
@@ -240,7 +250,7 @@ module CQL
         # - **@param** column [Symbol] The column to count (defaults to *)
         # - **@return** [Int64] The count result
         def count(column : Symbol = :*)
-          result = @query.count(column)
+          result = @query.clone.count(column)
           result = result.get(Int64 | Int32 | Nil) if result.responds_to?(:get)
           result || 0_i64
         end
@@ -249,7 +259,7 @@ module CQL
         # - **@param** column [Symbol] The column to sum
         # - **@return** [Float64 | Int64] The sum result
         def sum(column : Symbol)
-          result = @query.sum(column)
+          result = @query.clone.sum(column)
           result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
           result || 0_i64
         end
@@ -258,7 +268,7 @@ module CQL
         # - **@param** column [Symbol] The column to average
         # - **@return** [Float64] The average result
         def avg(column : Symbol)
-          result = @query.avg(column)
+          result = @query.clone.avg(column)
           result = result.get(Float64 | Int64 | Int32 | Nil) if result.responds_to?(:get)
           result || 0.0
         end
@@ -267,7 +277,7 @@ module CQL
         # - **@param** column [Symbol] The column to find minimum
         # - **@return** [DB::Any] The minimum result
         def min(column : Symbol)
-          result = @query.min(column)
+          result = @query.clone.min(column)
           result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
           result || 0
         end
@@ -276,7 +286,7 @@ module CQL
         # - **@param** column [Symbol] The column to find maximum
         # - **@return** [DB::Any] The maximum result
         def max(column : Symbol)
-          result = @query.max(column)
+          result = @query.clone.max(column)
           result = result.get(Int64 | Float64 | Int32 | Nil) if result.responds_to?(:get)
           result || 0
         end
@@ -589,7 +599,7 @@ module CQL
         def ids(as as_kind = Int64)
           # Use a different approach to get just the ID values
           # We need to get the raw values, not deserialize into models
-          query, params = @query.select(:id).to_sql
+          query, params = @query.clone.select(:id).to_sql
           @query.schema.exec_query do |conn|
             conn.query_all(query, args: params, as: as_kind)
           end
@@ -627,35 +637,27 @@ module CQL
         # - **@param** fields [Symbol*] The fields to order by
         # - **@return** [QueryBuilder(T)] Self for chaining
         def reorder(*fields : Symbol | String)
-          # Clear existing order and add new one
-          @query.order_by.clear if @query.responds_to?(:order_by)
-          order(*fields)
+          clone_builder.tap(&.query.reorder(*fields))
         end
 
         # Replace existing order clause with hash syntax
         # - **@param** fields [Hash] The fields and directions to order by
         # - **@return** [QueryBuilder(T)] Self for chaining
         def reorder(**fields)
-          # Clear existing order and add new one
-          @query.order_by.clear if @query.responds_to?(:order_by)
-          order(**fields)
+          clone_builder.tap(&.query.reorder(**fields))
         end
 
         # Reverse the order of records
         # - **@return** [QueryBuilder(T)] Self for chaining
         def reverse_order
-          # This would need specific implementation in CQL::Query
-          # For now, return self to maintain chainability
-          self
+          clone_builder.tap(&.query.reverse_order)
         end
 
         # Remove specific scopes
         # - **@param** scope_type [Symbol] The type of scope to remove
         # - **@return** [QueryBuilder(T)] Self for chaining
         def unscope(scope_type : Symbol)
-          # This would need specific implementation in CQL::Query
-          # For now, return self to maintain chainability
-          self
+          clone_builder.tap(&.query.unscope(scope_type))
         end
 
         # Delete all records matching current scope

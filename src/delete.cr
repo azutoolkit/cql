@@ -147,7 +147,7 @@ module CQL
       end
 
       builder = with Expression::FilterBuilder.new(query_tables_hash) yield
-      @where = Expression::Where.new(builder.condition)
+      merge_where(builder.condition)
       self
     end
 
@@ -170,7 +170,7 @@ module CQL
         condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
       end
 
-      @where = Expression::Where.new(condition.not_nil!)
+      merge_where(condition.not_nil!)
 
       self
     end
@@ -193,7 +193,7 @@ module CQL
         condition = condition ? Expression::And.new(condition.not_nil!, expr) : expr
       end
 
-      @where = Expression::Where.new(condition.not_nil!)
+      merge_where(condition.not_nil!)
 
       self
     end
@@ -228,6 +228,15 @@ module CQL
     # ```
     def build
       Expression::Delete.new(@table.not_nil!, @where, @back, @using)
+    end
+
+    # Chained `where` calls are ANDed together, matching `Query#where`.
+    private def merge_where(condition : Expression::Condition) : Nil
+      @where = if existing = @where
+                 Expression::Where.new(Expression::And.new(existing.condition, condition))
+               else
+                 Expression::Where.new(condition)
+               end
     end
 
     private def where_hash

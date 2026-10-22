@@ -14,6 +14,10 @@ module Expression
     }
 
     # MySQL uses ? for all placeholders regardless of position
+    def quote_identifier(name : String) : String
+      "`#{name.gsub('`', "``")}`"
+    end
+
     def placeholder_format(param_index : Int32) : String
       @@cached_strings["mysql_placeholder"]
     end
