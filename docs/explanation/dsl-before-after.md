@@ -88,8 +88,9 @@ rows.first.email # String?
 **After** – fragments whose values are always bound, never interpolated:
 
 ```crystal
-User.where("lower(email) = ? AND age > :age", "ada@example.com", age: 18) # mixing styles raises
-Query.where("id IN (?)", [1, 2, 3])                                        # arrays expand
+User.query.where("lower(email) = ? AND age > ?", "ada@example.com", 18)   # positional
+User.query.where("lower(email) = :email AND age > :age", email: e, age: 18) # named (never mix the two)
+Query.where("id IN (?)", [1, 2, 3])                                         # arrays expand
 Query.where { raw("lower(name) = ?", name) | (customers.id == 1) }
 ```
 
@@ -139,7 +140,7 @@ query.explain(analyze: true)                  # PostgreSQL / MySQL / CockroachDB
 
 ## One execution path
 
-Every statement – selects, inserts, updates, deletes, DDL through
+Every query and DML statement – selects, inserts, updates, deletes, DDL through
 `Schema#exec`, `explain` – goes through `CQL::Execution.run`. That is where
 performance tracking and telemetry happen, and where an explicit connection
 can be supplied:
