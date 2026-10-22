@@ -30,6 +30,8 @@ module CQL
   # - `back(*columns : Symbol) : self` - Sets the columns to return after the update.
   # - `build : Expression::Update` - Builds the `Expression::Update` object.
   class Update
+    include Pinnable
+
     @table : Expression::Table? = nil
     @setters : Array(Expression::Setter) = [] of Expression::Setter
     @where : Expression::Where? = nil
@@ -37,6 +39,8 @@ module CQL
     @with_optimistic_locking : Bool = false
     @version_value : Int32? = nil
     @version_column : Symbol? = nil
+
+    getter schema : Schema
 
     def initialize(@schema : Schema)
     end
@@ -82,11 +86,7 @@ module CQL
       end
 
       query, params = to_sql
-      result = CQL::Performance.track(query, params) do
-        @schema.exec_query do |conn|
-          conn.exec(query, args: params)
-        end
-      end
+      result = CQL::Execution.run(executor, query, params, :update) { |connection| connection.exec(query, args: params) }
 
       if @with_optimistic_locking && result.rows_affected == 0
         raise CQL::OptimisticLockError.new("Record has been modified by another process")
@@ -204,7 +204,13 @@ module CQL
 
       # Pass the correctly structured hash to FilterBuilder
       builder = with Expression::FilterBuilder.new(query_tables_hash) yield
-      @where = Expression::Where.new(builder.condition)
+      merge_where(builder.condition)
+      self
+    end
+
+    # A raw SQL fragment with bound `?` / `:name` values (`sql` must be a literal).
+    def where(__sql sql : String, *positional, **named)
+      merge_where(Expression::Raw.build(sql, positional, named))
       self
     end
 
@@ -231,7 +237,7 @@ module CQL
         condition = index == 0 ? expr : Expression::And.new(condition.not_nil!, expr)
       end
 
-      @where = Expression::Where.new(condition.not_nil!)
+      merge_where(condition.not_nil!)
 
       self
     end
@@ -259,7 +265,7 @@ module CQL
         condition = condition ? Expression::And.new(condition.not_nil!, expr) : expr
       end
 
-      @where = Expression::Where.new(condition.not_nil!)
+      merge_where(condition.not_nil!)
 
       self
     end
@@ -304,6 +310,15 @@ module CQL
       Expression::Update.new(@table.not_nil!, @setters, @where, @back)
     end
 
+    # Chained `where` calls are ANDed together, matching `Query#where`.
+    private def merge_where(condition : Expression::Condition) : Nil
+      @where = if existing = @where
+                 Expression::Where.new(Expression::And.new(existing.condition, condition))
+               else
+                 Expression::Where.new(condition)
+               end
+    end
+
     private def build_setters(setters)
       setters.each do |k, v|
         column = find_column(k)
@@ -337,7 +352,8 @@ module CQL
     end
 
     private def find_column(name : Symbol) : BaseColumn
-      @table.not_nil!.table.columns[name] || raise "Column #{name} not found"
+      table = @table.not_nil!.table
+      table.columns[name]? || raise ArgumentError.new("Column #{name} not found in #{table.table_name}")
     end
 
     private def handle_optimistic_locking

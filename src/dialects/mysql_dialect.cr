@@ -13,6 +13,46 @@ module Expression
       "mysql_modify_prefix"     => "MODIFY COLUMN ",
     }
 
+    def display_name : String
+      "MySQL"
+    end
+
+    def format_json_text(column : String, path_placeholder : String) : String
+      "JSON_UNQUOTE(JSON_EXTRACT(#{column}, #{path_placeholder}))"
+    end
+
+    def format_json_contains(column : String, placeholder : String) : String
+      "JSON_CONTAINS(#{column}, #{placeholder})"
+    end
+
+    def format_geo_within(column : String, longitude : String, latitude : String, meters : String) : String
+      point = "ST_GeomFromText(CONCAT('POINT(', #{longitude}, ' ', #{latitude}, ')'), 4326, 'axis-order=long-lat')"
+      "ST_Distance_Sphere(#{column}, #{point}) <= #{meters}"
+    end
+
+    # MySQL has no FULL OUTER JOIN.
+    def join_keyword(type : Expression::JoinType) : String
+      raise CQL::DialectError.new(display_name, "FULL JOIN", "Combine a LEFT JOIN and a RIGHT JOIN with UNION.") if type.full?
+      super
+    end
+
+    def excluded_reference(column : String) : String
+      "VALUES(#{column})"
+    end
+
+    # MySQL has no DO NOTHING; assigning a key column to itself is the no-op idiom.
+    def format_on_conflict_nothing(target : Array(String)) : String
+      " ON DUPLICATE KEY UPDATE #{target.first} = #{target.first}"
+    end
+
+    def format_on_conflict_update(target : Array(String), assignments : Array(String)) : String
+      " ON DUPLICATE KEY UPDATE #{assignments.join(", ")}"
+    end
+
+    def quote_identifier(name : String) : String
+      "`#{name.gsub('`', "``")}`"
+    end
+
     # MySQL uses ? for all placeholders regardless of position
     def placeholder_format(param_index : Int32) : String
       @@cached_strings["mysql_placeholder"]
@@ -179,6 +219,11 @@ module Expression
       end
     end
 
+    # MySQL requires a LIMIT before OFFSET, so use the "no limit" sentinel.
+    def format_offset_only(offset : DB::Any) : String
+      " LIMIT 18446744073709551615 OFFSET #{offset}"
+    end
+
     # MySQL doesn't support RETURNING clause in versions before 8.0.21
     def format_returning(columns : Array(String)) : String
       ""
@@ -189,12 +234,16 @@ module Expression
 
       build_sql(values.size * 16) do |str|
         str << " VALUES "
+        # `placeholders` is a flat list spanning every row, so each row must
+        # read from its own offset (otherwise rows reuse the first row's `$n`).
+        offset = 0
         values.each_with_index do |row, i|
           str << "("
           row.size.times do |j|
-            str << placeholders[j]
+            str << placeholders[offset + j]
             str << ", " if j < row.size - 1
           end
+          offset += row.size
           str << ")"
           str << ", " if i < values.size - 1
         end

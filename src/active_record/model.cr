@@ -1,5 +1,7 @@
 require "./definition"
 require "./association_registry"
+require "./dsl/column"
+require "./typed_columns"
 require "./schema_validator"
 require "./queryable"
 require "./insertable"
@@ -64,6 +66,7 @@ module CQL
         include DB::Serializable
         include DB::Serializable::NonStrict
         include CQL::ActiveRecord::Definition
+        include CQL::ActiveRecord::TypedColumns
         include CQL::ActiveRecord::Identifyable
         include CQL::ActiveRecord::Attributes
         include CQL::ActiveRecord::Callbacks

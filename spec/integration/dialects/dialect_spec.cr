@@ -303,14 +303,15 @@ module Expression
         sqlite = create_dialect(:sqlite)
 
         values = [[1, "John"], [2, "Jane"]]
-        placeholders = ["$1", "$2"] # For PostgreSQL
+        # The generator passes one flat placeholder list spanning every row
+        placeholders = ["$1", "$2", "$3", "$4"] # For PostgreSQL
 
-        # Test PostgreSQL
+        # Test PostgreSQL: each row gets its own numbered placeholders
         postgres_values = postgres.format_insert_values(values, placeholders)
-        postgres_values.should eq(" VALUES ($1, $2), ($1, $2)")
+        postgres_values.should eq(" VALUES ($1, $2), ($3, $4)")
 
         # For MySQL and SQLite, we'd use ? placeholders
-        placeholders = ["?", "?"]
+        placeholders = ["?", "?", "?", "?"]
 
         mysql_values = mysql.format_insert_values(values, placeholders)
         mysql_values.should eq(" VALUES (?, ?), (?, ?)")

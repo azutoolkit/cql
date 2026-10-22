@@ -48,6 +48,15 @@ describe "UUID Primary Key Support" do
     UuidTestDB.exec("DELETE FROM uuid_sessions")
   end
 
+  describe "typed query DSL" do
+    it "filters on the UUID primary key" do
+      session = UuidSession.create!(token: "typed", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+      uuid = session.id.not_nil!
+
+      UuidSession.query.where { id == uuid }.to_a.map(&.token).should eq(["typed"])
+    end
+  end
+
   describe ".create!" do
     context "with named arguments" do
       it "creates a record with a UUID primary key" do

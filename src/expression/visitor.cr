@@ -10,6 +10,14 @@ module Expression
     abstract def visit(node : Or) : String
     abstract def visit(node : Not) : String
     abstract def visit(node : Compare) : String
+    abstract def visit(node : Raw) : String
+    abstract def visit(node : JsonEquals) : String
+    abstract def visit(node : JsonContains) : String
+    abstract def visit(node : GeoWithin) : String
+    abstract def visit(node : OnConflict) : String
+    abstract def visit(node : WindowFunction) : String
+    abstract def visit(node : SetOperation) : String
+    abstract def visit(node : Cte) : String
     abstract def visit(node : Between) : String
     abstract def visit(node : Like) : String
     abstract def visit(node : NotLike) : String
@@ -24,6 +32,7 @@ module Expression
     abstract def visit(node : Join) : String
     abstract def visit(node : From) : String
     abstract def visit(node : Table) : String
+    abstract def visit(node : Subquery) : String
     abstract def visit(node : Null) : String
     abstract def visit(node : Is) : String
     abstract def visit(node : IsNull) : String

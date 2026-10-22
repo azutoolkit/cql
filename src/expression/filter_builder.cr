@@ -14,6 +14,14 @@ module Expression
       ConditionBuilder.new(Exists.new(sub_query.build))
     end
 
+    def not(condition : ConditionBuilder) : ConditionBuilder
+      condition.not
+    end
+
+    def raw(sql : String, *positional, **named)
+      CQL.raw(sql, *positional, **named)
+    end
+
     # Direct table access method
     def table(name : String)
       @tables[name]? || raise "Table '#{name}' not found in filter context. Available tables: #{@tables.keys.join(", ")}"
