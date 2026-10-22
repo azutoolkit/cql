@@ -10,6 +10,9 @@ module CQL
   # CQL::Telemetry.alert_on_slow(200.milliseconds) { |event| Alerts.warn("slow query: #{event.sql}") }
   # ```
   #
+  # `subscribe_transactions` additionally reports `Schema#transaction`
+  # begin/commit/rollback, and `Schema#pool_stats` exposes the connection pool.
+  #
   # Parameter values are not included in events unless `capture_params` is on,
   # since they often contain personal data. A subscriber that raises is logged
   # and never affects the query.
@@ -38,6 +41,54 @@ module CQL
       end
     end
 
+    enum TransactionState
+      Begin
+      Commit
+      Rollback
+    end
+
+    # A transaction opened by `Schema#transaction` changed state. `Begin` is
+    # published before the connection is checked out, so `Commit`/`Rollback`
+    # durations include pool wait time.
+    struct TransactionEvent
+      getter state : TransactionState
+      # Shared by the Begin and the Commit/Rollback event of one transaction.
+      getter id : Int64
+      # Time since Begin; zero for Begin.
+      getter duration : Time::Span
+      # Informational: a transaction was already open on this fiber.
+      getter nested : Bool
+      # What ended the transaction in a Rollback (including `DB::Rollback`),
+      # or what made the commit fail.
+      getter error : Exception?
+      getter adapter : Adapter
+
+      def initialize(@state, @id, @duration, @nested, @error, @adapter)
+      end
+    end
+
+    # Reports one transaction's lifecycle to the subscribers. Created by
+    # `Telemetry.begin_transaction`, which has already published Begin.
+    class TransactionObserver
+      @started : Time::Instant = Time.instant
+      @error : Exception? = nil
+
+      getter id : Int64
+
+      def initialize(@adapter : Adapter, @id : Int64, @nested : Bool)
+      end
+
+      # Remembers the first failure; later calls (e.g. the same exception seen again) are ignored.
+      def failed(error : Exception) : Nil
+        @error ||= error
+      end
+
+      def finish : Nil
+        state = @error ? TransactionState::Rollback : TransactionState::Commit
+        Telemetry.emit_transaction(TransactionEvent.new(state, @id, Time.instant - @started, @nested, @error, @adapter))
+      end
+    end
+
     # Runs a statement inside a span of some tracing system.
     abstract class Tracer
       # Must call the block exactly once and let its exceptions propagate.
@@ -46,8 +97,11 @@ module CQL
     end
 
     alias Subscriber = QueryEvent ->
+    alias TransactionSubscriber = TransactionEvent ->
 
     @@subscribers = {} of String => Subscriber
+    @@transaction_subscribers = {} of String => TransactionSubscriber
+    @@transaction_ids = Atomic(Int64).new(0)
     @@contexts = {} of Fiber => String
     @@mutex = CQL::Compat::Mutex.new
     @@capture_params = false
@@ -76,6 +130,40 @@ module CQL
 
     def self.unsubscribe(name : String) : Nil
       @@mutex.synchronize { @@subscribers = @@subscribers.reject(name) }
+    end
+
+    # Registers (or replaces) the transaction subscriber called *name*.
+    def self.subscribe_transactions(name : String, &block : TransactionEvent ->) : Nil
+      @@mutex.synchronize { @@transaction_subscribers = @@transaction_subscribers.merge({name => block}) }
+    end
+
+    def self.unsubscribe_transactions(name : String) : Nil
+      @@mutex.synchronize { @@transaction_subscribers = @@transaction_subscribers.reject(name) }
+    end
+
+    # Whether a query or transaction subscriber is registered under *name*.
+    def self.subscribed?(name : String) : Bool
+      @@subscribers.has_key?(name) || @@transaction_subscribers.has_key?(name)
+    end
+
+    # Process-wide, strictly increasing transaction id.
+    def self.next_transaction_id : Int64
+      @@transaction_ids.add(1) + 1
+    end
+
+    # Publishes Begin and returns the observer that publishes the end of the
+    # transaction, or nil (without allocating or reading the clock) when nobody subscribed.
+    def self.begin_transaction(adapter : Adapter, nested : Bool) : TransactionObserver?
+      return if @@transaction_subscribers.empty?
+
+      id = next_transaction_id
+      emit_transaction(TransactionEvent.new(TransactionState::Begin, id, Time::Span.zero, nested, nil, adapter))
+      TransactionObserver.new(adapter, id, nested)
+    end
+
+    # :nodoc:
+    def self.emit_transaction(event : TransactionEvent) : Nil
+      notify(@@transaction_subscribers, event)
     end
 
     # Calls the block for statements that took at least *threshold*.
@@ -111,6 +199,7 @@ module CQL
     def self.reset! : Nil
       @@mutex.synchronize do
         @@subscribers = {} of String => Subscriber
+        @@transaction_subscribers = {} of String => TransactionSubscriber
         @@contexts.clear
       end
       @@capture_params = false
@@ -160,7 +249,11 @@ module CQL
     private def self.emit(adapter, operation, sql, params, duration, error, rows) : Nil
       context = @@mutex.synchronize { @@contexts[Fiber.current]? }
       event = QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows, context)
-      @@subscribers.each do |name, subscriber|
+      notify(@@subscribers, event)
+    end
+
+    private def self.notify(subscribers, event) : Nil
+      subscribers.each do |name, subscriber|
         subscriber.call(event)
       rescue ex
         Log.error(exception: ex) { "telemetry subscriber #{name} failed" }

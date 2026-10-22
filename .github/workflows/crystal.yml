@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: crystallang/crystal:1.20.2
+      image: crystallang/crystal:1.22.0
 
     services:
       postgres:
@@ -59,7 +59,7 @@ jobs:
       - name: Check formatting
         run: crystal tool format --check ./src
       - name: Check code linting with Ameba
-        run: bin/ameba -f progress ./src ./spec
+        run: crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec
       - name: Wait for Postgres
         run: |
           for i in {1..30}; do
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
-    if: ${{ success() }}
+    if: ${{ success() && github.event_name == 'push' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2

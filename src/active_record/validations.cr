@@ -1,7 +1,7 @@
 module CQL
   module ActiveRecord
     module Validations
-      alias AllNumbers = Int32 | Int64 | UInt32 | UInt64 | Float32 | Float64 | Nil
+      alias AllNumbers = Int32 | Int64 | UInt32 | UInt64 | Float32 | Float64?
 
       struct Error
         getter :field, :message
@@ -217,7 +217,7 @@ module CQL
       end
 
       macro validate(attribute, **options)
-        {% valid_predicates = %w(eq exclude gt gte in lt lte match size presence required confirmation accept) %}
+        {% valid_predicates = %w[eq exclude gt gte in lt lte match size presence required confirmation accept] %}
         {% for predicate, expected_value in options %}
           {% unless ["message", "on"].includes?(predicate.stringify) || valid_predicates.includes?(predicate.stringify) %}
             {{ raise "CQL validation error in #{@type}: unsupported predicate `#{predicate}` for `#{attribute}`. Supported predicates: #{valid_predicates.join(", ")}." }}

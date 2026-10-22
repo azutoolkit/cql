@@ -29,7 +29,7 @@ module CQL::ActiveRecord::Relations
     # end
     # ```
     macro has_many(name, type, foreign_key = nil, dependent = :nullify, inverse_of = nil, scope = nil)
-      {% valid_dependents = %w(destroy delete_all nullify restrict_with_error) %}
+      {% valid_dependents = %w[destroy delete_all nullify restrict_with_error] %}
       {% unless name.is_a?(SymbolLiteral) %}
         {{ raise "CQL has_many error in #{@type}: association name must be a symbol literal, for example `has_many :posts, Post`." }}
       {% end %}
