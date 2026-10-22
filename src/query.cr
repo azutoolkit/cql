@@ -122,6 +122,7 @@ module CQL
       new_query.recursive = recursive?
       @distinct_on.each { |column| new_query.distinct_on << column }
       new_query.row_lock = @row_lock
+      new_query.executor = @executor
       new_query
     end
 
@@ -402,6 +403,17 @@ module CQL
     def where(__sql sql : String, *positional, **named)
       merge_where_condition(Expression::Raw.build(sql, positional, named))
       self
+    end
+
+    # ANDs an already built condition (typed DSL, `CQL.raw`) with the existing WHERE.
+    def where(condition : Expression::ConditionBuilder) : self
+      merge_where_condition(condition.condition)
+      self
+    end
+
+    # Joins *table* with the given join type and an explicit ON condition built by the block.
+    def join_on(table : Symbol, type : Expression::JoinType, &block : Expression::FilterBuilder -> _) : self
+      join_table_block(table, type, &block)
     end
 
     def where(**fields)

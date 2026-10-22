@@ -1,9 +1,12 @@
+require "./executor"
+
 module CQL
   # Runs a statement that renders to `{sql, params}`. Result caching,
   # performance tracking and connection handling live here once, for every
   # query type that can be executed.
   module Executable
-    abstract def schema : Schema
+    include Pinnable
+
     abstract def build : Expression::Statement
 
     # The SQL text and its bound parameters, rendered for the schema's dialect
@@ -26,8 +29,8 @@ module CQL
       sql, params = to_sql
       dialect = schema.dialect
       # Plans are diagnostics: not cached, and not counted as application queries.
-      schema.exec_query do |conn|
-        conn.query(dialect.explain(sql, analyze), args: params) do |rows|
+      CQL::Execution.run(executor, dialect.explain(sql, analyze), params, :explain, track: false) do |connection|
+        connection.query(dialect.explain(sql, analyze), args: params) do |rows|
           lines = [] of String
           rows.each { lines << dialect.format_plan_row(Array.new(rows.column_count) { rows.read.to_s }) }
           lines.join("\n")
@@ -61,9 +64,7 @@ module CQL
     private def execute(&block : DB::Connection, String, Array(DB::Any) -> T) : T forall T
       sql, params = to_sql
       CQL::Cache::RequestQueryCacheHelper.with_cache(sql, params) do
-        CQL::Performance.track(sql, params) do
-          schema.exec_query { |conn| block.call(conn, sql, params) }
-        end
+        CQL::Execution.run(executor, sql, params, :select) { |connection| block.call(connection, sql, params) }
       end
     end
   end

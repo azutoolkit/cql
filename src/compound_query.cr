@@ -39,6 +39,10 @@ module CQL
       left.schema
     end
 
+    def executor : Executor
+      @executor || left.executor
+    end
+
     def build : Expression::SetOperation
       Expression::SetOperation.new(left.build, operator, right.build)
     end

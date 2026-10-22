@@ -1,3 +1,4 @@
+require "./executor"
 # Standard Lib
 require "db"
 require "uri"
@@ -37,6 +38,8 @@ module CQL
   # ```
   # The `Schema` class represents a database schema.
   class Schema
+    include Executor
+
     Log = CQL.config.logger
 
     class Error < CQL::Error; end
@@ -208,16 +211,20 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      if conn = active_connection
-        conn.exec(sql)
+      Execution.run(self, sql, [] of DB::Any, :ddl, track: false) { |connection| connection.exec(sql) }
+    end
+
+    # Yields the fiber's transaction connection, or else one pooled connection, to pin statements to it with `using(connection)`
+    # (e.g. inside a transaction started on that connection).
+    def with_connection(&)
+      if connection = active_connection
+        yield connection
       else
-        @db.using_connection do |db_conn|
-          db_conn.exec(sql)
-        end
+        @db.using_connection { |pooled| yield pooled }
       end
     end
 
-    def exec_query(&)
+    def exec_query(& : DB::Connection -> _)
       # Performance monitoring will be handled by individual query methods
       # that call this method, as we don't have access to SQL/params here
       if conn = active_connection

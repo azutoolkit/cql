@@ -15,6 +15,10 @@ module CQL
   # delete.from(:users).where(id: 1).commit
   # ```
   class Delete
+    include Pinnable
+
+    getter schema : Schema
+
     @table : Expression::Table? = nil
     @where : Expression::Where? = nil
     @back : Set(Expression::Column) = Set(Expression::Column).new
@@ -49,11 +53,7 @@ module CQL
     # ```
     def commit
       query, params = to_sql
-      CQL::Performance.track(query, params) do
-        @schema.exec_query do |conn|
-          conn.exec(query, args: params)
-        end
-      end
+      CQL::Execution.run(executor, query, params, :delete) { |connection| connection.exec(query, args: params) }
     end
 
     # Generates the SQL query and parameters

@@ -68,6 +68,10 @@ module CQL
         # Create a QueryBuilder and execute select with hash syntax
         # - **@param** fields [Hash] The fields to select using hash syntax
         # - **@return** [QueryBuilder(T)] The query builder instance
+        def self.select(*columns : Symbol)
+          query.select(*columns)
+        end
+
         def self.select(**fields)
           query.select(**fields)
         end
@@ -94,8 +98,8 @@ module CQL
         # Create a QueryBuilder and execute where with block
         # - **@yield** [FilterBuilder] The block to build conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.where(&block : -> Expression::ConditionBuilder)
-          query.where(&block)
+        def self.where(&)
+          query.where { |columns| with columns yield columns }
         end
 
         def self.where_like(field : Symbol | String, pattern : String)

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Typed model DSL: `Model.query.where { (age >= 18) & (status == "active") }` with bare column names typed to the column (unknown columns and type mismatches are compile errors), `order_by(created_at: :desc)` checked at compile time, `joins(:assoc) { ... }` / `left_joins`, `to_a`, and `Model.cql_columns` / `cql_association` metadata.
+- Telemetry: `CQL::Telemetry.subscribe`, `alert_on_slow`, `log_queries`, `with_context` and an abstract `Tracer` for OpenTelemetry-style adapters; parameters are not captured unless `capture_params` is on.
+- Unified execution: every statement runs through `CQL::Execution.run`; `Schema#with_connection` and `query.using(connection)` pin an explicit connection (e.g. a transaction).
 - Safe raw SQL fragments: `where("lower(name) = ? AND age > :age", "ada", age: 18)` on `Query`, `QueryBuilder`, models, associations, `Update` and `Delete`, plus `raw(...)` inside `where { }` blocks and `CQL.raw`. Values are always bound as parameters (arrays expand to `IN (?)` lists, `??` is a literal `?`, quoted text and comments are skipped); a value given in the wrong placeholder style raises instead of being dropped. The fragment text must be a literal, never built from user input. `nil` binds NULL (`name = ?` never matches it; use `IS NOT DISTINCT FROM ?`).
 - Window functions: `query.window(:row_number, as: :dept_rank, partition_by: :dept, order_by: {salary: :desc})`, aggregates over a window (`window(:sum, :salary, as: :running, order_by: :id, rows: {:unbounded_preceding, 0})`), `lag`/`lead`/`first_value`/`last_value`/`ntile`/`rank`/`dense_rank`/`percent_rank`/`cume_dist` and ROWS/RANGE frames. Needs MySQL 8.0+ and SQLite 3.25+. On MySQL, avoid window function names (`rank`, `row_number`, ...) as aliases unless `quote_identifiers` is on.
 - Upsert and bulk upsert: `insert.on_conflict(:email).do_update(:name, visits: 1)`, `.do_nothing`, and `insert.upsert(rows, conflict: [:email], update: [:name])` (`ON CONFLICT` on PostgreSQL/SQLite, `ON DUPLICATE KEY UPDATE` on MySQL). Not supported with `INSERT ... SELECT`. Needs SQLite 3.24+. On MySQL the conflict target is ignored: any unique key triggers `ON DUPLICATE KEY UPDATE`.
@@ -45,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Behavior change:** `QueryBuilder#select(:a, :b)` now returns a builder whose results are `Model::Row` records (unselected columns are `nil`) instead of hydrating a full model that failed for non-nilable attributes. `QueryBuilder#where { }` now yields typed bare columns; `ids` goes through the executor. Use `Model.query.select(...)` results as `Model::Row`, not `Model`.
 - **`QueryBuilder#where { }`, `join { }`, `left { }`, `right { }` return a new builder** like every other builder method; they no longer also mutate the receiver. Use the returned value.
 - `NOT (...)` conditions are always parenthesized (`NOT a AND b` negated only `a`).
 - `Insert`/`Update`/`Delete` raise `ArgumentError` ("Column x not found in table") for an unknown column; they used to raise `KeyError`, so a `rescue KeyError` around them must change.

@@ -41,6 +41,8 @@ module CQL
   #   ).commit
   # ```
   class Insert
+    include Pinnable
+
     Log = CQL.config.logger
 
     @table : Table? = nil
@@ -56,6 +58,8 @@ module CQL
     @refreshed : Array(Expression::Column)? = nil
     @refresh_all = false
     @overrides : Array(Expression::Setter) = [] of Expression::Setter
+
+    getter schema : Schema
 
     def initialize(@schema : Schema)
     end
@@ -75,11 +79,7 @@ module CQL
         # Reset to ensure nothing else but the :id is returned
         @back = Array(Expression::Column).new
         query, params = back(:id).to_sql
-        CQL::Performance.track(query, params) do
-          @schema.exec_query do |conn|
-            conn.query_one(query, args: params, as: type)
-          end
-        end
+        CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one(query, args: params, as: type) }
       else
         self.commit.last_insert_id
       end
@@ -106,11 +106,7 @@ module CQL
     def commit
       query, params = to_sql
 
-      CQL::Performance.track(query, params) do
-        @schema.exec_query do |conn|
-          conn.exec(query, args: params)
-        end
-      end
+      CQL::Execution.run(executor, query, params, :insert) { |connection| connection.exec(query, args: params) }
     rescue ex
       Log.error { "Insert failed: #{ex.message}" }
       raise ex

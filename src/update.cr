@@ -30,6 +30,8 @@ module CQL
   # - `back(*columns : Symbol) : self` - Sets the columns to return after the update.
   # - `build : Expression::Update` - Builds the `Expression::Update` object.
   class Update
+    include Pinnable
+
     @table : Expression::Table? = nil
     @setters : Array(Expression::Setter) = [] of Expression::Setter
     @where : Expression::Where? = nil
@@ -37,6 +39,8 @@ module CQL
     @with_optimistic_locking : Bool = false
     @version_value : Int32? = nil
     @version_column : Symbol? = nil
+
+    getter schema : Schema
 
     def initialize(@schema : Schema)
     end
@@ -82,11 +86,7 @@ module CQL
       end
 
       query, params = to_sql
-      result = CQL::Performance.track(query, params) do
-        @schema.exec_query do |conn|
-          conn.exec(query, args: params)
-        end
-      end
+      result = CQL::Execution.run(executor, query, params, :update) { |connection| connection.exec(query, args: params) }
 
       if @with_optimistic_locking && result.rows_affected == 0
         raise CQL::OptimisticLockError.new("Record has been modified by another process")

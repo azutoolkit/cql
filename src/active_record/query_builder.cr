@@ -47,13 +47,13 @@ module CQL
         def with_query(&block : CQL::Query -> CQL::Query)
           # Create a new query by applying the block to a copy of the current query
           new_query = block.call(@query.clone)
-          QueryBuilder(T).new(new_query, @model_class)
+          self.class.new(new_query, @model_class)
         end
 
         # Clone the current QueryBuilder and apply modifications
         # - **@return** [QueryBuilder(T)] A new query builder instance
-        private def clone_builder : QueryBuilder(T)
-          QueryBuilder(T).new(@query.clone, @model_class, @preload_specs.dup)
+        private def clone_builder : self
+          self.class.new(@query.clone, @model_class, @preload_specs.dup)
         end
 
         # Add columns to select
@@ -61,6 +61,14 @@ module CQL
         # - **@return** [QueryBuilder(T)] Self for chaining
         def select(*columns : Symbol | String)
           clone_builder.tap(&.query.select(*columns))
+        end
+
+        # Select only these columns; the result rows (`to_a`, `first`, ...) are
+        # `Model::Row` records whose unselected columns are nil.
+        def select(*columns : Symbol) : PartialBuilder(T)
+          query = @query.clone
+          columns.each { |column| query.columns << T.cql_column(column) }
+          PartialBuilder(T).new(query, @model_class, @preload_specs.dup)
         end
 
         # Add columns to select with hash syntax
@@ -92,10 +100,57 @@ module CQL
         # Add where conditions with block
         # - **@yield** [FilterBuilder] The block to build conditions
         # - **@return** [QueryBuilder(T)] Self for chaining
-        def where(&block : -> Expression::ConditionBuilder)
-          builder = clone_builder
-          builder.query.where(&block)
-          builder
+        def where(&) : self
+          columns = T.cql_columns
+          condition = with columns yield columns
+          clone_builder.tap(&.query.where(condition))
+        end
+
+        # Order by typed columns; unknown column names are compile-time errors.
+        #
+        # ```
+        # User.query.order_by(created_at: :desc, name: :asc)
+        # ```
+        def order_by(**fields : **N) : self forall N
+          {% for key in N.keys %}
+            {% unless T::Columns.has_method?(key.stringify) %}
+              {% raise "CQL order_by: #{T} has no column `#{key}`. Columns: #{T::Columns.methods.map(&.name).reject { |name| name == "initialize" }.join(", ").id}" %}
+            {% end %}
+          {% end %}
+          clone_builder.tap do |builder|
+            fields.each { |name, direction| builder.query.order_by[T.cql_column(name)] = Expression::OrderDirection.parse(direction.to_s) }
+          end
+        end
+
+        # Joins an association declared on the model (`has_one`, `has_many`, `belongs_to`).
+        # The optional block adds typed conditions to the join, written against the
+        # model's columns and its associations (`profile.country == "US"`).
+        def joins(association : Symbol) : self
+          join_association(association, Expression::JoinType::INNER)
+        end
+
+        def joins(association : Symbol, &) : self
+          columns = T.cql_columns
+          join_association(association, Expression::JoinType::INNER, with columns yield columns)
+        end
+
+        def left_joins(association : Symbol) : self
+          join_association(association, Expression::JoinType::LEFT)
+        end
+
+        def left_joins(association : Symbol, &) : self
+          columns = T.cql_columns
+          join_association(association, Expression::JoinType::LEFT, with columns yield columns)
+        end
+
+        private def join_association(association : Symbol, type : Expression::JoinType, extra : Expression::ConditionBuilder? = nil) : self
+          table, on = T.cql_association(association)
+          clone_builder.tap do |builder|
+            builder.query.join_on(table, type) do |join|
+              condition = on.call(join)
+              extra ? condition & extra : condition
+            end
+          end
         end
 
         # Add LIKE conditions
@@ -301,7 +356,7 @@ module CQL
         # - **@return** [QueryBuilder(T)] A new merged query builder
         def merge(other : QueryBuilder(T))
           merged_query = @query.merge(other.query)
-          QueryBuilder(T).new(merged_query, @model_class)
+          self.class.new(merged_query, @model_class)
         end
 
         # Add associations to preload (eager load) to avoid N+1 queries.
@@ -316,7 +371,7 @@ module CQL
         # User.preload(:posts, :comments).all          # Preload multiple associations
         # User.where(active: true).preload(:posts).all # Chain with where
         # ```
-        def preload(*associations : Symbol) : QueryBuilder(T)
+        def preload(*associations : Symbol) : self
           builder = clone_builder
           associations.each { |assoc| builder.@preload_specs << assoc }
           builder
@@ -325,10 +380,20 @@ module CQL
         # Execute the query and return all results
         # When preloads are configured, automatically applies them to the results.
         # - **@return** [Array(T)] Array of model instances
-        def all : Array(T)
-          records = @query.all(T)
+        def all
+          records = row_query(T).all(T)
           apply_preloads(records) if @preload_specs.any?
           records
+        end
+
+        # Runs this query on an explicit connection (see `Schema#with_connection`).
+        def using(connection : DB::Connection) : self
+          clone_builder.tap(&.query.using(connection))
+        end
+
+        # Alias of `all`.
+        def to_a
+          all
         end
 
         # Execute the query and return all results as a custom type
@@ -336,7 +401,7 @@ module CQL
         # - **@param** as_kind [Class] The type to deserialize results as
         # - **@return** [Array] Array of instances of the specified type
         def all(as as_kind)
-          @query.all(as_kind)
+          row_query(as_kind).all(as_kind)
         end
 
         # Apply preloads to the fetched records
@@ -365,19 +430,19 @@ module CQL
         # Execute the query and return the first result
         # - **@return** [T?] First model instance or nil
         def first(as as_kind = T)
-          @query.first(as_kind)
+          row_query(as_kind).first(as_kind)
         end
 
         # Execute the query and return the first result, raises if not found
         # - **@return** [T] First model instance
         def first!(as as_kind = T)
-          @query.first!(as_kind)
+          row_query(as_kind).first!(as_kind)
         end
 
         # Execute the query and return the last result (using reverse order)
         # - **@return** [T?] Last model instance or nil
         def last(as as_kind = T)
-          results = @query.all(as_kind)
+          results = row_query(as_kind).all(as_kind)
           results.last?
         end
 
@@ -399,7 +464,14 @@ module CQL
         # Iterate over each result
         # - **@yield** [T] Each model instance
         def each(&block : T ->)
-          @query.each(as: T, &block)
+          row_query(T).each(as: T, &block)
+        end
+
+        # With joins and no explicit select, rows are hydrated from the model's own
+        # columns only; aggregates and `pluck` keep the query untouched.
+        private def row_query(kind) : Query
+          return @query unless kind == T && @query.columns.empty? && !@query.joins.empty?
+          @query.clone.tap { |query| query.columns.concat(T.table_columns.values) }
         end
 
         # Check if any records exist
@@ -488,7 +560,7 @@ module CQL
         def find_each(batch_size : Int32 = 1000, & : T ->)
           # Ensure we have a consistent ordering to avoid infinite loops
           # If no ordering is specified, order by primary key (usually id)
-          query_with_order = @query.order_by.empty? ? order(:id) : self
+          query_with_order = @query.order_by.empty? ? order_by(id: :asc) : self
 
           offset = 0
           max_iterations = 10000 # Safety limit to prevent infinite loops
@@ -534,7 +606,7 @@ module CQL
         def find_in_batches(batch_size : Int32 = 1000, & : Array(T) ->)
           # Ensure we have a consistent ordering to avoid infinite loops
           # If no ordering is specified, order by primary key (usually id)
-          query_with_order = @query.order_by.empty? ? order(:id) : self
+          query_with_order = @query.order_by.empty? ? order_by(id: :asc) : self
 
           offset = 0
           max_iterations = 10000 # Safety limit to prevent infinite loops
@@ -604,10 +676,9 @@ module CQL
         def ids(as as_kind = Int64)
           # Use a different approach to get just the ID values
           # We need to get the raw values, not deserialize into models
-          query, params = @query.clone.select(:id).to_sql
-          @query.schema.exec_query do |conn|
-            conn.query_all(query, args: params, as: as_kind)
-          end
+          query = @query.clone
+          query.columns << T.cql_column(:id)
+          query.all(as: as_kind)
         end
 
         # Get maximum value of a column
@@ -710,6 +781,38 @@ module CQL
         # - **@return** [Int64] The number of records
         def size
           count
+        end
+      end
+
+      # A builder after `select(:a, :b)`: it keeps the whole chain API, but results
+      # are `T::Row` records carrying only the selected columns.
+      class PartialBuilder(T) < QueryBuilder(T)
+        def preload(*associations : Symbol) : self
+          raise ArgumentError.new("preload is not supported after a partial select")
+        end
+
+        def all
+          @query.all(T::Row)
+        end
+
+        def first(as as_kind = T::Row)
+          @query.first(as_kind)
+        end
+
+        def first!(as as_kind = T::Row)
+          @query.first!(as_kind)
+        end
+
+        def last(as as_kind = T::Row)
+          @query.all(as_kind).last?
+        end
+
+        def last!(as as_kind = T::Row)
+          last(as_kind) || raise "No records found"
+        end
+
+        def each(&block : T::Row ->)
+          @query.each(as: T::Row, &block)
         end
       end
     end
