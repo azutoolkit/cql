@@ -1,5 +1,6 @@
 require "../executor"
 require "./pool"
+require "./transaction_scope"
 require "./pipeline_result"
 
 module CQL::Postgres
@@ -21,8 +22,15 @@ module CQL::Postgres
     getter adapter : CQL::Adapter
     getter pool : Pool
 
-    def self.connect(url : String, adapter : CQL::Adapter = CQL::Adapter::Postgres) : AsyncEngine
-      new(Pool.new(Config.parse(url)), adapter)
+    # *setup* runs once on every new pooled connection (e.g. `SET search_path`);
+    # *reset* is a statement run each time a connection returns to the pool
+    # (e.g. `DISCARD ALL`). Pool sizing and lifetimes come from the URL:
+    # `pool_size`, `pool_min_size`, `max_queries`, `max_idle_lifetime`.
+    def self.connect(url : String, adapter : CQL::Adapter = CQL::Adapter::Postgres,
+                     setup : Proc(Connection, Nil)? = nil, reset : String? = nil) : AsyncEngine
+      config = Config.parse(url)
+      options = Pool::Options.from(config).copy_with(setup: setup, reset_sql: reset)
+      new(Pool.new(config, options).warm_up, adapter)
     end
 
     def initialize(@pool : Pool, @adapter : CQL::Adapter = CQL::Adapter::Postgres)
@@ -40,11 +48,27 @@ module CQL::Postgres
 
     # Runs the block inside BEGIN/COMMIT on one connection; it is rolled back
     # when the block raises (raise `DB::Rollback` to roll back without an error,
-    # which makes this return nil). The yielded executor pins statements to
-    # that connection: `query.using(tx)`.
-    def transaction(& : CQL::ConnectionExecutor -> T) : T? forall T
+    # which makes this return nil). The yielded scope pins statements to that
+    # connection (`query.using(tx)`) and offers `tx.savepoint { ... }`.
+    #
+    # ```
+    # engine.transaction(isolation: :serializable, read_only: true, deferrable: true) { |tx| ... }
+    # engine.transaction(synchronous_commit: false) { |tx| ... } # SET LOCAL: this commit may be lost in a crash
+    # ```
+    #
+    # `synchronous_commit: false` makes the commit return before the WAL is
+    # flushed: the database stays consistent, but the most recent commits
+    # (about three `wal_writer_delay`s' worth) can vanish if the server
+    # crashes. `true` forces `on` (overriding e.g. `remote_apply`); the default
+    # follows the server's setting.
+    def transaction(isolation : IsolationLevel? = nil, read_only : Bool = false, deferrable : Bool = false,
+                    synchronous_commit : Bool? = nil, & : TransactionScope -> T) : T? forall T
+      raise ArgumentError.new("CockroachDB does not support deferrable transactions") if deferrable && @adapter.cockroach_db?
       with_connection do |connection|
-        connection.transaction { |_| yield CQL::ConnectionExecutor.new(@adapter, connection) }
+        connection.transaction do |transaction|
+          apply_transaction_options(connection, isolation, read_only, deferrable, synchronous_commit)
+          yield TransactionScope.new(@adapter, connection, transaction)
+        end
       end
     end
 
@@ -82,6 +106,16 @@ module CQL::Postgres
 
     def close : Nil
       @pool.close
+    end
+
+    # Must run before the transaction's first query.
+    private def apply_transaction_options(connection : Connection, isolation : IsolationLevel?, read_only : Bool, deferrable : Bool, synchronous_commit : Bool?) : Nil
+      modes = [] of String
+      modes << "ISOLATION LEVEL #{isolation.to_sql}" if isolation
+      modes << "READ ONLY" if read_only
+      modes << "DEFERRABLE" if deferrable
+      connection.unprepared.exec("SET TRANSACTION #{modes.join(", ")}") unless modes.empty?
+      connection.unprepared.exec("SET LOCAL synchronous_commit TO #{synchronous_commit ? "on" : "off"}") unless synchronous_commit.nil?
     end
 
     private def operation_of(sql : String) : Symbol

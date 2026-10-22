@@ -129,6 +129,17 @@ rescue ex
 end
 puts "statuses: #{Order.query.order_by(id: :asc).using(engine).to_a.map { |order| "#{order.customer}=#{order.status}" }.join(", ")}"
 
+# Per-transaction options and savepoints. `synchronous_commit: false` is a SET LOCAL: the commit returns before the
+# WAL reaches disk, so a server crash can lose it (never corrupt it). Fine for recomputable data, not for payments.
+engine.transaction(isolation: :serializable, synchronous_commit: false) do |tx|
+  Shop.update.table(:cql_async_demo_orders).set(status: "shipped").where(customer: "ada").using(tx).commit
+  tx.savepoint do |inner|
+    Shop.update.table(:cql_async_demo_orders).set(status: "lost").where(customer: "ada").using(inner).commit
+    raise DB::Rollback.new
+  end
+end
+puts "after a rolled-back savepoint: #{Order.query.where(customer: "ada").using(engine).to_a.map(&.status).join}"
+
 # --- 8. Typed errors ----------------------------------------------------------------
 section 8, "Server errors arrive typed, without the offending values"
 begin

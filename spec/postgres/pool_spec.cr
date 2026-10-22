@@ -223,4 +223,147 @@ describe CQL::Postgres::Pool do
   it "rejects a pool with no room for connections" do
     expect_raises(ArgumentError, /pool_size/) { PG::Pool.new(PG::Config.parse("postgres://h/db?pool_size=0")) }
   end
+
+  describe "lifecycle" do
+    it "retires a connection after max_queries requests" do
+      server = idle_server
+      pool = pool_for(server, "&pool_size=1&max_queries=2")
+      first = pool.with_connection { |connection| connection.exec_all("SELECT 1"); connection }
+      pool.with_connection { |connection| connection.should be first; connection.exec_all("SELECT 2") }
+      first.closed?.should be_true
+      pool.with_connection(&.itself).should_not be first
+      server.accepted.should eq 2
+    end
+
+    it "retires a connection that sat idle for longer than max_idle_lifetime" do
+      server = idle_server
+      pool = pool_for(server, "&pool_size=1&max_idle_lifetime=0.05")
+      first = pool.with_connection(&.itself)
+      sleep 80.milliseconds
+      pool.with_connection(&.itself).should_not be first
+      first.closed?.should be_true
+      server.accepted.should eq 2
+    end
+
+    it "opens pool_min_size connections up front and fails fast when they cannot be opened" do
+      server = idle_server
+      pool = pool_for(server, "&pool_size=3&pool_min_size=2").warm_up
+      pool.stats.should eq PG::Pool::Stats.new(3, 2, 0)
+      server.accepted.should eq 2
+      expect_raises(IO::Error, /Connection refused/) { PG::Pool.new(PG::Config.parse("postgres://u:p@127.0.0.1:1/db?sslmode=disable&pool_min_size=1&connect_timeout=1")).warm_up }
+    end
+
+    it "runs the setup hook on each new connection and drops one whose setup fails" do
+      statements = [] of String
+      server = idle_server { |sql| statements << sql }
+      config = PG::Config.parse(server.url(query: "sslmode=disable&pool_size=2"))
+      options = PG::Pool::Options.from(config).copy_with(setup: ->(connection : PG::Connection) { connection.exec_all("SET search_path TO app") })
+      pool = PG::Pool.new(config, options)
+      pool.with_connection(&.itself)
+      statements.should eq ["SET search_path TO app"]
+
+      failing = PG::Pool::Options.from(config).copy_with(setup: ->(_connection : PG::Connection) { raise "setup broke" })
+      expect_raises(Exception, "setup broke") { PG::Pool.new(config, failing).checkout }
+    end
+
+    it "rolls back a transaction the borrower left open and reuses the connection" do
+      statements = [] of String
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        status = 'I'
+        while message = client.read_message
+          break if message[0] == 'X'
+          sql = String.new(message[1]).chomp('\0')
+          statements << sql
+          status = sql == "BEGIN" ? 'T' : 'I'
+          client.command_complete(sql)
+          client.ready(status)
+        end
+      end
+      pool = pool_for(server, "&pool_size=1")
+      leaked = pool.with_connection { |connection| connection.exec_all("BEGIN"); connection }
+      statements.should eq ["BEGIN", "ROLLBACK"]
+      pool.with_connection(&.itself).should be leaked
+      server.accepted.should eq 1
+    end
+
+    it "runs the reset statement on release and drops the connection when it fails" do
+      statements = [] of String
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        while message = client.read_message
+          break if message[0] == 'X'
+          sql = String.new(message[1]).chomp('\0')
+          statements << sql
+          sql.starts_with?("RESET") ? client.error("42501", "denied") : client.command_complete("OK")
+          client.ready
+        end
+      end
+      config = PG::Config.parse(server.url(query: "sslmode=disable&pool_size=1"))
+      options = PG::Pool::Options.from(config)
+      kept = PG::Pool.new(config, options.copy_with(reset_sql: "DISCARD ALL"))
+      first = kept.with_connection { |connection| connection.exec_all("SELECT 1"); connection }
+      kept.with_connection(&.itself).should be first
+      statements.should eq ["SELECT 1", "DISCARD ALL", "DISCARD ALL"]
+
+      broken = PG::Pool.new(config, options.copy_with(reset_sql: "RESET broken"))
+      lost = broken.with_connection(&.itself)
+      lost.closed?.should be_true
+      broken.stats.idle.should eq 0
+    end
+
+    it "runs the setup hook again after the reset statement, since a reset undoes it" do
+      statements = [] of String
+      server = idle_server { |sql| statements << sql }
+      config = PG::Config.parse(server.url(query: "sslmode=disable&pool_size=1"))
+      options = PG::Pool::Options.from(config).copy_with(reset_sql: "RESET ALL", setup: ->(connection : PG::Connection) { connection.exec_all("SET x TO 1") })
+      PG::Pool.new(config, options).with_connection(&.itself)
+      statements.should eq ["SET x TO 1", "RESET ALL", "SET x TO 1"]
+    end
+
+    it "drops a connection whose reset raises something unexpected, and returns its slot" do
+      config = PG::Config.parse(idle_server.url(query: "sslmode=disable&pool_size=1&checkout_timeout=0.2"))
+      broken = PG::Pool.new(config, PG::Pool::Options.from(config).copy_with(reset_sql: "SELECT '\0'"))
+      lost = broken.with_connection(&.itself)
+      lost.closed?.should be_true
+      broken.with_connection(&.itself).should_not be lost
+    end
+
+    it "clears crystal-db's transaction flag when it rolls back a leaked transaction" do
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        status = 'I'
+        while message = client.read_message
+          break if message[0] == 'X'
+          sql = String.new(message[1]).chomp('\0')
+          status = sql == "BEGIN" ? 'T' : 'I'
+          client.command_complete(sql)
+          client.ready(status)
+        end
+      end
+      pool = pool_for(server, "&pool_size=1")
+      leaked = pool.with_connection { |connection| connection.begin_transaction; connection }
+      reused = pool.with_connection do |connection|
+        connection.transaction { |_| }
+        connection
+      end
+      reused.should be leaked
+    end
+
+    it "closes the connections already opened when warm_up fails part way" do
+      server = idle_server
+      calls = 0
+      config = PG::Config.parse(server.url(query: "sslmode=disable&pool_size=3&pool_min_size=3"))
+      options = PG::Pool::Options.from(config).copy_with(setup: ->(_connection : PG::Connection) { (calls += 1) == 3 ? raise("setup broke") : nil })
+      expect_raises(Exception, "setup broke") { PG::Pool.new(config, options).warm_up }
+    end
+
+    it "rejects impossible sizes" do
+      expect_raises(ArgumentError, /pool_min_size/) { PG::Pool.new(PG::Config.parse("postgres://h/db?pool_size=2&pool_min_size=3")) }
+      expect_raises(ArgumentError, /max_queries/) { PG::Pool.new(PG::Config.parse("postgres://h/db?max_queries=0")) }
+    end
+  end
 end

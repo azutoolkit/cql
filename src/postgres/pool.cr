@@ -1,5 +1,6 @@
 require "db"
 require "./connection"
+require "./connection_reset"
 
 module CQL::Postgres
   # Bounded set of connections shared by many fibers. `checkout` waits (up to
@@ -9,15 +10,35 @@ module CQL::Postgres
   class Pool
     include ::DB::ConnectionContext
 
-    record Options, max_size : Int32 = 10, checkout_timeout : Time::Span = 5.seconds, health_check_after : Time::Span = 30.seconds do
+    # *min_size* connections are opened by `warm_up`; a connection is retired
+    # after *max_queries* requests or after sitting idle for *max_idle_lifetime*
+    # (checked when it would be lent out); every request counts, pings and
+    # resets included. *setup* runs on every new connection, *reset_sql* every
+    # time one is returned (followed by *setup* again, since a reset undoes it).
+    record Options,
+      max_size : Int32 = 10,
+      min_size : Int32 = 0,
+      checkout_timeout : Time::Span = 5.seconds,
+      health_check_after : Time::Span = 30.seconds,
+      max_queries : Int64? = nil,
+      max_idle_lifetime : Time::Span? = nil,
+      reset_sql : String? = nil,
+      setup : Proc(Connection, Nil)? = nil do
       def self.from(config : Config) : Options
         driver = config.driver_options
         defaults = new
         new(
           max_size: driver["pool_size"]?.try(&.to_i?) || defaults.max_size,
-          checkout_timeout: driver["checkout_timeout"]?.try(&.to_f?).try(&.seconds) || defaults.checkout_timeout,
-          health_check_after: driver["health_check_after"]?.try(&.to_f?).try(&.seconds) || defaults.health_check_after
+          min_size: driver["pool_min_size"]?.try(&.to_i?) || defaults.min_size,
+          checkout_timeout: seconds(driver, "checkout_timeout") || defaults.checkout_timeout,
+          health_check_after: seconds(driver, "health_check_after") || defaults.health_check_after,
+          max_queries: driver["max_queries"]?.try(&.to_i64?),
+          max_idle_lifetime: seconds(driver, "max_idle_lifetime")
         )
+      end
+
+      private def self.seconds(driver : Hash(String, String), key : String) : Time::Span?
+        driver[key]?.try(&.to_f?).try(&.seconds)
       end
     end
 
@@ -32,6 +53,9 @@ module CQL::Postgres
 
     def initialize(@config : Config, @options : Options = Options.from(config))
       raise ArgumentError.new("pool_size must be at least 1") if @options.max_size < 1
+      raise ArgumentError.new("pool_min_size must be between 0 and pool_size") unless 0 <= @options.min_size <= @options.max_size
+      raise ArgumentError.new("max_queries must be positive") if @options.max_queries.try { |limit| limit < 1 }
+      @reset = ConnectionReset.new(@options.reset_sql, @options.setup, @options.checkout_timeout)
       @slots = Channel(Nil).new(@options.max_size)
       @options.max_size.times { @slots.send(nil) }
       @idle = [] of Connection
@@ -42,6 +66,19 @@ module CQL::Postgres
 
     def closed? : Bool
       @closed
+    end
+
+    # Startup only, before fibers check out: opens `min_size` connections up front, so the first requests do not pay
+    # for connecting and a wrong URL fails at startup. They are not refilled
+    # when retired later; the pool then grows on demand.
+    def warm_up : self
+      opened = [] of Connection
+      (@options.min_size - idle_count).times { opened << open }
+      @lock.synchronize { @idle.concat(opened) }
+      self
+    rescue ex
+      opened.try(&.each(&.close))
+      raise ex
     end
 
     def stats : Stats
@@ -114,7 +151,18 @@ module CQL::Postgres
     end
 
     private def open : Connection
-      Connection.open(@config)
+      connection = Connection.open(@config)
+      begin
+        @options.setup.try(&.call(connection))
+        connection
+      rescue ex
+        connection.close
+        raise ex
+      end
+    end
+
+    private def idle_count : Int32
+      @lock.synchronize { @idle.size }
     end
 
     private def healthy_idle : Connection?
@@ -127,11 +175,17 @@ module CQL::Postgres
     private def healthy?(connection : Connection) : Bool
       return false if connection.closed? || connection.session.closed?
       idle_for = Time.instant - connection.session.last_used
+      return false if @options.max_idle_lifetime.try { |lifetime| idle_for >= lifetime }
       idle_for < @options.health_check_after || connection.ping
     end
 
     private def reusable?(connection : Connection) : Bool
-      !connection.closed? && !connection.session.closed? && !connection.in_transaction?
+      return false if connection.closed? || connection.session.closed? || worn_out?(connection)
+      @reset.call(connection)
+    end
+
+    private def worn_out?(connection : Connection) : Bool
+      @options.max_queries.try { |limit| connection.session.requests >= limit } || false
     end
   end
 end

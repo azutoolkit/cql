@@ -74,6 +74,27 @@ private def serving_accounts(rows : Array(Array(Bytes?)), runs = 1, params = 0, 
   end
 end
 
+# A server that answers every simple query with OK, reporting the transaction state.
+private def recording_simple_server
+  log = [] of String
+  server = FakePG.start do |client|
+    client.read_startup
+    client.ok_handshake
+    loop do
+      message = client.read_message || break
+      case message[0]
+      when 'Q'
+        log << String.new(message[1]).chomp('\0')
+        client.command_complete("OK")
+        client.ready(log.last == "BEGIN" || log.last.starts_with?("SET") || log.last.includes?("SAVEPOINT") || log.last.starts_with?("ROLLBACK TO") ? 'T' : 'I')
+      when 'X' then break
+      else          raise "unexpected message #{message[0]}"
+      end
+    end
+  end
+  {server: server, log: log}
+end
+
 describe CQL::Postgres::AsyncEngine do
   it "is an Executor reporting the PostgreSQL adapter, or CockroachDB when asked" do
     engine = engine_for(FakePG.start { |_| })
@@ -215,6 +236,43 @@ describe CQL::Postgres::AsyncEngine do
     end
     engine_for(server).transaction { |_| raise DB::Rollback.new }.should be_nil
     statements.should eq ["BEGIN", "ROLLBACK"]
+  end
+
+  it "starts a transaction with the requested isolation, access mode and commit durability" do
+    statements = recording_simple_server
+    engine = engine_for(statements[:server])
+    engine.transaction(isolation: :serializable, read_only: true, deferrable: true, synchronous_commit: false) { |_| }
+    engine.transaction(isolation: :repeatable_read) { |_| }
+    engine.transaction(synchronous_commit: true) { |_| }
+    engine.transaction { |_| }
+    statements[:log].should eq [
+      "BEGIN", "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE", "SET LOCAL synchronous_commit TO off", "COMMIT",
+      "BEGIN", "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ", "COMMIT",
+      "BEGIN", "SET LOCAL synchronous_commit TO on", "COMMIT",
+      "BEGIN", "COMMIT",
+    ]
+  end
+
+  it "refuses deferrable transactions on CockroachDB" do
+    engine = PG::AsyncEngine.new(PG::Pool.new(PG::Config.parse("postgres://h/db")), CQL::Adapter::CockroachDB)
+    expect_raises(ArgumentError, /CockroachDB/) { engine.transaction(deferrable: true) { |_| } }
+  end
+
+  it "nests savepoints: a failing block rolls back to its savepoint, the outer transaction goes on" do
+    statements = recording_simple_server
+    engine = engine_for(statements[:server])
+    engine.transaction do |tx|
+      expect_raises(Exception, "inner") { tx.savepoint { |_| raise "inner" } }
+      tx.savepoint { |_| 1 }.should eq 1
+      tx.savepoint { |outer| outer.savepoint { |_| 2 } }.should eq 2
+      tx.savepoint { |_| raise DB::Rollback.new }.should be_nil
+    end
+    log = statements[:log]
+    log.first.should eq "BEGIN"
+    log.last.should eq "COMMIT"
+    verbs = log[1..-2].map { |sql| sql.starts_with?("SAVEPOINT") ? "SAVEPOINT" : sql.split(' ').first(2).join(' ') }
+    verbs.should eq ["SAVEPOINT", "ROLLBACK TO", "SAVEPOINT", "RELEASE SAVEPOINT", "SAVEPOINT", "SAVEPOINT", "RELEASE SAVEPOINT", "RELEASE SAVEPOINT", "SAVEPOINT", "ROLLBACK TO"]
+    log[2].should eq log[1].sub("SAVEPOINT", "ROLLBACK TO")
   end
 
   it "pins statements to the transaction connection when they run `using(tx)`" do

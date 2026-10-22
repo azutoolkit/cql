@@ -85,6 +85,23 @@ describe "CQL::Postgres against a live server" do
     session.close
   end
 
+  it "negotiates the newest protocol the server supports, and cancels with that version's key" do
+    require_live!
+    session = live_session
+    server_major = session.server_parameters["server_version"].split('.').first.to_i
+    expected = server_major >= 18 ? PG::ProtocolVersion::V3_2 : PG::ProtocolVersion::V3_0
+    session.protocol_version.should eq expected
+    session.secret_key.size.should be >= 4
+    expect_raises(PG::QueryTimeout) { session.query("SELECT pg_sleep(10)", timeout: 200.milliseconds) }
+    session.query("SELECT 1").rows.should eq [[1]]
+    session.close
+
+    pinned = PG::Session.connect(PG::Config.parse("#{LIVE_URL}#{LIVE_URL.includes?('?') ? '&' : '?'}max_protocol_version=3.0"))
+    pinned.protocol_version.should eq PG::ProtocolVersion::V3_0
+    pinned.secret_key.size.should eq 4
+    pinned.close
+  end
+
   it "round-trips every supported type through bound parameters and binary results" do
     require_live!
     session = live_session
@@ -297,6 +314,67 @@ describe "CQL::Postgres against a live server" do
       end
     end
     LiveAccount.query.using(engine).to_a.map(&.name).should eq ["kept"]
+    engine.close
+  end
+
+  it "applies isolation level, access mode and commit durability to one transaction only" do
+    require_live!
+    engine = PG::AsyncEngine.connect(LIVE_URL)
+    engine.transaction(isolation: :serializable, synchronous_commit: false) do |tx|
+      tx.exec_query(&.scalar("SHOW transaction_isolation")).should eq "serializable"
+      tx.exec_query(&.scalar("SHOW synchronous_commit")).should eq "off"
+    end
+    engine.exec_query(&.scalar("SHOW synchronous_commit")).should eq "on"
+    engine.exec_query(&.scalar("SHOW transaction_isolation")).should eq "read committed"
+    denied = expect_raises(PG::ServerError) do
+      engine.transaction(read_only: true) do |tx|
+        LiveSchema.insert.into(:cql_wire_live_accounts).values(name: "denied").using(tx).commit
+      end
+    end
+    denied.sqlstate.should eq "25006"
+    engine.close
+  end
+
+  it "rolls back to a savepoint without ending the surrounding transaction" do
+    require_live!
+    engine = PG::AsyncEngine.connect(LIVE_URL)
+    engine.transaction do |tx|
+      LiveSchema.insert.into(:cql_wire_live_accounts).values(name: "outer").using(tx).commit
+      tx.savepoint do |inner|
+        LiveSchema.insert.into(:cql_wire_live_accounts).values(name: "inner").using(inner).commit
+        raise DB::Rollback.new
+      end
+    end
+    LiveAccount.query.using(engine).to_a.map(&.name).should eq ["outer"]
+    engine.close
+  end
+
+  it "keeps a pool tidy: setup on new connections, rollback of leaked transactions, retirement after max_queries" do
+    require_live!
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    setup = ->(connection : PG::Connection) { connection.exec_all("SET application_name TO 'cql_pooled'") }
+    engine = PG::AsyncEngine.connect("#{LIVE_URL}#{separator}pool_size=1&pool_min_size=1&max_queries=4", setup: setup)
+    engine.pool.stats.idle.should eq 1
+    backend = engine.with_connection do |connection|
+      connection.exec_all("BEGIN")
+      connection.exec_all("SET LOCAL statement_timeout = 1234")
+      connection.session.process_id
+    end
+    engine.with_connection do |connection|
+      connection.session.in_transaction?.should be_false
+      connection.session.process_id.should eq backend
+      connection.scalar("SHOW application_name").should eq "cql_pooled"
+    end
+    engine.with_connection(&.scalar("SELECT 1"))
+    engine.with_connection { |connection| connection.session.process_id.should_not eq backend }
+    engine.close
+  end
+
+  it "re-prepares cached statements after the pool's reset statement was DISCARD ALL" do
+    require_live!
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    engine = PG::AsyncEngine.connect("#{LIVE_URL}#{separator}pool_size=1", reset: "DISCARD ALL")
+    3.times { |round| engine.exec_query(&.scalar("SELECT $1::int8 + 1", round.to_i64)).should eq round + 1 }
     engine.close
   end
 

@@ -98,6 +98,11 @@ engine.transaction do |tx|
   AppDB.insert.into(:users).values(name: "ada").using(tx).commit
 end
 
+# Isolation, access mode, savepoints and commit durability are per transaction.
+engine.transaction(isolation: :serializable, read_only: true) do |tx|
+  tx.savepoint { |inner| AppDB.insert.into(:audit).values(note: "tried").using(inner).commit } # undone alone if the block raises
+end
+
 # Many statements, one network round trip (each still reaches telemetry); failures stay isolated.
 results = engine.pipeline([AppDB.query.from(:users).select(:name), AppDB.query.from(:orders).select(:id)])
 results[0].as(CQL::Postgres::PipelineResult).all(as: String)
@@ -118,6 +123,13 @@ What it does:
 - **Concurrency**: one request in flight per connection, enforced with a lock, so a connection shared between fibers is
   safe (they queue). `AsyncEngine` borrows connections from a pool (`pool_size`, `checkout_timeout`,
   `health_check_after` URL options), pings connections idle longer than `health_check_after` (30s by default) before reuse and discards ones left mid-transaction.
+- **Pool lifecycle**: `pool_min_size` connections are opened up front (`AsyncEngine.connect` fails at startup on a wrong
+  URL), a connection is retired after `max_queries` requests or after `max_idle_lifetime` seconds idle (both checked when
+  it would be lent out; there is no background reaper, and retired connections are not refilled), `setup:` runs once on
+  every new connection (`AsyncEngine.connect(url, setup: ->(c : CQL::Postgres::Connection) { c.exec_all("SET search_path TO app") })`)
+  and `reset:` runs on every return (the driver's statement cache is cleared and `setup:` runs again afterwards).
+  A transaction left open by a borrower is rolled back and the connection reused; if that or the reset fails, it is
+  dropped. Every request counts towards `max_queries`, pings and resets included.
 - **Errors**: `ErrorResponse` becomes a typed `CQL::Postgres::ServerError` (`UniqueViolation`, `ForeignKeyViolation`,
   `NotNullViolation`, `SerializationFailure`, `DeadlockDetected`, `UndefinedTable`, ...). The message carries the
   server's wording only for SQLSTATE classes known not to quote data; `#server_message` and `#detail` hold the rest and
@@ -129,6 +141,12 @@ What it does:
   `CQL::Postgres::Types.register` to decode more.
 
 Things to know:
+
+- `synchronous_commit: false` (or `?synchronous_commit=off` for a whole connection) lets `COMMIT` return before the WAL is
+  flushed to disk. It cannot corrupt the database, but commits from the last few hundred milliseconds (up to about three
+  times `wal_writer_delay`) can be lost if the server crashes, and a replica or client may have seen them already.
+  Use it for data you can recompute; keep the default for money. A transaction-level `SET LOCAL` only affects that one
+  transaction.
 
 - A statement's whole result is read into memory; there is no row streaming yet.
 - Infinite and out-of-range dates and timestamps raise `CQL::Postgres::UnsupportedValue`.

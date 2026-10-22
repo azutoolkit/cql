@@ -45,6 +45,8 @@ module CQL::Postgres
     getter server_parameters : Hash(String, String)
     getter transaction_status : Char
     getter last_used : Time::Instant
+    # Requests run on this session so far (a pipeline counts once).
+    getter requests : Int64 = 0_i64
     property on_notice : Proc(Hash(Char, String), Nil)? = nil
     property on_notification : Proc(Notification, Nil)? = nil
 
@@ -153,6 +155,15 @@ module CQL::Postgres
       Transport.cancel(@config, @process_id, @secret_key)
     end
 
+    # Forgets every cached statement after the server dropped them
+    # (`DISCARD ALL`, `DEALLOCATE ALL`).
+    def forget_prepared_statements : Nil
+      @lock.synchronize do
+        @cache.clear
+        @retired.clear
+      end
+    end
+
     # Ends the session politely (Terminate) once any in-flight request is done.
     def close : Nil
       return if @closed
@@ -179,6 +190,7 @@ module CQL::Postgres
       @lock.synchronize do
         raise ConnectionLost.new("the connection is closed") if @closed
         @deadline_expired = false
+        @requests += 1
         guarded { with_deadline(timeout) { yield } }
       ensure
         @last_used = Time.instant

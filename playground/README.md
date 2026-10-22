@@ -35,7 +35,8 @@ Author.query.where { age > "old" }  # CQL: cannot compare a Int32 column with St
 `postgres_async_demo.cr` tours `CQL::Postgres::AsyncEngine`: connecting to a pool, telemetry output for every
 statement, parameterized queries through the CQL DSL (with a hostile value, to show it is only data), model hydration,
 eight fibers sharing five pooled connections, a pipelined batch of 200 statements against the same statements one by
-one, a committed and a rolled-back transaction, and a typed `UniqueViolation` whose message omits the duplicated value.
+one, a committed and a rolled-back transaction, a serializable transaction with a savepoint and `synchronous_commit: false`
+(which lets a commit return before the WAL is flushed: a server crash can lose it, never corrupt it), and a typed `UniqueViolation` whose message omits the duplicated value.
 Unlike `cql_demo.cr` it needs a PostgreSQL server, because the point is the wire driver:
 
 ```bash

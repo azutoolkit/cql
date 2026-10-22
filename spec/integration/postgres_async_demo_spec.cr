@@ -26,6 +26,7 @@ describe "playground/postgres_async_demo.cr" do
     status.success?.should be_true, output.to_s
     (1..8).each { |section| output.to_s.should contain("== #{section}. ") }
     output.to_s.should contain("rolled back: payment gateway down")
+    output.to_s.should contain("after a rolled-back savepoint: shipped")
     output.to_s.should contain("CQL::Postgres::UniqueViolation")
     output.to_s.should_not contain("x'; DROP")
     output.to_s.should_not contain("(customer)=(ada)")
