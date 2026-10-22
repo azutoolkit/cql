@@ -76,6 +76,71 @@ Real-world benchmarks (1M records, complex queries):
 | **MySQL**      | Full          | Complete MySQL support            |
 | **SQLite**     | Full          | Perfect for development & testing |
 
+## Native PostgreSQL Driver
+
+`CQL::Postgres::AsyncEngine` speaks the PostgreSQL wire protocol (v3.0) itself, on Crystal fibers and the standard
+library's event loop, with its own connection pool. It is an opt-in `CQL::Executor`: nothing is loaded unless you require
+it, and SQLite/MySQL users are unaffected. The engine itself needs only the standard library and `db`. A `CQL::Schema`
+for PostgreSQL still opens a crystal-db connection when it is created, so an app that defines schemas also needs the
+`pg` shard (or `?initial_pool_size=0` in the schema's URL to keep that connection from being opened).
+
+```crystal
+require "cql/postgres"
+
+engine = CQL::Postgres::AsyncEngine.connect("postgres://app:secret@db.internal/app?sslmode=verify-full&pool_size=10")
+
+# Any CQL statement runs on it with `using`; rows map exactly as they do on the default driver.
+User.query.where(active: true).using(engine).to_a
+AppDB.query.from(:users).select(:name).where("age > ?", 18).using(engine).all(as: String)
+
+# Transactions pin statements to one connection and roll back on exceptions (or `raise DB::Rollback`).
+engine.transaction do |tx|
+  AppDB.insert.into(:users).values(name: "ada").using(tx).commit
+end
+
+# Many statements, one network round trip (each still reaches telemetry); failures stay isolated.
+results = engine.pipeline([AppDB.query.from(:users).select(:name), AppDB.query.from(:orders).select(:id)])
+results[0].as(CQL::Postgres::PipelineResult).all(as: String)
+```
+
+What it does:
+
+- **Protocol**: startup, trust/cleartext/MD5/SCRAM-SHA-256 authentication, TLS through SSLRequest
+  (`sslmode=disable|prefer|require|verify-full`), Unix sockets (`?host=/var/run/postgresql`), simple and extended
+  queries with per-connection prepared-statement caching, binary results for common types, `COPY` in and out,
+  `LISTEN`/`NOTIFY` and notice callbacks, cancel requests and per-statement timeouts (`Session#query(..., timeout:)`, reached through `connection.session`).
+- **Concurrency**: one request in flight per connection, enforced with a lock, so a connection shared between fibers is
+  safe (they queue). `AsyncEngine` borrows connections from a pool (`pool_size`, `checkout_timeout`,
+  `health_check_after` URL options), pings connections idle longer than `health_check_after` (30s by default) before reuse and discards ones left mid-transaction.
+- **Errors**: `ErrorResponse` becomes a typed `CQL::Postgres::ServerError` (`UniqueViolation`, `ForeignKeyViolation`,
+  `NotNullViolation`, `SerializationFailure`, `DeadlockDetected`, `UndefinedTable`, ...). The message carries the
+  server's wording only for SQLSTATE classes known not to quote data; `#server_message` and `#detail` hold the rest and
+  can contain bound values. Bound values and passwords never appear in driver messages or telemetry.
+- **Values** are always bound as parameters. `Int*`, `Float*`, `Bool`, `String`, `Bytes`, `Time`, `UUID`, `JSON::Any`,
+  arrays and `nil` are accepted; results decode `int2/4/8`, `float4/8`, `bool`, `text`, `bytea`, `uuid`, `date`,
+  `time`, `timestamp(tz)`, `json(b)` and `numeric` (as `CQL::Postgres::Types::DecimalText`, exact text, to avoid
+  depending on GMP). Other types (arrays, intervals, ranges, ...) arrive as their text form; register a codec with
+  `CQL::Postgres::Types.register` to decode more.
+
+Things to know:
+
+- A statement's whole result is read into memory; there is no row streaming yet.
+- Infinite and out-of-range dates and timestamps raise `CQL::Postgres::UnsupportedValue`.
+- Behind PgBouncer in transaction mode use `statement_cache_size=0` (the unnamed statement is used; pipelining needs the
+  cache). This is by design and has not been tried against PgBouncer itself.
+- `sslrootcert` adds a CA to the system trust store (Crystal's TLS context cannot drop the system roots); `prefer` and
+  `require` encrypt without verifying the server, like libpq.
+- `playground/postgres_async_demo.cr` is a runnable tour, and `benchmarks/pg_wire_bench.cr` compares the engine with
+  the `pg` shard on your server:
+  `DATABASE_URL=postgres://... crystal run --release benchmarks/pg_wire_bench.cr`. Numbers depend on your hardware and
+  network, so none are quoted here.
+
+Verified against PostgreSQL 16.15 only, on one machine; CI has not run this yet. The live specs in
+`spec/postgres/live_spec.cr` (types, errors, transactions, pipelining, COPY, cancellation, pool, `NOTIFY`) run when
+`DATABASE_URL` points at a server and are pending otherwise. Authentication methods, TLS modes and Unix sockets were also
+tried by hand against that server, but their specs use byte-level fixtures and an in-process fake server. Other
+PostgreSQL versions, PgBouncer and CockroachDB (`AsyncEngine.new(pool, CQL::Adapter::CockroachDB)`) are untested.
+
 ## Safety Guardrails
 
 CQL validates relationship declarations during compilation. If a relation points at an incompatible key type, compilation fails with a CQL-specific error instead of a deep Crystal macro stack:
