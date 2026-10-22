@@ -10,6 +10,11 @@ require "./exceptions"
 require "./cql"
 
 module CQL
+  # Snapshot of a schema's connection pool.
+  record PoolStats, open : Int32, idle : Int32, in_flight : Int32, max : Int32 do
+    include JSON::Serializable
+  end
+
   # The `Schema` class represents a database schema.
   #
   # This class provides methods to build and manage a database schema, including
@@ -151,6 +156,61 @@ module CQL
     def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0")
       validate_uri!
       @db = DB.open(@uri)
+      Events.emit(Events::CONNECT, Events::ConnectEvent.new(@name, @adapter.to_s, redacted_uri)) if Events.subscribed?(Events::CONNECT)
+    end
+
+    # Connection pool counters (open / idle / in flight / max).
+    def pool_stats : PoolStats
+      stats = @db.pool.stats
+      PoolStats.new(stats.open_connections, stats.idle_connections, stats.in_flight_connections, stats.max_connections)
+    end
+
+    # Runs a read query inside a transaction that is always rolled back and
+    # returns `{column_names, rows}` with at most `limit` rows. Values are
+    # stringified (`nil` stays `nil`). Intended for tooling such as dev
+    # dashboards; callers are responsible for validating the SQL.
+    def raw_readonly(sql : String, limit : Int32 = 200) : {Array(String), Array(Array(String?))}
+      columns = [] of String
+      rows = [] of Array(String?)
+      @db.transaction do |tx|
+        tx.connection.query(sql) do |rs|
+          columns = rs.column_names
+          while rows.size < limit && rs.move_next
+            rows << Array(String?).new(columns.size) do
+              value = rs.read
+              case value
+              when Nil   then nil
+              when Bytes then "<#{value.size} bytes>"
+              else            value.to_s
+              end
+            end
+          end
+        end
+        raise DB::Rollback.new
+      end
+      {columns, rows}
+    end
+
+    private def redacted_uri : String
+      uri = URI.parse(@uri)
+      uri.password = nil
+      uri.to_s
+    rescue URI::Error
+      "<invalid uri>"
+    end
+
+    # Emits `cql.query` for statements that don't go through `Performance.track`.
+    private def observe_sql(sql : String, &)
+      return yield unless Events.subscribed?(Events::QUERY)
+      started = Time.instant
+      begin
+        result = yield
+        Events.emit(Events::QUERY, Events::QueryEvent.new(sql, [] of DB::Any, (Time.instant - started).total_milliseconds))
+        result
+      rescue ex
+        Events.emit(Events::QUERY, Events::QueryEvent.new(sql, [] of DB::Any, (Time.instant - started).total_milliseconds, nil, ex.message || ex.class.name))
+        raise ex
+      end
     end
 
     def dialect
@@ -197,11 +257,13 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      if conn = active_connection
-        conn.exec(sql)
-      else
-        @db.using_connection do |db_conn|
-          db_conn.exec(sql)
+      observe_sql(sql) do
+        if conn = active_connection
+          conn.exec(sql)
+        else
+          @db.using_connection do |db_conn|
+            db_conn.exec(sql)
+          end
         end
       end
     end
@@ -272,20 +334,46 @@ module CQL
     # end
     # ```
     def transaction(&)
+      started = Time.instant
+      emitting = false
+      tx_id = 0_i64
+      nested = false
+      completed = false
       previous_connection = active_connection
-      @db.transaction do |tx|
-        self.active_connection = tx.connection
-        begin
-          yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
-        ensure
-          self.active_connection = previous_connection
+      begin
+        emitting = Events.subscribed?(Events::TRANSACTION)
+        tx_id = Events.next_transaction_id if emitting
+        nested = !previous_connection.nil?
+        if emitting
+          Events.emit(Events::TRANSACTION, Events::TransactionEvent.new(Events::TransactionState::Begin, tx_id, 0.0, nested))
         end
+        @db.transaction do |tx|
+          self.active_connection = tx.connection
+          begin
+            yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
+            completed = true
+          ensure
+            self.active_connection = previous_connection
+          end
+        end
+        if emitting
+          state = completed ? Events::TransactionState::Commit : Events::TransactionState::Rollback
+          Events.emit(Events::TRANSACTION, Events::TransactionEvent.new(state, tx_id, (Time.instant - started).total_milliseconds, nested))
+        end
+      rescue ex : DB::Rollback
+        # DB::Rollback should be caught silently by the outer @db.transaction
+        # and perform the rollback without propagating the exception further.
+        # We log it for debugging, but don't convert to ConnectionError.
+        Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
+        if emitting
+          Events.emit(Events::TRANSACTION, Events::TransactionEvent.new(Events::TransactionState::Rollback, tx_id, (Time.instant - started).total_milliseconds, nested))
+        end
+      rescue ex
+        if emitting
+          Events.emit(Events::TRANSACTION, Events::TransactionEvent.new(Events::TransactionState::Rollback, tx_id, (Time.instant - started).total_milliseconds, nested, ex.message || ex.class.name))
+        end
+        raise ex
       end
-    rescue ex : DB::Rollback
-      # DB::Rollback should be caught silently by the outer @db.transaction
-      # and perform the rollback without propagating the exception further.
-      # We log it for debugging, but don't convert to ConnectionError.
-      Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
     end
 
     def transaction(tx : DB::Transaction, &)
@@ -389,7 +477,7 @@ module CQL
           cnn = tx.connection
           sql_statements.split(";\n").each do |sql|
             next if sql.empty?
-            cnn.exec(sql)
+            observe_sql(sql) { cnn.exec(sql) }
           end
         end
       end

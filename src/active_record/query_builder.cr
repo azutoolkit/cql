@@ -590,8 +590,10 @@ module CQL
           # Use a different approach to get just the ID values
           # We need to get the raw values, not deserialize into models
           query, params = @query.select(:id).to_sql
-          @query.schema.exec_query do |conn|
-            conn.query_all(query, args: params, as: as_kind)
+          CQL::Performance.track(query, params) do
+            @query.schema.exec_query do |conn|
+              conn.query_all(query, args: params, as: as_kind)
+            end
           end
         end
 

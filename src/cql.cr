@@ -9,6 +9,7 @@ require "./ulid_compat"
 require "colorize"
 require "./compat"
 
+require "./events"
 require "./expression"
 require "./exceptions"
 require "./converters/*"

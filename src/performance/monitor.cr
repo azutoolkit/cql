@@ -44,7 +44,10 @@ module CQL::Performance
 
     # Main monitoring methods
     def monitor_query(sql : String, params : Array(DB::Any) = [] of DB::Any, &)
-      return yield unless enabled?
+      emit_events = Events.subscribed?(Events::QUERY)
+      return yield unless enabled? || emit_events
+
+      emitted = false
 
       # Execute and measure
       result, execution_time = measure_execution { yield }
@@ -52,22 +55,33 @@ module CQL::Performance
       # Extract metadata
       rows_affected = extract_rows_affected(result)
 
-      # Record in components
-      record_execution(sql, params, execution_time, rows_affected)
+      if emit_events
+        emitted = true
+        emit_query_event(sql, params, execution_time, extract_row_count(result))
+      end
 
-      # Log if configured
-      log_query(sql, params, execution_time, rows_affected) if @config.logging.enabled?
+      if enabled?
+        # Record in components
+        record_execution(sql, params, execution_time, rows_affected)
+
+        # Log if configured
+        log_query(sql, params, execution_time, rows_affected) if @config.logging.enabled?
+      end
 
       result
     rescue ex
-      # Track error count
-      @error_count.add(1)
+      emit_query_event(sql, params, Time::Span.zero, nil, ex.message || ex.class.name) if emit_events && !emitted
 
-      # Record error in profiler
-      record_execution(sql, params, Time::Span.zero, nil, ex.message)
+      if enabled?
+        # Track error count
+        @error_count.add(1)
 
-      # Log error if configured
-      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
+        # Record error in profiler
+        record_execution(sql, params, Time::Span.zero, nil, ex.message)
+
+        # Log error if configured
+        Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
+      end
 
       raise ex
     end
@@ -197,6 +211,20 @@ module CQL::Performance
         Log.warn { output }
       else
         Log.info { output }
+      end
+    end
+
+    private def emit_query_event(sql : String, params : Array(DB::Any), duration : Time::Span, rows : Int64?, error : String? = nil) : Nil
+      Events.emit(Events::QUERY, Events::QueryEvent.new(sql, params, duration.total_milliseconds, rows, error))
+    end
+
+    # Rows returned (SELECT) or affected (INSERT/UPDATE/DELETE).
+    private def extract_row_count(result) : Int64?
+      case result
+      when Array then result.size.to_i64
+      when Nil   then 0_i64
+      else
+        extract_rows_affected(result) || 1_i64
       end
     end
 
