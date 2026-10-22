@@ -58,6 +58,18 @@ describe CQL::Schema do
       end
     end
 
+    it "rejects a mysql URI without a host" do
+      ["mysql://", "mysql:///testdb"].each do |uri|
+        expect_raises(CQL::Schema::InvalidURIError, "Missing host in MySQL URI") do
+          CQL::Schema.define(:mysql_db, adapter: CQL::Adapter::MySql, uri: uri) do
+            table :users do
+              primary :id, Int32
+            end
+          end
+        end
+      end
+    end
+
     it "raises error for malformed URI" do
       expect_raises(CQL::Schema::InvalidURIError, "Invalid database URI format") do
         CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "not a uri") do

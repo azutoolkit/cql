@@ -90,3 +90,23 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     sql_of.call(original).should contain("WHERE")
   end
 end
+
+describe "QueryBuilder#pick and Model.having" do
+  before_each { UserDB.users.create! }
+  after_each { UserDB.users.drop! }
+
+  it "pick does not narrow or limit the receiver" do
+    builder = TestUser.query
+    builder.pick(:age)
+
+    sql = builder.query.to_sql[0]
+    sql.should contain("users.name")
+    sql.should_not contain("LIMIT")
+  end
+
+  it "Model.having accepts implicit-self and block-parameter forms" do
+    TestUser.group(:age).having { count(:id) > 1 }.query.to_sql[0].should contain("HAVING COUNT(users.id) > ?")
+    TestUser.group(:age).having { |h| h.count(:id) > 1 }.query.to_sql[0].should contain("HAVING")
+    TestUser.having { count(:id) > 1 }.query.to_sql[0].should contain("HAVING")
+  end
+end

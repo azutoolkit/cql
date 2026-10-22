@@ -42,4 +42,14 @@ describe "Bulk INSERT generation" do
       Northwind.insert.into(:users).values(ragged)
     end
   end
+
+  it "stays usable after a row with an unknown column is rejected" do
+    insert = Northwind.insert.into(:users)
+
+    expect_raises(Exception) { insert.values(name: "a", nope: 1) }
+    sql, params = insert.values(name: "a", email: "a@example.com").to_sql
+
+    sql.should eq("INSERT INTO users (name, email) VALUES (?, ?)")
+    params.should eq(["a", "a@example.com"] of DB::Any)
+  end
 end

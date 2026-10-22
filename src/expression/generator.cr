@@ -7,10 +7,6 @@ module Expression
     @dialect : BaseDialect
     getter params : Array(DB::Any) = [] of DB::Any
     getter query : String = ""
-    # Nesting depth of `Query` nodes currently being visited. Parameters are
-    # only reset at the root; subqueries must append to the enclosing list so
-    # outer values and `$n` numbering survive.
-    @query_depth : Int32 = 0
 
     def initialize(@adapter : CQL::Adapter = CQL::Adapter::SQLite, @quote_identifiers : Bool = false)
       @dialect = @adapter.dialect
@@ -28,10 +24,11 @@ module Expression
       %w[created_at updated_at].includes?(column_name)
     end
 
+    # Visits only append to the parameters; `reset` (called by every `to_sql`)
+    # is the one place they are cleared, so subqueries keep the outer values.
     def reset
       @params.clear
       @query = ""
-      @query_depth = 0
     end
 
     # Get the appropriate placeholder based on the current parameter index
@@ -42,8 +39,6 @@ module Expression
 
     # Template Method for common visit methods
     def visit(node : Query) : String
-      @params.clear if @query_depth == 0
-      @query_depth += 1
       @query = String.build do |string|
         string << "SELECT "
         string << "DISTINCT " if node.distinct?
@@ -68,8 +63,6 @@ module Expression
         string << node.order_by.try &.accept(self) if node.order_by # OrderBy handles aliases internally
         string << node.limit.try &.accept(self) if node.limit
       end
-    ensure
-      @query_depth -= 1
     end
 
     # An aggregate in the SELECT list, with its optional `AS alias`.

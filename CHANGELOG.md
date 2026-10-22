@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`QueryBuilder#where { }`, `join { }`, `left { }`, `right { }` return a new builder** like every other builder method; they no longer also mutate the receiver. Use the returned value.
 - Aggregates accept `as:` for a select-list alias: `count(:id, as: "n")`.
-- Opt-in identifier quoting: `CQL::Schema.define(..., quote_identifiers: true)` quotes table, column and alias names (double quotes, backticks on MySQL). Default is off, so generated SQL is unchanged.
+- Opt-in identifier quoting: `CQL::Schema.define(..., quote_identifiers: true)` quotes table, column and alias names (double quotes, backticks on MySQL). Default is off, so generated SQL is unchanged. Quoting covers queries and DML only; DDL (`build`, migrations, `alter`) is not quoted yet.
 
 - Improved error handling with detailed exception hierarchy
 - Enhanced N+1 query detection with better pattern recognition
@@ -58,13 +58,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Subqueries (`IN (SELECT ...)`, `EXISTS`, `INSERT ... SELECT`) no longer discard the parameters bound by the enclosing query, and PostgreSQL `$n` numbering now continues across them.
+- Subqueries (`IN (SELECT ...)`, `EXISTS`, `INSERT ... SELECT`) no longer discard the parameters bound by the enclosing query (SELECT, UPDATE and DELETE), and PostgreSQL `$n` numbering now continues across them.
 - Multi-row `INSERT` on PostgreSQL numbers each row's placeholders (it emitted `($1,$2),($1,$2)`); rows are aligned by column name and rows with a different column set raise `ArgumentError`.
 - `OFFSET` without `LIMIT` is no longer dropped (bare `OFFSET` on PostgreSQL, `LIMIT -1` on SQLite, maximum `LIMIT` on MySQL).
 - Block DSL qualifies columns with the table alias (`from(customers: :c).where { c.city == ... }`).
 - `Update#where` / `Delete#where` AND with earlier conditions instead of replacing them.
 - `QueryBuilder#having` builds a `HAVING` clause (it called `where`); `reverse_order` and `unscope` work; aggregates, `ids` and `reorder` no longer alter the builder they are called on.
-- `mysql://` URIs are accepted by `Schema`.
+- `mysql://` URIs are accepted by `Schema` (an empty host is rejected).
+- `QueryBuilder#pick` no longer alters the builder it is called on; `Model.having` accepts implicit-self blocks.
 
 - Connection pool configuration consistency
 - Transaction rollback handling

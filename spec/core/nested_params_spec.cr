@@ -64,3 +64,35 @@ describe "Nested query parameter binding" do
     second[1].should eq(["Tulum"] of DB::Any)
   end
 end
+
+describe "Nested query parameter binding in UPDATE, DELETE and INSERT ... SELECT" do
+  subquery = -> { Northwind.query.from(:orders).select(:customer_id).where { orders.total > 1000 } }
+
+  it "keeps SET values when an UPDATE WHERE contains a subquery" do
+    sql, params = Northwind.update.table(:customers).set(city: "X")
+      .where { customers.id.in(subquery.call) }.to_sql
+
+    params.should eq(["X", 1000] of DB::Any)
+    sql.should contain("SET city = ?")
+  end
+
+  it "keeps outer WHERE values and numbering in a DELETE with a subquery (PostgreSQL)" do
+    generator = Expression::Generator.new(CQL::Adapter::Postgres)
+    sql, params = Northwind.delete.from(:customers).where(city: "Z")
+      .where { customers.id.in(subquery.call) }.to_sql(generator)
+
+    params.should eq(["Z", 1000] of DB::Any)
+    sql.should contain("customers.city = $1")
+    sql.should contain("orders.total > $2")
+  end
+
+  it "numbers an UPDATE with a subquery consistently (PostgreSQL)" do
+    generator = Expression::Generator.new(CQL::Adapter::Postgres)
+    sql, params = Northwind.update.table(:customers).set(city: "X")
+      .where { customers.id.in(subquery.call) }.to_sql(generator)
+
+    params.should eq(["X", 1000] of DB::Any)
+    sql.should contain("SET city = $1")
+    sql.should contain("orders.total > $2")
+  end
+end

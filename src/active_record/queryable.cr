@@ -142,8 +142,8 @@ module CQL
         # Create a QueryBuilder and execute having on it
         # - **@yield** [HavingBuilder] The block to build having conditions
         # - **@return** [QueryBuilder(T)] The query builder instance
-        def self.having(&block)
-          query.having(&block)
+        def self.having(&)
+          query.having { |builder| with builder yield builder }
         end
 
         # Create a QueryBuilder and execute distinct on it

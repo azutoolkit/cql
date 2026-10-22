@@ -30,6 +30,11 @@ it is created:
 
 ## Conventions
 
+- Design for readability: apply SOLID and the patterns already in use (Visitor for SQL generation,
+  Builder for queries/conditions, Strategy for dialects, Template Method for dialect defaults).
+  Add a feature as a new AST node + visitor method + dialect hook, not as adapter `if`/`case`
+  branches. Keep classes and methods small and single-purpose, avoid duplication and verbosity,
+  and let names carry the meaning instead of comments.
 - Values are always bound as parameters; identifiers go through `CQL::Identifier` or
   `Dialect#quote_identifier`. Never interpolate user input into SQL.
 - A bug fix lands with a regression spec that fails without the fix.

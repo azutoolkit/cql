@@ -60,7 +60,10 @@ module CQL
     getter adapter : Adapter = Adapter::SQLite
 
     # - **@return** [Bool] whether generated SQL quotes table, column and alias
-    #   names (opt-in; needed for reserved words such as `order` or `group`)
+    #   names (opt-in; needed for reserved words such as `order` or `group`).
+    #   Applies to queries and DML (SELECT/INSERT/UPDATE/DELETE); DDL emitted by
+    #   `build`, migrations and `alter` is not quoted yet, so create such tables
+    #   with raw SQL or a quoted migration.
     getter quote_identifiers : Bool = false
 
     # - **@return** [Hash(Symbol, Table)] the tables in the schema
@@ -172,7 +175,7 @@ module CQL
       when "postgres", "postgresql"
         raise InvalidURIError.new("Missing host in PostgreSQL URI") unless uri.host
       when "mysql"
-        raise InvalidURIError.new("Missing host in MySQL URI") unless uri.host
+        raise InvalidURIError.new("Missing host in MySQL URI") unless uri.host.presence
       else
         raise InvalidURIError.new("Unsupported database type: #{uri.scheme}")
       end

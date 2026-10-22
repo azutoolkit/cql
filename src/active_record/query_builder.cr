@@ -591,7 +591,7 @@ module CQL
         # - **@param** column [Symbol] The column to extract
         # - **@return** [DB::Any?] The value or nil if no records
         def pick(column : Symbol, as as_kind = DB::Any)
-          @query.select(column).limit(1).first(as_kind)
+          self.select(column).first(as_kind)
         end
 
         # Get array of primary key values

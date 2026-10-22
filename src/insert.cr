@@ -253,7 +253,10 @@ module CQL
       end
 
       if @column_order.empty?
-        pairs.each { |(field, _)| @columns << Expression::Column.new(find_column(field)) }
+        # Resolve every column before touching state so a bad column leaves the
+        # insert unchanged.
+        columns = pairs.map { |(field, _)| Expression::Column.new(find_column(field)) }
+        columns.each { |column| @columns << column }
         @column_order = pairs.map(&.[0])
       else
         names = pairs.map(&.[0])
