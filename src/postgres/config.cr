@@ -77,10 +77,17 @@ module CQL::Postgres
     # A host starting with `/` (percent-encoded in the authority, or given as
     # `?host=`) is the directory of a Unix socket.
     def self.parse(url : String) : Config
-      uri = URI.parse(url)
+      from_uri(URI.parse(url), *userinfo(url))
+    end
+
+    # For callers that only hold a parsed URI (crystal-db's driver interface).
+    # `URI.parse` has already decoded the user info, and reads `+` as a space,
+    # so write a literal plus as `%2B`. Query keys in *ignoring* belong to the
+    # caller and are not read as settings.
+    def self.from_uri(uri : URI, user : String? = uri.user.presence, password : String? = uri.password, ignoring : Enumerable(String) = [] of String) : Config
       raise ArgumentError.new("expected a postgres:// URL, got scheme #{uri.scheme.inspect}") unless SCHEMES.includes?(uri.scheme)
       params = query_parameters(uri.query)
-      user, password = userinfo(url)
+      ignoring.each { |key| params.delete(key) }
       driver_options = DRIVER_OPTION_KEYS.each_with_object({} of String => String) do |key, options|
         pop(params, key).try { |value| options[key] = value }
       end

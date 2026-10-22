@@ -78,11 +78,19 @@ Real-world benchmarks (1M records, complex queries):
 
 ## Native PostgreSQL Driver
 
+This is the default driver for `postgres://`, `postgresql://` and `cockroachdb://` URLs: `require "cql"` loads it and
+registers it with crystal-db, so `CQL::Schema` and `DB.open` use it without the `pg` shard. If your app requires `pg`
+before `cql` (it keeps the names) or after it (it replaces them), the `pg` shard's driver serves `postgres://` and
+`postgresql://` instead, so remove `require "pg"` to switch (`cockroachdb://` is only claimed by this driver; a Schema with
+`CQL::Adapter::CockroachDB` rewrites it to `postgres://`, so it follows the same rule). crystal-db's own pool serves
+`Schema` and `DB.open`; the engine's `pool_size`/`max_queries` options only apply to `AsyncEngine`. Write a literal `+`
+in a user name or password as `%2B` (crystal-db reads `+` as a space). CQL has only been run against CockroachDB
+through a protocol fake, never a real CockroachDB server; see "CockroachDB" below.
+
 `CQL::Postgres::AsyncEngine` speaks the PostgreSQL wire protocol itself (3.2, falling back to 3.0), on Crystal fibers and the standard
-library's event loop, with its own connection pool. It is an opt-in `CQL::Executor`: nothing is loaded unless you require
-it, and SQLite/MySQL users are unaffected. The engine itself needs only the standard library and `db`. A `CQL::Schema`
-for PostgreSQL still opens a crystal-db connection when it is created, so an app that defines schemas also needs the
-`pg` shard (or `?initial_pool_size=0` in the schema's URL to keep that connection from being opened).
+library's event loop, with its own connection pool. It is also a `CQL::Executor` (`query.using(engine)`); SQLite/MySQL users are unaffected. The engine itself needs only the standard library and `db`. A `CQL::Schema`
+for PostgreSQL opens a crystal-db connection when it is created (through this driver, so the `pg` shard is no longer
+needed; `?initial_pool_size=0` keeps the connection from being opened).
 
 ```crystal
 require "cql/postgres"
@@ -141,6 +149,11 @@ What it does:
   `CQL::Postgres::Types.register` to decode more.
 
 Things to know:
+
+- **CockroachDB** speaks the PostgreSQL wire protocol, and `CQL::Adapter::CockroachDB` engines use this driver. What is
+  verified: startup, authentication and queries against PostgreSQL 16 and 18, and URL/driver handling for
+  `cockroachdb://` with a fake server. Not verified: anything against a real CockroachDB server (none was available).
+  Expect differences there: `deferrable: true` is refused, and settings such as `synchronous_commit` and `COPY` details may not behave as on PostgreSQL; `statement_cache_size=0` turns prepared-statement caching off if you hit trouble.
 
 - `synchronous_commit: false` (or `?synchronous_commit=off` for a whole connection) lets `COMMIT` return before the WAL is
   flushed to disk. It cannot corrupt the database, but commits from the last few hundred milliseconds (up to about three
@@ -207,7 +220,7 @@ dependencies:
     version: "~> 0.0.435"
 
   # Choose your database driver:
-  pg: # For PostgreSQL
+  pg: # Optional: CQL ships its own PostgreSQL driver
     github: will/crystal-pg
   mysql: # For MySQL
     github: crystal-lang/crystal-mysql
