@@ -391,6 +391,11 @@ module CQL
           clone_builder.tap(&.query.using(connection))
         end
 
+        # Runs this query on another executor, e.g. a `CQL::Postgres::AsyncEngine`.
+        def using(executor : CQL::Executor) : self
+          clone_builder.tap(&.query.using(executor))
+        end
+
         # Alias of `all`.
         def to_a
           all

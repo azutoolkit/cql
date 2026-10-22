@@ -26,6 +26,12 @@ module CQL::Postgres
   class QueryTimeout < Error
   end
 
+  class PoolTimeout < Error
+  end
+
+  class PoolClosed < Error
+  end
+
   # An ErrorResponse from the server. The server's own wording
   # (`server_message`) and `detail` can quote bound values (a unique violation
   # names the duplicate key, "invalid input syntax" quotes the offending text,

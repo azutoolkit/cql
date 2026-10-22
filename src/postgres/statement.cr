@@ -1,0 +1,40 @@
+require "db"
+require "./result_set"
+
+module CQL::Postgres
+  # A statement on a `Connection`. Prepared ones are parsed once per
+  # connection and reused; unprepared ones use the unnamed statement, or the
+  # simple protocol when there are no parameters and no rows are wanted.
+  class Statement < ::DB::Statement
+    def initialize(connection : ::DB::Connection, command : String, @prepared : Bool)
+      super(connection, command)
+    end
+
+    protected def perform_query(args : Enumerable) : ::DB::ResultSet
+      ResultSet.new(self, run(args))
+    end
+
+    protected def perform_exec(args : Enumerable) : ::DB::ExecResult
+      rows_affected = simple?(args) ? simple_rows_affected : run(args).rows_affected
+      ::DB::ExecResult.new(rows_affected: rows_affected, last_insert_id: 0_i64)
+    end
+
+    private def run(args : Enumerable) : Result
+      params = [] of Types::Param
+      args.each { |arg| params << Types::ParamEncoder.encode(arg) }
+      connection.as(Connection).session.query(command, params, cache: @prepared)
+    rescue ex : ConnectionLost
+      raise ::DB::ConnectionLost.new(connection, cause: ex)
+    end
+
+    private def simple?(args : Enumerable) : Bool
+      !@prepared && args.none?
+    end
+
+    private def simple_rows_affected : Int64
+      connection.as(Connection).session.simple_query(command).last?.try(&.rows_affected) || 0_i64
+    rescue ex : ConnectionLost
+      raise ::DB::ConnectionLost.new(connection, cause: ex)
+    end
+  end
+end
