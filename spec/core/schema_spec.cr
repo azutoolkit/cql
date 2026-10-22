@@ -47,15 +47,13 @@ describe CQL::Schema do
     it "accepts the mysql scheme instead of rejecting it as unsupported" do
       # No MySQL server or driver is available in specs, so connecting fails -
       # but URI validation itself must no longer raise InvalidURIError.
-      begin
-        CQL::Schema.define(:mysql_db, adapter: CQL::Adapter::MySql, uri: "mysql://localhost/testdb") do
-          table :users do
-            primary :id, Int32
-          end
+      CQL::Schema.define(:mysql_db, adapter: CQL::Adapter::MySql, uri: "mysql://localhost/testdb") do
+        table :users do
+          primary :id, Int32
         end
-      rescue ex
-        ex.should_not be_a(CQL::Schema::InvalidURIError)
       end
+    rescue ex
+      ex.should_not be_a(CQL::Schema::InvalidURIError)
     end
 
     it "rejects a mysql URI without a host" do
