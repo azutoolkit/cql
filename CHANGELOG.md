@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Native PostgreSQL wire-protocol driver, `require "cql/postgres"` (work in progress, see `CQL::Postgres`): protocol v3.0 frontend/backend codec, type decoding by OID and bound-parameter encoding, typed `ServerError` subclasses per SQLSTATE. Additive; nothing is loaded unless required.
 - Typed model DSL: `Model.query.where { (age >= 18) & (status == "active") }` with bare column names typed to the column (unknown columns and type mismatches are compile errors), `order_by(created_at: :desc)` checked at compile time, `joins(:assoc) { ... }` / `left_joins`, `to_a`, and `Model.cql_columns` / `cql_association` metadata.
 - Telemetry: `CQL::Telemetry.subscribe`, `alert_on_slow`, `log_queries`, `with_context` and an abstract `Tracer` for OpenTelemetry-style adapters; parameters are not captured unless `capture_params` is on.
 - Unified execution: every statement runs through `CQL::Execution.run`; `Schema#with_connection` and `query.using(connection)` pin an explicit connection (e.g. a transaction).
