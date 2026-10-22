@@ -46,16 +46,18 @@ class FakePG
       message[1]
     end
 
+    # Like `expect`, returning the message type for specs that record it.
+    def expect_type(type : Char) : Char
+      expect(type)
+      type
+    end
+
     def cstrings(payload : Bytes) : Array(String)
       String.new(payload).split('\0')
     end
 
     def send(type : Char, payload : Bytes = Bytes.empty) : Nil
-      frame = IO::Memory.new
-      frame.write_byte(type.ord.to_u8)
-      frame.write_bytes(payload.size + 4, IO::ByteFormat::NetworkEndian)
-      frame.write(payload)
-      @io.write(frame.to_slice)
+      @io.write(FakePG.frame(type, payload))
       @io.flush
     end
 
@@ -178,12 +180,22 @@ class FakePG
 
   @@running = [] of FakePG
 
+  # One backend message, built by hand.
+  def self.frame(type : Char, payload : Bytes = Bytes.empty) : Bytes
+    frame = IO::Memory.new
+    frame.write_byte(type.ord.to_u8)
+    frame.write_bytes(payload.size + 4, IO::ByteFormat::NetworkEndian)
+    frame.write(payload)
+    frame.to_slice
+  end
+
   getter port : Int32
   getter failures = [] of Exception
   # Connections accepted so far, and the most that were open at once.
   getter accepted = 0
   getter max_open = 0
   @open = 0
+  @finished = Channel(Nil).new(1024)
   @server : TCPServer
 
   def initialize(&@script : Client ->)
@@ -211,6 +223,15 @@ class FakePG
     "postgres://#{credentials}@127.0.0.1:#{@port}/#{database}?#{query}"
   end
 
+  # Blocks until one more client script has run to its end.
+  def await(timeout : Time::Span = 3.seconds) : Nil
+    select
+    when @finished.receive
+    when timeout(timeout)
+      raise "the fake server's client script did not finish within #{timeout}"
+    end
+  end
+
   def close : Nil
     @server.close
   end
@@ -234,6 +255,7 @@ class FakePG
     ensure
       @open -= 1
       socket.close rescue nil
+      @finished.send(nil)
     end
   end
 end
@@ -272,6 +294,36 @@ class FakeScramServer
     server_signature = OpenSSL::HMAC.digest(OpenSSL::Algorithm::SHA256, server_key, auth_message)
     client.auth(12, "v=#{Base64.strict_encode(server_signature)}".to_slice) if valid
     valid
+  end
+end
+
+# A stream that replays prepared backend frames and can fail like a broken
+# socket, to reach error paths a real loopback connection cannot be made to hit.
+class ScriptedIO < IO
+  getter written = IO::Memory.new
+
+  def initialize(backend_frames : Bytes = Bytes.empty, @fail_writes_after : Int32? = nil, @close_raises : Bool = false, @tls_failure : Bool = false)
+    @input = IO::Memory.new(backend_frames)
+    @writes = 0
+  end
+
+  def read(slice : Bytes) : Int32
+    @input.read(slice)
+  end
+
+  def write(slice : Bytes) : Nil
+    @writes += 1
+    limit = @fail_writes_after
+    if limit && @writes > limit
+      raise OpenSSL::Error.new("SSL_write: broken pipe") if @tls_failure
+      raise IO::Error.new("Broken pipe")
+    end
+    @written.write(slice)
+  end
+
+  def close : Nil
+    raise OpenSSL::Error.new("SSL_shutdown: shutdown while in init") if @close_raises
+    super
   end
 end
 

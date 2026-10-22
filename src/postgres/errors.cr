@@ -18,6 +18,14 @@ module CQL::Postgres
   class AuthenticationError < Error
   end
 
+  # The socket failed or the connection was already closed.
+  class ConnectionLost < Error
+  end
+
+  # A statement exceeded its time limit and was canceled on the server.
+  class QueryTimeout < Error
+  end
+
   # An ErrorResponse from the server. The server's own wording
   # (`server_message`) and `detail` can quote bound values (a unique violation
   # names the duplicate key, "invalid input syntax" quotes the offending text,
