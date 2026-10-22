@@ -6,7 +6,7 @@ describe "playground/cql_demo.cr" do
     status = Process.run("crystal", ["run", "playground/cql_demo.cr"], output: output, error: output)
 
     status.success?.should be_true, output.to_s
-    (1..11).each { |n| output.to_s.should contain("== #{n}. ") }
+    (1..11).each { |section| output.to_s.should contain("== #{section}. ") }
     output.to_s.should contain("table still exists: 3 authors")
   end
 end

@@ -366,7 +366,7 @@ describe "Typed query DSL" do
     end
 
     it "rejects a column of another table inside a joins block" do
-      success, _, error = Snippets.compile(preamble + "\nSnipAuthor.query.joins(:books) { name_of_book == 1 }\n")
+      success, _, _ = Snippets.compile(preamble + "\nSnipAuthor.query.joins(:books) { name_of_book == 1 }\n")
       success.should be_false
     end
   end

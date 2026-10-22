@@ -106,7 +106,7 @@ describe "QueryBuilder#pick and Model.having" do
 
   it "Model.having accepts implicit-self and block-parameter forms" do
     TestUser.group(:age).having { count(:id) > 1 }.query.to_sql[0].should contain("HAVING COUNT(users.id) > ?")
-    TestUser.group(:age).having { |h| h.count(:id) > 1 }.query.to_sql[0].should contain("HAVING")
+    TestUser.group(:age).having { |having| having.count(:id) > 1 }.query.to_sql[0].should contain("HAVING")
     TestUser.having { count(:id) > 1 }.query.to_sql[0].should contain("HAVING")
   end
 end

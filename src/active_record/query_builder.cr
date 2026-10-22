@@ -470,8 +470,9 @@ module CQL
         # With joins and no explicit select, rows are hydrated from the model's own
         # columns only; aggregates and `pluck` keep the query untouched.
         private def row_query(kind) : Query
-          return @query unless kind == T && @query.columns.empty? && !@query.joins.empty?
-          @query.clone.tap { |query| query.columns.concat(T.table_columns.values) }
+          joined_without_select = @query.columns.empty? && @query.joins.any?
+          return @query unless joined_without_select && kind == T
+          @query.clone.tap(&.columns.concat(T.table_columns.values))
         end
 
         # Check if any records exist

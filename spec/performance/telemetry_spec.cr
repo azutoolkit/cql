@@ -71,7 +71,7 @@ describe CQL::Telemetry do
 
     it "hands out the transaction's connection from with_connection" do
       UserDB.transaction do |tx|
-        UserDB.with_connection { |connection| connection.should be(tx.connection) }
+        UserDB.with_connection(&.should(be(tx.connection)))
       end
     end
   end
@@ -152,9 +152,9 @@ describe CQL::Telemetry do
       done = Channel(Nil).new
       4.times do |i|
         spawn do
-          50.times do |n|
-            CQL::Telemetry.subscribe("worker-#{i}-#{n}") { |_| }
-            CQL::Telemetry.unsubscribe("worker-#{i}-#{n}")
+          50.times do |index|
+            CQL::Telemetry.subscribe("worker-#{i}-#{index}") { |_| }
+            CQL::Telemetry.unsubscribe("worker-#{i}-#{index}")
           end
           done.send(nil)
         end
