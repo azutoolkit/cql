@@ -148,7 +148,7 @@ describe CQL::Postgres::Wire::Backend do
     bytes = stream.to_slice
 
     [IO::Memory.new(bytes.dup), PlainIO.new(IO::Memory.new(bytes.dup))].each do |source|
-      rows = 2.times.map { Wire::Backend.read(source).as(Wire::Backend::DataRow).values.map { |field| field.try { |value| String.new(value) } } }.to_a
+      rows = Array.new(2) { Wire::Backend.read(source).as(Wire::Backend::DataRow).values.map { |field| field.try { |value| String.new(value) } } }
       rows.should eq [["one", nil], ["two", "bb"]]
       Wire::Backend.read(source).as(Wire::Backend::ReadyForQuery).status.should eq 'I'
     end
@@ -163,7 +163,7 @@ describe CQL::Postgres::Wire::Backend do
         rows.each { |row| writer.write(data_row_frame(row)) }
         writer.close
       end
-      read = rows.size.times.map { Wire::Backend.read(reader).as(Wire::Backend::DataRow).values.map { |field| field.try { |value| String.new(value) } } }.to_a
+      read = Array.new(rows.size) { Wire::Backend.read(reader).as(Wire::Backend::DataRow).values.map { |field| field.try { |value| String.new(value) } } }
       read.should eq rows
       expect_raises(IO::EOFError) { Wire::Backend.read(reader) }
     end
@@ -308,8 +308,8 @@ describe CQL::Postgres::Types do
     Types.codec_for(Types::OID::INT8).decode.call(Bytes[0, 0, 0, 0, 0, 0, 1, 0]).should eq 256_i64
     Types.codec_for(Types::OID::FLOAT8).decode.call(Bytes[0x3f, 0xf8, 0, 0, 0, 0, 0, 0]).should eq 1.5
     Types.codec_for(Types::OID::FLOAT4).decode.call(Bytes[0x3f, 0xc0, 0, 0]).should eq 1.5_f32
-    Types.codec_for(Types::OID::BOOL).decode.call(Bytes[1]).should eq true
-    Types.codec_for(Types::OID::BOOL).decode.call(Bytes[0]).should eq false
+    Types.codec_for(Types::OID::BOOL).decode.call(Bytes[1]).should be_true
+    Types.codec_for(Types::OID::BOOL).decode.call(Bytes[0]).should be_false
   end
 
   it "rejects values whose size does not match the type instead of reading garbage" do

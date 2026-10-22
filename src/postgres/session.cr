@@ -214,7 +214,7 @@ module CQL::Postgres
       hard_close if @owed > 0
       discard_unsent
       raise ex
-    rescue ex : IO::TimeoutError
+    rescue IO::TimeoutError
       hard_close
       raise QueryTimeout.new("no answer from the server within the read timeout")
     rescue ex : IO::Error | OpenSSL::Error

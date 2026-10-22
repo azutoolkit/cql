@@ -325,7 +325,7 @@ describe CQL::Postgres::AsyncEngine do
     30.times do
       spawn { results.send(PgSchema.query.from(:accounts).select(:id).using(engine).get!(as: Int32)) }
     end
-    30.times.map { results.receive }.to_a.sum.should eq 30
+    Array.new(30) { results.receive }.sum.should eq 30
     server.max_open.should be <= 3
   end
 

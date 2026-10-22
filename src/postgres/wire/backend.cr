@@ -113,7 +113,7 @@ module CQL::Postgres::Wire
       include Message
     end
 
-    {% for name in %w(EmptyQueryResponse ParseComplete BindComplete CloseComplete NoData PortalSuspended CopyDone) %}
+    {% for name in %w[EmptyQueryResponse ParseComplete BindComplete CloseComplete NoData PortalSuspended CopyDone] %}
       record {{name.id}} do
         include Message
       end

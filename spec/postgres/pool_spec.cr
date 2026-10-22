@@ -271,7 +271,6 @@ describe CQL::Postgres::Pool do
       server = FakePG.start do |client|
         client.read_startup
         client.ok_handshake
-        status = 'I'
         while message = client.read_message
           break if message[0] == 'X'
           sql = String.new(message[1]).chomp('\0')
@@ -335,7 +334,6 @@ describe CQL::Postgres::Pool do
       server = FakePG.start do |client|
         client.read_startup
         client.ok_handshake
-        status = 'I'
         while message = client.read_message
           break if message[0] == 'X'
           sql = String.new(message[1]).chomp('\0')

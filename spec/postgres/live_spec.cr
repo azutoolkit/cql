@@ -134,7 +134,7 @@ describe "CQL::Postgres against a live server" do
     row[2].should eq 5_000_000_000_i64
     row[3].should eq 1.5_f32
     row[4].should eq 2.25
-    row[5].should eq true
+    row[5].should be_true
     row[6].should eq "héllo ✓"
     row[7].should eq Bytes[0, 1, 255]
     row[8].should eq uuid

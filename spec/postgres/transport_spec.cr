@@ -77,6 +77,8 @@ describe CQL::Postgres::Transport do
         hung_up.send(true)
       rescue IO::TimeoutError
         hung_up.send(false)
+      rescue IO::Error
+        hung_up.send(true) # closing with unread bytes in the receive buffer resets the connection instead of ending it
       end
     end
     expect_raises(IO::Error, /cannot connect/) { PG::Transport.connect(PG::Config.parse(server.url(query: "sslmode=require"))) }

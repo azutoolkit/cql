@@ -32,7 +32,7 @@ class FakePG
 
     # {type, payload}; nil when the client hung up.
     def read_message : {Char, Bytes}?
-      type = @io.read_byte || return nil
+      type = @io.read_byte || return
       length = @io.read_bytes(Int32, IO::ByteFormat::NetworkEndian)
       payload = Bytes.new(length - 4)
       @io.read_fully(payload)
@@ -246,7 +246,8 @@ class FakePG
     socket.sync = true
     client = Client.new(socket)
     @accepted += 1
-    @max_open = Math.max(@max_open, @open += 1)
+    @open += 1
+    @max_open = Math.max(@max_open, @open)
     spawn(name: "fake-pg-client") do
       @script.call(client)
     rescue IO::Error
