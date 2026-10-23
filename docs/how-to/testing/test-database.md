@@ -79,7 +79,7 @@ require "../src/models/*"
 
 ## Run Migrations for Tests
 
-Before running tests, migrate the test database:
+Before running tests, migrate the test database. Turn `auto_sync` off so the migrator does not rewrite your schema file:
 
 ```crystal
 # spec/spec_helper.cr
@@ -87,14 +87,16 @@ ENV["APP_ENV"] = "test"
 require "../src/db"
 
 # Run migrations
-MyDB.migrator.up
+MyDB.migrator(CQL::MigratorConfig.new(auto_sync: false)).up
 ```
+
+If the schema is declared in code (as in CQL's own specs), you can skip migrations and create every declared table with `MyDB.build`, or one at a time with `MyDB.users.create!` and `MyDB.users.drop!`.
 
 Or with a script:
 
 ```bash
 #!/bin/bash
-# bin/test
+# bin/test (src/migrate.cr calls MyDB.migrator(...).up)
 APP_ENV=test crystal run src/migrate.cr
 APP_ENV=test crystal spec "$@"
 ```
@@ -139,7 +141,9 @@ Spec.around_each do |example|
 end
 ```
 
-**Note:** This won't work if your tests use multiple connections or spawn fibers.
+`Schema#transaction` pins the fiber to one connection and swallows `DB::Rollback`, so queries issued by the example run inside the transaction.
+
+**Note:** This won't work if your tests use multiple connections or spawn fibers, because other fibers do not see the transaction's connection.
 
 ### Delete Strategy
 
@@ -162,15 +166,23 @@ For fastest tests, use in-memory SQLite:
 TestDB = CQL::Schema.define(
   :test_db,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://:memory:"
+  uri: "sqlite3::memory:"
 ) do
+  table :users do
+    primary :id, Int64
+    column :name, String
+    column :email, String
+    timestamps
+  end
 end
 
 Spec.before_suite do
-  # Run migrations on in-memory database
-  TestDB.migrator.up
+  # Create the declared tables
+  TestDB.build
 end
 ```
+
+SQLite gives every connection its own private `:memory:` database, so a test that ends up on a second pooled connection can see an empty database. CQL's own specs use SQLite files in the temp directory instead (`CQL::Schema.define(:name, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{File.join(Dir.tempdir, "cql_test.db")}")`) and create and drop tables around each example with `TestDB.users.create!` / `TestDB.users.drop!`.
 
 ## Separate Test Schema
 
@@ -178,9 +190,9 @@ Use a dedicated schema module for tests:
 
 ```crystal
 # spec/support/test_schema.cr
-TestDB = CQL::Schema.define(:test, adapter: CQL::Adapter::SQLite, uri: "sqlite3://:memory:") do
+TestDB = CQL::Schema.define(:test, adapter: CQL::Adapter::SQLite, uri: "sqlite3::memory:") do
   table :users do
-    primary_key :id, Int64
+    primary :id, Int64
     column :name, String
     column :email, String
     timestamps
@@ -213,7 +225,7 @@ end
 # spec/database_spec.cr
 describe "Database" do
   it "connects to test database" do
-    MyDB.exec("SELECT 1").should_not be_nil
+    MyDB.exec_query { |conn| conn.scalar("SELECT 1") }.should eq(1)
   end
 
   it "has migrated schema" do

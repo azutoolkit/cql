@@ -15,14 +15,16 @@ In Active Record:
 ## Active Record in CQL
 
 ```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
+class User
+  include CQL::ActiveRecord::Model(Int64) # provides `id : Int64?`
   db_context MyDB, :users
 
-  property id : Int64?
   property name : String
   property email : String
   property active : Bool = true
+
+  def initialize(@name : String, @email : String)
+  end
 
   # Business logic in the model
   def activate!
@@ -56,13 +58,15 @@ user.save   # UPDATE
 user.delete! # DELETE
 ```
 
+Models are classes, not structs: `save` assigns the generated `id` to the instance you hold.
+
 ### 2. Class Methods for Queries
 
 The model class provides query methods:
 
 ```crystal
-User.find(1)
-User.where(active: true)
+User.find(1)                 # => User?
+User.where(active: true).all # => Array(User)
 User.count
 User.all
 ```
@@ -72,14 +76,15 @@ User.all
 Validation logic lives in the model:
 
 ```crystal
-struct User
+class User
   validate :email, presence: true, match: /@/
   validate :name, presence: true
 end
 
 user = User.new("", "invalid")
 user.valid?  # false
-user.save    # won't save, returns false
+user.errors.map(&.message) # => ["email must match the pattern /@/", "name must be present"]
+user.save    # raises CQL::ActiveRecord::Validations::ValidationError; nothing is written
 ```
 
 ### 4. Lifecycle Callbacks
@@ -87,7 +92,7 @@ user.save    # won't save, returns false
 Models respond to persistence events:
 
 ```crystal
-struct User
+class User
   before_save :normalize_email
   after_create :send_welcome_email
 
@@ -107,7 +112,7 @@ Active Record is intuitive. The code reads naturally:
 ```crystal
 # Create a user, save it, find it, update it
 user = User.create!(name: "John", email: "john@example.com")
-found = User.find(user.id)
+found = User.find!(user.id!)
 found.name = "Jane"
 found.save
 ```
@@ -117,14 +122,14 @@ found.save
 Everything you need is in one place:
 
 ```crystal
-struct Post
+class Post
   include CQL::ActiveRecord::Model(Int64)
   db_context MyDB, :posts
 
-  property id : Int64?
   property title : String
   property body : String
   property user_id : Int64
+  property slug : String = ""
 
   belongs_to :user, User, :user_id
   has_many :comments, Comment, :post_id
@@ -132,6 +137,13 @@ struct Post
   validate :title, presence: true
 
   before_save :update_slug
+
+  def initialize(@title : String, @body : String, @user_id : Int64)
+  end
+
+  private def update_slug
+    @slug = @title.downcase.gsub(/[^a-z0-9]+/, "-").strip("-")
+  end
 end
 ```
 
@@ -178,14 +190,16 @@ For complex domains, models can become bloated with too much logic.
 ## Example: Complex Active Record Model
 
 ```crystal
-struct Order
+class Order
   include CQL::ActiveRecord::Model(Int64)
   db_context MyDB, :orders
 
-  property id : Int64?
   property user_id : Int64
   property status : String = "pending"
-  property total : BigDecimal = BigDecimal.new(0)
+  property total : Float64 = 0.0
+
+  def initialize(@user_id : Int64)
+  end
 
   belongs_to :user, User, :user_id
   has_many :order_items, OrderItem, :order_id
@@ -207,7 +221,7 @@ struct Order
   end
 
   private def calculate_total
-    @total = order_items.all.sum(&.subtotal)
+    @total = order_items.all.sum(&.subtotal) # subtotal : Float64 on OrderItem
     true
   end
 

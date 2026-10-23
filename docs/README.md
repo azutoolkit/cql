@@ -23,10 +23,11 @@ dependencies:
     github: azutoolkit/cql
     version: ~> 0.0.589
 
-  # Choose your database driver:
-  pg:  # PostgreSQL
-    github: will/crystal-pg
-    version: "~> 0.26.0"
+  # Choose your database driver (PostgreSQL needs none: CQL ships a native driver):
+  sqlite3:  # SQLite
+    github: crystal-lang/crystal-sqlite3
+  mysql:    # MySQL
+    github: crystal-lang/crystal-mysql
 ```
 
 Then run:
@@ -40,8 +41,7 @@ shards install
 ## Quick Start
 
 ```crystal
-require "cql"
-require "pg"
+require "cql" # includes the native PostgreSQL driver
 
 # Define your database
 MyDB = CQL::Schema.define(
@@ -49,14 +49,18 @@ MyDB = CQL::Schema.define(
   adapter: CQL::Adapter::Postgres,
   uri: "postgres://localhost/myapp"
 ) do
+  table :users do
+    primary :id, Int64
+    text :name
+    text :email
+  end
 end
 
 # Define a model
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
   db_context MyDB, :users
 
-  property id : Int64?
   property name : String
   property email : String
 
@@ -65,7 +69,7 @@ struct User
 end
 
 # Use it
-MyDB.init
+MyDB.users.create! # CREATE TABLE (use migrations in a real app)
 user = User.create!(name: "Alice", email: "alice@example.com")
 puts "Created user #{user.id}: #{user.name}"
 ```

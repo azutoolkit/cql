@@ -27,14 +27,18 @@ schema.table :profiles do
   column :bio, String
   column :avatar_url, String
 
-  foreign_key [:user_id], references: :users, references_columns: [:id]
-  index [:user_id], unique: true
   timestamps
+
+  foreign_key [:user_id], references: :users, references_columns: [:id]
 end
 schema.profiles.create!
+
+schema.alter :profiles do
+  create_index :idx_profiles_user_id, [:user_id], unique: true
+end
 ```
 
-Note: The unique index ensures only one profile per user.
+Note: The unique index ensures only one profile per user. Indexes are created with `schema.alter`, see [Create Indexes](../migrations/indexes.md).
 
 ## Options
 

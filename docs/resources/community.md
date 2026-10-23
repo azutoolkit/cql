@@ -31,13 +31,16 @@ For questions and discussions, use [GitHub Discussions](https://github.com/azuto
 
 ### Code Style
 
-Follow Crystal's standard style guide. Run `crystal tool format` before committing.
+Follow Crystal's standard style guide. Run `crystal tool format src spec` before committing; CI runs `crystal tool format --check`.
 
 ### Running Tests
 
 ```shell
+shards install --ignore-crystal-version
 crystal spec
 ```
+
+See the [contributing guide](contributing.md) for the full workflow.
 
 ### Documentation
 

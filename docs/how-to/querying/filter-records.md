@@ -174,6 +174,7 @@ User.where { age > 20 }.count   # => 2
 
 ## Related
 
+- [Typed Where DSL](typed-where-dsl.md)
 - [Find Records](find-records.md)
 - [Build Complex Queries](complex-queries.md)
 - [Create Query Scopes](scopes.md)

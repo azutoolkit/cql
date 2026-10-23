@@ -11,7 +11,7 @@ A design pattern where objects carry both data and behavior. In CQL, models that
 The database-specific driver that CQL uses to communicate with different database systems. CQL supports PostgreSQL, MySQL, SQLite and CockroachDB adapters.
 
 ### Association
-A relationship between two models. See: belongs_to, has_one, has_many.
+A relationship between two models. See: belongs_to, has_one, has_many, many_to_many.
 
 ## B
 
@@ -21,7 +21,7 @@ A relationship where a model references another model via a foreign key. The mod
 ## C
 
 ### Callback
-A method that is automatically called at specific points during a model's lifecycle (e.g., before_save, after_create).
+A method that is automatically called at specific points during a model's lifecycle (e.g., before_save, after_create). Registered by method name, e.g. `before_save :normalize_email`; returning `false` halts the operation.
 
 ### Column
 A single field in a database table, represented as a property in a CQL model.
@@ -55,6 +55,11 @@ A relationship where a model has exactly one related record in another table.
 ### Index
 A database structure that improves query performance on specific columns.
 
+## J
+
+### Join Model
+A model for the join table of a many-to-many relationship, passed as `join_through:` to `many_to_many`.
+
 ## M
 
 ### Migration
@@ -76,6 +81,9 @@ Object-Relational Mapping - a technique for converting data between incompatible
 ### Persistence
 The process of saving data to a database so it survives beyond the application's runtime.
 
+### Preload
+Loading a `has_many` association for many records with one extra query instead of one query per record (`User.preload(:posts)`).
+
 ### Primary Key
 A unique identifier for each record in a table, typically named `id`.
 
@@ -85,12 +93,12 @@ A Crystal attribute that maps to a database column.
 ## Q
 
 ### Query Builder
-A fluent interface for constructing SQL queries programmatically.
+A fluent interface for constructing SQL queries programmatically (`CQL::Query`, and `QueryBuilder(T)` for model queries).
 
 ## R
 
 ### Relationship
-A connection between two database tables, represented in CQL using belongs_to, has_one, or has_many.
+A connection between two database tables, represented in CQL using belongs_to, has_one, has_many, or many_to_many.
 
 ### Rollback
 Reverting a database migration to its previous state.
@@ -101,18 +109,21 @@ Reverting a database migration to its previous state.
 The structure of a database, including its tables, columns, indexes, and relationships.
 
 ### Scope
-A reusable query method defined on a model.
+A reusable, chainable query defined on a model with the `scope` macro (`scope :published, -> { where(published: true) }`).
 
 ### Soft Delete
-A technique where records are marked as deleted (using a timestamp) rather than being removed from the database.
+A technique where records are marked as deleted (using a `deleted_at` timestamp) rather than being removed from the database. In CQL, include `CQL::ActiveRecord::SoftDeletable`.
 
 ## T
 
 ### Table
 A collection of related data organized in rows and columns within a database.
 
+### Telemetry
+`CQL::Telemetry`, the event stream CQL publishes for every statement and transaction, used for logging, metrics and tracing.
+
 ### Timestamps
-Columns that automatically track when records are created (`created_at`) and updated (`updated_at`).
+Columns that track when records are created (`created_at`) and updated (`updated_at`). `save` fills them in automatically.
 
 ### Transaction
 A sequence of database operations that are executed as a single unit, ensuring all operations succeed or all are rolled back.

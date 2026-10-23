@@ -66,9 +66,13 @@ schema.table :posts do
   timestamps
 
   foreign_key [:user_id], references: :users, references_columns: [:id]
-  index [:user_id]
 end
 schema.posts.create!
+
+# Index the foreign key (indexes are created with schema.alter, see Create Indexes)
+schema.alter :posts do
+  create_index :idx_posts_user_id, [:user_id]
+end
 ```
 
 ## Define the Relationship

@@ -37,9 +37,13 @@ schema.table :post_tag do
 
   foreign_key [:post_id], references: :posts, references_columns: [:id], on_delete: :cascade
   foreign_key [:tag_id], references: :tags, references_columns: [:id], on_delete: :cascade
-  index [:post_id, :tag_id], unique: true
 end
 schema.post_tag.create!
+
+# Prevent duplicate links (indexes are created with schema.alter, see Create Indexes)
+schema.alter :post_tag do
+  create_index :idx_post_tag_unique, [:post_id, :tag_id], unique: true
+end
 ```
 
 ## Define the Models
@@ -53,8 +57,6 @@ struct PostTag
 
   property post_id : Int64?
   property tag_id : Int64?
-  property created_at : Time?
-  property updated_at : Time?
 
   belongs_to :post, Post, :post_id
   belongs_to :tag, Tag, :tag_id

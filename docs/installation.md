@@ -38,11 +38,12 @@ dependencies:
   sqlite3:
     github: crystal-lang/crystal-sqlite3
   # OR
-  pg:
-    github: will/crystal-pg
-  # OR
   mysql:
     github: crystal-lang/crystal-mysql
+  # OR nothing for PostgreSQL/CockroachDB: CQL ships its own native driver.
+  # You can still use the pg shard instead:
+  # pg:
+  #   github: will/crystal-pg
 ```
 
 ### 3. Install and Test
@@ -71,18 +72,20 @@ MyDB = CQL::Schema.define(
   end
 end
 
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
   db_context MyDB, :users
 
-  property id : Int64?
   property name : String
   property email : String
   property created_at : Time?
   property updated_at : Time?
+
+  def initialize(@name : String, @email : String)
+  end
 end
 
-MyDB.build
+MyDB.build # creates every table defined in the schema
 user = User.create!(name: "Alice", email: "alice@example.com")
 puts "Created user: #{user.name}"
 ```
@@ -91,18 +94,20 @@ puts "Created user: #{user.name}"
 crystal run src/myapp.cr
 ```
 
+The `id` primary key is provided by `CQL::ActiveRecord::Model(Int64)`, and models are classes so that `save` can assign the new id to your instance.
+
 ## Database-Specific Setup
 
 ### PostgreSQL Configuration
+
+`require "cql"` registers a native PostgreSQL driver for `postgres://` and `postgresql://` URLs, so the `pg` shard is optional. Pool settings are query parameters on the URL (see [Connection Pooling](how-to/configuration/connection-pooling.md)); `Schema.define` has no `pool_size` argument.
 
 ```crystal
 # Production setup
 AppDB = CQL::Schema.define(
   :production_db,
   adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]? || "postgresql://username:password@localhost:5432/myapp_production",
-  pool_size: 20,
-  checkout_timeout: 10.seconds
+  uri: ENV["DATABASE_URL"]? || "postgresql://username:password@localhost:5432/myapp_production?max_pool_size=20&checkout_timeout=10",
 ) do
   table :users do
     primary :id, Int64, auto_increment: true
@@ -120,7 +125,7 @@ end
 **Connection Examples:**
 
 ```crystal
-# Production with SSL
+# Production with SSL (native driver: disable, prefer, require or verify-full)
 "postgresql://user:pass@prod-server:5432/myapp_prod?sslmode=require"
 
 # Development
@@ -133,9 +138,7 @@ end
 AppDB = CQL::Schema.define(
   :mysql_db,
   adapter: CQL::Adapter::MySql,
-  uri: ENV["DATABASE_URL"]? || "mysql://username:password@localhost:3306/myapp_development",
-  pool_size: 15,
-  charset: "utf8mb4"
+  uri: ENV["DATABASE_URL"]? || "mysql://username:password@localhost:3306/myapp_development?max_pool_size=15&encoding=utf8mb4_unicode_ci"
 ) do
   table :users do
     primary :id, Int64, auto_increment: true
@@ -153,7 +156,7 @@ end
 ```crystal
 # Multi-environment setup
 database_url = case ENV["CRYSTAL_ENV"]?
-when "test"        then "sqlite3://:memory:"
+when "test"        then "sqlite3::memory:"
 when "production"  then "sqlite3://#{ENV["DATA_PATH"]? || "./"}/production.db"
 else                    "sqlite3://./db/development.db"
 end
@@ -185,15 +188,16 @@ module DatabaseConfig
 
   DATABASE_URLS = {
     "development" => "sqlite3://./db/development.db",
-    "test"        => "sqlite3://:memory:",
+    "test"        => "sqlite3::memory:",
     "production"  => ENV["DATABASE_URL"]? || raise("DATABASE_URL required")
   }
 
   def self.adapter_for(url : String)
     case url
-    when .starts_with?("postgresql://") then CQL::Adapter::Postgres
-    when .starts_with?("mysql://")      then CQL::Adapter::MySql
-    when .starts_with?("sqlite3://")    then CQL::Adapter::SQLite
+    when .starts_with?("postgres://"), .starts_with?("postgresql://") then CQL::Adapter::Postgres
+    when .starts_with?("cockroachdb://")                              then CQL::Adapter::CockroachDB
+    when .starts_with?("mysql://")                                    then CQL::Adapter::MySql
+    when .starts_with?("sqlite3:")                                    then CQL::Adapter::SQLite
     else raise "Unsupported database URL: #{url}"
     end
   end
@@ -203,6 +207,12 @@ module DatabaseConfig
     "test"        => 1,
     "production"  => 25
   }
+
+  # Pool size is a URL parameter understood by crystal-db's pool
+  def self.with_pool_size(url : String, size : Int32) : String
+    separator = url.includes?("?") ? "&" : "?"
+    "#{url}#{separator}max_pool_size=#{size}"
+  end
 end
 
 database_url = DatabaseConfig::DATABASE_URLS[DatabaseConfig::ENV_NAME]
@@ -212,10 +222,12 @@ pool_size = DatabaseConfig::POOL_SIZES[DatabaseConfig::ENV_NAME]
 AppDB = CQL::Schema.define(
   :app_database,
   adapter: adapter,
-  uri: database_url,
-  pool_size: pool_size
-)
+  uri: DatabaseConfig.with_pool_size(database_url, pool_size)
+) do
+end
 ```
+
+`CQL.configure` can also build the URL and pool settings for you; see [Configuration](how-to/configuration/database-connection.md).
 
 ### File Structure
 
@@ -238,6 +250,7 @@ src/
 ```crystal
 # test_connection.cr
 require "./config/database"
+require "./models/user"
 
 puts "Testing database connection..."
 
@@ -291,7 +304,7 @@ volumes:
 
 ```bash
 docker-compose up -d postgres
-# Use: postgresql://postgres:password@localhost:5432/myapp_development
+# Use: postgres://postgres:password@localhost:5432/myapp_development
 ```
 
 ## Troubleshooting

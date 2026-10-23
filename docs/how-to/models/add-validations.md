@@ -85,19 +85,13 @@ validate :email, match: /@/, message: "Please enter a valid email address"
 validate :age, gt: 0, message: "Age must be a positive number"
 ```
 
+### One Call Per Property
+
+Validations are stored per property, so a second `validate :email, ...` replaces the first. Put every rule for a property in a single call: `validate :email, presence: true, match: /@/`.
+
 ### Unknown Options
 
-Only these options are accepted: `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `match`, `size`, `presence`, `required`, `confirmation`, `accept`, plus `message` and `on`. Any other option, or a `validate` for a property that does not exist, fails at compile time.
-
-### Validation Contexts
-
-Pass `on:` to run a rule only for a given context, then pass the context to `valid?`, `errors` or `validate!`:
-
-```crystal
-validate :password, presence: true, on: :signup
-
-user.valid?(:signup)   # runs rules without `on:` and rules marked `on: :signup`
-```
+Only these options are accepted: `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `match`, `size`, `presence`, `required`, `confirmation`, `accept`, plus `message`. Any other option, or a `validate` for a property that does not exist, fails at compile time.
 
 ## Checking Validity
 

@@ -24,10 +24,13 @@ Domain objects focus on business logic, not database operations:
 
 ```crystal
 # Entity - no database knowledge
-struct User
+class User
   property id : Int64?
   property name : String
   property email : String
+
+  def initialize(@name : String, @email : String)
+  end
 
   def full_name
     name.split.map(&.capitalize).join(" ")
@@ -82,10 +85,37 @@ end
 
 ## Implementing Repository with CQL
 
+### Built-in: `CQL::Repository`
+
+For plain records that include `DB::Serializable`, CQL ships a generic repository. It is built from a schema and a table, and returns your own type:
+
+```crystal
+struct UserRow
+  include DB::Serializable
+
+  getter id : Int64
+  getter name : String
+  getter email : String
+end
+
+users = CQL::Repository(UserRow, Int64).new(MyDB, :users)
+
+id = users.create(name: "Alice", email: "alice@example.com") # => the new primary key
+users.find(id)                       # => UserRow? (nil when missing)
+users.find_by(email: "alice@example.com")
+users.all
+users.update(id, name: "Alice B.")
+users.exists?(name: "Alice B.")
+users.count
+users.delete(id)
+```
+
+The rest of this page builds a hand-written repository around an Active Record model, which gives you validations and callbacks while keeping the domain entity free of persistence code.
+
 ### Step 1: Define Your Entity
 
 ```crystal
-struct User
+class User
   property id : Int64?
   property name : String
   property email : String
@@ -103,14 +133,14 @@ end
 ### Step 2: Create a CQL Model (Internal)
 
 ```crystal
-# This is internal to the repository
-struct UserRecord
+# This is internal to the repository. `id` comes from Model(Int64).
+class UserRecord
   include CQL::ActiveRecord::Model(Int64)
   db_context MyDB, :users
 
-  property id : Int64?
   property name : String
   property email : String
+  property active : Bool = true
   property created_at : Time?
 
   def initialize(@name : String, @email : String)
@@ -118,14 +148,14 @@ struct UserRecord
 
   def to_entity : User
     user = User.new(@name, @email)
-    user.id = @id
+    user.id = id
     user.created_at = @created_at
     user
   end
 
   def self.from_entity(user : User) : UserRecord
     record = new(user.name, user.email)
-    record.id = user.id
+    user.id.try { |existing_id| record.id = existing_id }
     record
   end
 end
@@ -149,19 +179,18 @@ class UserRepository
     UserRecord.all.map(&.to_entity)
   end
 
+  # Returns false when a callback halts the save; invalid records raise
+  # CQL::ActiveRecord::Validations::ValidationError
   def save(user : User) : Bool
     record = UserRecord.from_entity(user)
-    if record.save
-      user.id = record.id
-      true
-    else
-      false
-    end
+    saved = record.save
+    user.id = record.id if saved
+    saved
   end
 
   def delete(user : User) : Bool
-    return false unless user.id
-    record = UserRecord.find(user.id.not_nil!)
+    return false unless id = user.id
+    record = UserRecord.find(id)
     record.try(&.delete!) || false
   end
 

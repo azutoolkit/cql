@@ -12,6 +12,7 @@ CQL supports:
 - PostgreSQL
 - MySQL
 - SQLite
+- CockroachDB
 
 ### Is CQL production-ready?
 
@@ -31,10 +32,11 @@ end
 
 ### Why is my primary key nullable?
 
-Primary keys should be `Type?` (nullable) because new records don't have an ID until saved:
+Primary keys are `Type?` (nullable) because new records don't have an ID until saved. `CQL::ActiveRecord::Model(Int64)` already provides `id` (as `Int64?`), `id!` (raises when nil) and `id=`, so declaring the property yourself is optional:
 
 ```crystal
-property id : Int64?  # Correct - nil until saved
+property id : Int64?  # nil until saved
+user.id!              # Int64, raises when the record is unsaved
 ```
 
 ### How do I add a field that isn't in the database?
@@ -50,8 +52,18 @@ property temp_value : String?
 
 ### How do I write raw SQL?
 
+Add a fragment with bound values to a model query:
+
 ```crystal
-results = MyDB.exec("SELECT * FROM users WHERE id = ?", [1])
+users = User.where("lower(email) = ? AND age > :age", "john@example.com", age: 18).all
+```
+
+For a whole statement, use a pooled connection (`MyDB.exec(sql)` runs DDL/statements and returns no rows):
+
+```crystal
+rows = MyDB.exec_query do |conn|
+  conn.query_all("SELECT name, age FROM users WHERE id = ?", 1, as: {String, Int32})
+end
 ```
 
 ### Why is my query returning an empty array?
@@ -63,12 +75,20 @@ Check:
 
 ### How do I debug what SQL is being generated?
 
-Enable query logging:
+Print the SQL and bound values of a query without running it:
+
+```crystal
+User.where(active: true).query.to_sql   # => {"SELECT ... WHERE users.active = ?", [true]}
+```
+
+Or log every statement CQL runs:
 
 ```crystal
 Log.setup do |c|
   c.bind("cql.*", :debug, Log::IOBackend.new)
 end
+
+CQL::Telemetry.log_queries
 ```
 
 ## Relationships
@@ -96,11 +116,17 @@ This compares model getter types with the schema table configured by `db_context
 
 ### How do I eager load associations?
 
-Load related IDs first, then batch load:
+For `has_many`, use `preload`:
+
+```crystal
+users = User.preload(:posts).all   # 2 queries, user.posts is already loaded
+```
+
+`preload` ignores `belongs_to`, `has_one` and `many_to_many` associations. For those, load related IDs first, then batch load:
 
 ```crystal
 posts = Post.where(published: true).all
-user_ids = posts.map(&.user_id).uniq
+user_ids = posts.compact_map(&.user_id).uniq
 users = User.where { id.in(user_ids) }.all.index_by(&.id)
 ```
 
@@ -127,8 +153,10 @@ end
 ### How do I rollback a migration?
 
 ```crystal
-migrator.down       # Rollback one
-migrator.down_to(3) # Rollback to version 3
+migrator.rollback      # Rollback the last migration
+migrator.rollback(2)   # Rollback the last two
+migrator.down_to(3)    # Rollback until version 3 is the latest applied
+migrator.down          # Rollback everything
 ```
 
 ### What if a migration fails halfway through?
@@ -143,14 +171,17 @@ DELETE FROM cql_schema_migrations WHERE version = 5;
 
 ### How do I avoid N+1 queries?
 
-Load related data in batches:
+Preload `has_many` associations, and load other related data in batches:
 
 ```crystal
 # Bad: N+1
-posts.each { |p| puts p.user.name }
+posts.each { |p| puts p.user.try(&.name) }
 
-# Good: Batch load
-user_ids = posts.map(&.user_id).uniq
+# Good: has_many with preload (2 queries)
+users = User.preload(:posts).all
+
+# Good: belongs_to by batch load
+user_ids = posts.compact_map(&.user_id).uniq
 users = User.where { id.in(user_ids) }.all.index_by(&.id)
 posts.each { |p| puts users[p.user_id]?.try(&.name) }
 ```
@@ -180,7 +211,7 @@ migrator.up
 
 ### "Validation failed" but I don't know why
 
-Check the errors array:
+`save`, `save!` and `create!` raise `CQL::ActiveRecord::Validations::ValidationError` (its message joins the error messages). To inspect the errors yourself:
 
 ```crystal
 unless model.valid?
@@ -194,8 +225,8 @@ end
 
 ### Should I use `save` or `save!`?
 
-- Use `save` when you want to handle failure gracefully
-- Use `save!` when failure should raise an exception
+- `save` returns `false` when a `before_*` callback halts the save; `save!` raises `CQL::RecordNotSaved` instead
+- Both raise `CQL::ActiveRecord::Validations::ValidationError` for an invalid record, so call `valid?` first if you want to handle validation failures without `rescue`
 
 ### When should I use transactions?
 
@@ -204,7 +235,7 @@ When multiple operations must succeed or fail together:
 ```crystal
 User.transaction do
   user = User.create!(...)
-  Profile.create!(user_id: user.id.not_nil!)
+  Profile.create!(user_id: user.id!)
 end
 ```
 
