@@ -44,19 +44,18 @@ end
 
 {% for prefix in ["Sqlite", "Postgres"] %}
   describe "Model.create! with auto-increment keys ({{prefix.id}})" do
-    # Raw DDL fixes the key width: with generated DDL the Int64 table was created as INTEGER on PostgreSQL after its first use (observed in the server log, not investigated).
     before_each do
       {% if prefix == "Postgres" %}require_postgres!{% end %}
-      CreateBang{{prefix.id}}DB.exec("DROP TABLE IF EXISTS create_bang_rows")
-      CreateBang{{prefix.id}}DB.exec("DROP TABLE IF EXISTS create_bang_small_rows")
-      CreateBang{{prefix.id}}DB.exec("CREATE TABLE create_bang_rows (id {{prefix == "Postgres" ? "BIGINT GENERATED ALWAYS AS IDENTITY".id : "INTEGER".id}} PRIMARY KEY {{prefix == "Postgres" ? "".id : "AUTOINCREMENT".id}}, name TEXT NOT NULL)")
-      CreateBang{{prefix.id}}DB.exec("CREATE TABLE create_bang_small_rows (id {{prefix == "Postgres" ? "INTEGER GENERATED ALWAYS AS IDENTITY".id : "INTEGER".id}} PRIMARY KEY {{prefix == "Postgres" ? "".id : "AUTOINCREMENT".id}}, name TEXT NOT NULL)")
+      CreateBang{{prefix.id}}DB.create_bang_rows.drop!
+      CreateBang{{prefix.id}}DB.create_bang_rows.create!
+      CreateBang{{prefix.id}}DB.create_bang_small_rows.drop!
+      CreateBang{{prefix.id}}DB.create_bang_small_rows.create!
     end
 
     after_all do
       {% if prefix == "Postgres" %}next unless postgres_available?{% end %}
-      CreateBang{{prefix.id}}DB.exec("DROP TABLE IF EXISTS create_bang_rows")
-      CreateBang{{prefix.id}}DB.exec("DROP TABLE IF EXISTS create_bang_small_rows")
+      CreateBang{{prefix.id}}DB.create_bang_rows.drop!
+      CreateBang{{prefix.id}}DB.create_bang_small_rows.drop!
     end
 
     it "returns the stored row for keyword fields" do
@@ -83,7 +82,10 @@ end
       record = CreateBang{{prefix.id}}Row.allocate
       record.name = "ada"
 
-      CreateBang{{prefix.id}}Row.create!(record).name.should eq("ada")
+      created = CreateBang{{prefix.id}}Row.create!(record)
+
+      created.name.should eq("ada")
+      created.id.should eq(1)
     end
 
     it "supports Int32 keys on the instance path" do
