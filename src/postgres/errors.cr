@@ -161,6 +161,10 @@ module CQL::Postgres
   end
 
   class QueryCanceled < ServerError
+    # What the server would have said, for a cancel the driver acts on itself.
+    def self.user_request : QueryCanceled
+      new({'S' => "ERROR", 'C' => "57014", 'M' => "canceling statement due to user request"})
+    end
   end
 
   class ServerError

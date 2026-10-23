@@ -322,6 +322,33 @@ describe "CQL::Postgres streaming" do
       outcome.should be_a PG::WrongFiber
     end
 
+    {"cached" => "", "uncached" => "&statement_cache_size=0"}.each do |kind, extra|
+      it "keeps a Bind in sync when a cancel arrives before the first Execute (#{kind} statement), then ends the stream at the next fetch" do
+        cached = extra.empty?
+        server = FakePG.start do |client|
+          startup = client.read_startup
+          next if startup["protocol"] == "cancel"
+          client.ok_handshake
+          client.expect('P'); client.expect('D'); client.expect(cached ? 'S' : 'H')
+          sleep 300.milliseconds # the cancel arrives while the describe is outstanding
+          client.send('1'); client.parameter_description([] of UInt32); client.row_description(int4_columns)
+          client.ready if cached
+          client.expect('B'); client.expect('E'); client.expect('H')
+          client.send('2'); client.data_row(number_row(1)); client.send('s')
+          client.expect('C'); client.expect('S'); client.send('3'); client.ready
+          client.idle
+        end
+        session = PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable#{extra}")))
+        spawn do
+          sleep 100.milliseconds
+          session.cancel
+        end
+        expect_raises(PG::QueryCanceled) { session.stream("SELECT n", fetch_size: 1, &.to_a) }
+        session.closed?.should be_false
+        session.ping.should be_true
+      end
+    end
+
     it "rejects a fetch size of zero" do
       expect_raises(ArgumentError, /fetch_size/) { connect(FakePG.start { |client| client.read_startup; client.ok_handshake; client.idle }).stream("SELECT 1", fetch_size: 0, &.to_a) }
     end
@@ -381,6 +408,24 @@ describe "CQL::Postgres streaming" do
       expect_raises(PG::QueryCanceled) { session.stream("SELECT g::int4, pg_sleep(0.05)::text FROM generate_series(1, 1000) g", fetch_size: 1, &.to_a) }
       session.closed?.should be_false
       session.query("SELECT 45").rows.should eq [[45]]
+      session.close
+    end
+
+    it "is canceled while the portal is suspended between fetches, which the server alone would ignore" do
+      pending! "needs a PostgreSQL server reachable through DATABASE_URL" unless live
+      session = PG::Session.connect(PG::Config.parse(LIVE_URL))
+      started = Time.instant
+      expect_raises(PG::QueryCanceled) do
+        session.stream("SELECT g::int4, pg_sleep(0.05)::text FROM generate_series(1, 1000) g", fetch_size: 1) do |rows|
+          rows.next      # the first row is in; the backend now waits for the next Execute
+          session.cancel # nothing is running on the server, so it has nothing to cancel
+          sleep 200.milliseconds
+          rows.to_a
+        end
+      end
+      (Time.instant - started).should be < 10.seconds # not the 50 seconds the whole result would take
+      session.closed?.should be_false
+      session.query("SELECT 46").rows.should eq [[46]]
       session.close
     end
 

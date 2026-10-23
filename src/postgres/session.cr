@@ -113,6 +113,8 @@ module CQL::Postgres
       @queued = 0
       @owed = 0
       @deadline_expired = false
+      @streaming = false
+      @cancel_requested = false
       @last_used = Time.instant
     end
 
@@ -181,6 +183,9 @@ module CQL::Postgres
     # Asks the server, over a second connection, to cancel what this session is
     # running. Safe to call from any fiber.
     def cancel : Nil
+      # Between the fetches of a stream nothing runs on the server, which then
+      # ignores the cancel; remember it so the next fetch raises instead.
+      @cancel_requested = true if @streaming
       Transport.cancel(@config, @process_id, @secret_key)
     end
 

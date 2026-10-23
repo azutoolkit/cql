@@ -47,8 +47,17 @@ module CQL::Postgres
       io = open(config)
       Wire::Frontend.cancel_request(io, process_id, secret_key)
       io.flush
+      wait_for_hang_up(io)
     ensure
       io.try(&.close)
+    end
+
+    # The postmaster closes its side once it has signalled the backend, so
+    # waiting for that (as libpq does) means the cancel cannot land on a
+    # statement sent after this returns.
+    private def self.wait_for_hang_up(io : IO) : Nil
+      io.read(Bytes.new(1))
+    rescue IO::Error
     end
 
     private def self.open(config : Config) : TCPSocket | UNIXSocket

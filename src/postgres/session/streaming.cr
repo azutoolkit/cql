@@ -7,22 +7,39 @@ module CQL::Postgres
     # sync, ready for the pool; the stream cannot be read afterwards. *timeout*
     # bounds the whole stream, consumer time included: once it passes, the next
     # fetch raises `QueryTimeout` and the session is dropped unless the server
-    # confirmed a cancel. COPY cannot be streamed.
+    # confirmed a cancel. `Session#cancel` ends a stream that still has rows to
+    # fetch: it cancels the fetch in progress, or, if the portal is suspended and
+    # the server has nothing to cancel, makes the next fetch raise `QueryCanceled`.
+    # COPY cannot be streamed.
     def stream(sql : String, params : Array(Types::Param) = [] of Types::Param, fetch_size : Int32 = 1000,
                cache : Bool = true, timeout : Time::Span? = nil, & : RowStream -> T) : T forall T
       raise ArgumentError.new("fetch_size must be positive, got #{fetch_size}") unless fetch_size > 0
       exclusive(timeout) do
-        rows = open_stream(sql, params, cache, fetch_size)
+        @cancel_requested = false
+        @streaming = true
         begin
-          yield rows
+          rows = open_stream(sql, params, cache, fetch_size)
+          begin
+            yield rows
+          ensure
+            finish_stream(rows)
+          end
         ensure
-          finish_stream(rows)
+          @streaming = false
         end
       end
     end
 
+    # The fetches after the first. A cancel that came earlier (the server had
+    # nothing running to cancel) ends the stream here; the first fetch always
+    # goes out, so a Bind already staged is never left behind.
     protected def fetch_rows(rows : RowStream, fetch_size : Int32) : Nil
       raise QueryTimeout.new("the stream timed out") if @deadline_expired
+      raise QueryCanceled.user_request if @cancel_requested
+      request_batch(rows, fetch_size)
+    end
+
+    private def request_batch(rows : RowStream, fetch_size : Int32) : Nil
       Wire::Frontend.execute(@out, fetch_size)
       Wire::Frontend.flush(@out)
       flush
@@ -36,7 +53,8 @@ module CQL::Postgres
         check_parameters(statement, params)
         Wire::Frontend.bind(@out, statement.name, params, statement.result_formats)
       end
-      fetch_rows(rows, fetch_size)
+      raise QueryTimeout.new("the stream timed out") if @deadline_expired
+      request_batch(rows, fetch_size)
       rows
     rescue ex : ServerError
       forget_statements(sql, ex) if cache && outdated_statement?(ex)
