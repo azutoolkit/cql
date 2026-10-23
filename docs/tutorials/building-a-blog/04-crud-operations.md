@@ -179,10 +179,15 @@ comments = post.comments.all
 # Get posts in a category
 category = Category.find_by(slug: "technology")
 tech_posts = Post.where(category_id: category.id!, published: true).all if category
+```
 
-# Join through an association and filter on the joined table
+To filter on the other side of an association, join it and write the condition against the joined table:
+
+```crystal
 by_alice = Post.query.joins(:user) { user.username == "alice" }.to_a
 ```
+
+Inside these blocks, bare names such as `user` or `views_count` are the model's typed columns and associations. A local variable with the same name takes precedence, so don't have a local called `user` in scope when you write `user.username`.
 
 ### Pagination
 
@@ -246,7 +251,7 @@ post.try(&.increment_views!)
 
 ```crystal
 # Publish all draft posts by a user with a single UPDATE statement
-BlogDB.update
+BlogSchema.update
   .table(:posts)
   .set(published: true)
   .where(user_id: 1, published: false)
@@ -290,7 +295,7 @@ Comment.delete_by!(post_id: 1)
 Post.delete_by!(published: false)
 
 # Delete old comments with the lower-level delete builder
-BlogDB.delete
+BlogSchema.delete
   .from(:comments)
   .where { comments.created_at < 1.year.ago }
   .commit
@@ -306,7 +311,7 @@ user = User.find(1)
 user.try(&.delete!)
 ```
 
-The cascade comes from the `ON DELETE CASCADE` foreign keys, so the database performs it. (The `dependent:` option of `has_many` is not what removes the rows here.) SQLite only enforces foreign keys on connections where `PRAGMA foreign_keys = ON` has been run; PostgreSQL and MySQL always do.
+The cascade comes from the `ON DELETE CASCADE` foreign keys, so the database performs it. (The `dependent:` option of `has_many` is not what removes the rows here.) PostgreSQL and MySQL always enforce foreign keys; SQLite only does when the connection asks for it, which is why Part 1 put `?foreign_keys=1` on the database URL.
 
 ## Aggregations
 
@@ -352,7 +357,7 @@ Category.all.each do |category|
 end
 
 # Most active authors: one GROUP BY query instead of one count per user
-counts = BlogDB.query
+counts = BlogSchema.query
   .from(:posts)
   .select(:user_id, count: :id)
   .group(:user_id)

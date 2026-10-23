@@ -47,7 +47,7 @@ end
 
 class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :users
+  db_context BlogSchema, :users
 
   # ... existing properties ...
 
@@ -64,7 +64,7 @@ end
 # src/models/post.cr
 class Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :posts
+  db_context BlogSchema, :posts
 
   # ... existing properties ...
 
@@ -373,7 +373,7 @@ module Monitoring
 
     # Most active authors: one GROUP BY query
     puts "Most Active Authors:"
-    counts = BlogDB.query
+    counts = BlogSchema.query
       .from(:posts)
       .select(:user_id, count: :id)
       .where(published: true)
@@ -472,10 +472,32 @@ else
   CQL::Adapter::SQLite
 end
 
-uri = ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db"
+uri = ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db?foreign_keys=1"
 
 BlogDB = CQL::Schema.define(:blog_db, adapter: adapter, uri: uri) do
 end
+```
+
+Your models use `BlogSchema`, and the generated `src/schemas/blog_schema.cr` hard-codes the adapter and URL it was generated from. Before deploying, edit those two lines to read from the environment and stop the migrator from overwriting your edit:
+
+```crystal
+# src/schemas/blog_schema.cr (edited by hand for production)
+BlogSchema = CQL::Schema.define(
+  :blog_schema,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"]) do
+  # ... generated table definitions ...
+end
+```
+
+```crystal
+# src/database.cr
+MIGRATOR_CONFIG = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/blog_schema.cr",
+  schema_name: :BlogSchema,
+  schema_symbol: :blog_schema,
+  auto_sync: false
+)
 ```
 
 ### Environment Variables

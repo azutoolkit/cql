@@ -95,7 +95,7 @@ require "sqlite3"
 AcmeDB = CQL::Schema.define(
   :acme_db,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://./db/development.db"
+  uri: "sqlite3://./db/development.db?foreign_keys=1"
 ) do
   # Tables will be defined through migrations
 end
@@ -136,7 +136,7 @@ class CreateUsers < CQL::Migration(1)
       column :active, Bool, default: false
       timestamps  # Creates created_at and updated_at columns
 
-      index [:email], unique: true
+      unique_constraint [:email]
     end
 
     schema.users.create!
@@ -148,47 +148,20 @@ class CreateUsers < CQL::Migration(1)
 end
 ```
 
-## Step 5: Define Your First Model
+## Step 5: Run the Migrations
 
-Create a model that maps to your users table:
-
-```crystal
-# src/models/user.cr
-class User
-  include CQL::ActiveRecord::Model(Int64)
-
-  # Connect to the database and table
-  db_context AcmeDB, :users
-
-  # Define your model attributes (`id` is provided by the Model(Int64) module)
-  property name : String
-  property email : String
-  property active : Bool = false
-  property created_at : Time?
-  property updated_at : Time?
-
-  # Constructor for creating new instances
-  def initialize(@name : String, @email : String, @active : Bool = false)
-  end
-end
-```
-
-Models are classes, not structs: `save` assigns the new primary key to the instance, which a struct copy would not see.
-
-## Step 6: Initialize the Database and Run Migrations
-
-Create a setup script to initialize everything:
+Create a setup script that applies the migrations:
 
 ```crystal
 # src/setup.cr
 require "./database"
-require "./models/*"
 require "../migrations/*"
 
 # Configure automatic schema file synchronization
 config = CQL::MigratorConfig.new(
   schema_file_path: "src/schemas/acme_schema.cr",
   schema_name: :AcmeSchema,
+  schema_symbol: :acme_schema,
   auto_sync: true
 )
 
@@ -205,13 +178,44 @@ Run the setup:
 crystal src/setup.cr
 ```
 
+Besides creating the tables, the migrator writes `src/schemas/acme_schema.cr`: an `AcmeSchema` constant that describes the tables that now exist in your database. `AcmeDB` has an empty schema block (the migrations declare the tables while they run), so your application uses `AcmeSchema` instead, which knows every table without running the migrations again. The file is regenerated after every `up` and `down`.
+
+## Step 6: Define Your First Model
+
+Create a model that maps to your users table. It points at `AcmeSchema`, the schema file the migrator generates in Step 5:
+
+```crystal
+# src/models/user.cr
+class User
+  include CQL::ActiveRecord::Model(Int64)
+
+  # Connect to the database and table
+  db_context AcmeSchema, :users
+
+  # Define your model attributes (`id` is provided by the Model(Int64) module)
+  property name : String
+  property email : String
+  property active : Bool = false
+  property created_at : Time?
+  property updated_at : Time?
+
+  # Constructor for creating new instances
+  def initialize(@name : String, @email : String, @active : Bool = false)
+  end
+end
+```
+
+Models are classes, not structs: `save` assigns the new primary key to the instance, which a struct copy would not see.
+
 ## Step 7: Perform CRUD Operations
 
 Now you can interact with your data. Create a main application file:
 
 ```crystal
 # src/myapp.cr
-require "./database"
+require "cql"
+require "sqlite3" # your database driver (not needed for PostgreSQL)
+require "./schemas/acme_schema"
 require "./models/*"
 
 # CREATE: Add new users
@@ -283,10 +287,13 @@ class CreatePosts < CQL::Migration(2)
       timestamps
 
       foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
-      index [:user_id]
     end
 
     schema.posts.create!
+
+    schema.alter :posts do
+      create_index :idx_posts_user_id, [:user_id]
+    end
   end
 
   def down
@@ -302,7 +309,7 @@ Create the Post model:
 class Post
   include CQL::ActiveRecord::Model(Int64)
 
-  db_context AcmeDB, :posts
+  db_context AcmeSchema, :posts
 
   property title : String
   property body : String
@@ -325,7 +332,7 @@ Update the User model to include the association:
 class User
   include CQL::ActiveRecord::Model(Int64)
 
-  db_context AcmeDB, :users
+  db_context AcmeSchema, :users
 
   property name : String
   property email : String
@@ -379,7 +386,7 @@ Enhance your User model with validations:
 class User
   include CQL::ActiveRecord::Model(Int64)
 
-  db_context AcmeDB, :users
+  db_context AcmeSchema, :users
 
   property name : String
   property email : String

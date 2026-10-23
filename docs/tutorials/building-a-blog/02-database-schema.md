@@ -58,8 +58,8 @@ class CreateUsers < CQL::Migration(1)
       column :active, Bool, default: true
       timestamps
 
-      index [:email], unique: true
-      index [:username], unique: true
+      unique_constraint [:email]
+      unique_constraint [:username]
     end
 
     schema.users.create!
@@ -76,7 +76,7 @@ Key points:
 - `null: false` makes columns required
 - `default: true` sets a default value
 - `timestamps` creates `created_at` and `updated_at` columns
-- Unique indexes on `email` and `username` prevent duplicates
+- `unique_constraint` on `email` and `username` prevents duplicates (a table-level `UNIQUE (...)` clause)
 
 ## Step 2: Create Categories Migration
 
@@ -90,7 +90,7 @@ class CreateCategories < CQL::Migration(2)
       column :slug, String, null: false
       timestamps
 
-      index [:slug], unique: true
+      unique_constraint [:slug]
     end
 
     schema.categories.create!
@@ -122,12 +122,15 @@ class CreatePosts < CQL::Migration(3)
 
       foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
       foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: :set_null
-      index [:user_id]
-      index [:category_id]
-      index [:published]
     end
 
     schema.posts.create!
+
+    schema.alter :posts do
+      create_index :idx_posts_user_id, [:user_id]
+      create_index :idx_posts_category_id, [:category_id]
+      create_index :idx_posts_published, [:published]
+    end
   end
 
   def down
@@ -140,7 +143,7 @@ Key points:
 - Foreign keys establish relationships with users and categories
 - `on_delete: :cascade` deletes posts when the author is deleted
 - `on_delete: :set_null` keeps posts when a category is deleted (just nullifies the reference)
-- Indexes on foreign keys improve query performance
+- Indexes on foreign keys improve query performance. Create them with `create_index` inside `schema.alter` after the table exists; an `index [...]` line inside the `table` block is not turned into a `CREATE INDEX` statement
 - Index on `published` helps filter posts efficiently
 
 ## Step 4: Create Comments Migration
@@ -158,11 +161,14 @@ class CreateComments < CQL::Migration(4)
 
       foreign_key [:post_id], references: :posts, references_columns: [:id], on_delete: :cascade
       foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :set_null
-      index [:post_id]
-      index [:user_id]
     end
 
     schema.comments.create!
+
+    schema.alter :comments do
+      create_index :idx_comments_post_id, [:post_id]
+      create_index :idx_comments_user_id, [:user_id]
+    end
   end
 
   def down
@@ -178,7 +184,7 @@ Key points:
 
 ## Step 5: Run the Migrations
 
-Update your setup script to require migrations:
+The setup script from Part 1 already loads the migrations (`src/blog_engine.cr` requires `../migrations/*`), so it runs them as is:
 
 ```crystal
 # src/setup.cr
@@ -213,7 +219,35 @@ Migrations complete
 Setup complete!
 ```
 
-## Step 6: Verify the Schema
+## Step 6: Look at the Generated Schema
+
+Because `auto_sync` is on, the migrator wrote the real tables of your database to `src/schemas/blog_schema.cr`:
+
+```crystal
+BlogSchema = CQL::Schema.define(
+  :blog_schema,
+  adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3://./db/blog_development.db") do
+  table :users do
+    primary :id, Int32
+    text :username
+    text :email
+    # ...
+    timestamps
+  end
+
+  table :posts do
+    # ... with its foreign keys
+  end
+  # categories, comments, and the cql_schema_migrations bookkeeping table
+end
+```
+
+This is the schema your models will use in Part 3: unlike `BlogDB`, whose block is empty, it knows every table, so a program that never runs the migrations can still query them. The file is rewritten after every `migrator.up` and `down`, so keep it in version control and recompile after adding a migration. (SQLite integer keys are dumped as `Int32`; the models still declare `Model(Int64)`.)
+
+The generated file embeds the connection URL it was created from. If that URL holds credentials (a production PostgreSQL password, for example), set `auto_sync: false` there and keep a hand-written schema instead.
+
+## Step 7: Verify the Migrations
 
 Create a verification script to inspect the created tables:
 

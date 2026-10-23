@@ -172,11 +172,14 @@ class CreateOrders < CQL::Migration(1)
       timestamps
 
       foreign_key [:user_id], references: :users, references_columns: [:id]
-      index [:user_id]
-      index [:status]
     end
 
     schema.orders.create!
+
+    schema.alter :orders do
+      create_index :idx_orders_user_id, [:user_id]
+      create_index :idx_orders_status, [:status]
+    end
   end
 
   def down
@@ -216,6 +219,8 @@ Run migrations:
 ```shell
 crystal src/migrate.cr up
 ```
+
+A migration declares its table only while it runs. For models and queries in your application (a separate process) to know about `orders`, add the same `table :orders do ... end` block to the `AppDB` schema in `src/cql_config.cr`, next to `users` and `products`. (Alternatively, point your models at the schema file that `auto_sync` writes to `src/schemas/app_schema.cr`, as the other tutorials do.)
 
 ## Step 8: Gradual Migration Strategy
 

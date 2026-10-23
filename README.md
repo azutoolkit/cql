@@ -442,7 +442,7 @@ class Post
   validate :title, presence: true, size: 1..100
   validate :content, presence: true
 
-  # `user_id` has a default so `user.posts.create(title: ..., content: ...)` can build a Post
+  # `user_id` has a default so `user.posts.build(title: ..., content: ...)` can build a Post
   def initialize(@title : String, @content : String, @user_id : Int64 = 0_i64)
   end
 end
@@ -454,34 +454,36 @@ Models are classes (not structs) so `save` can assign the generated `id` to your
 
 ```crystal
 # Validate, then save (save raises ValidationError for an invalid record)
-user = User.new("alice_j", "alice@example.com", "Alice", "Johnson")
-if user.valid?
-  user.save
-  puts "User created with ID: #{user.id}"
+author = User.new("alice_j", "alice@example.com", "Alice", "Johnson")
+if author.valid?
+  author.save
+  puts "User created with ID: #{author.id}"
 else
-  puts "Validation errors: #{user.errors.map(&.message)}"
+  puts "Validation errors: #{author.errors.map(&.message)}"
 end
 
 # Type-safe queries
 alice = User.find_by(username: "alice_j")
 active_users = User.where(active: true).all
 
-# Create associated records through the association (user_id is set for you)
-post = user.posts.create(title: "My First Post", content: "Hello, World!")
+# Build associated records through the association (user_id is set for you)
+post = author.posts.build(title: "My First Post", content: "Hello, World!")
+post.save!
 
 # Safe transactions with automatic rollback
 User.transaction do |tx|
   bob = User.create!(username: "bob", email: "bob@example.com")
-  bob.posts.create(title: "Bob's Post", content: "Content here")
+  Post.create!(title: "Bob's Post", content: "Content here", user_id: bob.id!)
 
   # If anything raises, everything rolls back automatically
 end
 
-# Typed queries with joins on a declared association
+# Typed queries with joins on a declared association (inside the block, `user` is
+# the association, so do not keep a local variable named `user` in scope)
 published_posts = Post.query
   .joins(:user) { user.active == true }
   .where(published: true)
-  .order(created_at: :desc)
+  .order_by(created_at: :desc) # typed, so it is not ambiguous between posts and users
   .limit(10)
   .all
 
@@ -508,9 +510,10 @@ BlogDB = CQL::Schema.define(:blog, adapter: CQL::Adapter::Postgres, uri: ENV["DA
     json :metadata, null: true           # JSON columns
     timestamps
 
-    # Optimized indexing
-    index [:name], unique: true
-    index [:price, :created_at]          # Composite indexes for performance
+    # Constraints and indexes
+    unique_constraint [:name]
+    # Non-unique indexes are created in a migration:
+    #   schema.alter(:products) { create_index :idx_products_price, [:price, :created_at] }
   end
 end
 ```
@@ -518,7 +521,7 @@ end
 ### Active Record Pattern
 
 ```crystal
-struct Product
+class Product
   include CQL::ActiveRecord::Model(UUID)
   db_context BlogDB, :products
 
@@ -556,7 +559,7 @@ product.delete!
 ### Validations
 
 ```crystal
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
 
   # Built-in validations with clear error messages
@@ -597,7 +600,7 @@ end
 
 # Efficient association loading
 user = User.find!(1_i64)
-user.posts.create(title: "New Post", content: "Content")
+user.posts.build(title: "New Post", content: "Content").save!
 user.posts.size                         # Number of posts
 user.posts.empty?                       # Existence check
 
@@ -614,7 +617,7 @@ users_with_posts = User.preload(:posts)
 # Simple atomic transactions
 User.transaction do |tx|
   user = User.create!(username: "john", email: "john@example.com")
-  user.posts.create(title: "First Post", content: "Hello!")
+  Post.create!(title: "First Post", content: "Hello!", user_id: user.id!)
 
   # Automatic rollback on any exception
   raise "Error!" if some_condition  # Everything safely rolls back

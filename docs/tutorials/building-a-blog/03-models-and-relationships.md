@@ -15,13 +15,17 @@ In this part, you'll create Active Record models for your blog engine and define
 
 - Completed [Part 2: Database Schema](02-database-schema.md)
 
+## Step 0: Models Use the Generated Schema
+
+In Part 2 the migrator generated `src/schemas/blog_schema.cr`, which defines `BlogSchema`. Models point at it with `db_context`, so every model below says `db_context BlogSchema, :users` (and so on).
+
 ## Step 1: Create the User Model
 
 ```crystal
 # src/models/user.cr
 class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :users
+  db_context BlogSchema, :users
 
   property username : String
   property email : String
@@ -63,7 +67,7 @@ end
 
 Key points:
 - `include CQL::ActiveRecord::Model(Int64)` - Makes this an Active Record model with Int64 primary key
-- `db_context BlogDB, :users` - Connects model to the `users` table in `BlogDB`
+- `db_context BlogSchema, :users` - Connects model to the `users` table in the generated `BlogSchema`
 - `property` defines model attributes matching database columns (the `id` primary key is provided by the `Model(Int64)` module, so it is not declared)
 - Models are classes rather than structs so that `save` can assign the new `id` to the instance you hold
 - `has_many` defines one-to-many relationships
@@ -75,7 +79,7 @@ Key points:
 # src/models/category.cr
 class Category
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :categories
+  db_context BlogSchema, :categories
 
   property name : String
   property slug : String
@@ -108,7 +112,7 @@ The `generate_slug` method automatically creates URL-friendly slugs from categor
 # src/models/post.cr
 class Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :posts
+  db_context BlogSchema, :posts
 
   property title : String
   property content : String
@@ -177,7 +181,7 @@ Key points:
 # src/models/comment.cr
 class Comment
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :comments
+  db_context BlogSchema, :comments
 
   property content : String
   property post_id : Int64
@@ -218,6 +222,7 @@ Update `blog_engine.cr` to require all models:
 ```crystal
 # src/blog_engine.cr
 require "./database"
+require "./schemas/blog_schema"
 require "./models/user"
 require "./models/category"
 require "./models/post"
@@ -228,12 +233,12 @@ module BlogEngine
   VERSION = "0.1.0"
 
   def self.setup
-    BlogDB.exec("SELECT 1")
+    BlogSchema.exec("SELECT 1")
     puts "Database connected"
   end
 
   def self.migrate
-    migrator = BlogDB.migrator(MIGRATOR_CONFIG)
+    migrator = BlogSchema.migrator(MIGRATOR_CONFIG)
     pending = migrator.pending_migrations.size
 
     if pending > 0
@@ -246,6 +251,8 @@ module BlogEngine
   end
 end
 ```
+
+From now on the migrator runs against `BlogSchema` too (`BlogSchema.migrator(...)` above), because it already knows the existing tables. That matters for later migrations that `alter` or drop a table: `BlogDB`'s empty schema block would raise `Table 'posts' not found` for those.
 
 Note: associations may point at models that are required later (for example `User` mentions `Post` before `post.cr` is loaded). All the model files just have to be required before compilation finishes; CQL checks every `belongs_to` and `has_many` then, and reports a missing target model or a foreign key whose type does not match the target's primary key as a compile-time error.
 

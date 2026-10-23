@@ -92,6 +92,7 @@ For plain records that include `DB::Serializable`, CQL ships a generic repositor
 ```crystal
 struct UserRow
   include DB::Serializable
+  include DB::Serializable::NonStrict # ignore table columns this struct does not declare
 
   getter id : Int64
   getter name : String

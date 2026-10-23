@@ -117,7 +117,6 @@ AppDB = CQL::Schema.define(
     timestamps
 
     unique_constraint [:email]
-    index [:active, :created_at]
   end
 end
 ```
@@ -146,7 +145,7 @@ AppDB = CQL::Schema.define(
     column :email, String, size: 320
     timestamps
 
-    index [:email], unique: true
+    unique_constraint [:email]
   end
 end
 ```
