@@ -1,6 +1,6 @@
 # Part 3: Models and Relationships
 
-In this part, you'll create Active Record models for your blog engine and define the relationships between them. You'll learn how to map database tables to Crystal structs and navigate between related records.
+In this part, you'll create Active Record models for your blog engine and define the relationships between them. You'll learn how to map database tables to Crystal classes and navigate between related records.
 
 ## What You'll Learn
 
@@ -15,15 +15,18 @@ In this part, you'll create Active Record models for your blog engine and define
 
 - Completed [Part 2: Database Schema](02-database-schema.md)
 
+## Step 0: Models Use the Generated Schema
+
+In Part 2 the migrator generated `src/schemas/blog_schema.cr`, which defines `BlogSchema`. Models point at it with `db_context`, so every model below says `db_context BlogSchema, :users` (and so on).
+
 ## Step 1: Create the User Model
 
 ```crystal
 # src/models/user.cr
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :users
+  db_context BlogSchema, :users
 
-  property id : Int64?
   property username : String
   property email : String
   property first_name : String?
@@ -49,8 +52,8 @@ struct User
   def full_name : String
     if first_name && last_name
       "#{first_name} #{last_name}"
-    elsif first_name
-      first_name.not_nil!
+    elsif name = first_name
+      name
     else
       username
     end
@@ -64,8 +67,9 @@ end
 
 Key points:
 - `include CQL::ActiveRecord::Model(Int64)` - Makes this an Active Record model with Int64 primary key
-- `db_context BlogDB, :users` - Connects model to the `users` table in `BlogDB`
-- `property` defines model attributes matching database columns
+- `db_context BlogSchema, :users` - Connects model to the `users` table in the generated `BlogSchema`
+- `property` defines model attributes matching database columns (the `id` primary key is provided by the `Model(Int64)` module, so it is not declared)
+- Models are classes rather than structs so that `save` can assign the new `id` to the instance you hold
 - `has_many` defines one-to-many relationships
 - Custom methods add business logic
 
@@ -73,11 +77,10 @@ Key points:
 
 ```crystal
 # src/models/category.cr
-struct Category
+class Category
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :categories
+  db_context BlogSchema, :categories
 
-  property id : Int64?
   property name : String
   property slug : String
   property created_at : Time?
@@ -86,12 +89,12 @@ struct Category
   # Relationships
   has_many :posts, Post, :category_id
 
-  def initialize(@name : String, @slug : String? = nil)
-    @slug ||= generate_slug(@name)
+  def initialize(@name : String, slug : String? = nil)
+    @slug = slug || Category.generate_slug(@name)
   end
 
   # Generate URL-friendly slug from name
-  private def generate_slug(text : String) : String
+  def self.generate_slug(text : String) : String
     text.downcase
         .gsub(/[^a-z0-9\s-]/, "")
         .gsub(/\s+/, "-")
@@ -107,11 +110,10 @@ The `generate_slug` method automatically creates URL-friendly slugs from categor
 
 ```crystal
 # src/models/post.cr
-struct Post
+class Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :posts
+  db_context BlogSchema, :posts
 
-  property id : Int64?
   property title : String
   property content : String
   property published : Bool = false
@@ -177,11 +179,10 @@ Key points:
 
 ```crystal
 # src/models/comment.cr
-struct Comment
+class Comment
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :comments
+  db_context BlogSchema, :comments
 
-  property id : Int64?
   property content : String
   property post_id : Int64
   property user_id : Int64?  # Nullable for anonymous comments
@@ -221,23 +222,23 @@ Update `blog_engine.cr` to require all models:
 ```crystal
 # src/blog_engine.cr
 require "./database"
+require "./schemas/blog_schema"
 require "./models/user"
 require "./models/category"
 require "./models/post"
 require "./models/comment"
+require "../migrations/*"
 
 module BlogEngine
   VERSION = "0.1.0"
 
   def self.setup
-    BlogDB.init
+    BlogSchema.exec("SELECT 1")
     puts "Database connected"
   end
 
   def self.migrate
-    require "../migrations/*"
-
-    migrator = BlogDB.migrator(MIGRATOR_CONFIG)
+    migrator = BlogSchema.migrator(MIGRATOR_CONFIG)
     pending = migrator.pending_migrations.size
 
     if pending > 0
@@ -251,7 +252,9 @@ module BlogEngine
 end
 ```
 
-Note: Order matters! Models with dependencies must be required after their dependencies.
+From now on the migrator runs against `BlogSchema` too (`BlogSchema.migrator(...)` above), because it already knows the existing tables. That matters for later migrations that `alter` or drop a table: `BlogDB`'s empty schema block would raise `Table 'posts' not found` for those.
+
+Note: associations may point at models that are required later (for example `User` mentions `Post` before `post.cr` is loaded). All the model files just have to be required before compilation finishes; CQL checks every `belongs_to` and `has_many` then, and reports a missing target model or a foreign key whose type does not match the target's primary key as a compile-time error.
 
 ## Step 6: Test the Models
 
@@ -277,7 +280,7 @@ alice = User.new(
 if alice.save
   puts "Created user: #{alice.full_name} (ID: #{alice.id})"
 else
-  puts "Failed to create user"
+  puts "Failed to create user" # a before_* callback halted the save
   exit 1
 end
 
@@ -358,7 +361,7 @@ belongs_to :user, User, :user_id
 This creates a `user` method that returns the associated User (or nil):
 
 ```crystal
-post = Post.find(1)
+post = Post.find!(1)
 author = post.user  # Returns User?
 ```
 
@@ -368,13 +371,15 @@ author = post.user  # Returns User?
 has_many :posts, Post, :user_id
 ```
 
-This creates a `posts` method that returns a query builder:
+This creates a `posts` method that returns a collection scoped to the user:
 
 ```crystal
-user = User.find(1)
-all_posts = user.posts.all           # Get all posts
-published = user.posts.where(published: true).all  # Filter
-count = user.posts.count             # Count posts
+user = User.find!(1)
+all_posts = user.posts.all           # Array(Post)
+count = user.posts.count             # COUNT(*) query
+
+# Filter at the database with the model itself
+published = Post.where(user_id: user.id!, published: true).all
 ```
 
 ## Model Best Practices

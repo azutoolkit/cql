@@ -31,7 +31,7 @@ struct User
   property name : String
   property created_at : Time?
   property updated_at : Time?
-  # deleted_at is handled automatically
+  # deleted_at is declared by SoftDeletable (property deleted_at : Time?)
 
   def initialize(@name : String)
   end
@@ -61,6 +61,8 @@ User.delete!(user_id)
 ```crystal
 User.delete_by!(email: "spam@example.com")
 ```
+
+This loads the matching records and soft deletes each one, so `before_destroy`/`after_destroy` callbacks run.
 
 ### Delete All Records
 
@@ -107,6 +109,7 @@ User.find(1)       # Returns nil if user is deleted
 User.with_deleted.all        # All users including deleted
 User.with_deleted.find(1)    # Finds even if deleted
 User.with_deleted.count      # Counts all users
+User.count_with_deleted      # Same, as a class method
 ```
 
 ### Query Only Deleted Records
@@ -114,7 +117,10 @@ User.with_deleted.count      # Counts all users
 ```crystal
 User.only_deleted.all        # Only deleted users
 User.only_deleted.count      # Count of deleted users
+User.count_only_deleted      # Same, as a class method
 ```
+
+`with_deleted` and `only_deleted` are scopes, so you can keep chaining: `User.only_deleted.where(role: "admin").order(deleted_at: :desc).all`.
 
 ## Permanently Delete
 
@@ -123,12 +129,13 @@ To actually remove records from the database:
 ```crystal
 user.force_delete!           # Permanently removes from database
 User.force_delete!(user_id)  # By ID
+User.force_delete_by!(email: "spam@example.com")  # By attributes
 User.force_delete_all        # Permanently delete all records
 ```
 
 ## Add Index for Performance
 
-Add an index on the `deleted_at` column:
+Every query adds `WHERE deleted_at IS NULL`, so add an index on the `deleted_at` column:
 
 ```crystal
 schema.alter :users do
@@ -163,7 +170,7 @@ struct Post
 
   db_context MyDB, :posts
 
-  has_many :comments, Comment, :post_id
+  has_many :comments, Comment, foreign_key: :post_id
 
   after_destroy :soft_delete_comments
 

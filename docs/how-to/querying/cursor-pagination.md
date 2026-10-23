@@ -10,11 +10,24 @@ Cursor pagination is better than offset pagination for:
 - Infinite scroll interfaces
 - API pagination
 
+## Built-in Cursor Helpers
+
+Models include helpers for id-based cursors. Each returns an `Array` of records:
+
+```crystal
+Post.after_cursor(last_seen_id, limit: 20)    # id > cursor, ascending
+Post.before_cursor(first_seen_id, limit: 20)  # id < cursor, returned in ascending order
+Post.paginate_by(:views_count, 500, limit: 20) # views_count > 500, ordered by views_count
+```
+
+These always order ascending by the cursor column and use a strict comparison, so they suit unique, ordered columns such as ids. For descending feeds, filtered queries or compound sort keys, build the query yourself as below.
+
 ## Basic Cursor Pagination
 
 Use the ID as a cursor:
 
 ```crystal
+# `published` is a scope (see Create Query Scopes)
 def fetch_posts(after : Int64?, limit : Int32 = 20)
   query = Post.published.order(id: :desc).limit(limit + 1)
 

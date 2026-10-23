@@ -8,8 +8,6 @@ This guide shows you how to run database migrations.
 require "cql"
 require "../migrations/*"
 
-MyDB.init
-
 config = CQL::MigratorConfig.new(
   schema_file_path: "src/schemas/app_schema.cr",
   schema_name: :AppSchema,
@@ -19,6 +17,10 @@ config = CQL::MigratorConfig.new(
 migrator = MyDB.migrator(config)
 ```
 
+Creating a migrator creates the migrations table (`config.migration_table_name`, default `cql_schema_migrations`). With `auto_sync: true` (the default) it also writes the schema file at `schema_file_path`, from the current database state, when the migrator is created and after every `up`/`down`. Pass `auto_sync: false` to leave the file alone, which is usually what you want in production. Otherwise make sure the directory of `schema_file_path` exists.
+
+Only migration classes that have been required are registered, so require your migrations before calling `migrator.up`.
+
 ## Run All Pending Migrations
 
 ```crystal
@@ -26,19 +28,25 @@ migrator.up
 puts "Migrations complete"
 ```
 
+All pending migrations run inside one transaction, in version order, and are recorded as they succeed. `migrator.up(2)` runs at most the first 2 migrations in version order (already-applied ones count towards the 2). `up` prints a table of applied migrations when it finishes.
+
 ## Check Migration Status
 
 ```crystal
 puts "Applied: #{migrator.applied_migrations.size}"
 puts "Pending: #{migrator.pending_migrations.size}"
+migrator.print_pending_migrations   # table of pending migrations
+migrator.print_applied_migrations   # table of applied migrations
 ```
 
 ## Run to Specific Version
 
 ```crystal
-# Run up to migration 5
-migrator.up_to(5)
+# Run every migration up to and including version 5 (an Int64)
+migrator.up_to(5_i64)
 ```
+
+`up_to` does nothing if no registered migration has that version.
 
 ## Create Migration Script
 
@@ -46,8 +54,6 @@ migrator.up_to(5)
 # src/migrate.cr
 require "./database"
 require "../migrations/*"
-
-MyDB.init
 
 config = CQL::MigratorConfig.new(
   schema_file_path: "src/schemas/app_schema.cr",
@@ -62,13 +68,13 @@ when "up"
   migrator.up
   puts "Migrated up"
 when "down"
-  migrator.down
+  migrator.rollback   # one migration; `migrator.down` with no argument rolls back all of them
   puts "Rolled back one migration"
 when "status"
   puts "Applied: #{migrator.applied_migrations.size}"
   puts "Pending: #{migrator.pending_migrations.size}"
 when "version"
-  puts "Current version: #{migrator.current_version}"
+  puts "Current version: #{migrator.last.try(&.version) || 0}"
 else
   puts "Usage: crystal src/migrate.cr [up|down|status|version]"
 end
@@ -97,8 +103,6 @@ require "./database"
 require "../migrations/*"
 
 def setup_database
-  MyDB.init
-
   config = CQL::MigratorConfig.new(
     schema_file_path: "src/schemas/app_schema.cr",
     schema_name: :AppSchema,
@@ -126,8 +130,8 @@ migrator.up
 
 # Verify
 puts "Applied migrations:"
-migrator.applied_migrations.each do |version|
-  puts "  - #{version}"
+migrator.applied_migrations.each do |record|
+  puts "  - #{record.version} #{record.name}"
 end
 ```
 

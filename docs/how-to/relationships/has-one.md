@@ -27,14 +27,28 @@ schema.table :profiles do
   column :bio, String
   column :avatar_url, String
 
-  foreign_key [:user_id], references: :users, references_columns: [:id]
-  index [:user_id], unique: true
   timestamps
+
+  foreign_key [:user_id], references: :users, references_columns: [:id]
 end
 schema.profiles.create!
+
+schema.alter :profiles do
+  create_index :idx_profiles_user_id, [:user_id], unique: true
+end
 ```
 
-Note: The unique index ensures only one profile per user.
+Note: The unique index ensures only one profile per user. Indexes are created with `schema.alter`, see [Create Indexes](../migrations/indexes.md).
+
+## Options
+
+```crystal
+has_one :profile, Profile                       # foreign key defaults to user_id (owner name + _id)
+has_one :profile, Profile, :user_id             # third argument is the foreign key
+has_one :profile, Profile, :user_id, dependent: :nullify, cache: false
+```
+
+`dependent` accepts `:destroy` (the default), `:delete` and `:nullify` (the foreign key property must be nilable for `:nullify`). It decides what happens to an existing profile when you call `create_profile` or `delete_profile`. With `cache: true` (the default) the record is cached on the instance after the first access.
 
 ## Define the Relationship
 
@@ -65,7 +79,7 @@ struct Profile
 
   belongs_to :user, User, :user_id
 
-  def initialize(@user_id : Int64, @bio : String? = nil, @avatar_url : String? = nil)
+  def initialize(@user_id : Int64 = 0_i64, @bio : String? = nil, @avatar_url : String? = nil)
   end
 end
 ```
@@ -73,7 +87,7 @@ end
 ## Access the Related Record
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 profile = user.profile  # Returns Profile?
 
 if profile
@@ -91,7 +105,7 @@ end
 user = User.create!(name: "John")
 
 profile = Profile.create!(
-  user_id: user.id.not_nil!,
+  user_id: user.id!,
   bio: "Hello world",
   avatar_url: "/avatars/john.jpg"
 )
@@ -99,31 +113,49 @@ profile = Profile.create!(
 user.profile.try(&.bio)  # => "Hello world"
 ```
 
+### Create Through the Association
+
+```crystal
+user = User.create!(name: "John")
+
+profile = user.create_profile(bio: "Hello world")   # sets user_id, saves, caches
+other = user.build_profile(bio: "Draft")            # sets user_id, does not save
+```
+
+`create_profile` first disposes of an existing profile according to `dependent` (deleted by default).
+
 ### Build and Save
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 
-profile = Profile.new(user.id.not_nil!, "My bio")
+profile = Profile.new(user.id!, "My bio")
 profile.save!
 ```
 
 ## Update Related Record
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 
 if profile = user.profile
   profile.bio = "Updated bio"
   profile.save!
 end
+
+# or
+user.update_profile(bio: "Updated bio")   # raises AssociationNotFound when there is no profile
 ```
 
 ## Delete Related Record
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 user.profile.try(&.delete!)
+
+# or follow the `dependent` option (destroy, delete or nullify)
+user.delete_profile   # => Bool
+user.clear_profile    # nullifies the foreign key, returns Bool
 ```
 
 ## Verify It Works
@@ -132,7 +164,7 @@ user.profile.try(&.delete!)
 user = User.create!(name: "Test User")
 
 profile = Profile.create!(
-  user_id: user.id.not_nil!,
+  user_id: user.id!,
   bio: "Test bio"
 )
 

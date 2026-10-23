@@ -2,6 +2,10 @@
 
 This guide shows you how to create database indexes to improve query performance.
 
+## Indexes Are Created With `schema.alter`
+
+`index: true` on a column and `index [...]` inside a `schema.table` block only describe an index in memory; `table.create!` does not emit `CREATE INDEX`. Create indexes with `create_index` inside `schema.alter`, as in the migrations below. The table must be known to the schema (declared with `schema.table` or loaded from your schema file), otherwise `schema.alter` raises `CQL::Schema::Error`. Index names are always given explicitly.
+
 ## Create a Simple Index
 
 ```crystal

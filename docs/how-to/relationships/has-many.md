@@ -9,6 +9,16 @@ Use `has_many` when:
 - A Post has many Comments
 - A Category has many Products
 
+## Options
+
+```crystal
+has_many :posts, Post                                  # foreign key defaults to user_id (owner name + _id)
+has_many :posts, Post, :user_id                        # third argument is the foreign key
+has_many :posts, Post, foreign_key: :author_id, dependent: :destroy
+```
+
+`dependent` accepts `:nullify` (the default), `:destroy`, `:delete_all` and `:restrict_with_error`. It is applied by the collection's `clear` and by `handle_posts_dependency`; deleting the parent row with `user.delete!` does not trigger it on its own (see [Cascade Delete](#cascade-delete-with-foreign-keys)).
+
 ## Compile-Time Safety
 
 CQL validates `has_many` declarations during compilation:
@@ -51,12 +61,18 @@ schema.table :posts do
   column :user_id, Int64, null: false
   column :title, String
   column :body, String
+  column :published, Bool, default: false
+  column :views_count, Int64, default: 0_i64
   timestamps
 
   foreign_key [:user_id], references: :users, references_columns: [:id]
-  index [:user_id]
 end
 schema.posts.create!
+
+# Index the foreign key (indexes are created with schema.alter, see Create Indexes)
+schema.alter :posts do
+  create_index :idx_posts_user_id, [:user_id]
+end
 ```
 
 ## Define the Relationship
@@ -71,7 +87,7 @@ struct User
   property id : Int64?
   property name : String
 
-  has_many :posts, Post, :user_id
+  has_many :posts, Post, foreign_key: :user_id
 
   def initialize(@name : String)
   end
@@ -85,10 +101,13 @@ struct Post
   property user_id : Int64
   property title : String
   property body : String
+  property published : Bool = false
+  property views_count : Int64 = 0_i64
+  property created_at : Time?
 
   belongs_to :user, User, :user_id
 
-  def initialize(@title : String, @body : String, @user_id : Int64)
+  def initialize(@title : String, @body : String, @user_id : Int64 = 0_i64)
   end
 end
 ```
@@ -98,7 +117,7 @@ end
 ### Get All Related Records
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 posts = user.posts.all
 
 posts.each do |post|
@@ -109,21 +128,39 @@ end
 ### Count Related Records
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 count = user.posts.count
 puts "User has #{count} posts"
+
+user.posts_count   # Same count, as a generated method
+user.posts_any?    # => Bool
 ```
 
 ### Filter Related Records
 
+`user.posts.where`, `order`, `limit` and `offset` return a plain `CQL::Query` already scoped to the user, so finish with `.all(Post)`:
+
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 
 # Published posts only
-published = user.posts.where(published: true).all
+published = user.posts.where(published: true).all(Post)
 
 # Most recent posts
-recent = user.posts.order(created_at: :desc).limit(5).all
+recent = user.posts.order(created_at: :desc).limit(5).all(Post)
+
+# Look up within the user's posts
+user.posts.find(title: "First Post")        # => Array(Post)
+user.posts.find_by(title: "First Post")     # => Post?
+```
+
+For the typed `where { ... }` DSL, scopes and `preload`, query the model directly: `Post.where(user_id: user.id!).where { views_count > 100 }.all`.
+
+### Eager Load Related Records
+
+```crystal
+users = User.preload(:posts).all
+users.each { |u| puts u.posts.size }   # no extra query per user
 ```
 
 ## Create Related Records
@@ -131,37 +168,41 @@ recent = user.posts.order(created_at: :desc).limit(5).all
 ```crystal
 user = User.create!(name: "John")
 
-# Create posts for user
-post1 = Post.create!(
-  title: "First Post",
-  body: "Hello world",
-  user_id: user.id.not_nil!
-)
+# Create posts through the collection (sets user_id for you; the model needs a default for it)
+post1 = user.posts.create(title: "First Post", body: "Hello world")
 
-post2 = Post.create!(
-  title: "Second Post",
-  body: "Another post",
-  user_id: user.id.not_nil!
-)
+# Or build, then add
+post2 = Post.new("Second Post", "Another post", user.id!)
+user.posts << post2
 
-user.posts.count  # => 2
+# Or create directly with the foreign key
+Post.create!(title: "Third Post", body: "Yet another", user_id: user.id!)
+
+user.posts.count  # => 3
 ```
+
+The parent must be saved first; `user.posts` raises `CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord` otherwise.
 
 ## Delete Related Records
 
 ### Delete Specific Posts
 
 ```crystal
-user = User.find(1)
-user.posts.where(published: false).each(&.delete!)
+user = User.find!(1)
+Post.where(user_id: user.id!, published: false).all.each(&.delete!)
 ```
 
 ### Delete All Posts
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 user.posts.all.each(&.delete!)
+
+# or in one statement, without callbacks
+user.posts.delete_all
 ```
+
+`user.posts.clear` follows the association's `dependent` option (`:nullify` by default, which sets `user_id` to NULL; it needs a nullable column).
 
 ## Cascade Delete with Foreign Keys
 
@@ -174,12 +215,12 @@ schema.table :posts do
 end
 ```
 
-Now when a user is deleted, their posts are automatically deleted.
+Now when a user row is deleted, the database deletes their posts. The `dependent:` option on `has_many` is not run by `user.delete!`, so rely on the foreign key (or delete the children yourself) when removing parents.
 
 ## Check for Related Records
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 
 if user.posts.count > 0
   puts "User has posts"
@@ -193,8 +234,8 @@ end
 ```crystal
 user = User.create!(name: "Test User")
 
-Post.create!(title: "Post 1", body: "Body 1", user_id: user.id.not_nil!)
-Post.create!(title: "Post 2", body: "Body 2", user_id: user.id.not_nil!)
+Post.create!(title: "Post 1", body: "Body 1", user_id: user.id!)
+Post.create!(title: "Post 2", body: "Body 2", user_id: user.id!)
 
 user.posts.count  # => 2
 user.posts.all.map(&.title)  # => ["Post 1", "Post 2"]

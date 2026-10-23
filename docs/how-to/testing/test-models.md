@@ -30,6 +30,11 @@ describe User do
       user = User.new("John", "invalid-email")
       user.valid?.should be_false
     end
+
+    it "reports which field failed" do
+      user = User.new("John", "invalid-email")
+      user.errors.map(&.field).should contain(:email)
+    end
   end
 end
 ```
@@ -50,14 +55,26 @@ describe User do
       user.save
       user.created_at.should_not be_nil
     end
+
+    it "raises for an invalid record" do
+      user = User.new("John", "invalid-email")
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError) do
+        user.save!
+      end
+    end
   end
 
   describe ".find" do
     it "retrieves a saved user" do
       user = User.create!(name: "John", email: "john@example.com")
-      found = User.find(user.id.not_nil!)
+      found = User.find(user.id!)
       found.should_not be_nil
       found.not_nil!.name.should eq("John")
+    end
+
+    it "returns nil for a missing id" do
+      User.find(0).should be_nil
+      expect_raises(DB::NoResultsError) { User.find!(0) }
     end
   end
 end
@@ -90,15 +107,16 @@ describe Post do
   describe "relationships" do
     it "belongs to user" do
       user = User.create!(name: "John", email: "john@example.com")
-      post = Post.create!(user_id: user.id.not_nil!, title: "Test", body: "Body")
+      post = Post.create!(user_id: user.id!, title: "Test", body: "Body")
 
-      post.user.id.should eq(user.id)
+      post.user.try(&.id).should eq(user.id)
     end
 
     it "has many comments" do
-      post = Post.create!(user_id: 1, title: "Test", body: "Body")
-      Comment.create!(post_id: post.id.not_nil!, body: "Nice!")
-      Comment.create!(post_id: post.id.not_nil!, body: "Great!")
+      user = User.create!(name: "John", email: "john@example.com")
+      post = Post.create!(user_id: user.id!, title: "Test", body: "Body")
+      Comment.create!(post_id: post.id!, body: "Nice!")
+      Comment.create!(post_id: post.id!, body: "Great!")
 
       post.comments.count.should eq(2)
     end
@@ -118,11 +136,11 @@ describe Post do
 
     it ".published returns only published posts" do
       Post.published.count.should eq(1)
-      Post.published.first.not_nil!.title.should eq("Published")
+      Post.published.first!.title.should eq("Published")
     end
 
-    it ".drafts returns only draft posts" do
-      Post.drafts.count.should eq(1)
+    it ".draft returns only draft posts" do
+      Post.draft.count.should eq(1)
     end
   end
 end
@@ -134,38 +152,31 @@ Create helpers for common operations:
 
 ```crystal
 module TestHelpers
-  def create_user(name = "Test User", email = "test@example.com")
+  def self.create_user(name = "Test User", email = "test@example.com")
     User.create!(name: name, email: email)
   end
 
-  def create_post(user : User, title = "Test Post")
-    Post.create!(user_id: user.id.not_nil!, title: title, body: "Content")
+  def self.create_post(user : User, title = "Test Post")
+    Post.create!(user_id: user.id!, title: title, body: "Content")
   end
 end
 
-Spec.before_each do
-  extend TestHelpers
-end
+# In a spec
+user = TestHelpers.create_user
+post = TestHelpers.create_post(user)
 ```
 
 ## Factory Pattern
 
 ```crystal
 module Factory
-  def self.user(attrs = {} of Symbol => String)
-    User.create!(
-      name: attrs[:name]? || "Test User #{rand(1000)}",
-      email: attrs[:email]? || "test#{rand(1000)}@example.com"
-    )
+  def self.user(name : String = "Test User #{rand(1000)}", email : String = "test#{rand(100000)}@example.com")
+    User.create!(name: name, email: email)
   end
 
-  def self.post(user : User? = nil, attrs = {} of Symbol => String)
+  def self.post(user : User? = nil, title : String = "Test Post", body : String = "Test content")
     user ||= self.user
-    Post.create!(
-      user_id: user.id.not_nil!,
-      title: attrs[:title]? || "Test Post",
-      body: attrs[:body]? || "Test content"
-    )
+    Post.create!(user_id: user.id!, title: title, body: body)
   end
 end
 
@@ -188,7 +199,7 @@ end
 Spec.around_each do |example|
   MyDB.transaction do
     example.run
-    raise Rollback.new  # Always rollback
+    raise DB::Rollback.new  # Always rollback
   end
 end
 ```

@@ -42,3 +42,10 @@ it is created:
 - Only SQLite runs live in specs. Other dialects are verified with generated-SQL specs via
   `Expression::Generator.new(CQL::Adapter::Postgres)` and `query.to_sql(generator)`.
 - Behavior changes are recorded under `[Unreleased]` in `CHANGELOG.md`.
+
+## Documentation
+
+- `docs/` follows Diátaxis (tutorials, how-to, reference, explanation). Every page must be listed in
+  `docs/SUMMARY.md` and linked from its section `README.md`.
+- A behavior change updates the matching docs page in the same change. Every class, method and option
+  a page cites must exist in `src/`; prefer call shapes copied from `spec/`.

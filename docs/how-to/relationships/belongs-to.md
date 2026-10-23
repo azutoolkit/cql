@@ -11,6 +11,16 @@ Use `belongs_to` when:
 
 The model with `belongs_to` holds the foreign key.
 
+## Options
+
+```crystal
+belongs_to :post, Post, :post_id                       # optional: true, cache: true (defaults)
+belongs_to :post, Post, :post_id, optional: false      # raise instead of returning nil
+belongs_to :post, Post, :post_id, cache: false         # look the parent up on every call
+```
+
+The third argument is the foreign key (a symbol literal). With `optional: true` (the default) the getter returns `Post?`; with `optional: false` it returns `Post` and raises when the foreign key is `nil` or `0` or the parent row is missing.
+
 ## Compile-Time Safety
 
 CQL validates `belongs_to` declarations during compilation:
@@ -85,13 +95,17 @@ end
 ## Access the Parent
 
 ```crystal
-comment = Comment.find(1)
+comment = Comment.find!(1)
 post = comment.post  # Returns Post?
 
 if post
   puts "Comment on: #{post.title}"
 end
 ```
+
+The parent is loaded on first access and cached on the instance. Use `comment.reload_post` to fetch it again and `comment.post_loaded?` to check whether it is cached.
+
+`preload` only batches `has_many` associations, so it does not remove the per-record lookup for `belongs_to`. To avoid N+1 queries, load the parents in one query (see [Fix N+1 Queries](../performance/n-plus-one.md)).
 
 ## Create with Parent
 
@@ -100,7 +114,7 @@ end
 ```crystal
 post = Post.create!(title: "My Post")
 
-comment = Comment.new("Great post!", post.id.not_nil!)
+comment = Comment.new("Great post!", post.id!)
 comment.save!
 ```
 
@@ -110,7 +124,7 @@ comment.save!
 post = Post.create!(title: "My Post")
 
 comment = Comment.new("Great post!", 0_i64)
-comment.post = post  # Sets post_id automatically
+comment.post = post  # Sets post_id automatically (the post must already be saved)
 comment.save!
 ```
 
@@ -139,9 +153,17 @@ post = comment.create_post(title: "New Post")
 comment.save!  # post_id is now set
 ```
 
+## Update and Remove the Parent
+
+```crystal
+comment.update_post(title: "Edited title")  # Updates the parent and saves it
+comment.delete_post                          # Deletes the parent row, returns Bool
+comment.clear_post                           # Clears the foreign key (optional associations only)
+```
+
 ## Optional Belongs To
 
-For optional relationships, make the foreign key nullable:
+Associations are optional by default. Make the foreign key nullable as well:
 
 ```crystal
 schema.table :comments do
@@ -159,7 +181,7 @@ struct Comment
   end
 end
 
-comment = Comment.find(1)
+comment = Comment.find!(1)
 if user = comment.user
   puts "By: #{user.name}"
 else
@@ -171,7 +193,7 @@ end
 
 ```crystal
 post = Post.create!(title: "Test Post")
-comment = Comment.create!(body: "Test Comment", post_id: post.id.not_nil!)
+comment = Comment.create!(body: "Test Comment", post_id: post.id!)
 
 comment.post.try(&.title)  # => "Test Post"
 comment.post_id == post.id  # => true

@@ -4,6 +4,8 @@ This guide helps you diagnose and fix validation errors.
 
 ## Check What's Invalid
 
+`valid?`, `errors` and `validate!` take an optional validation context (`valid?(:update)`) that selects rules declared with `on:`. `errors` returns an array of `CQL::ActiveRecord::Validations::Error` with `field` and `message`.
+
 ```crystal
 user = User.new("", "invalid-email")
 
@@ -18,8 +20,10 @@ end
 
 **Error:**
 ```
-name: can't be blank
+name must be present
 ```
+
+(`presence: true` fails for `nil` or an empty value, message `"<field> must be present"`; `required: true` only rejects `nil`, message `"<field> is required"`.)
 
 **Cause:** Field is empty or nil.
 
@@ -40,8 +44,10 @@ validate :bio, presence: true, on: :update
 
 **Error:**
 ```
-email: is invalid
+email must match the pattern /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
 ```
+
+(The default `match:` message is `"<field> must match the pattern <regex>"`; set `message:` for something friendlier.)
 
 **Cause:** Value doesn't match the required format.
 
@@ -62,7 +68,7 @@ validate :email, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
 
 **Error:**
 ```
-username: is too short (minimum is 3 characters)
+username must have a size of 3..20
 ```
 
 **Solutions:**
@@ -81,10 +87,10 @@ validate :username, size: 2..50  # Allow shorter names
 
 **Error:**
 ```
-email: has already been taken
+duplicate key value violates unique constraint "idx_users_email"
 ```
 
-**Cause:** Another record has the same value.
+**Cause:** There is no built-in `uniqueness` validation option. Duplicates are caught by a unique index (the database raises, for example `CQL::Postgres::UniqueViolation` on the native PostgreSQL driver) or by a custom validator registered with `use` (see [Add Validations](../models/add-validations.md)).
 
 **Solutions:**
 
@@ -105,7 +111,7 @@ end
 
 **Error:**
 ```
-age: must be greater than 0
+age must be greater than 0
 ```
 
 **Solutions:**
@@ -119,6 +125,8 @@ user.age = 25  # Positive number
 ```crystal
 validate :age, gt: 0, lt: 150
 ```
+
+Supported predicates are `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `match`, `size`, `presence`, `required`, `confirmation` and `accept`, plus the `message:` and `on:` options. Any other key (`format:`, `numericality:`, `uniqueness:`) fails at compile time with "unsupported predicate".
 
 ## Debugging Validation
 
@@ -141,13 +149,28 @@ else
 end
 ```
 
+## Common Error: ValidationError Raised From save
+
+`save`, `save!` and `create!` run validations and raise `CQL::ActiveRecord::Validations::ValidationError` when the record is invalid (its message joins the error messages with commas). Check `valid?` first, or rescue it:
+
+```crystal
+begin
+  user.save!
+rescue ex : CQL::ActiveRecord::Validations::ValidationError
+  puts ex.message
+end
+```
+
 ## Skip Validation (Use Carefully)
 
 Sometimes you need to bypass validation:
 
 ```crystal
-# Direct database update bypasses model validation
-User.where(id: 1).update!(email: "override@example.com")
+# Instance update! writes the changed attributes without running validations
+user.update!(email: "override@example.com")
+
+# Class-level bulk update also skips model validation
+User.update_all({:active => false})
 ```
 
 ## Test Validations
@@ -179,7 +202,8 @@ end
 def create(params)
   user = User.new(params[:name], params[:email])
 
-  if user.save
+  if user.valid?
+    user.save!
     {status: "success", user: user.to_json}
   else
     {
@@ -196,7 +220,7 @@ Make errors user-friendly:
 
 ```crystal
 validate :email, required: true, message: "Please provide your email address"
-validate :password, size: 8..100, message: "Password must be at least 8 characters"
+validate :password, size: 8..100, message: "Password must be 8 to 100 characters"
 ```
 
 ## Related

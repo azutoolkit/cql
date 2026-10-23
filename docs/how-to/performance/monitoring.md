@@ -9,31 +9,34 @@ Track query performance and identify bottlenecks in your CQL application.
 
 ## Enable Query Logging
 
-Log all queries with execution time:
+CQL publishes every statement it runs (selects, inserts, updates, deletes, DDL) to `CQL::Telemetry`. Log one line per statement:
 
 ```crystal
-MyDB.on_query do |sql, duration|
-  Log.info { "[CQL] (#{duration.total_milliseconds.round(2)}ms) #{sql}" }
+require "log"
+
+Log.setup do |c|
+  c.bind("cql.*", :debug, Log::IOBackend.new)
 end
+
+# [select] 1.23ms SELECT ... (1 params)
+CQL::Telemetry.log_queries
 ```
+
+Bound parameter values are not part of the line and are not captured unless you set `CQL::Telemetry.capture_params = true`.
 
 ## Log Slow Queries
 
-Only log queries exceeding a threshold:
+Only react to queries exceeding a threshold:
 
 ```crystal
-SLOW_QUERY_THRESHOLD = 100.milliseconds
-
-MyDB.on_query do |sql, duration|
-  if duration > SLOW_QUERY_THRESHOLD
-    Log.warn { "[SLOW QUERY] (#{duration.total_milliseconds.round(2)}ms) #{sql}" }
-  end
+CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
+  Log.warn { "[SLOW QUERY] (#{event.duration.total_milliseconds.round(2)}ms) #{event.sql}" }
 end
 ```
 
 ## Track Query Metrics
 
-Collect metrics for monitoring systems:
+Collect metrics for monitoring systems by subscribing to events:
 
 ```crystal
 module QueryMetrics
@@ -59,42 +62,47 @@ module QueryMetrics
   end
 end
 
-MyDB.on_query do |sql, duration|
-  QueryMetrics.record(duration)
+CQL::Telemetry.subscribe("query_metrics") do |event|
+  QueryMetrics.record(event.duration)
 end
 ```
 
+Each event also carries `operation` (`:select`, `:insert`, `:update`, `:delete`, `:ddl`, `:explain`), `rows_affected`, `adapter`, `param_count` and `error`, so you can break metrics down by operation or count failures. Subscribers are isolated: one that raises does not affect queries or other subscribers. Remove one with `CQL::Telemetry.unsubscribe("query_metrics")`.
+
 ## Per-Request Tracking
 
-Track queries per HTTP request:
+Tag everything a request does with `CQL::Telemetry.with_context`, then group events by that tag:
 
 ```crystal
-class QueryTracker
-  property queries = [] of {String, Time::Span}
+module RequestQueries
+  @@events = Hash(String, Array(CQL::Telemetry::QueryEvent)).new
+  @@mutex = Mutex.new
 
-  def record(sql : String, duration : Time::Span)
-    @queries << {sql, duration}
+  def self.install
+    CQL::Telemetry.subscribe("request_queries") do |event|
+      if request_id = event.context
+        @@mutex.synchronize { (@@events[request_id] ||= [] of CQL::Telemetry::QueryEvent) << event }
+      end
+    end
   end
 
-  def total_time
-    @queries.sum(&.[1])
-  end
-
-  def count
-    @queries.size
+  def self.finish(request_id : String)
+    events = @@mutex.synchronize { @@events.delete(request_id) } || [] of CQL::Telemetry::QueryEvent
+    {count: events.size, total_ms: events.sum(&.duration.total_milliseconds)}
   end
 end
 
 # In your request middleware
-tracker = QueryTracker.new
-MyDB.with_query_callback(tracker.method(:record)) do
-  # Handle request
+RequestQueries.install
+CQL::Telemetry.with_context(request_id) do
   response = handle_request(request)
-
-  Log.info { "Request completed: #{tracker.count} queries in #{tracker.total_time.total_milliseconds}ms" }
+  summary = RequestQueries.finish(request_id)
+  Log.info { "Request completed: #{summary[:count]} queries in #{summary[:total_ms].round(2)}ms" }
   response
 end
 ```
+
+The context is fiber-local, so work you `spawn` inside the block is not tagged.
 
 ## Query Analysis
 
@@ -103,6 +111,10 @@ Analyze query patterns:
 ```crystal
 module QueryAnalyzer
   @@patterns = Hash(String, {count: Int32, total_time: Time::Span}).new
+
+  def self.install
+    CQL::Telemetry.subscribe("query_analyzer") { |event| record(event.sql, event.duration) }
+  end
 
   def self.record(sql : String, duration : Time::Span)
     # Normalize query by removing specific values
@@ -128,38 +140,57 @@ module QueryAnalyzer
 end
 ```
 
+CQL binds values as `?` (or `$1` on PostgreSQL) placeholders, so `event.sql` is usually already normalized; the regexes only matter for raw SQL you executed with literals.
+
+## Built-in Profiler and N+1 Detector
+
+The `CQL::Performance` module profiles queries, detects N+1 patterns and produces reports:
+
+```crystal
+CQL::Performance.enable_development_mode!   # or enable_production_mode!
+
+CQL::Performance.with_context("UsersController#index") do
+  User.all
+end
+
+puts CQL::Performance.report                # formatted performance report
+CQL::Performance.metrics_summary            # Hash of headline numbers
+CQL::Performance.healthy?                   # => Bool
+CQL::Performance.critical_issues            # => Array(CQL::Performance::Issue)
+```
+
+Use `CQL::Performance.enable_sql_logging` / `disable_sql_logging` for formatted SQL logging, and `CQL::Performance.configure { |config| ... }` to tune thresholds. See [Telemetry](telemetry.md) for the event API.
+
 ## Database Statistics
 
-Query database statistics directly:
+Query database statistics directly on a pooled connection:
 
 ```crystal
 # PostgreSQL
-stats = MyDB.exec(<<-SQL
-  SELECT
-    relname as table,
-    seq_scan,
-    idx_scan,
-    n_live_tup as rows
-  FROM pg_stat_user_tables
-  ORDER BY seq_scan DESC
-  LIMIT 10
-SQL
-)
+rows = MyDB.exec_query do |conn|
+  conn.query_all(<<-SQL, as: {String, Int64, Int64, Int64})
+    SELECT relname, seq_scan, COALESCE(idx_scan, 0), n_live_tup
+    FROM pg_stat_user_tables
+    ORDER BY seq_scan DESC
+    LIMIT 10
+  SQL
+end
 
-stats.each do |row|
-  puts "#{row["table"]}: #{row["seq_scan"]} seq scans, #{row["idx_scan"]} idx scans"
+rows.each do |table, seq_scan, idx_scan, _live_rows|
+  puts "#{table}: #{seq_scan} seq scans, #{idx_scan} idx scans"
 end
 ```
 
 ## Connection Pool Monitoring
 
-Monitor pool usage:
+Monitor pool usage with `Schema#pool_stats` (it never checks out a connection):
 
 ```crystal
 spawn do
   loop do
     stats = MyDB.pool_stats
-    Log.info { "Pool: #{stats[:busy]}/#{stats[:size]} connections in use" }
+    limit = stats.max == 0 ? "unlimited" : stats.max.to_s
+    Log.info { "Pool: #{stats.in_flight} in use, #{stats.idle} idle, #{stats.open} open (max #{limit})" }
     sleep 30.seconds
   end
 end
@@ -173,9 +204,9 @@ require "prometheus"
 query_counter = Prometheus.counter("cql_queries_total", "Total CQL queries")
 query_duration = Prometheus.histogram("cql_query_duration_seconds", "Query duration")
 
-MyDB.on_query do |sql, duration|
+CQL::Telemetry.subscribe("prometheus") do |event|
   query_counter.inc
-  query_duration.observe(duration.total_seconds)
+  query_duration.observe(event.duration.total_seconds)
 end
 ```
 
@@ -190,11 +221,12 @@ Post.where(published: true).all
 User.find(1)
 
 # Check your logs/metrics
-QueryMetrics.stats  # => {count: 3, total_ms: 15.5, avg_ms: 5.17}
+QueryMetrics.stats  # => {count: 3, total_ms: 15.5, avg_ms: 5.17}  (counts every statement CQL ran)
 ```
 
 ## See Also
 
 - [Optimize Queries](optimize-queries.md)
 - [Avoid N+1 Queries](n-plus-one.md)
+- [Telemetry](telemetry.md)
 - [Performance Monitoring Tutorial](../../tutorials/real-world-examples/performance-monitoring.md)

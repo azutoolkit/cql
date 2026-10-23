@@ -6,7 +6,6 @@ This guide shows you how to configure your database connection in CQL.
 
 ```crystal
 require "cql"
-require "pg"
 
 MyDB = CQL::Schema.define(
   :my_db,
@@ -14,9 +13,22 @@ MyDB = CQL::Schema.define(
   uri: "postgres://username:password@localhost:5432/myapp_development"
 ) do
 end
-
-MyDB.init
 ```
+
+`postgres://` and `postgresql://` URLs are opened by CQL's native PostgreSQL driver, so no `pg` shard is needed. If you `require "pg"` before CQL, the `pg` shard keeps those scheme names instead. See the [native PostgreSQL driver guide](../postgres-native/README.md).
+
+## Basic CockroachDB Connection
+
+```crystal
+MyDB = CQL::Schema.define(
+  :my_db,
+  adapter: CQL::Adapter::CockroachDB,
+  uri: "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+) do
+end
+```
+
+`cockroachdb://` is rewritten to `postgres://` for crystal-db. Using the native driver for it is opt-in: compile with `-Dcql_postgres_driver_cockroachdb` or call `CQL::Postgres::Driver.register_cockroachdb`. See [CockroachDB](cockroachdb.md).
 
 ## Basic SQLite Connection
 
@@ -30,8 +42,6 @@ MyDB = CQL::Schema.define(
   uri: "sqlite3://./db/development.db"
 ) do
 end
-
-MyDB.init
 ```
 
 ## Basic MySQL Connection
@@ -46,8 +56,6 @@ MyDB = CQL::Schema.define(
   uri: "mysql://username:password@localhost:3306/myapp_development"
 ) do
 end
-
-MyDB.init
 ```
 
 ## Use Environment Variables
@@ -73,6 +81,12 @@ postgres://user:pass@localhost:5432/myapp
 postgres://localhost/myapp  # Uses default user and port
 ```
 
+### CockroachDB
+
+```
+cockroachdb://user@host:26257/database
+```
+
 ### MySQL
 
 ```
@@ -90,9 +104,11 @@ sqlite3://:memory:  # In-memory database
 
 ## Test Connection
 
+`Schema.define` validates the URI (`CQL::Schema::InvalidURIError`) and opens the pool. Run a query to confirm the database answers:
+
 ```crystal
 begin
-  MyDB.init
+  MyDB.exec_query(&.scalar("SELECT 1"))
   puts "Connected successfully"
 rescue ex
   puts "Connection failed: #{ex.message}"
@@ -101,6 +117,8 @@ end
 ```
 
 ## Connection with Options (PostgreSQL)
+
+Recognised query parameters configure the driver (`sslmode`, `connect_timeout`, `application_name`, `statement_cache_size`, pool settings); any other key is sent to the server as a startup parameter such as `search_path`. See [Enable SSL Connections](ssl.md) and [Set Up Connection Pooling](connection-pooling.md).
 
 ```crystal
 MyDB = CQL::Schema.define(
@@ -143,23 +161,36 @@ AnalyticsDB = CQL::Schema.define(
 end
 
 # Use different schemas for different models
-struct User
-  db_context PrimaryDB, :users
+class User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: PrimaryDB, table: :users
 end
 
-struct PageView
-  db_context AnalyticsDB, :page_views
+class PageView
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: AnalyticsDB, table: :page_views
 end
 ```
 
 ## Verify Connection
 
 ```crystal
-MyDB.init
-
 # Run a simple query
-MyDB.exec("SELECT 1")
+MyDB.exec_query(&.scalar("SELECT 1"))
 puts "Database connection verified"
+```
+
+## Global Configuration
+
+`CQL.configure` holds the URL, environment, pool and SSL settings in one place (`config.db`, `config.env`, `config.pool_size`, `config.ssl.mode`). The adapter is detected from the URL scheme (`postgres://`, `postgresql://`, `cockroachdb://`, `mysql://`, `sqlite3://`):
+
+```crystal
+CQL.configure do |config|
+  config.db = ENV["DATABASE_URL"]
+end
+
+MyDB = CQL.build_schema(:my_db) do
+end
 ```
 
 ## Related

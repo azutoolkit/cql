@@ -7,12 +7,16 @@ Essential CQL patterns for quick reference.
 ```crystal
 MyDB = CQL::Schema.define(
   :my_db,
-  adapter: CQL::Adapter::Postgres,  # or SQLite, MySql
+  adapter: CQL::Adapter::Postgres,  # or SQLite, MySql, CockroachDB
   uri: "postgres://localhost/myapp"
 ) do
+  table :users do
+    primary :id, Int64, auto_increment: true
+    column :name, String
+    column :email, String
+    timestamps
+  end
 end
-
-MyDB.init
 ```
 
 ## Model Definition
@@ -40,7 +44,8 @@ end
 user = User.create!(name: "John", email: "john@example.com")
 
 # Read
-user = User.find(1)
+user = User.find(1)             # => User? (nil when missing)
+user = User.find!(1)            # raises DB::NoResultsError
 user = User.find_by(email: "john@example.com")
 users = User.where(active: true).all
 
@@ -63,14 +68,32 @@ User.count
 
 # Where clauses
 User.where(active: true).all
-User.where { age > 18 }.all
+User.where { age > 18 }.all                        # typed columns, checked at compile time
+User.where { (age >= 18) & (status == "active") }.all
 User.where { name.like("%john%") }.all
+User.where("lower(email) = ?", "john@example.com").all
 
 # Chaining
 User.where(active: true)
     .order(created_at: :desc)
     .limit(10)
     .all
+
+# Typed ordering, joins through associations and partial selects
+User.query
+    .joins(:posts) { posts.published == true }
+    .order_by(created_at: :desc)
+    .select(:id, :name)
+    .to_a
+
+# Pagination and loading
+User.page(2, per_page: 20)
+User.preload(:posts).all          # has_many only
+User.where(active: true).pluck(:email, as: String)
+
+# Scopes
+scope :active, -> { where(active: true) }
+User.active.recent.all
 ```
 
 ## Relationships
@@ -82,9 +105,12 @@ has_one :profile, Profile, :user_id
 has_many :posts, Post, :user_id
 
 # Use
-user.posts.all
-post.user
+user.posts.all                    # Array(Post)
+user.posts.create(title: "Hi")    # sets user_id for you
+post.user                         # => User? (optional: true by default)
 ```
+
+`has_many` also takes `foreign_key:` and `dependent:` (`:nullify`, `:destroy`, `:delete_all`, `:restrict_with_error`); `many_to_many :tags, Tag, join_through: PostTag` uses a join model.
 
 Relationship declarations are compile-time checked. `belongs_to` and `has_many` raise CQL-specific compile errors when foreign-key and primary-key types do not match:
 
@@ -118,6 +144,8 @@ validate :name, presence: true
 validate :email, required: true, match: /@/
 validate :age, gt: 0, lt: 150
 validate :status, in: ["active", "pending"]
+validate :username, presence: true, size: 3..20, message: "is invalid"   # one call per property
+use PasswordValidator                                                    # custom validator class
 ```
 
 ## Callbacks
@@ -165,7 +193,7 @@ migrator.up
 ```crystal
 User.transaction do
   user = User.create!(name: "John", email: "john@example.com")
-  Profile.create!(user_id: user.id.not_nil!)
+  Profile.create!(user_id: user.id!)
 end
 ```
 
@@ -174,8 +202,8 @@ end
 ```crystal
 include CQL::ActiveRecord::SoftDeletable
 
-user.delete!      # Soft delete
-user.restore!     # Restore
+user.delete!        # Soft delete
+user.restore!       # Restore
 user.force_delete!  # Permanent delete
 
 User.with_deleted.all
@@ -186,7 +214,7 @@ User.only_deleted.all
 
 ```crystal
 include CQL::ActiveRecord::OptimisticLocking
-optimistic_locking version_column: :version
+optimistic_locking version_column: :version   # version property type must match the model's primary key type
 
 begin
   user.update!
@@ -205,7 +233,10 @@ end
 # MySQL
 "mysql://user:pass@host:3306/database"
 
+# CockroachDB
+"cockroachdb://user:pass@host:26257/database"
+
 # SQLite
 "sqlite3://./db/app.db"
-"sqlite3://:memory:"
+"sqlite3::memory:"
 ```

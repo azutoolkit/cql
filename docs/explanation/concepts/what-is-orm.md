@@ -8,11 +8,10 @@ Without an ORM, you would write code like this:
 
 ```crystal
 # Raw SQL approach
-result = db.exec("SELECT id, name, email FROM users WHERE id = ?", [1])
-row = result.first
-user_id = row[0].as(Int64)
-user_name = row[1].as(String)
-user_email = row[2].as(String)
+user_id, user_name, user_email = db.query_one(
+  "SELECT id, name, email FROM users WHERE id = ?", 1,
+  as: {Int64, String, String}
+)
 ```
 
 With an ORM like CQL:
@@ -34,16 +33,18 @@ The ORM handles:
 
 ### Models
 
-A model is a Crystal struct or class that represents a database table. Each instance of the model represents a row in that table.
+A model is a Crystal class that represents a database table. Each instance of the model represents a row in that table.
 
 ```crystal
-struct User                           # Represents the 'users' table
-  include CQL::ActiveRecord::Model(Int64)
+class User                            # Represents the 'users' table
+  include CQL::ActiveRecord::Model(Int64) # Provides `id : Int64?` (column: id)
   db_context MyDB, :users
 
-  property id : Int64?                # Column: id
   property name : String              # Column: name
   property email : String             # Column: email
+
+  def initialize(@name : String, @email : String)
+  end
 end
 ```
 
@@ -53,8 +54,8 @@ The ORM provides methods that translate to SQL:
 
 | ORM Method | SQL Equivalent |
 |------------|---------------|
-| `User.find(1)` | `SELECT * FROM users WHERE id = 1` |
-| `User.where(active: true)` | `SELECT * FROM users WHERE active = true` |
+| `User.find(1)` | `SELECT ... FROM users WHERE id = ? LIMIT 1` |
+| `User.where(active: true).all` | `SELECT ... FROM users WHERE active = ?` |
 | `User.count` | `SELECT COUNT(*) FROM users` |
 | `user.save` | `INSERT INTO users ...` or `UPDATE users ...` |
 
@@ -117,7 +118,7 @@ user = User.create!(
 The same model code works with different databases:
 
 ```crystal
-# Works with PostgreSQL, MySQL, or SQLite
+# Works with PostgreSQL, MySQL, SQLite, or CockroachDB
 User.where(active: true).order(created_at: :desc).all
 ```
 
@@ -127,8 +128,8 @@ Changes to your data model are centralized:
 
 ```crystal
 # Add a new field - one place to change
-struct User
-  property phone : String?  # Add property
+class User
+  property phone : String?  # Add property (and a column in a migration)
 end
 
 # All code using User automatically has access to phone
@@ -146,15 +147,18 @@ ORMs aren't always the best choice:
 CQL lets you drop to raw SQL when needed:
 
 ```crystal
-result = MyDB.exec(<<-SQL
-  SELECT u.name, COUNT(p.id) as post_count
-  FROM users u
-  LEFT JOIN posts p ON p.user_id = u.id
-  GROUP BY u.id
-  HAVING COUNT(p.id) > 10
-SQL
-)
+rows = MyDB.exec_query do |conn|
+  conn.query_all(<<-SQL, as: {String, Int64})
+    SELECT u.name, COUNT(p.id) AS post_count
+    FROM users u
+    LEFT JOIN posts p ON p.user_id = u.id
+    GROUP BY u.id, u.name
+    HAVING COUNT(p.id) > 10
+  SQL
+end
 ```
+
+`exec_query` hands you the schema's pooled `DB::Connection` (or the current transaction's), so raw statements and model calls can share a transaction. Where possible, prefer bound parameters over string interpolation.
 
 ## ORM Patterns
 
@@ -173,8 +177,7 @@ user.save  # The user object saves itself
 ### Other Patterns
 
 CQL also supports:
-- **Repository Pattern**: Separate persistence from domain objects
-- **Data Mapper Pattern**: Decouple domain and database layers
+- **Repository Pattern**: `CQL::Repository(T, Pk)` separates persistence from plain domain objects
 
 See [Design Patterns](../design-patterns/active-record.md) for more details.
 

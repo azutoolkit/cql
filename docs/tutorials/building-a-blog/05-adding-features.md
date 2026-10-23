@@ -21,40 +21,40 @@ Validations ensure data integrity before records are saved.
 
 ### User Validations
 
-Update your User model:
+Declare rules with `validate :attribute, predicate: value`. The available predicates are `presence`, `required`, `size`, `match`, `eq`, `gt`, `gte`, `lt`, `lte`, `in`, `exclude`, `confirmation` and `accept`; add `message:` to override the default text.
+
+Rules that need the database, such as uniqueness, go in a custom validator: a subclass of `CQL::ActiveRecord::Validations::CustomValidator` registered with `use`.
 
 ```crystal
 # src/models/user.cr
-struct User
+class UniqueUserValidator < CQL::ActiveRecord::Validations::CustomValidator
+  def initialize(@record : User)
+  end
+
+  def valid? : Array(CQL::ActiveRecord::Validations::Error)
+    errors = [] of CQL::ActiveRecord::Validations::Error
+
+    if (other = User.find_by(username: @record.username)) && other.id != @record.id
+      errors << CQL::ActiveRecord::Validations::Error.new(:username, "has already been taken")
+    end
+    if (other = User.find_by(email: @record.email)) && other.id != @record.id
+      errors << CQL::ActiveRecord::Validations::Error.new(:email, "has already been taken")
+    end
+
+    errors
+  end
+end
+
+class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :users
+  db_context BlogSchema, :users
 
   # ... existing properties ...
 
   # Validations
-  validate :username, presence: true, size: (3..50)
+  validate :username, presence: true, size: 3..50
   validate :email, presence: true, match: /\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i
-
-  # Custom validation
-  def validate
-    super
-    validate_username_uniqueness
-    validate_email_uniqueness
-  end
-
-  private def validate_username_uniqueness
-    existing = User.find_by(username: @username)
-    if existing && existing.id != @id
-      errors.add(:username, "has already been taken")
-    end
-  end
-
-  private def validate_email_uniqueness
-    existing = User.find_by(email: @email)
-    if existing && existing.id != @id
-      errors.add(:email, "has already been taken")
-    end
-  end
+  use UniqueUserValidator
 end
 ```
 
@@ -62,43 +62,31 @@ end
 
 ```crystal
 # src/models/post.cr
-struct Post
+class Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogDB, :posts
+  db_context BlogSchema, :posts
 
   # ... existing properties ...
 
   # Validations
-  validate :title, presence: true, size: (1..200)
+  validate :title, presence: true, size: 1..200
   validate :content, presence: true
-
-  def validate
-    super
-    validate_title_length
-  end
-
-  private def validate_title_length
-    if @title.size > 200
-      errors.add(:title, "is too long (maximum 200 characters)")
-    end
-  end
 end
 ```
 
 ### Using Validations
 
+`valid?` returns a Bool and `errors` returns an array of errors with a `field` and a `message`. `save` and `save!` run the validations too, and raise `CQL::ActiveRecord::Validations::ValidationError` when the record is invalid, so check `valid?` first when you want to report problems instead of rescuing:
+
 ```crystal
-# Test validations
 user = User.new(username: "ab", email: "invalid")
 
 if user.valid?
   user.save
 else
   puts "Validation errors:"
-  user.errors.each do |field, messages|
-    messages.each do |message|
-      puts "  #{field}: #{message}"
-    end
+  user.errors.each do |error|
+    puts "  #{error.field}: #{error.message}"
   end
 end
 ```
@@ -107,11 +95,13 @@ end
 
 Callbacks let you run code at specific points in a model's lifecycle.
 
+Register callbacks with `before_validation`, `after_validation`, `before_save`, `after_save`, `before_create`, `after_create`, `before_update`, `after_update`, `before_destroy` and `after_destroy`. A callback that returns `false` halts the operation (`save` then returns `false`); any other return value continues. Note that `before_save` runs after validation.
+
 ### User Callbacks
 
 ```crystal
 # src/models/user.cr
-struct User
+class User
   # ... existing code ...
 
   # Callbacks
@@ -131,23 +121,23 @@ end
 
 ### Post Callbacks
 
+`created_at` and `updated_at` are filled in automatically on save when the table has those columns, so no callback is needed for them.
+
 ```crystal
 # src/models/post.cr
-struct Post
+class Post
   # ... existing code ...
 
   # Callbacks
-  before_save :update_timestamps
+  before_save :clean_title
   after_save :notify_subscribers
 
-  private def update_timestamps
-    now = Time.utc
-    @created_at ||= now
-    @updated_at = now
+  private def clean_title
+    @title = @title.strip
   end
 
   private def notify_subscribers
-    if @published && changes.includes?(:published)
+    if @published
       # Notify subscribers about new post
       puts "Notifying subscribers about: #{@title}"
     end
@@ -159,15 +149,13 @@ end
 
 ```crystal
 # src/models/category.cr
-struct Category
+class Category
   # ... existing code ...
 
   before_save :generate_slug_if_blank
 
   private def generate_slug_if_blank
-    if @slug.blank?
-      @slug = generate_slug(@name)
-    end
+    @slug = Category.generate_slug(@name) if @slug.blank?
   end
 end
 ```
@@ -276,7 +264,7 @@ module Seeders
 
   private def self.create_categories
     ["Technology", "Lifestyle", "Travel", "Food", "Programming"].map do |name|
-      Category.create!(name: name)
+      Category.new(name).tap(&.save!)
     end
   end
 
@@ -318,7 +306,7 @@ module Seeders
   end
 end
 
-# Run if executed directly
+# Run when this file is the program being compiled
 if PROGRAM_NAME.includes?("seeders")
   BlogEngine.setup
   Seeders.run
@@ -333,13 +321,19 @@ crystal src/seeders.cr
 
 ## Step 5: Add Performance Monitoring
 
-Track query performance to identify issues:
+CQL publishes every statement it runs to `CQL::Telemetry`. Subscribe once at startup to log slow queries, and print a few statistics to see how the blog is doing:
 
 ```crystal
 # src/monitoring.cr
 require "./blog_engine"
 
 module Monitoring
+  def self.watch_slow_queries
+    CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
+      puts "Slow query (#{event.duration.total_milliseconds.round(1)}ms): #{event.sql}"
+    end
+  end
+
   def self.print_stats
     puts ""
     puts "Blog Statistics"
@@ -355,12 +349,14 @@ module Monitoring
     puts ""
 
     # Engagement
+    published = Post.where(published: true)
+    published_count = published.count
+    total_views = published.sum(:views_count)
+    avg_views = published_count > 0 ? total_views.to_f / published_count : 0.0
+
     puts "Engagement:"
-    total_views = Post.where(published: true).sum(:views_count)
-    avg_views = Post.where(published: true).count > 0 ?
-                total_views / Post.where(published: true).count : 0
     puts "  Total views: #{total_views}"
-    puts "  Average views per post: #{avg_views}"
+    puts "  Average views per post: #{avg_views.round(1)}"
     puts ""
 
     # Top content
@@ -375,24 +371,30 @@ module Monitoring
     end
     puts ""
 
-    # Most active users
+    # Most active authors: one GROUP BY query
     puts "Most Active Authors:"
-    User.all
-        .map { |u| {user: u, count: u.posts.where(published: true).count} }
-        .sort_by { |h| -h[:count] }
-        .first(5)
-        .each do |h|
-      puts "  #{h[:count]} posts - #{h[:user].full_name}"
+    counts = BlogSchema.query
+      .from(:posts)
+      .select(:user_id, count: :id)
+      .where(published: true)
+      .group(:user_id)
+      .all(as: {Int64, Int64})
+
+    counts.sort_by { |_, total| -total }.first(5).each do |user_id, total|
+      puts "  #{total} posts - #{User.find!(user_id).full_name}"
     end
   end
 end
 
-# Run if executed directly
+# Run when this file is the program being compiled
 if PROGRAM_NAME.includes?("monitoring")
   BlogEngine.setup
+  Monitoring.watch_slow_queries
   Monitoring.print_stats
 end
 ```
+
+To find N+1 patterns and profile queries in more depth, see the [performance monitoring tutorial](../real-world-examples/performance-monitoring.md).
 
 ## Step 6: Create the Complete Demo
 
@@ -412,6 +414,7 @@ puts ""
 # Setup
 BlogEngine.setup
 BlogEngine.migrate
+Monitoring.watch_slow_queries
 
 # Seed data if database is empty
 if User.count == 0
@@ -456,20 +459,45 @@ crystal src/demo.cr
 
 ### Database Configuration
 
-For production, switch to PostgreSQL:
+For production, switch to PostgreSQL. `require "cql"` already includes a native PostgreSQL driver, so no extra shard is needed for `postgres://` URLs:
 
 ```crystal
 # src/database.cr
+require "cql"
+require "sqlite3" # development only; drop it when you only run on PostgreSQL
+
 adapter = if ENV["CRYSTAL_ENV"]? == "production"
   CQL::Adapter::Postgres
 else
   CQL::Adapter::SQLite
 end
 
-uri = ENV["DATABASE_URL"]? || "sqlite3://./db/development.db"
+uri = ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db?foreign_keys=1"
 
 BlogDB = CQL::Schema.define(:blog_db, adapter: adapter, uri: uri) do
 end
+```
+
+Your models use `BlogSchema`, and the generated `src/schemas/blog_schema.cr` hard-codes the adapter and URL it was generated from. Before deploying, edit those two lines to read from the environment and stop the migrator from overwriting your edit:
+
+```crystal
+# src/schemas/blog_schema.cr (edited by hand for production)
+BlogSchema = CQL::Schema.define(
+  :blog_schema,
+  adapter: CQL::Adapter::Postgres,
+  uri: ENV["DATABASE_URL"]) do
+  # ... generated table definitions ...
+end
+```
+
+```crystal
+# src/database.cr
+MIGRATOR_CONFIG = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/blog_schema.cr",
+  schema_name: :BlogSchema,
+  schema_symbol: :blog_schema,
+  auto_sync: false
+)
 ```
 
 ### Environment Variables

@@ -17,17 +17,14 @@ This tutorial shows you how to track and optimize query performance in your CQL 
 
 ## Step 1: Enable Query Logging
 
-Configure logging to capture all database queries:
+CQL publishes every statement it runs (selects, inserts, DDL, transactions) to `CQL::Telemetry`. Turn on one log line per statement:
 
 ```crystal
 # src/database.cr
+require "cql"
 require "log"
 
-# Configure logging
-Log.setup do |c|
-  backend = Log::IOBackend.new
-  c.bind("cql.*", :debug, backend)
-end
+DATABASE_URL = ENV["DATABASE_URL"]
 
 AppDB = CQL::Schema.define(
   :app_db,
@@ -35,11 +32,21 @@ AppDB = CQL::Schema.define(
   uri: DATABASE_URL
 ) do
 end
+
+# Send the query log to STDOUT at debug level
+Log.setup do |c|
+  c.bind("cql.*", :debug, Log::IOBackend.new)
+end
+
+# One line per statement: [select] 1.23ms SELECT ... (1 params)
+CQL::Telemetry.log_queries
 ```
+
+Bound parameter values are not part of the log line (and are not captured at all unless you set `CQL::Telemetry.capture_params = true`), so the log stays safe to ship.
 
 ## Step 2: Create a Query Monitor
 
-Build a simple query monitor to track execution times:
+Subscribe to telemetry events and keep them in memory to analyse execution times:
 
 ```crystal
 # src/monitoring/query_monitor.cr
@@ -59,6 +66,13 @@ module QueryMonitor
 
     def slow?(threshold_ms = 100.0)
       duration_ms > threshold_ms
+    end
+  end
+
+  # Feed the monitor from CQL's telemetry events
+  def self.install
+    CQL::Telemetry.subscribe("query_monitor") do |event|
+      record(event.sql, event.duration.total_milliseconds, event.context || "")
     end
   end
 
@@ -127,25 +141,23 @@ module QueryMonitor
 end
 ```
 
-## Step 3: Wrap Database Operations
+## Step 3: Tag Database Operations
 
-Create a timing wrapper:
+Call `QueryMonitor.install` once at startup. To see where queries come from, wrap code in `CQL::Telemetry.with_context`; every statement run inside the block carries the context, which the monitor stores as the query's source:
 
 ```crystal
-# src/monitoring/timed_queries.cr
-module TimedQueries
-  def self.measure(source = "")
-    start = Time.monotonic
-    result = yield
-    duration = (Time.monotonic - start).total_milliseconds
-    QueryMonitor.record("query", duration, source)
-    result
-  end
-end
+QueryMonitor.install
 
-# Usage in your code:
-posts = TimedQueries.measure("load_posts") do
+posts = CQL::Telemetry.with_context("load_posts") do
   Post.where(published: true).all
+end
+```
+
+To be told about slow statements as they happen, use `alert_on_slow`:
+
+```crystal
+CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
+  Log.warn { "Slow query (#{event.duration.total_milliseconds.round(2)}ms): #{event.sql}" }
 end
 ```
 
@@ -162,14 +174,23 @@ posts.each do |post|
 end
 
 # The monitor would show something like:
-# 1x SELECT * FROM posts WHERE published = true
-# 10x SELECT * FROM users WHERE id = ?
+# 1x SELECT ... FROM posts WHERE posts.published = ?
+# 10x SELECT ... FROM users WHERE users.id = ?
 ```
 
 ### Solution: Eager Loading
 
+For `has_many` associations, `preload` loads the children in one extra query:
+
 ```crystal
-# GOOD: Single query with join
+users = User.where(active: true).preload(:posts).all # 2 queries, however many users
+users.each { |user| puts "#{user.username}: #{user.posts.size} posts" }
+```
+
+For a `belongs_to` association, load the parents in one query and look them up in memory:
+
+```crystal
+# GOOD: two queries in total
 posts = Post.where(published: true).all
 user_ids = posts.map(&.user_id).uniq
 users_by_id = User.where { id.in(user_ids) }.all.index_by(&.id)
@@ -180,9 +201,11 @@ posts.each do |post|
 end
 
 # The monitor shows:
-# 1x SELECT * FROM posts WHERE published = true
-# 1x SELECT * FROM users WHERE id IN (?, ?, ...)
+# 1x SELECT ... FROM posts WHERE posts.published = ?
+# 1x SELECT ... FROM users WHERE users.id IN (?, ?, ...)
 ```
+
+CQL also ships an automatic detector, `CQL::Performance::NPlusOneDetector`, which flags repeated queries (see Step 7).
 
 ## Step 5: Create a Dashboard
 
@@ -310,10 +333,12 @@ describe "Performance" do
     # Create test data
     10.times { create_post }
 
-    # Load posts
-    QueryMonitor.enable
+    # Load posts and their authors
+    QueryMonitor.install # once per test run, e.g. in spec_helper.cr
+    QueryMonitor.clear
     posts = Post.where(published: true).all
-    posts.each { |p| p.user }
+    users_by_id = User.where { id.in(posts.map(&.user_id).uniq) }.all.index_by(&.id)
+    posts.each { |p| users_by_id[p.user_id]? }
 
     # Assert query count
     QueryMonitor.queries.size.should be <= 2
@@ -326,27 +351,31 @@ end
 
 ## Step 7: Production Monitoring
 
-For production, integrate with your monitoring stack:
+`CQL::Performance` profiles every query, detects N+1 patterns and produces reports. Configure it once at startup:
 
 ```crystal
-# src/monitoring/metrics.cr
-module Metrics
-  def self.record_query(duration_ms : Float64, query_type : String)
-    # Send to your metrics system (StatsD, Prometheus, etc.)
-    # Example with a hypothetical metrics client:
-    # MetricsClient.timing("cql.query.duration", duration_ms, tags: ["type:#{query_type}"])
-  end
+CQL::Performance.configure do |config|
+  config.monitoring.enabled = true
+  config.profiling.slow_query_threshold = 50.milliseconds
+  config.detection.threshold = 3 # repeats of one query before it counts as N+1
+end
 
-  def self.increment_query_count(query_type : String)
-    # MetricsClient.increment("cql.query.count", tags: ["type:#{query_type}"])
-  end
+# Later, e.g. from a health endpoint or a scheduled job
+puts CQL::Performance.report("console") # also "text", "json" and "html"
+pp CQL::Performance.metrics_summary
+Log.warn { "Performance issues found" } unless CQL::Performance.healthy?
+```
 
-  def self.record_slow_query(sql : String, duration_ms : Float64)
-    # Log slow queries for investigation
-    Log.warn { "Slow query (#{duration_ms.round(2)}ms): #{sql}" }
-  end
+To forward timings to your metrics stack (StatsD, Prometheus, OpenTelemetry), subscribe to telemetry events:
+
+```crystal
+CQL::Telemetry.subscribe("metrics") do |event|
+  # MetricsClient.timing("cql.query.duration", event.duration.total_milliseconds,
+  #   tags: ["operation:#{event.operation}", "ok:#{event.success?}"])
 end
 ```
+
+For OpenTelemetry-style tracing, implement `CQL::Telemetry::Tracer` and assign it to `CQL::Telemetry.tracer`. See the [telemetry how-to](../../how-to/performance/telemetry.md).
 
 ## Optimization Checklist
 
@@ -356,14 +385,14 @@ When you find performance issues:
 
 ```crystal
 # Check if filtering on a column without an index
-Post.where(status: "published").all  # Is status indexed?
+Post.where(published: true).all  # Is published indexed?
 ```
 
 ### 2. Use Select to Limit Columns
 
 ```crystal
 # Instead of loading entire records
-titles = Post.where(published: true).select(:id, :title).all
+titles = Post.where(published: true).select(:id, :title).to_a # rows with only id and title filled in
 ```
 
 ### 3. Batch Large Operations
@@ -388,11 +417,11 @@ end
 
 You've learned:
 
-1. How to enable query logging
-2. Building a query monitor
+1. How to enable query logging with `CQL::Telemetry`
+2. Building a query monitor on telemetry events
 3. Detecting N+1 queries
 4. Creating a performance dashboard
-5. Monitoring in tests and production
+5. Monitoring in tests and production with `CQL::Performance`
 
 ## Next Steps
 

@@ -11,20 +11,30 @@ Improve query performance with indexing, eager loading, and query optimization t
 
 Indexes dramatically speed up queries on frequently searched columns.
 
+Indexes are created with `create_index` inside `schema.alter`; `table.create!` does not emit `CREATE INDEX` (see [Create Indexes](../migrations/indexes.md)).
+
 ### Single Column Index
 
 ```crystal
 class AddIndexes < CQL::Migration(1)
   def up
-    add_index :users, :email
-    add_index :posts, :user_id
-    add_index :posts, :published_at
+    schema.alter :users do
+      create_index :idx_users_email, [:email]
+    end
+    schema.alter :posts do
+      create_index :idx_posts_user_id, [:user_id]
+      create_index :idx_posts_published_at, [:published_at]
+    end
   end
 
   def down
-    remove_index :users, :email
-    remove_index :posts, :user_id
-    remove_index :posts, :published_at
+    schema.alter :users do
+      drop_index :idx_users_email
+    end
+    schema.alter :posts do
+      drop_index :idx_posts_user_id
+      drop_index :idx_posts_published_at
+    end
   end
 end
 ```
@@ -35,7 +45,9 @@ For queries filtering on multiple columns:
 
 ```crystal
 # For queries like: WHERE user_id = ? AND status = ?
-add_index :orders, [:user_id, :status]
+schema.alter :orders do
+  create_index :idx_orders_user_status, [:user_id, :status]
+end
 ```
 
 ### Unique Index
@@ -43,7 +55,9 @@ add_index :orders, [:user_id, :status]
 Enforce uniqueness and speed up lookups:
 
 ```crystal
-add_index :users, :email, unique: true
+schema.alter :users do
+  create_index :idx_users_email, [:email], unique: true
+end
 ```
 
 ## Use Select to Limit Columns
@@ -54,8 +68,9 @@ Only fetch columns you need:
 # Instead of
 users = User.all
 
-# Use
-users = User.select(:id, :name, :email).all
+# Use (returns lightweight rows with only these columns filled in)
+rows = User.select(:id, :name, :email).all
+rows.first.name  # => String?
 ```
 
 ## Use Pluck for Single Values
@@ -64,10 +79,13 @@ When you only need specific columns without model objects:
 
 ```crystal
 # Returns array of emails
-emails = User.where(active: true).pluck(:email)
+emails = User.where(active: true).pluck(:email, as: String)
 
-# Returns array of [id, name] tuples
-data = User.select(:id, :name).pluck(:id, :name)
+# Returns array of {id, name} tuples
+data = User.where(active: true).pluck(:id, :name, as: {Int64, String})
+
+# One value from the first row
+newest_id = User.order(id: :desc).pick(:id, as: Int64)
 ```
 
 ## Limit Result Sets
@@ -99,12 +117,18 @@ count = User.where(active: true).all.size
 Process large datasets in batches:
 
 ```crystal
-User.where(needs_update: true).each_batch(1000) do |batch|
-  batch.each do |user|
-    user.update!(processed: true)
-  end
+# One record at a time, loaded 1000 per query
+User.where(active: true).find_each(1000) do |user|
+  user.update!(processed: true)
+end
+
+# Or a whole batch at a time
+User.where(active: true).find_in_batches(1000) do |batch|
+  batch.each { |user| user.update!(processed: true) }
 end
 ```
+
+Batches are read with `ORDER BY id LIMIT ... OFFSET ...`, so do not change the columns used in your `where` while iterating (for example flagging rows out of the filter), or later batches will skip rows.
 
 ## Use Exists Instead of Count
 
@@ -128,7 +152,9 @@ Ensure ordered columns are indexed:
 
 ```crystal
 # Add index for common ordering
-add_index :posts, :created_at
+schema.alter :posts do
+  create_index :idx_posts_created_at, [:created_at]
+end
 
 # Query uses index
 Post.order(created_at: :desc).limit(10).all
@@ -139,20 +165,22 @@ Post.order(created_at: :desc).limit(10).all
 Log queries to find bottlenecks:
 
 ```crystal
-MyDB.on_query do |sql, duration|
-  if duration > 100.milliseconds
-    Log.warn { "Slow query (#{duration}ms): #{sql}" }
-  end
+CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
+  Log.warn { "Slow query (#{event.duration.total_milliseconds.round(2)}ms): #{event.sql}" }
 end
 ```
+
+See [Monitor Performance](monitoring.md) and [Telemetry](telemetry.md) for more.
 
 ## Verify Optimization
 
 Check query execution plans:
 
 ```crystal
-result = MyDB.exec("EXPLAIN ANALYZE SELECT * FROM users WHERE email = 'test@example.com'")
-puts result.first
+query = User.where(email: "test@example.com").query
+
+puts query.explain                 # the database's plan, one line per row
+puts query.explain(analyze: true)  # runs the statement and reports real timings
 ```
 
 Look for:
@@ -164,4 +192,5 @@ Look for:
 
 - [Avoid N+1 Queries](n-plus-one.md)
 - [Create Indexes](../migrations/indexes.md)
+- [Telemetry](telemetry.md)
 - [Monitor Performance](monitoring.md)

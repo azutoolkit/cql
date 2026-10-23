@@ -40,9 +40,11 @@ Feature requests are welcome! Open an issue describing:
    crystal spec
    ```
 
-5. **Format your code**
+5. **Format and lint your code**
    ```shell
-   crystal tool format
+   crystal tool format src spec     # apply formatting
+   crystal tool format --check src spec  # what CI checks
+   bin/ameba                        # lint (build it first with `shards build ameba`)
    ```
 
 6. **Commit your changes**
@@ -67,20 +69,30 @@ Feature requests are welcome! Open an issue describing:
 ### Testing
 
 - Write tests for all new features
+- A bug fix comes with a regression spec that fails without the fix
 - Ensure existing tests pass
 - Test edge cases and error conditions
+- Live specs run on SQLite. Other dialects are verified by generated-SQL specs, for example `Expression::Generator.new(CQL::Adapter::Postgres)` with `query.to_sql(generator)`; PostgreSQL and Redis specs are marked pending when no server is available
+- SQL assertions follow `spec/core/query_spec.cr`: `query.to_sql.should eq({sql, params})`
+
+### Code Design
+
+- Values are always bound as parameters; identifiers go through `CQL::Identifier` or `Dialect#quote_identifier`. Never interpolate user input into SQL
+- Add a feature as a new AST node, a visitor method and a dialect hook rather than `if`/`case` branches on the adapter
 
 ### Documentation
 
 - Update documentation for public API changes
 - Add code examples for new features
 - Use clear, concise language
+- Record behavior changes under `[Unreleased]` in `CHANGELOG.md`
 
 ## Pull Request Process
 
 1. Update the README.md with details of changes if applicable
 2. Update the documentation with any new features
-3. The PR will be merged once it has been reviewed and approved
+3. Add a `CHANGELOG.md` entry under `[Unreleased]`
+4. The PR will be merged once it has been reviewed and approved
 
 ## Development Setup
 
@@ -92,13 +104,17 @@ Feature requests are welcome! Open an issue describing:
 
 2. Install dependencies:
    ```shell
-   shards install
+   shards install --ignore-crystal-version
    ```
 
 3. Run tests:
    ```shell
-   crystal spec
+   crystal spec                              # full suite
+   crystal spec spec/core/query_spec.cr      # one file
    ```
+
+   Without a MySQL client installed, one spec errors because `mysqldump` is missing
+   (`spec/integration/dialects/mysql_dialect_spec.cr`). That is an environment issue, not a regression.
 
 ## Questions?
 

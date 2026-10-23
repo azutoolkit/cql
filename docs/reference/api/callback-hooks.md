@@ -7,16 +7,59 @@ Complete reference for lifecycle callbacks in CQL Active Record models.
 Callbacks allow you to trigger logic at specific points in a record's lifecycle:
 
 ```
-┌──────────────┐
-│  before_save │ ─── Runs before INSERT or UPDATE
-├──────────────┤
-│    save      │ ─── Database operation
-├──────────────┤
-│  after_save  │ ─── Runs after INSERT or UPDATE
-└──────────────┘
+┌───────────────────┐
+│ before_validation │ ─── Runs first
+├───────────────────┤
+│ after_validation  │ ─── Runs before the validation rules are evaluated
+├───────────────────┤
+│    validations    │ ─── Raise ValidationError when invalid
+├───────────────────┤
+│    before_save    │ ─── Runs before INSERT or UPDATE
+├───────────────────┤
+│       save        │ ─── Database operation
+├───────────────────┤
+│    after_save     │ ─── Runs after INSERT or UPDATE
+└───────────────────┘
 ```
 
+Each callback is registered with a macro that takes a method name as a symbol (`before_save :normalize_email`). There are no block, `if:` or `unless:` forms. Callbacks run for `save`, `save!` and the instance `delete!`; `create!`, `update!`, `touch` and the class-level `delete!`, `delete_all`, `delete_by!` and `update_all` skip them. Several callbacks for one event run in the order they were declared.
+
 ## Available Callbacks
+
+### before_validation
+
+Runs first when saving, before anything else.
+
+```crystal
+struct User
+  include CQL::ActiveRecord::Model(Int64)
+
+  before_validation :strip_name
+
+  private def strip_name
+    @name = @name.strip
+    true
+  end
+end
+```
+
+**Use cases:**
+- Normalizing input before validation rules look at it
+
+### after_validation
+
+Runs right after `before_validation` and before the validation rules are evaluated, so it cannot see the validation result. Use `before_save` for logic that must only run on valid records.
+
+```crystal
+struct User
+  after_validation :log_attempt
+
+  private def log_attempt
+    Log.debug { "validating #{@email}" }
+    true
+  end
+end
+```
 
 ### before_save
 
@@ -30,7 +73,7 @@ struct User
 
   private def normalize_email
     @email = @email.downcase.strip
-    true  # Must return true to continue
+    true  # Return anything but false to continue
   end
 end
 ```
@@ -38,7 +81,7 @@ end
 **Use cases:**
 - Data normalization
 - Setting computed fields
-- Validation that requires database access
+- Guarding the save with a database lookup (return `false` to halt)
 
 ### after_save
 
@@ -73,7 +116,7 @@ struct User
 
   private def set_defaults
     @role ||= "member"
-    @created_at = Time.utc
+    @api_token = Random::Secure.hex(16)
     true
   end
 end
@@ -110,19 +153,21 @@ Runs only before UPDATE operations (existing records).
 
 ```crystal
 struct Post
-  before_update :track_changes
+  before_update :stamp_edit
 
-  private def track_changes
-    @previous_status = @status_was if status_changed?
+  private def stamp_edit
+    @edited_at = Time.utc
     true
   end
 end
 ```
 
 **Use cases:**
-- Tracking changes
+- Recording edit metadata
 - Validating state transitions
-- Incrementing version numbers
+- Incrementing counters
+
+CQL has no dirty tracking (`changed?`, `*_was`). To compare against the stored values, load the row with `Post.find(id)` inside the callback.
 
 ### after_update
 
@@ -133,7 +178,7 @@ struct Post
   after_update :notify_subscribers
 
   private def notify_subscribers
-    if @published && !@published_was
+    if @published
       subscribers.each do |sub|
         Mailer.new_post(sub, self).deliver
       end
@@ -150,16 +195,15 @@ end
 
 ### before_destroy
 
-Runs before DELETE operations.
+Runs before DELETE operations. It fires from the instance `delete!` (and from the soft-delete `delete!` and `force_delete!`); returning `false` makes `delete!` return `false` without deleting.
 
 ```crystal
 struct User
   before_destroy :check_can_delete
 
   private def check_can_delete
-    if posts.any?
-      errors.add(:base, "Cannot delete user with posts")
-      return false
+    if posts_any?
+      return false  # Halts - the row is kept
     end
     true
   end
@@ -173,14 +217,14 @@ end
 
 ### after_destroy
 
-Runs after successful DELETE operations.
+Runs after a successful DELETE (at least one row removed). The record's `id` is cleared afterwards, so capture it in `before_destroy` if you need it later.
 
 ```crystal
 struct User
   after_destroy :cleanup_files
 
   private def cleanup_files
-    FileUtils.rm_rf("/uploads/users/#{@id}")
+    FileUtils.rm_rf("/uploads/users/#{@name}")
     true
   end
 end
@@ -193,36 +237,43 @@ end
 
 ## Return Values
 
-**Important:** Callbacks must return `true` to continue the operation.
+A callback halts the operation only when it returns `false`. Any other value, including `nil` and `true`, lets the chain continue, but return `true` explicitly so a stray `false` from your last expression cannot halt it by accident.
 
 ```crystal
 # Stops the save operation
-private def validate_something
+private def check_something
   if some_condition_fails
-    errors.add(:field, "error message")
     return false  # Halts operation
   end
   true  # Continues operation
 end
 ```
 
+When a `before_*` callback halts, `save` returns `false` and `save!` raises `CQL::RecordNotSaved`. Halting does not add anything to `errors`; `errors` only holds validation rule results. A `false` from an `after_*` callback stops the remaining callbacks for that event but does not undo the database change.
+
 ## Callback Order
 
 When saving a new record:
-1. `before_save`
-2. `before_create`
-3. (database INSERT)
-4. `after_create`
-5. `after_save`
+1. `before_validation`
+2. `after_validation`
+3. validation rules
+4. `before_save`
+5. `before_create`
+6. (database INSERT)
+7. `after_create`
+8. `after_save`
 
 When updating an existing record:
-1. `before_save`
-2. `before_update`
-3. (database UPDATE)
-4. `after_update`
-5. `after_save`
+1. `before_validation`
+2. `after_validation`
+3. validation rules
+4. `before_save`
+5. `before_update`
+6. (database UPDATE)
+7. `after_update`
+8. `after_save`
 
-When deleting:
+When deleting with `record.delete!`:
 1. `before_destroy`
 2. (database DELETE)
 3. `after_destroy`
@@ -273,7 +324,7 @@ struct Article
   end
 
   private def check_publish_state
-    if @published && !published_was
+    if @published && @published_at.nil?
       @published_at = Time.utc
     end
     true
@@ -286,7 +337,7 @@ struct Article
   end
 
   private def archive_content
-    Archive.create!(content: to_json, type: "Article")
+    Archive.create!(content: @body, type: "Article")
     true
   end
 

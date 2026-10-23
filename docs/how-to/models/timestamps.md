@@ -19,6 +19,8 @@ This creates two columns:
 - `created_at` - Set when record is first saved
 - `updated_at` - Updated each time record is saved
 
+Both columns get the dialect's current-timestamp default.
+
 ## Add to Model
 
 Define the timestamp properties in your model:
@@ -40,7 +42,7 @@ end
 
 ## Automatic Timestamps
 
-CQL automatically sets timestamps when you save:
+`save` and `save!` set `created_at` (new records only) and `updated_at` automatically, as long as the table has those columns:
 
 ```crystal
 post = Post.new("My Post")
@@ -56,6 +58,22 @@ post.save!
 post.created_at  # => 2024-01-15 10:30:00 UTC (unchanged)
 post.updated_at  # => 2024-01-15 11:45:00 UTC (updated)
 ```
+
+Only `save`/`save!` do this. `Post.create!(title: "...")` inserts just the fields you pass, so the database default from `timestamps` fills `created_at` and `updated_at`, and the returned record is re-read from the database. `update!` writes the model's attributes as they are and does not touch `updated_at`, so use `save!` (or `touch`) when you want it refreshed.
+
+## Touch Records
+
+`touch` updates timestamp columns without running validations or callbacks:
+
+```crystal
+post.touch                          # updated_at = now
+post.touch(:updated_at, :created_at)
+post.touch!                         # same as touch(:updated_at)
+
+Post.touch_all([1_i64, 2_i64])      # updated_at for many ids
+```
+
+`touch` raises `CQL::Error` on an unsaved record or an unknown column.
 
 ## Manual Timestamps with Callbacks
 
@@ -120,7 +138,7 @@ class AddTimestampsToPosts < CQL::Migration(20240115)
     end
 
     # Optionally set existing records to current time
-    schema.exec("UPDATE posts SET created_at = NOW(), updated_at = NOW() WHERE created_at IS NULL")
+    schema.exec("UPDATE posts SET created_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
   end
 
   def down
@@ -141,7 +159,7 @@ struct Post
   # ... properties ...
 
   def created_today? : Bool
-    created_at.try(&.to_date) == Time.utc.to_date
+    created_at.try(&.date) == Time.utc.date
   end
 
   def recently_updated? : Bool
@@ -170,7 +188,7 @@ sleep 1
 post.title = "Updated"
 post.save!
 
-post.created_at < post.updated_at  # => true
+post.created_at.not_nil! < post.updated_at.not_nil!  # => true
 ```
 
 ## Related

@@ -75,6 +75,7 @@ Real-world benchmarks (1M records, complex queries):
 | **PostgreSQL** | Full          | JSONB, Arrays, Advanced Types     |
 | **MySQL**      | Full          | Complete MySQL support            |
 | **SQLite**     | Full          | Perfect for development & testing |
+| **CockroachDB**| Full          | PostgreSQL dialect, native driver |
 
 ## Native PostgreSQL Driver
 
@@ -329,7 +330,7 @@ Add CQL and your database driver to your `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.435"
+    version: "~> 0.0.589"
 
   # Choose your database driver:
   pg: # Optional: CQL ships its own PostgreSQL driver
@@ -352,7 +353,7 @@ shards install
 
 ```crystal
 require "cql"
-require "sqlite3"  # or "pg" or "mysql"
+require "sqlite3"  # or "mysql"; PostgreSQL needs no extra require
 
 # Define your database schema with compile-time validation
 BlogDB = CQL::Schema.define(
@@ -366,7 +367,7 @@ BlogDB = CQL::Schema.define(
     text :email
     text :first_name, null: true
     text :last_name, null: true
-    boolean :active, default: "1"
+    boolean :active, default: true
     timestamps
   end
 
@@ -374,7 +375,7 @@ BlogDB = CQL::Schema.define(
     primary :id, Int64
     text :title
     text :content
-    boolean :published, default: "0"
+    boolean :published, default: false
     bigint :user_id
     timestamps
 
@@ -391,18 +392,20 @@ BlogDB.posts.create!
 ### 2. Create Models
 
 ```crystal
-struct User
-  getter id : Int64?
-  getter username : String
-  getter email : String
-  getter first_name : String?
-  getter last_name : String?
-  getter? active : Bool = true
-  getter created_at : Time?
-  getter updated_at : Time?
+class User
+  include CQL::ActiveRecord::Model(Int64) # provides `id : Int64?`
+  db_context BlogDB, :users
+
+  property username : String
+  property email : String
+  property first_name : String?
+  property last_name : String?
+  property active : Bool = true
+  property created_at : Time?
+  property updated_at : Time?
 
   # Compile-time validated relationships
-  has_many :posts, foreign_key: :user_id
+  has_many :posts, Post, :user_id
 
   # Built-in validations with clear error messages
   validate :username, presence: true, size: 2..50
@@ -421,70 +424,76 @@ struct User
   end
 end
 
-struct Post
-  getter id : Int64?
-  getter title : String
-  getter content : String
-  getter? published : Bool = false
-  getter user_id : Int64
-  getter created_at : Time?
-  getter updated_at : Time?
+class Post
+  include CQL::ActiveRecord::Model(Int64)
+  db_context BlogDB, :posts
+
+  property title : String
+  property content : String
+  property published : Bool = false
+  property user_id : Int64
+  property created_at : Time?
+  property updated_at : Time?
 
   # Type-safe relationships prevent association errors
-  belongs_to :user, User, foreign_key: :user_id
+  belongs_to :user, User, :user_id
 
   # Comprehensive validations
   validate :title, presence: true, size: 1..100
   validate :content, presence: true
 
-  def initialize(@title : String, @content : String, @user_id : Int64)
+  # `user_id` has a default so `user.posts.build(title: ..., content: ...)` can build a Post
+  def initialize(@title : String, @content : String, @user_id : Int64 = 0_i64)
   end
 end
 ```
 
+Models are classes (not structs) so `save` can assign the generated `id` to your instance.
+
 ### 3. Work with Your Data
 
 ```crystal
-# Create with automatic validation
-user = User.new("alice_j", "alice@example.com", "Alice", "Johnson")
-if user.save
-  puts "✅ User created with ID: #{user.id}"
+# Validate, then save (save raises ValidationError for an invalid record)
+author = User.new("alice_j", "alice@example.com", "Alice", "Johnson")
+if author.valid?
+  author.save
+  puts "User created with ID: #{author.id}"
 else
-  puts "❌ Validation errors: #{user.errors.map(&.message)}"
+  puts "Validation errors: #{author.errors.map(&.message)}"
 end
 
-# Type-safe queries with IntelliSense support
+# Type-safe queries
 alice = User.find_by(username: "alice_j")
 active_users = User.where(active: true).all
 
-# Create associated records (no N+1 queries!)
-post = user.posts.create(title: "My First Post", content: "Hello, World!")
+# Build associated records through the association (user_id is set for you)
+post = author.posts.build(title: "My First Post", content: "Hello, World!")
+post.save!
 
 # Safe transactions with automatic rollback
 User.transaction do |tx|
-  user = User.create!(username: "bob", email: "bob@example.com")
-  post = user.posts.create!(title: "Bob's Post", content: "Content here")
+  bob = User.create!(username: "bob", email: "bob@example.com")
+  Post.create!(title: "Bob's Post", content: "Content here", user_id: bob.id!)
 
-  # If anything fails, everything rolls back automatically
-  # No partial data corruption!
+  # If anything raises, everything rolls back automatically
 end
 
-# Advanced querying with type safety
-published_posts = Post.where(published: true)
-                     .joins(:user)
-                     .where(users: {active: true})
-                     .order(created_at: :desc)
-                     .limit(10)
-                     .all
+# Typed queries with joins on a declared association (inside the block, `user` is
+# the association, so do not keep a local variable named `user` in scope)
+published_posts = Post.query
+  .joins(:user) { user.active == true }
+  .where(published: true)
+  .order_by(created_at: :desc) # typed, so it is not ambiguous between posts and users
+  .limit(10)
+  .all
 
-# Complex queries made simple
-recent_active_authors = User.joins(:posts)
-                           .where("posts.created_at > ?", 1.week.ago)
-                           .where(active: true)
-                           .distinct
-                           .count
+# Bound raw fragments and typed blocks
+recent_authors = User.query
+  .where("created_at > ?", 1.week.ago)
+  .where { active == true }
+  .count
 
-puts "Found #{recent_active_authors} active authors this week"
+puts "Found #{recent_authors} active authors this week"
 ```
 
 ## Advanced Features
@@ -495,15 +504,16 @@ puts "Found #{recent_active_authors} active authors this week"
 # Schema with advanced features
 BlogDB = CQL::Schema.define(:blog, adapter: CQL::Adapter::Postgres, uri: ENV["DATABASE_URL"]) do
   table :products do
-    primary :id, UUID                    # UUID primary keys
+    primary :id, String, auto_increment: false # UUID primary keys (stored as text)
     text :name
-    decimal :price, precision: 10, scale: 2
-    text :metadata                       # JSON columns
+    double :price
+    json :metadata, null: true           # JSON columns
     timestamps
 
-    # Optimized indexing
-    index :name, unique: true
-    index [:price, :created_at]          # Composite indexes for performance
+    # Constraints and indexes
+    unique_constraint [:name]
+    # Non-unique indexes are created in a migration:
+    #   schema.alter(:products) { create_index :idx_products_price, [:price, :created_at] }
   end
 end
 ```
@@ -511,15 +521,14 @@ end
 ### Active Record Pattern
 
 ```crystal
-struct Product
+class Product
   include CQL::ActiveRecord::Model(UUID)
   db_context BlogDB, :products
 
-  getter id : UUID?
-  getter name : String
-  getter price : Float64
-  getter created_at : Time?
-  getter updated_at : Time?
+  property name : String
+  property price : Float64
+  property created_at : Time?
+  property updated_at : Time?
 
   # Custom validations with clear error messages
   validate :name, presence: true, size: 2..100
@@ -531,7 +540,7 @@ end
 
 # CRUD operations with validation
 product = Product.create!(name: "Laptop", price: 999.99)
-product = Product.find(product.id.not_nil!)
+product = Product.find!(product.id!)
 
 # Efficient querying with type safety
 affordable_products = Product.where("price < ?", 1000.0)
@@ -544,16 +553,16 @@ product.price = 899.99
 product.save!  # Validates before saving
 
 # Safe deletion
-product.destroy!
+product.delete!
 ```
 
 ### Validations
 
 ```crystal
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
 
-  # Built-in validations with internationalization support
+  # Built-in validations with clear error messages
   validate :name, presence: true, size: 2..50
   validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
   validate :age, gt: 0, lt: 120
@@ -564,7 +573,7 @@ struct User
   use BusinessRuleValidator
 end
 
-# Comprehensive error handling
+# Comprehensive error handling (save/save! raise ValidationError on an invalid record)
 user = User.new("", "invalid-email")
 unless user.valid?
   user.errors.each do |error|
@@ -576,26 +585,26 @@ end
 ### Smart Relationships
 
 ```crystal
-struct User
+class User
   # Type-safe relationship definitions
   has_one :profile, UserProfile, foreign_key: :user_id
-  has_many :posts, foreign_key: :user_id
-  has_many :comments, foreign_key: :user_id
+  has_many :posts, Post, foreign_key: :user_id
+  has_many :comments, Comment, foreign_key: :user_id
 end
 
-struct Post
-  belongs_to :user, User, foreign_key: :user_id
-  has_many :comments, foreign_key: :post_id
-  many_to_many :tags, Tag, join_through: :post_tags
+class Post
+  belongs_to :user, User, :user_id
+  has_many :comments, Comment, foreign_key: :post_id
+  many_to_many :tags, Tag, join_through: PostTag # PostTag is the join table's model
 end
 
-# Efficient association loading (automatic N+1 prevention)
-user = User.find(1.to_i64)
-user.posts.create(title: "New Post", content: "Content")
-user.posts.size                         # Efficient count without loading all records
-user.posts.any?                         # Check existence without memory overhead
+# Efficient association loading
+user = User.find!(1_i64)
+user.posts.build(title: "New Post", content: "Content").save!
+user.posts.size                         # Number of posts
+user.posts.empty?                       # Existence check
 
-# Eager loading with preload (avoids N+1 queries)
+# Eager loading with preload for has_many associations (avoids N+1 queries)
 users_with_posts = User.preload(:posts)
                       .where(active: true)
                       .all
@@ -608,7 +617,7 @@ users_with_posts = User.preload(:posts)
 # Simple atomic transactions
 User.transaction do |tx|
   user = User.create!(username: "john", email: "john@example.com")
-  user.posts.create!(title: "First Post", content: "Hello!")
+  Post.create!(title: "First Post", content: "Hello!", user_id: user.id!)
 
   # Automatic rollback on any exception
   raise "Error!" if some_condition  # Everything safely rolls back
@@ -661,15 +670,16 @@ end
 
 # Safe migration management
 migrator = CQL::Migrator.new(BlogDB)
-migrator.up           # Apply all pending migrations
-migrator.down(1)      # Rollback last migration safely
-migrator.status       # Check migration status
+migrator.up                        # Apply all pending migrations
+migrator.down(1)                   # Rollback last migration safely
+migrator.print_pending_migrations  # Check migration status
+migrator.print_applied_migrations
 ```
 
 ### Query Scopes
 
 ```crystal
-struct Post
+class Post
   # Define reusable query patterns
   scope :published, ->{ where(published: true) }
   scope :recent, ->{ where("created_at > ?", 1.week.ago).order(created_at: :desc) }
@@ -715,30 +725,24 @@ dumper.close
 ### Caching
 
 ```crystal
-# Caching configuration
-cache_config = CQL::Cache::CacheConfig.new(
-  enabled: true,
-  ttl: 1.hour,
-  max_size: 10_000,
-  compression: true
-)
-
 # Memory cache for lightning-fast access
 memory_cache = CQL::Cache::MemoryCache.new(max_size: 1000)
 
 # Redis cache for distributed applications
 redis_cache = CQL::Cache::RedisCache.new("redis://localhost:6379")
 
-# Fragment caching for expensive operations
-fragment_cache = CQL::Cache::FragmentCache.new(memory_cache)
+# Fragment caching for expensive operations: a store plus an invalidation strategy
+strategy = CQL::Cache::TimestampInvalidation.new(1.hour)
+fragment_cache = CQL::Cache::FragmentCache.new(memory_cache, strategy)
 
-# Intelligent caching with automatic invalidation
-result = fragment_cache.cache_fragment("expensive_query", {"user_id" => user.id}) do
-  # Expensive database operation cached automatically
-  User.join(:posts)
-      .where(active: true)
-      .preload(:profile)
-      .all
+# The block runs only on a cache miss and returns a String
+titles_json = fragment_cache.cache_fragment(
+  "active_user_posts",
+  params: {"user_id" => user.id!} of String => DB::Any,
+  tags: ["user:#{user.id}", "posts"],
+  ttl: 10.minutes
+) do
+  Post.where(user_id: user.id!, published: true).all.map(&.title).to_json
 end
 
 # Tag-based cache invalidation
@@ -754,18 +758,19 @@ CQL::Telemetry.subscribe("slow") do |event|
 end
 CQL::Telemetry.alert_on_slow(100.milliseconds) { |event| Log.warn { event.sql } }
 
-# Automatic N+1 query detection
+# Automatic N+1 query detection (statements run through CQL are fed to the global monitor for you)
 detector = CQL::Performance::NPlusOneDetector.new
-detector.analyze_queries(queries) do |pattern|
+queries.each { |sql| detector.record_query(sql) }
+detector.patterns.each do |pattern|
   puts "⚠️  N+1 Query Pattern Detected:"
-  puts "   Model: #{pattern.model}"
-  puts "   Association: #{pattern.association}"
-  puts "   Suggestion: Use .preload(:#{pattern.association})"
+  puts "   Repeated #{pattern.repetition_count}x: #{pattern.repeated_query}"
+  puts "   Suggestion: load the association once with .preload(:association)"
 end
 
 # Generate beautiful performance reports
-report_generator = CQL::Performance::Reports::HTMLReportGenerator.new
-report_generator.generate_report(monitor.events, "performance_report.html")
+report = CQL::Performance::PerformanceReport.new(10.seconds, total_queries: 120, slow_queries: 3, errors: 0)
+report_generator = CQL::Performance::UnifiedReportGenerator.new
+File.write("performance_report.html", report_generator.generate("html", report))
 puts "📊 Performance report generated: performance_report.html"
 ```
 
@@ -808,40 +813,37 @@ Comprehensive guides for every level:
 ### Getting Started
 
 - **[Installation Guide](./docs/installation.md)** - Set up CQL in your project
-- **[Getting Started](./docs/guides/getting-started.md)** - Your first CQL application
-- **[Schema Definition](./docs/core-concepts/schemas.md)** - Type-safe database schemas
-- **[Configuration](./docs/guides/configuration.md)** - Environment setup and database connections
+- **[Getting Started](./docs/tutorials/getting-started/your-first-cql-app.md)** - Your first CQL application
+- **[Configuration](./docs/how-to/configuration/database-connection.md)** - Environment setup and database connections
 
 ### Core Features
 
-- **[Defining Models](./docs/guides/active-record-with-cql/defining-models.md)** - Active Record model setup
-- **[CRUD Operations](./docs/guides/active-record-with-cql/crud-operations.md)** - Create, read, update, delete
-- **[Complex Queries](./docs/guides/active-record-with-cql/complex-queries.md)** - Advanced querying and N+1 prevention
-- **[Validations](./docs/guides/active-record-with-cql/validations.md)** - Data validation and integrity
-- **[Relationships](./docs/guides/active-record-with-cql/relations/README.md)** - Model associations and relationships
+- **[Defining Models](./docs/how-to/models/define-model.md)** - Active Record model setup
+- **[CRUD Operations](./docs/how-to/data-operations/create.md)** - Create, read, update, delete
+- **[Complex Queries](./docs/how-to/querying/complex-queries.md)** - Advanced querying and N+1 prevention
+- **[Validations](./docs/how-to/models/add-validations.md)** - Data validation and integrity
+- **[Relationships](./docs/how-to/relationships/has-many.md)** - Model associations and relationships
 
 ### Advanced Topics
 
-- **[Transactions](./docs/guides/active-record-with-cql/transactions.md)** - Managing database transactions
-- **[Migrations](./docs/guides/active-record-with-cql/migrations.md)** - Schema evolution and versioning
-- **[Schema Dump](./docs/guides/schema-dump.md)** - Reverse-engineer existing databases
-- **[Callbacks](./docs/guides/active-record-with-cql/callbacks.md)** - Lifecycle hooks and callbacks
-- **[Scopes](./docs/guides/active-record-with-cql/scopes.md)** - Reusable query methods
-- **[Optimistic Locking](./docs/guides/active-record-with-cql/optimistic-locking.md)** - Concurrency control
+- **[Transactions](./docs/how-to/data-operations/transactions.md)** - Managing database transactions
+- **[Migrations](./docs/how-to/migrations/run-migrations.md)** - Schema evolution and versioning
+- **[Callbacks](./docs/how-to/models/use-callbacks.md)** - Lifecycle hooks and callbacks
+- **[Scopes](./docs/how-to/querying/scopes.md)** - Reusable query methods
+- **[Optimistic Locking](./docs/how-to/models/optimistic-locking.md)** - Concurrency control
 
 ### Performance & Production
 
-- **[Advanced Caching](./docs/guides/advanced-caching-architecture.md)** - Multi-layer caching strategies
-- **[Performance Monitoring](./docs/guides/performance-optimization.md)** - Query profiling and optimization
-- **[Security Guide](./docs/guides/security-guide.md)** - Production security best practices
-- **[Testing Strategies](./docs/guides/testing-strategies.md)** - Testing CQL applications
+- **[Advanced Caching](./docs/how-to/caching/query-cache.md)** - Multi-layer caching strategies
+- **[Performance Monitoring](./docs/how-to/performance/monitoring.md)** - Query profiling and optimization
+- **[Testing Strategies](./docs/how-to/testing/test-models.md)** - Testing CQL applications
 
 ### Reference
 
-- **[Quick Reference](./docs/guides/quick-reference.md)** - Cheat sheet for common operations
-- **[Architecture Overview](./docs/guides/architecture-overview.md)** - Understanding CQL's design
-- **[FAQ](./docs/faqs.md)** - Frequently asked questions
-- **[Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
+- **[Quick Reference](./docs/reference/quick-reference.md)** - Cheat sheet for common operations
+- **[Architecture Overview](./docs/explanation/README.md)** - Understanding CQL's design
+- **[FAQ](./docs/resources/faq.md)** - Frequently asked questions
+- **[Troubleshooting](./docs/how-to/troubleshooting/connection-errors.md)** - Common issues and solutions
 
 ## Development & Testing
 
@@ -902,7 +904,7 @@ We welcome contributions! Here's how to get involved:
 - Follow Crystal coding conventions and style guidelines
 - Add comprehensive tests for new features and bug fixes
 - Update documentation for API changes and new features
-- Ensure compatibility across all supported databases (PostgreSQL, MySQL, SQLite)
+- Ensure compatibility across all supported databases (PostgreSQL, MySQL, SQLite, CockroachDB)
 - Use meaningful commit messages following [conventional commits](https://conventionalcommits.org/)
 - Add performance benchmarks for query-related features
 - Consider security implications for new features
@@ -931,7 +933,7 @@ shards install
 crystal examples/run_examples.cr
 ```
 
-**[Get Started Now →](./docs/guides/getting-started.md) • [Try Examples →](./examples/) • [Join Community →](https://github.com/azutoolkit/cql/discussions)**
+**[Get Started Now →](./docs/tutorials/getting-started/your-first-cql-app.md) • [Try Examples →](./examples/) • [Join Community →](https://github.com/azutoolkit/cql/discussions)**
 
 ---
 
