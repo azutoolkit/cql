@@ -100,6 +100,11 @@ class User
     @email = @email.downcase.strip
     true
   end
+
+  private def send_welcome_email
+    # Send the welcome email
+    true
+  end
 end
 ```
 
