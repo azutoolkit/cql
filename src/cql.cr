@@ -158,3 +158,7 @@ module CQL
     end
   end
 end
+
+# The native PostgreSQL/CockroachDB driver is the default for those URLs unless
+# the `pg` shard registers its drivers first.
+require "./postgres"

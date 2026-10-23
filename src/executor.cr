@@ -23,14 +23,19 @@ module CQL
     end
   end
 
-  # Lets a statement run on an explicit connection: `query.using(connection)`.
+  # Lets a statement run on an explicit connection or executor:
+  # `query.using(connection)`, `query.using(engine)`.
   module Pinnable
     @executor : Executor? = nil
 
     abstract def schema : Schema
 
     def using(connection : DB::Connection) : self
-      @executor = ConnectionExecutor.new(schema.adapter, connection)
+      using(ConnectionExecutor.new(schema.adapter, connection))
+    end
+
+    def using(executor : Executor) : self
+      @executor = executor
       self
     end
 

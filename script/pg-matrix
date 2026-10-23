@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Starts one throwaway PostgreSQL server per major version and runs the live specs against each.
+#
+#   PG_MATRIX_BINS="14=/opt/pg14/bin 16=/usr/lib/postgresql/16/bin" script/pg-matrix start
+#   script/pg-matrix run     # spec/postgres/matrix_spec.cr and live_spec.cr against every running server
+#   script/pg-matrix stop
+#
+# Each server listens on 127.0.0.1:55<major> with data under $PG_MATRIX_DIR (default /tmp/cql-pg-matrix).
+# pg_hba.conf gives the superuser `cql` trust and the test roles cql_scram / cql_md5 / cql_clear the
+# matching password method (password: secret). Servers run as the `postgres` OS user when started as root.
+#
+# For throwaway test machines and CI only: the superuser `cql` is trusted from every local user.
+set -euo pipefail
+
+DIR="${PG_MATRIX_DIR:-/tmp/cql-pg-matrix}"
+BINS="${PG_MATRIX_BINS:-}"
+
+die() { echo "pg-matrix: $*" >&2; exit 1; }
+if [ -L "$DIR" ]; then die "$DIR is a symlink"; fi
+if [ -z "$BINS" ]; then die "set PG_MATRIX_BINS, e.g. '14=/usr/lib/postgresql/14/bin 16=/usr/lib/postgresql/16/bin'"; fi
+
+as_server_user() {
+  if [ "$(id -u)" = 0 ]; then su postgres -s /bin/bash -c "$*"; else bash -c "$*"; fi
+}
+
+majors() { for entry in $BINS; do echo "${entry%%=*}"; done; }
+bin_of() { for entry in $BINS; do if [ "${entry%%=*}" = "$1" ]; then echo "${entry#*=}"; fi; done; }
+port_of() { echo $((5500 + $1)); }
+
+start_one() {
+  local major=$1 bin data port
+  bin=$(bin_of "$major"); data="$DIR/$major"; port=$(port_of "$major")
+  if [ ! -f "$data/PG_VERSION" ]; then
+    mkdir -p "$data"; if [ "$(id -u)" = 0 ]; then chown postgres "$data"; fi
+    as_server_user "'$bin/initdb' -D '$data' -U cql --auth=trust >/dev/null"
+    {
+      echo "host all cql 127.0.0.1/32 trust"
+      echo "host all cql_scram 127.0.0.1/32 scram-sha-256"
+      echo "host all cql_md5 127.0.0.1/32 md5"
+      echo "host all cql_clear 127.0.0.1/32 password"
+    } > "$data/pg_hba.conf"
+    printf "port = %s\nlisten_addresses = '127.0.0.1'\nunix_socket_directories = '%s'\nfsync = off\n" "$port" "$data" >> "$data/postgresql.conf"
+  fi
+  if as_server_user "'$bin/pg_ctl' -D '$data' status >/dev/null"; then
+    echo "PostgreSQL $major already running on 127.0.0.1:$port"
+    return
+  fi
+  as_server_user "'$bin/pg_ctl' -D '$data' -l '$data/log' -w start >/dev/null"
+  echo "PostgreSQL $major on 127.0.0.1:$port"
+}
+
+stop_one() {
+  local major=$1 bin
+  bin=$(bin_of "$major")
+  as_server_user "'$bin/pg_ctl' -D '$DIR/$major' -m fast stop >/dev/null" || true
+}
+
+matrix_env() {
+  local out=() major
+  for major in $(majors); do out+=("$major=$(port_of "$major")"); done
+  (IFS=,; echo "${out[*]}")
+}
+
+case "${1:-}" in
+  start) mkdir -p "$DIR"; if [ "$(id -u)" = 0 ]; then chown postgres "$DIR"; fi; for m in $(majors); do start_one "$m"; done ;;
+  stop) for m in $(majors); do stop_one "$m"; done ;;
+  run)
+    export CQL_PG_MATRIX="$(matrix_env)"
+    status=0
+    crystal spec spec/postgres/matrix_spec.cr || status=1
+    for m in $(majors); do
+      echo "== live_spec on PostgreSQL $m"
+      log=$(mktemp)
+      if ! DATABASE_URL="postgres://cql@127.0.0.1:$(port_of "$m")/postgres?sslmode=disable" crystal spec spec/postgres/live_spec.cr >"$log" 2>&1; then status=1; fi
+      tail -3 "$log"; rm -f "$log"
+    done
+    exit $status ;;
+  *) echo "usage: PG_MATRIX_BINS='14=/path/bin ...' $0 start|run|stop" >&2; exit 2 ;;
+esac
