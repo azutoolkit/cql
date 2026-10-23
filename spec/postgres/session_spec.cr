@@ -885,6 +885,21 @@ describe CQL::Postgres::Session do
     session.protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_0
   end
 
+  it "retries with protocol 3.0 when the server resets the connection on a 3.2 startup (Odyssey)" do
+    asked = [] of String
+    server = FakePG.start do |client|
+      asked << client.read_startup["protocol"]
+      if asked.size == 1
+        client.io.linger = 0
+        client.io.close
+      else
+        client.ok_handshake
+      end
+    end
+    connect(server).protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_0
+    asked.should eq ["3.2", "3.0"]
+  end
+
   it "tries exactly twice when both versions are rejected, and not at all when 3.0 is the ceiling" do
     asked = [] of String
     server = FakePG.start do |client|

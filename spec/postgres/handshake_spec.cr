@@ -171,7 +171,7 @@ describe CQL::Postgres::Handshake do
   end
 
   it "gives up on a server that accepts the connection and then says nothing" do
-    server = FakePG.start { |_| sleep 2.seconds }
+    server = FakePG.start { |_| sleep 1.second }
     started = Time.instant
     expect_raises(IO::TimeoutError) { handshake(server, query: "sslmode=disable&connect_timeout=0.2") }
     (Time.instant - started).should be < 1.5.seconds
@@ -239,6 +239,25 @@ describe CQL::Postgres::Handshake do
   it "treats a server that closes the connection without answering the startup as an unrecognised reply" do
     server = FakePG.start(&.read_startup)
     expect_raises(PG::UnrecognizedStartupReply) { handshake(server) }
+  end
+
+  it "treats a connection reset instead of any answer to the startup like a hang-up" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.io.linger = 0 # closing now sends a reset, not a FIN
+      client.io.close
+    end
+    error = expect_raises(PG::UnrecognizedStartupReply) { handshake(server) }
+    error.cause.should be_a IO::Error
+    error.cause.should_not be_a IO::EOFError # a reset, not a plain hang-up
+  end
+
+  it "does not take a stall for a rejection" do
+    server = FakePG.start do |client|
+      client.read_startup
+      sleep 1.second
+    end
+    expect_raises(IO::TimeoutError) { handshake(server, query: "sslmode=disable&connect_timeout=0.2") }
   end
 
   it "reports a startup EOF with the IO error as its cause, so the driver can hand it to crystal-db's retry" do

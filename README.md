@@ -209,7 +209,7 @@ Things to know:
   | 14.24, 15.19, 16.15, 17.11 | 3.0 (same) | 4 bytes | pass | pass |
   | 18.6 | 3.2 | 32 bytes | pass | pass |
 
-  Untested: PostgreSQL 19 and later (no binaries were available), PostgreSQL on non-Linux or non-x86_64 hosts, and
+  PostgreSQL 19rc1 (a release candidate built from source) also passed the matrix (7 of 7), the live spec (23 examples, none pending) and the streaming spec (35 examples). Untested: a final PostgreSQL 19 release, PostgreSQL on non-Linux or non-x86_64 hosts, and
   distribution-patched builds. Each version also passes: re-preparing after a schema change, pipelining and failure isolation, COPY in and out,
   cancel after a statement timeout, and `synchronous_commit: false` per transaction (`SHOW` reads `off` inside and `on`
   after). Which majors upstream still supports changes yearly; check postgresql.org/support/versioning.
@@ -224,8 +224,18 @@ Things to know:
   Sync, so Bind stays in the same request and a transaction-mode pooler keeps both on one server connection; before that
   change, 8 clients over 3 PgBouncer server connections failed about half the runs (`bind message supplies N
   parameters, but prepared statement "" requires M`, or worse, another client's statement), after it 25 of 25 runs passed. Everything above was also run
-  against PgBouncer 1.24.1 built from source (10 of 10 examples). Not tested: other poolers (Odyssey, pgcat, RDS Proxy),
-  TLS to the pooler.
+  against PgBouncer 1.24.1 and 1.26.1 built from source (10 of 10 examples each; 1.26.1 also negotiates 3.2 down to 3.0).
+  `script/pooler_probes.cr` runs nine probes (connect, cached statements, interleaved clients, `statement_cache_size=0`,
+  pipelining, `SET LOCAL`, timeout cancel, streaming, savepoints) against any pooler; set `POOLER_NAME`, `POOLER_PORT`,
+  `POOLER_USER`, `POOLER_PASSWORD` and optionally `POOLER_QUERY` (extra URL options). Results on one machine, PostgreSQL 16 behind:
+  - PgBouncer 1.26.1 with `client_tls_sslmode = require` and its own CA, in front of PostgreSQL 16 and 18: all nine probes pass with
+    `sslmode=require` and with `sslmode=verify-full` plus `sslrootcert`, and the timeout cancel works (the CancelRequest travels unencrypted
+    on its own connection, as the protocol says). With `sslmode=disable` the pooler answers `FATAL SSL required`, and a bad `sslrootcert` raises `TLSRefused`.
+  - Odyssey 1.5.2 (transaction mode): all nine pass. It resets the connection on a 3.2 startup, so the driver falls back to 3.0 (one extra attempt per new connection; set `max_protocol_version=3.0`).
+  - pgcat 1.2.0 (transaction mode): it drops a 3.2 startup (the driver falls back to 3.0) and does not accept the Flush message (`Unexpected code: H`), so
+    cached statements, pipelining and timeout cancel work, but `statement_cache_size=0`, `SET LOCAL`, streaming and savepoints hang until the client gives up (4 of 9 probes failed). Not usable for those features.
+  - pgpool-II 4.3.7 (default settings, no load balancing): needs `max_protocol_version=3.0` (it forwards the 3.2 startup to PostgreSQL and fails the login with `XX000`); then eight of nine probes pass and streaming through a portal hangs.
+  Not tested: RDS Proxy, Supavisor, other pgpool-II settings.
 - `sslrootcert` adds a CA to the system trust store (Crystal's TLS context cannot drop the system roots); `prefer` and
   `require` encrypt without verifying the server, like libpq.
 - `playground/postgres_async_demo.cr` is a runnable tour, and `benchmarks/pg_wire_bench.cr` compares the engine with
@@ -237,7 +247,7 @@ Verified on one Linux machine; CI has not run this yet. The live specs in `spec/
 transactions, pipelining, COPY, cancellation, pool, `NOTIFY`) run when `DATABASE_URL` points at a server and are pending
 otherwise; the PostgreSQL, PgBouncer and CockroachDB results above come from running them against real servers.
 TLS modes and Unix sockets were tried by hand against PostgreSQL 16 earlier and otherwise have byte-level fixture and
-fake-server specs only. CockroachDB was tested insecure and with TLS plus a password; PostgreSQL 19 was not tested (no binaries were available).
+fake-server specs only; `script/tls-probes` now checks TLS refusal against real servers (PostgreSQL 16 without TLS and with TLS, CockroachDB secure): the error is `TLSRefused` and the pool makes one attempt, where a plain hang-up is retried. `spec/postgres/blackhole_spec.cr` (`CQL_TLS_PG_PORT` set to a TLS server) drops a TLS connection on a path that stops answering: 50 timed-out requests, 50 pings and 10 writes finished without hanging (slowest request ~0.5 s, ping ~0.3 s) and the descriptor count stayed at 12. CockroachDB was tested insecure and with TLS plus a password.
 
 ## Safety Guardrails
 

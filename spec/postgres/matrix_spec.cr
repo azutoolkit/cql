@@ -46,7 +46,7 @@ describe "PostgreSQL version matrix" do
 
       it "is the server we think it is" do
         session = target.session
-        session.server_parameters["server_version"].should start_with "#{target.major}."
+        session.server_parameters["server_version"].should match(/\A#{target.major}(\.|[a-z])/) # "19.0", or "19rc1" for a release candidate
         session.close
       end
 
