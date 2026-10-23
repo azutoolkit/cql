@@ -105,7 +105,7 @@ module CQL::Postgres::Wire
       include Message
     end
 
-    record CopyResponse, direction : Char, column_count : UInt16 do
+    record CopyResponse, direction : Char, column_count : UInt16, binary : Bool = false do
       include Message
     end
 
@@ -173,7 +173,7 @@ module CQL::Postgres::Wire
       when 'N'      then NoticeResponse.new(error_fields(reader))
       when 'A'      then NotificationResponse.new(reader.int32, reader.cstring, reader.cstring)
       when 't'      then ParameterDescription.new(Array.new(reader.uint16.to_i) { reader.uint32 })
-      when 'G', 'H' then CopyResponse.new(type, copy_column_count(reader))
+      when 'G', 'H' then copy_response(type, reader)
       when 'd'      then CopyData.new(reader.rest)
       when 'c'      then CopyDone.new
       when 'I'      then EmptyQueryResponse.new
@@ -242,9 +242,10 @@ module CQL::Postgres::Wire
       fields
     end
 
-    private def self.copy_column_count(reader : Reader) : UInt16
-      reader.int8 # overall format; per-column formats follow and are not needed
-      reader.uint16
+    # The overall format is kept; the per-column formats that follow are not needed.
+    private def self.copy_response(direction : Char, reader : Reader) : CopyResponse
+      binary = reader.int8 == 1
+      CopyResponse.new(direction, reader.uint16, binary)
     end
 
     private def self.negotiate_protocol_version(reader : Reader) : NegotiateProtocolVersion

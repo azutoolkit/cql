@@ -54,7 +54,7 @@ module CQL::Postgres
       rows = RowStream.new(self, statement.columns, fetch_size)
       binding(statement) do
         check_parameters(statement, params)
-        Wire::Frontend.bind(@out, statement.name, params, statement.result_formats)
+        Wire::Frontend.bind(@out, statement.name, settled(statement, params), statement.result_formats)
       end
       raise QueryTimeout.new("the stream timed out") if @deadline_expired
       request_batch(rows, fetch_size)

@@ -34,7 +34,7 @@ module CQL::Postgres
 
     private def request_size(statement : PipelineStatement) : Int32
       sql, params = statement
-      sql.bytesize + params.sum { |param| (param.value.try(&.size) || 0) + 8 } + 64
+      sql.bytesize + params.sum { |param| (param.value.try(&.size) || param.deferred.try(&.size_hint) || 0) + 8 } + 64
     end
 
     private def run_batch(statements : Array(PipelineStatement)) : Array(Result | ServerError)

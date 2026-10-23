@@ -2,10 +2,44 @@ require "db"
 require "json"
 require "uuid"
 require "../errors"
+require "./binary"
 
 module CQL::Postgres::Types
+  # A value whose wire form waits for the parameter's type: the statement has to
+  # be described first, and only then is it known whether the server's type has a
+  # binary encoding for this value (see `Binary`). It stands in for a `Param`
+  # until `resolve` is called with the type the server reported.
+  abstract class Deferred
+    abstract def resolve(type_oid : UInt32?, text_only : Indexable(UInt32)) : Param
+
+    # About how many bytes the parameter will take, for sizing a pipeline batch.
+    abstract def size_hint : Int32
+  end
+
+  class DeferredValue(T) < Deferred
+    def initialize(@value : T)
+    end
+
+    # Binary when the server's type has an encoding for the value (and is not
+    # one the server reads differently from its text), otherwise exactly the
+    # text the value would have been sent as.
+    def resolve(type_oid : UInt32?, text_only : Indexable(UInt32)) : Param
+      bytes = type_oid.try { |oid| Binary.encode(@value, oid) unless text_only.includes?(oid) }
+      bytes ? Param.binary(bytes) : ParamEncoder.encode(@value)
+    end
+
+    def size_hint : Int32
+      Binary.size_hint(@value)
+    end
+
+    def inspect(io : IO) : Nil
+      io << "#<" << self.class.name << ">"
+    end
+  end
+
   # One encoded bind parameter: text format unless the value is binary data.
-  record Param, value : Bytes?, format : Int16 do
+  # A *deferred* one has no bytes yet and cannot be sent as it is.
+  record Param, value : Bytes?, format : Int16, deferred : Deferred? = nil do
     TEXT   = 0_i16
     BINARY = 1_i16
 
@@ -21,11 +55,26 @@ module CQL::Postgres::Types
     def self.binary(value : Bytes) : Param
       new(value, BINARY)
     end
+
+    def self.deferred(value) : Param
+      new(nil, TEXT, DeferredValue.new(value))
+    end
+
+    # Parameters can be bound values, so they are never printed.
+    def inspect(io : IO) : Nil
+      io << "#<" << self.class.name << " format=" << format << ">"
+    end
   end
 
   # Turns Crystal values into bind parameters. The server infers each
   # parameter's type from the statement and parses the text form.
   module ParamEncoder
+    # With *binary* the value is kept until the statement's parameter types are
+    # known, when it may be sent in binary (see `Binary.supported?`).
+    def self.encode(value, binary : Bool) : Param
+      binary && Binary.supported?(value) ? Param.deferred(value) : encode(value)
+    end
+
     def self.encode(value : Nil) : Param
       Param.null
     end

@@ -64,6 +64,7 @@ module CQL::Postgres::Wire
     def self.bind(io : IO, statement : String, params : Array(Types::Param), result_formats : Array(Int16)) : Nil
       raise ArgumentError.new("a statement takes at most #{UInt16::MAX} parameters, got #{params.size}") if params.size > UInt16::MAX
       raise ArgumentError.new("at most #{UInt16::MAX} result formats can be requested") if result_formats.size > UInt16::MAX
+      raise ArgumentError.new("a parameter still waits for the statement's types") if params.any?(&.deferred)
       frame(io, 'B') do |body|
         cstring(body, "") # unnamed portal
         cstring(body, statement)

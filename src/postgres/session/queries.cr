@@ -46,17 +46,17 @@ module CQL::Postgres
       Wire::Frontend.describe_statement(@out, "")
       Wire::Frontend.flush(@out)
       flush
-      param_count = 0
+      param_oids = [] of UInt32
       columns = [] of Column
       loop do
         case message = receive
-        when Wire::Backend::ParameterDescription then param_count = message.type_oids.size
+        when Wire::Backend::ParameterDescription then param_oids = message.type_oids
         when Wire::Backend::RowDescription       then columns = message.fields.map { |field| Column.new(field.name, field.type_oid, Types.codec_for(field.type_oid)) }; break
         when Wire::Backend::NoData               then break
         when Wire::Backend::ErrorResponse        then abandon_request(ServerError.from(message.fields))
         end
       end
-      PreparedStatement.new("", param_count, columns)
+      PreparedStatement.new("", param_oids.size, columns, param_oids)
     end
 
     # The server is waiting for the rest of the request: end it with a Sync and
@@ -106,15 +106,15 @@ module CQL::Postgres
     end
 
     private def read_description(name : String) : PreparedStatement | ServerError
-      param_count = 0
+      param_oids = [] of UInt32
       columns = [] of Column
       until_ready do |message|
         case message
-        when Wire::Backend::ParameterDescription then param_count = message.type_oids.size
+        when Wire::Backend::ParameterDescription then param_oids = message.type_oids
         when Wire::Backend::RowDescription       then columns = message.fields.map { |field| Column.new(field.name, field.type_oid, Types.codec_for(field.type_oid)) }
         end
       end
-      PreparedStatement.new(name, param_count, columns)
+      PreparedStatement.new(name, param_oids.size, columns, param_oids)
     rescue ex : ServerError
       ex
     end
@@ -128,8 +128,19 @@ module CQL::Postgres
       raise ArgumentError.new("the statement takes #{statement.param_count} parameters, got #{params.size}")
     end
 
+    # Parameters that waited for the server's types take their final form now.
+    private def settled(statement : PreparedStatement, params : Array(Types::Param)) : Array(Types::Param)
+      return params unless params.any?(&.deferred)
+      params.map_with_index do |param, index|
+        param.deferred.try(&.resolve(statement.param_oids[index]?, @binary_text_only)).try do |resolved|
+          @binary_params_sent += 1 if resolved.format == Types::Param::BINARY
+          resolved
+        end || param
+      end
+    end
+
     private def write_execution(statement : PreparedStatement, params : Array(Types::Param)) : Nil
-      Wire::Frontend.bind(@out, statement.name, params, statement.result_formats)
+      Wire::Frontend.bind(@out, statement.name, settled(statement, params), statement.result_formats)
       Wire::Frontend.execute(@out)
       queue_sync
     end

@@ -149,7 +149,7 @@ module CQL::Postgres
       end
 
       private def send_all : Array(Result | ServerError)
-        @connection.pipeline(@statements.map { |(sql, params)| {sql, params.map { |value| Types::ParamEncoder.encode(value) }} })
+        @connection.pipeline(@statements.map { |(sql, params)| {sql, params.map { |value| @connection.session.encode(value) }} })
       end
     end
   end
