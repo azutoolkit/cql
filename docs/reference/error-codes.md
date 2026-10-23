@@ -1,12 +1,12 @@
 # Error Codes
 
-Common CQL errors and their meanings.
+Common CQL errors and their meanings. Everything CQL defines inherits from `CQL::Error`, except `CQL::ActiveRecord::Validations::ValidationError`, which inherits from `Exception`. Classes marked "defined, not raised by CQL" exist in `src/exceptions.cr` for applications to raise or rescue but are not raised by the library itself.
 
 ## Validation Errors
 
 ### ValidationError
 
-Raised when model validations fail.
+Raised when model validations fail: by `validate!`, and by `save`, `save!` and `create!`, which validate first.
 
 ```crystal
 begin
@@ -21,7 +21,7 @@ end
 - Value doesn't match format
 - Value outside allowed range
 
-**Solution:** Check `model.errors` for specific field errors.
+**Solution:** Check `model.errors` for specific field errors (each has `field` and `message`). Use `valid?` to check without raising.
 
 ## Locking Errors
 
@@ -46,76 +46,104 @@ end
 
 ## Record Errors
 
-### RecordNotFound
+### DB::NoResultsError
 
-Raised when `find!` cannot locate a record.
+Raised by `find!` and `find_by!` when no row matches. `find` and `find_by` return `nil` instead.
 
 ```crystal
 begin
   user = User.find!(999)
-rescue CQL::RecordNotFound
+rescue DB::NoResultsError
   puts "User not found"
 end
 ```
 
 **Solution:** Use `find` (returns nil) instead, or handle the exception.
 
-### RecordInvalid
+`CQL::RecordNotFound` and `CQL::RecordNotFoundError` (with `model_class` and `id`) are defined but not raised by CQL.
 
-Raised when `save!` or `create!` fails validation.
+### RecordInvalid and RecordNotSaved
+
+`save!` raises these when `save` returns `false`. `CQL::RecordInvalid` (with `error_messages` and `error_fields`) is raised if the record has validation errors; `CQL::RecordNotSaved` ("Failed to save the record") otherwise, typically because a `before_*` callback halted the save.
 
 ```crystal
 begin
-  User.create!(name: "", email: "")
-rescue CQL::RecordInvalid => ex
+  user.save!
+rescue ex : CQL::RecordNotSaved
   puts "Failed: #{ex.message}"
 end
 ```
 
-**Solution:** Check validations before saving, or use non-bang methods.
+Validation failures themselves raise `Validations::ValidationError` before `save` can return `false`, so `RecordInvalid` is rarely seen in practice.
+
+**Solution:** Check `valid?` before saving, or use the non-bang `save`, which returns `false` when a `before_*` callback halts.
 
 ## Database Errors
 
-### ConnectionError
+### DB::ConnectionRefused
 
-Raised when database connection fails.
+Raised by crystal-db when a connection cannot be opened (the native PostgreSQL driver maps transport and TLS failures to it).
 
 **Common causes:**
 - Database server not running
 - Wrong connection string
 - Network issues
-- Authentication failure
 
-**Solution:** Verify connection settings and database availability.
+**Solution:** Verify connection settings and database availability. See [Fix Connection Errors](../how-to/troubleshooting/connection-errors.md).
 
-### QueryError
+### CQL::Schema::InvalidURIError
 
-Raised when a SQL query fails.
+Raised by `Schema.define` / `Schema.new` for a URI that is malformed, has no host (PostgreSQL, MySQL, CockroachDB) or an unsupported scheme.
 
-**Common causes:**
-- Syntax error in raw SQL
-- Reference to non-existent column
-- Type mismatch
+### CQL::Postgres errors
 
-**Solution:** Check the SQL being generated and table structure.
+The native PostgreSQL/CockroachDB driver raises subclasses of `CQL::Postgres::Error`:
+
+| Error | Raised when |
+|-------|-------------|
+| `AuthenticationError` | Authentication could not complete |
+| `TLSRefused` | The server refused or failed TLS that `sslmode` requires |
+| `ConnectionLost` | The socket failed or was closed |
+| `PoolTimeout` / `PoolClosed` | The async engine's pool had no free connection in time / was closed |
+| `QueryTimeout` | A statement exceeded its time limit |
+| `TransactionClosed` | A transaction scope was used after its transaction ended |
+| `ServerError` | The server sent an ErrorResponse; has `sqlstate`, `detail`, `constraint`, ... |
+
+`ServerError` has subclasses chosen by SQLSTATE: `UniqueViolation` (23505), `ForeignKeyViolation` (23503), `NotNullViolation` (23502), `CheckViolation` (23514), `SerializationFailure` (40001), `DeadlockDetected` (40P01), `UndefinedTable` (42P01), `UndefinedColumn` (42703) and `QueryCanceled` (57014), with the parents `IntegrityViolation`, `TransactionRollback`, `SyntaxOrAccessError` and `InvalidAuthorization` for the rest of their classes. See the [native PostgreSQL driver guide](../how-to/postgres-native/README.md).
+
+### Dialect errors
+
+`CQL::DialectError` (with `dialect`, `feature` and an optional `workaround`) is raised when the adapter cannot express a feature. `CQL::SQLiteUnsupportedFeatureError` and `CQL::MySqlUnsupportedFeatureError` are its subclasses, for example `change_column` or adding a foreign key to an existing SQLite table.
+
+### QueryError, TransactionError, PersistenceError, AttributeError, CallbackError, ConnectionError
+
+Defined, not raised by CQL. `CQL::QueryError` carries `sql` and `params`, `CQL::TransactionError` a `transaction_state`, `CQL::ConnectionError` prefixes its message with "Database connection error:". Query failures from the database surface as the driver's own exceptions (`DB::Error` subclasses, or `CQL::Postgres::ServerError`).
 
 ## Migration Errors
 
-### MigrationError
+### CQL::Migrator::Error
 
-Raised when a migration fails.
+Raised when the schema file cannot be written ("Schema update failed: ...") with `auto_sync` on.
+
+### CQL::Schema::Error
+
+Raised by `schema.alter :table` when the table is not registered in the schema ("Table 'users' not found").
+
+### Database errors during a migration
+
+A failing statement in `up` or `down` raises the driver's exception and rolls back the whole `migrator.up`/`migrator.down` transaction (MySQL commits DDL implicitly).
 
 **Common causes:**
-- Table already exists
+- Table already exists (only for tables created outside CQL; `create!` uses `IF NOT EXISTS`)
 - Column already exists
 - Foreign key constraint violation
 - Invalid SQL syntax
 
-**Solution:** Check migration status and database state.
+`CQL::MigrationError` (with `migration_version` and `direction`) is defined, not raised by CQL.
 
-### IrreversibleMigration
+### Irreversible migrations
 
-Raised when attempting to rollback an irreversible migration.
+There is no `IrreversibleMigration` class. Raise any exception from `down`:
 
 ```crystal
 def down
@@ -123,7 +151,7 @@ def down
 end
 ```
 
-**Solution:** Manually handle the rollback or skip it.
+**Solution:** Handle the rollback manually or skip it.
 
 ## Schema Errors
 
@@ -144,17 +172,11 @@ CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
 
 **Solution:** Update the model property type or the schema column type so they agree.
 
-### TableNotFound
+### Unknown tables and columns
 
-Raised when referencing a table that doesn't exist.
+There are no `TableNotFound` or `ColumnNotFound` classes. A table or column missing from the database surfaces as the driver's error (`CQL::Postgres::UndefinedTable` / `UndefinedColumn` on the native driver). A table missing from the *schema definition* raises `KeyError` from `schema.tables[...]`, or `CQL::Schema::Error` from `schema.alter`.
 
-**Solution:** Ensure migrations have run and table exists.
-
-### ColumnNotFound
-
-Raised when referencing a column that doesn't exist.
-
-**Solution:** Check column name spelling and run migrations.
+**Solution:** Ensure migrations have run, check spelling, and keep the schema definition in sync.
 
 ## Compile-Time Association Errors
 
@@ -185,16 +207,13 @@ Raised at compile time when a `has_many` declaration is malformed or type-unsafe
 
 ## Configuration Errors
 
-### ConfigurationError
+There is no `ConfigurationError` class. Invalid settings raise `ArgumentError`:
 
-Raised for invalid configuration settings.
+- `CQL.configure` validates when the block ends: empty `db`, `schema_dir` or `schema_file`, a `schema_file` not ending in `.cr`, a `timezone` other than `:utc`/`:local`, a non-positive pool size, an invalid `ssl.mode`, or an unsupported SQLite `journal_mode`/`synchronous` value
+- `config.adapter` raises `ArgumentError` for a URL that is not `postgres://`, `postgresql://`, `cockroachdb://`, `mysql://` or `sqlite3://`
+- The native PostgreSQL driver raises `ArgumentError` for an unsupported `sslmode`, unsupported libpq options, or non-numeric pool options
 
-**Common causes:**
-- Missing required configuration
-- Invalid adapter name
-- Malformed connection string
-
-**Solution:** Review configuration settings.
+**Solution:** Review the message; it names the offending setting.
 
 ## Debugging Tips
 
@@ -204,6 +223,9 @@ Raised for invalid configuration settings.
 Log.setup do |c|
   c.bind("cql.*", :debug, Log::IOBackend.new)
 end
+
+# Or let CQL print formatted SQL (auto-enabled when CRYSTAL_ENV=development)
+CQL.configure { |config| config.sql_logging = true }
 ```
 
 ### Print Error Details

@@ -2,6 +2,20 @@
 
 This guide helps you diagnose and fix database connection errors.
 
+## How Errors Surface
+
+With the native PostgreSQL driver (the default for `postgres://` and `postgresql://` URLs), failures are raised as `CQL::Postgres` errors, all subclasses of `CQL::Error`; server errors are `CQL::Postgres::ServerError`, which carries `sqlstate` and a message such as `FATAL: password authentication failed for user "myuser" (SQLSTATE 28P01)`. Messages for most SQLSTATE classes use a fixed title instead of the server's wording, because the server's text can quote bound values. Connect failures at pool level are reported by crystal-db as `DB::ConnectionRefused` after `retry_attempts`. The native driver is described in the [native PostgreSQL driver guide](../postgres-native/README.md); CockroachDB URLs (`cockroachdb://`) are covered in [CockroachDB](../configuration/cockroachdb.md).
+
+| Exception | Meaning |
+|-----------|---------|
+| `DB::ConnectionRefused` | TCP/TLS failure while opening a connection (retried by the pool) |
+| `CQL::Postgres::AuthenticationError` | Client could not finish authentication (no password configured, unsupported method) |
+| `CQL::Postgres::TLSRefused` | Server refused or failed TLS while `sslmode` requires it |
+| `CQL::Postgres::ConnectionLost` | Socket failed or was already closed |
+| `CQL::Postgres::PoolTimeout` | No pooled connection became free in `checkout_timeout` (native `AsyncEngine` pool) |
+| `DB::PoolTimeout` | Same, for `CQL::Schema`'s crystal-db pool |
+| `CQL::Schema::InvalidURIError` | Malformed or unsupported URI, raised by `Schema.define` |
+
 ## Common Error: Connection Refused
 
 **Error:**
@@ -104,7 +118,7 @@ too many connections for role "myuser"
 ALTER ROLE myuser CONNECTION LIMIT 100;
 ```
 
-3. Use connection pooling
+3. Use connection pooling and cap it below the server limit (`max_pool_size`, see [Set Up Connection Pooling](../configuration/connection-pooling.md))
 
 ## Common Error: SSL Required
 
@@ -120,11 +134,22 @@ Add SSL mode to connection string:
 DATABASE_URL = "postgres://user:pass@host/db?sslmode=require"
 ```
 
+The native driver supports `disable`, `prefer`, `require` and `verify-full`; other values raise `ArgumentError`. See [Enable SSL Connections](../configuration/ssl.md).
+
+## Common Error: Unsupported URL Option
+
+**Error:**
+```
+ArgumentError: the sslcert option is not supported by this driver
+```
+
+The native driver rejects libpq-only options (`sslcert`, `sslkey`, `target_session_attrs`, ...) instead of ignoring them, and `user`, `database`, `password` and similar cannot be set through the query string. Put credentials in the URL's userinfo.
+
 ## Debugging Connection Issues
 
 ```crystal
 begin
-  MyDB.init
+  MyDB.exec_query(&.scalar("SELECT 1"))
   puts "Connection successful"
 rescue ex
   puts "Connection failed"
@@ -141,7 +166,6 @@ end
 ```crystal
 # scripts/test_connection.cr
 require "cql"
-require "pg"
 
 url = ARGV[0]? || ENV["DATABASE_URL"]? || "postgres://localhost/myapp"
 
@@ -150,8 +174,7 @@ puts "Testing connection to: #{url.gsub(/:[^:@]+@/, ":****@")}"
 begin
   db = CQL::Schema.define(:test, adapter: CQL::Adapter::Postgres, uri: url) do
   end
-  db.init
-  db.exec("SELECT 1")
+  db.exec_query(&.scalar("SELECT 1"))
   puts "Connection successful!"
 rescue ex
   puts "Connection failed: #{ex.message}"

@@ -26,7 +26,7 @@ Before writing code, plan what tables and columns you need:
 ```
 New tables needed:
 - tags (id, name, slug)
-- post_tags (post_id, tag_id) - join table
+- post_tags (id, post_id, tag_id) - join table (it gets its own id so it can have a model)
 
 New indexes:
 - Unique index on tags.slug
@@ -64,9 +64,10 @@ end
 class CreatePostTags < CQL::Migration(6)
   def up
     schema.table :post_tags do
+      primary :id, Int64, auto_increment: true
       column :post_id, Int64, null: false
       column :tag_id, Int64, null: false
-      column :created_at, Time
+      timestamps
 
       foreign_key [:post_id], references: :posts, references_columns: [:id], on_delete: :cascade
       foreign_key [:tag_id], references: :tags, references_columns: [:id], on_delete: :cascade
@@ -87,7 +88,7 @@ end
 ### Step 3: Test Locally
 
 ```shell
-# Run migrations
+# Run migrations (the migration runner from "Adding CQL to an Existing Project")
 crystal src/migrate.cr up
 
 # Verify
@@ -97,11 +98,10 @@ crystal src/migrate.cr status
 ### Step 4: Create the Models
 
 ```crystal
-struct Tag
+class Tag
   include CQL::ActiveRecord::Model(Int64)
   db_context AppDB, :tags
 
-  property id : Int64?
   property name : String
   property slug : String
   property created_at : Time?
@@ -114,13 +114,14 @@ struct Tag
   end
 end
 
-struct PostTag
+class PostTag
   include CQL::ActiveRecord::Model(Int64)
   db_context AppDB, :post_tags
 
   property post_id : Int64
   property tag_id : Int64
   property created_at : Time?
+  property updated_at : Time?
 
   belongs_to :post, Post, :post_id
   belongs_to :tag, Tag, :tag_id
@@ -148,7 +149,7 @@ When adding columns:
 class AddFeaturedToPosts < CQL::Migration(7)
   def up
     schema.alter :posts do
-      add_column :featured, Bool, default: false
+      add_column :featured, Bool, default: false, null: false
       add_column :featured_at, Time, null: true
     end
 
@@ -192,8 +193,10 @@ class NormalizeUserEmails < CQL::Migration(8)
     schema.exec("UPDATE users SET email_normalized = LOWER(TRIM(email))")
 
     # Verify
-    count = schema.exec("SELECT COUNT(*) FROM users WHERE email_normalized IS NULL").first
-    raise "Data migration incomplete" if count > 0
+    missing = schema.exec_query do |conn|
+      conn.scalar("SELECT COUNT(*) FROM users WHERE email_normalized IS NULL").as(Int64)
+    end
+    raise "Data migration incomplete" if missing > 0
 
     # Swap columns
     schema.alter :users do
@@ -220,10 +223,9 @@ end
 ```crystal
 def up
   batch_size = 1000
-  offset = 0
 
   loop do
-    result = schema.exec(<<-SQL
+    result = schema.exec(<<-SQL)
       UPDATE users
       SET email_normalized = LOWER(TRIM(email))
       WHERE id IN (
@@ -232,28 +234,27 @@ def up
         LIMIT #{batch_size}
       )
     SQL
-    )
 
     break if result.rows_affected == 0
-    offset += batch_size
 
     # Optional: Add a small delay to reduce database load
-    sleep 0.1
+    sleep 0.1.seconds
   end
 end
 ```
+
+`batch_size` is an integer you control, never user input. MySQL does not allow `LIMIT` inside an `IN (...)` subquery, so there you would select the ids first and update `WHERE id IN (...)` with the list.
 
 ## Workflow 4: Rolling Back
 
 ### Safe Rollback
 
 ```shell
-# Rollback last migration
+# Rollback the last migration
 crystal src/migrate.cr down
-
-# Rollback to specific version
-crystal src/migrate.cr down_to 5
 ```
+
+In code, `migrator.rollback` undoes one migration, `migrator.rollback(3)` the last three, and `migrator.down` every applied migration.
 
 ### When Rollback Isn't Possible
 
@@ -290,25 +291,23 @@ require "../migrations/*"
 puts "Starting migration deployment..."
 puts "================================"
 
-AppDB.init
-
 migrator = AppDB.migrator(CQL_MIGRATOR_CONFIG)
 
-pending = migrator.pending_migrations.size
-if pending == 0
+pending = migrator.pending_migrations
+if pending.empty?
   puts "No pending migrations"
   exit 0
 end
 
-puts "Pending migrations: #{pending}"
+puts "Pending migrations: #{pending.size}"
 puts ""
 
-# Run with transaction per migration
-migrator.pending_migrations.each do |version|
-  puts "Running migration #{version}..."
+# Apply the pending migrations one at a time
+pending.each do |migration|
+  puts "Running migration #{migration.version} (#{migration.name})..."
 
   begin
-    migrator.up_to(version)
+    migrator.up_to(migration.version)
     puts "  Success!"
   rescue ex
     puts "  FAILED: #{ex.message}"

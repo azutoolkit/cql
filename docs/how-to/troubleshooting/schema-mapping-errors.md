@@ -28,13 +28,15 @@ end
 
 class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
+  db_context schema: MyDB, table: :users
 
   property name : String
 end
 ```
 
 Or change the schema column type if the model type is correct.
+
+If the model's table is not defined in the schema, the error reads ``CQL schema mapping error in User: table `users` is not defined in schema `my_db`.`` Both cases raise `CQL::ActiveRecord::SchemaMappingError`.
 
 ## What Is Checked
 

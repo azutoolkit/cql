@@ -22,27 +22,28 @@ In this part, you'll learn how to create, read, update, and delete records in yo
 There are several ways to create records:
 
 ```crystal
-# Method 1: new + save
+# Method 1: new + save (runs validations and callbacks)
 user = User.new(username: "john", email: "john@example.com")
 if user.save
   puts "User created with ID: #{user.id}"
 else
-  puts "Failed to create user"
+  puts "Failed to create user" # a callback halted the save
 end
 
-# Method 2: create! (raises on failure)
+# Method 2: save! (raises CQL::RecordNotSaved or CQL::RecordInvalid instead of returning false)
+user = User.new(username: "bob", email: "bob@example.com")
+user.save!
+puts "User created" if user.persisted?
+
+# Method 3: create! (inserts the given columns and returns the stored record)
 user = User.create!(
   username: "jane",
   email: "jane@example.com",
   first_name: "Jane"
 )
-
-# Method 3: create (returns the record, check persisted?)
-user = User.create(username: "bob", email: "bob@example.com")
-if user.persisted?
-  puts "User created"
-end
 ```
+
+`create!` writes exactly the columns you pass and lets the database fill in defaults; it does not go through your `initialize`, so anything `initialize` computes (like the category slug) must be passed explicitly or created with `new` + `save`.
 
 ### Creating with Relationships
 
@@ -50,8 +51,9 @@ end
 # Create a user first
 author = User.create!(username: "alice", email: "alice@example.com")
 
-# Create a category
-tech = Category.create!(name: "Technology")
+# Create a category (new + save so initialize generates the slug)
+tech = Category.new(name: "Technology")
+tech.save!
 
 # Create a post with relationships
 post = Post.create!(
@@ -75,7 +77,7 @@ comment = Comment.create!(
 ```crystal
 # Create sample categories
 categories = ["Technology", "Lifestyle", "Travel", "Food"].map do |name|
-  Category.create!(name: name)
+  Category.new(name).tap(&.save!)
 end
 
 puts "Created #{categories.size} categories"
@@ -86,7 +88,7 @@ puts "Created #{categories.size} categories"
 ### Finding by ID
 
 ```crystal
-# Find returns nil if not found
+# find returns nil if not found
 user = User.find(1)
 if user
   puts "Found: #{user.username}"
@@ -94,10 +96,10 @@ else
   puts "User not found"
 end
 
-# Find! raises if not found
+# find! raises DB::NoResultsError if not found
 begin
   user = User.find!(999)
-rescue ex
+rescue ex : DB::NoResultsError
   puts "User not found: #{ex.message}"
 end
 ```
@@ -146,9 +148,10 @@ posts = Post
   .order(views_count: :desc)
   .all
 
-# Using blocks for complex conditions
+# Using blocks for complex conditions (bare column names, typed against the schema)
 popular_posts = Post.where { views_count > 100 }.all
 recent_posts = Post.where { created_at > 1.week.ago }.all
+extremes = Post.where { (views_count < 5) | (views_count > 1000) }.all
 
 # Combining conditions
 featured = Post
@@ -163,25 +166,31 @@ featured = Post
 
 ```crystal
 # Get user's posts
-user = User.find(1)
+user = User.find!(1)
 user_posts = user.posts.all
 
-# Filter user's posts
-published_user_posts = user.posts.where(published: true).all
+# Filter user's posts at the database
+published_user_posts = Post.where(user_id: user.id!, published: true).all
 
 # Get post's comments
-post = Post.find(1)
+post = Post.find!(1)
 comments = post.comments.all
 
 # Get posts in a category
 category = Category.find_by(slug: "technology")
-tech_posts = category.posts.where(published: true).all if category
+tech_posts = Post.where(category_id: category.id!, published: true).all if category
+
+# Join through an association and filter on the joined table
+by_alice = Post.query.joins(:user) { user.username == "alice" }.to_a
 ```
 
 ### Pagination
 
 ```crystal
-# Simple pagination
+# Built-in helper (oldest first, no filter)
+first_page = Post.page(1, 10)
+
+# Filtered and ordered pagination
 page = 1
 per_page = 10
 
@@ -215,8 +224,8 @@ end
 post = Post.find(1)
 post.try(&.update!(published: true, views_count: 100_i64))
 
-# Method 3: Using update on query
-Post.where(id: 1).update!(published: true)
+# Method 3: Update by primary key without loading the record
+Post.update!(1_i64, published: true)
 ```
 
 ### Incrementing Values
@@ -236,11 +245,14 @@ post.try(&.increment_views!)
 ### Bulk Updates
 
 ```crystal
-# Publish all draft posts by a user
-Post.where(user_id: 1, published: false).update!(published: true)
+# Publish all draft posts by a user with a single UPDATE statement
+BlogDB.update
+  .table(:posts)
+  .set(published: true)
+  .where(user_id: 1, published: false)
+  .commit
 
-# Deactivate users who haven't posted
-# (This would require a more complex query in practice)
+# Deactivate users who haven't posted (loads each user: fine for small tables)
 User.where(active: true).each do |user|
   if user.posts.count == 0
     user.active = false
@@ -259,22 +271,29 @@ user = User.find(1)
 user.try(&.delete!)
 puts "User deleted"
 
-# Method 2: Using destroy (triggers callbacks)
+# delete! runs the before_destroy / after_destroy callbacks and
+# returns true when a row was removed
 post = Post.find(1)
-post.try(&.destroy!)
+post.try(&.delete!)
+
+# Delete by primary key without loading the record
+Post.delete!(2_i64)
 ```
 
 ### Deleting with Conditions
 
 ```crystal
-# Delete all comments on a post
-Comment.where(post_id: 1).delete!
+# Delete all comments on a post (one DELETE statement)
+Comment.delete_by!(post_id: 1)
 
 # Delete all unpublished posts
-Post.where(published: false).delete!
+Post.delete_by!(published: false)
 
-# Delete old anonymous comments
-Comment.where(user_id: nil).where { created_at < 1.year.ago }.delete!
+# Delete old comments with the lower-level delete builder
+BlogDB.delete
+  .from(:comments)
+  .where { comments.created_at < 1.year.ago }
+  .commit
 ```
 
 ### Cascading Deletes
@@ -286,6 +305,8 @@ Remember our foreign key setup? Deleting a user cascades to their posts, which c
 user = User.find(1)
 user.try(&.delete!)
 ```
+
+The cascade comes from the `ON DELETE CASCADE` foreign keys, so the database performs it. (The `dependent:` option of `has_many` is not what removes the rows here.) SQLite only enforces foreign keys on connections where `PRAGMA foreign_keys = ON` has been run; PostgreSQL and MySQL always do.
 
 ## Aggregations
 
@@ -326,13 +347,19 @@ min_views = Post.where(published: true).min(:views_count)
 ```crystal
 # Posts per category
 Category.all.each do |category|
-  count = category.posts.where(published: true).count
+  count = Post.where(category_id: category.id!, published: true).count
   puts "#{category.name}: #{count} posts"
 end
 
-# Most active authors
-User.all.sort_by { |u| -u.posts.count }.first(5).each do |user|
-  puts "#{user.display_name}: #{user.posts.count} posts"
+# Most active authors: one GROUP BY query instead of one count per user
+counts = BlogDB.query
+  .from(:posts)
+  .select(:user_id, count: :id)
+  .group(:user_id)
+  .all(as: {Int64, Int64})
+
+counts.sort_by { |_, total| -total }.first(5).each do |user_id, total|
+  puts "#{User.find!(user_id).display_name}: #{total} posts"
 end
 ```
 
@@ -409,10 +436,10 @@ puts "Found #{results.size} posts matching 'crystal'"
 
 In this part, you learned:
 
-1. **Create**: `new` + `save`, `create`, and `create!`
+1. **Create**: `new` + `save`/`save!`, and `create!`
 2. **Read**: `find`, `find_by`, `where`, `order`, `limit`
 3. **Update**: attribute assignment + `save`, `update!`, bulk updates
-4. **Delete**: `delete!`, `destroy!`, bulk deletes
+4. **Delete**: `delete!`, `delete_by!`, bulk deletes
 5. **Aggregate**: `count`, `sum`, `avg`, `min`, `max`
 6. **Batch**: `find_each` for large datasets
 

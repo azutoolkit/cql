@@ -16,6 +16,18 @@ posts = Post.order(created_at: :desc)
             .all
 ```
 
+## Built-in Helpers
+
+Every model has `page` and `per_page` class methods. They return an `Array` of records (1-based page numbers, default 10 per page):
+
+```crystal
+Post.page(2)                # records 11-20
+Post.page(3, per_page: 25)  # records 51-75
+Post.per_page(5)            # first 5 records
+```
+
+They run on the whole table. To paginate a filtered or ordered query, use `limit`/`offset` on the query as shown next. For keyset navigation by id, see [Use Cursor Pagination](cursor-pagination.md).
+
 ## Pagination Helper
 
 Create a reusable pagination method:
@@ -51,7 +63,7 @@ def paginated_results(query, page : Int32 = 1, per_page : Int32 = 10)
   }
 end
 
-# Usage
+# Usage (published is a scope, see Create Query Scopes)
 result = paginated_results(Post.published, page: 2)
 puts "Page #{result[:page]} of #{result[:total_pages]}"
 puts "Showing #{result[:items].size} of #{result[:total]} items"
