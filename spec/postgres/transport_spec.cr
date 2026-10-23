@@ -55,7 +55,7 @@ describe CQL::Postgres::Transport do
   it "sends a CancelRequest with the session's key over a new connection" do
     request = Channel(Hash(String, String)).new(1)
     server = FakePG.start { |client| request.send(client.read_startup) }
-    PG::Transport.cancel(PG::Config.parse(server.url), 4242, Bytes[0, 0, 3, 9])
+    PG::Transport.cancel(PG::Config.parse(server.url), 4242, Bytes[0, 0, 3, 9], 5.seconds)
     select
     when received = request.receive
       received.should eq({"protocol" => "cancel", "pid" => "4242", "secret" => "00000309"})
