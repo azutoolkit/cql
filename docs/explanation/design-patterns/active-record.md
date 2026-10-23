@@ -226,7 +226,8 @@ class Order
   end
 
   private def calculate_total
-    @total = order_items.all.sum(&.subtotal) # subtotal : Float64 on OrderItem
+    # Associations can only be read once the record has an id
+    @total = order_items.all.sum(&.subtotal) if persisted? # subtotal : Float64 on OrderItem
     true
   end
 

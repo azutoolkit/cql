@@ -312,8 +312,10 @@ Comments ──────┬─── belongs to ──> Post
 | `String` (`text`, `varchar`) | TEXT | VARCHAR | VARCHAR(255) |
 | `Bool` (`boolean`) | BOOLEAN | BOOLEAN | TINYINT(1) |
 | `Float64` (`double`) | DOUBLE | DOUBLE PRECISION | DOUBLE |
-| `Time` (`timestamp`) | TIMESTAMP | TIMESTAMP | DATETIME |
+| `Time` (`timestamp`) | DATE | DATE | DATE |
 | `timestamps` | `created_at` and `updated_at` as `Time` columns defaulting to the current time | | |
+
+(`Time` columns are currently declared with the type name `DATE` on every adapter; check the generated DDL with `schema.users.create_sql` if you depend on sub-day precision on PostgreSQL or MySQL.)
 
 An auto-increment `primary` key becomes `INTEGER PRIMARY KEY AUTOINCREMENT` on SQLite, `... GENERATED ALWAYS AS IDENTITY PRIMARY KEY` on PostgreSQL and `AUTO_INCREMENT` on MySQL. CockroachDB follows PostgreSQL, except that `Int32` columns are declared `INT4`.
 
