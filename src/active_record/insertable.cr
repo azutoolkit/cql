@@ -214,7 +214,7 @@ module CQL
               .new({{@type.id}}.schema)
               .into({{@type.id}}.table)
               .values(filtered_attrs)
-              .last_insert_id
+              .last_insert_id(as: Pk)
 
             {% if Pk == Int32 %}
               if id > Int32::MAX || id < Int32::MIN

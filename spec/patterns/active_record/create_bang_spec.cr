@@ -85,5 +85,12 @@ end
 
       CreateBang{{prefix.id}}Row.create!(record).name.should eq("ada")
     end
+
+    it "supports Int32 keys on the instance path" do
+      record = CreateBang{{prefix.id}}SmallRow.allocate
+      record.name = "ada"
+
+      CreateBang{{prefix.id}}SmallRow.create!(record).id.should eq(1)
+    end
   end
 {% end %}
