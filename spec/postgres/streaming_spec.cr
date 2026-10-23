@@ -220,6 +220,28 @@ describe "CQL::Postgres streaming" do
       session.stream("SELECT n", fetch_size: 2, &.to_a).should eq [[1], [2], [3]]
     end
 
+    it "refuses to be read from a fiber other than the one that opened it" do
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        client.serve_prepare([] of UInt32, int4_columns)
+        client.expect('B'); client.expect('E'); client.expect('H')
+        client.send('2'); client.data_row(number_row(1)); client.send('s')
+        client.expect('C'); client.expect('S'); client.send('3'); client.ready
+      end
+      outcome = connect(server).stream("SELECT n", fetch_size: 1) do |rows|
+        result = Channel(Exception?).new
+        spawn do
+          rows.next
+          result.send(nil)
+        rescue ex
+          result.send(ex)
+        end
+        result.receive
+      end
+      outcome.should be_a PG::Error
+    end
+
     it "rejects a fetch size of zero" do
       expect_raises(ArgumentError, /fetch_size/) { connect(FakePG.start { |client| client.read_startup; client.ok_handshake; client.idle }).stream("SELECT 1", fetch_size: 0, &.to_a) }
     end

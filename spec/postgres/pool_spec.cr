@@ -359,6 +359,64 @@ describe CQL::Postgres::Pool do
       expect_raises(Exception, "setup broke") { PG::Pool.new(config, options).warm_up }
     end
 
+    it "does not wait on a health check the idle connection never answers" do
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        client.read_message # a health-check ping, never answered
+        sleep 5.seconds
+      end
+      pool = pool_for(server, "&pool_size=1&health_check_after=0&checkout_timeout=0.3")
+      first = pool.with_connection(&.itself)
+      started = Time.instant
+      replacement = pool.checkout
+      (Time.instant - started).should be < 2.seconds
+      replacement.should_not be first
+      first.closed?.should be_true
+    end
+
+    it "spends one health-check budget per checkout, not one per idle connection" do
+      pings = Atomic(Int32).new(0)
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        message = client.read_message
+        pings.add(1) if message && message[0] == 'Q' # a ping; the others only see the Terminate of a discarded connection
+        sleep 5.seconds
+      end
+      pool = pool_for(server, "&pool_size=4&health_check_after=0&checkout_timeout=0.4")
+      held = Array.new(3) { pool.checkout }
+      held.each(&.release)
+      started = Time.instant
+      pool.checkout
+      (Time.instant - started).should be < 1.5.seconds # three stale connections, one 0.4s budget
+      pings.get.should eq 1
+    end
+
+    it "wakes fibers waiting for a connection when the pool closes" do
+      pool = pool_for(idle_server, "&pool_size=1&checkout_timeout=10")
+      held = pool.checkout
+      waiter = Channel(Exception?).new
+      spawn do
+        pool.checkout
+        waiter.send(nil)
+      rescue ex
+        waiter.send(ex)
+      end
+      Fiber.yield
+      started = Time.instant
+      pool.close
+      waiter.receive.should be_a PG::PoolClosed
+      (Time.instant - started).should be < 2.seconds
+      held.close
+    end
+
+    it "rejects malformed pool options instead of using a default" do
+      {"pool_size=abc", "pool_min_size=1.5", "max_queries=many", "max_idle_lifetime=soon", "checkout_timeout=-1", "health_check_after=x"}.each do |option|
+        expect_raises(ArgumentError, /#{option.split('=').first}/) { PG::Pool::Options.from(PG::Config.parse("postgres://h/db?#{option}")) }
+      end
+    end
+
     it "rejects impossible sizes" do
       expect_raises(ArgumentError, /pool_min_size/) { PG::Pool.new(PG::Config.parse("postgres://h/db?pool_size=2&pool_min_size=3")) }
       expect_raises(ArgumentError, /max_queries/) { PG::Pool.new(PG::Config.parse("postgres://h/db?max_queries=0")) }

@@ -71,6 +71,8 @@ module CQL::Postgres
       Wire::Backend.read(@io, MAX_MESSAGE_SIZE).tap { @heard = true }
     rescue ex : ProtocolError
       raise @heard ? ex : UnrecognizedStartupReply.new(ex.message)
+    rescue ex : IO::EOFError
+      raise @heard ? ex : UnrecognizedStartupReply.new("the server closed the connection without answering the startup message", cause: ex)
     end
 
     # The server cannot speak the requested minor version and names the newest it

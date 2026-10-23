@@ -236,6 +236,17 @@ describe CQL::Postgres::Handshake do
     asked.should eq "3.0"
   end
 
+  it "treats a server that closes the connection without answering the startup as an unrecognised reply" do
+    server = FakePG.start(&.read_startup)
+    expect_raises(PG::UnrecognizedStartupReply) { handshake(server) }
+  end
+
+  it "reports a startup EOF with the IO error as its cause, so the driver can hand it to crystal-db's retry" do
+    server = FakePG.start(&.read_startup)
+    error = expect_raises(PG::UnrecognizedStartupReply) { handshake(server) }
+    error.cause.should be_a IO::Error
+  end
+
   it "refuses a version negotiation that arrives after authentication began" do
     server = FakePG.start do |client|
       client.read_startup

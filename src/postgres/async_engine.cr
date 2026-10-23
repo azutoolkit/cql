@@ -1,5 +1,7 @@
 require "../executor"
 require "./pool"
+require "./operation_kind"
+require "./query_streaming"
 require "./transaction_scope"
 require "./pipeline_result"
 
@@ -18,6 +20,7 @@ module CQL::Postgres
   # tracking see them like any other.
   class AsyncEngine
     include CQL::Executor
+    include QueryStreaming
 
     getter adapter : CQL::Adapter
     getter pool : Pool
@@ -26,9 +29,11 @@ module CQL::Postgres
     # *reset* is a statement run each time a connection returns to the pool
     # (e.g. `DISCARD ALL`). Pool sizing and lifetimes come from the URL:
     # `pool_size`, `pool_min_size`, `max_queries`, `max_idle_lifetime`.
-    def self.connect(url : String, adapter : CQL::Adapter = CQL::Adapter::Postgres,
+    # The adapter defaults from the URL: `cockroachdb://` is CockroachDB, anything else PostgreSQL.
+    def self.connect(url : String, adapter : CQL::Adapter? = nil,
                      setup : Proc(Connection, Nil)? = nil, reset : String? = nil) : AsyncEngine
       config = Config.parse(url)
+      adapter ||= config.cockroachdb? ? CQL::Adapter::CockroachDB : CQL::Adapter::Postgres
       options = Pool::Options.from(config).copy_with(setup: setup, reset_sql: reset)
       new(Pool.new(config, options).warm_up, adapter)
     end
@@ -67,7 +72,12 @@ module CQL::Postgres
       with_connection do |connection|
         connection.transaction do |transaction|
           apply_transaction_options(connection, isolation, read_only, deferrable, synchronous_commit)
-          yield TransactionScope.new(@adapter, connection, transaction)
+          scope = TransactionScope.new(@adapter, connection, transaction)
+          begin
+            yield scope
+          ensure
+            scope.finish
+          end
         end
       end
     end
@@ -96,29 +106,6 @@ module CQL::Postgres
       end
     end
 
-    # Streams the rows of a query (a CQL query, or SQL with arguments) instead of
-    # loading them all: the block gets a `DB::ResultSet` that fetches *fetch_size*
-    # rows at a time over one pooled connection (a new checkout, so outside any
-    # `engine.transaction` in progress; use `tx.stream` inside one). Stopping early is fine; the
-    # connection goes back to the pool in sync. Telemetry sees one statement
-    # whose duration is the whole stream.
-    #
-    # ```
-    # engine.stream(User.query.where(active: true), fetch_size: 500) do |rows|
-    #   rows.each { puts rows.read(Int64) }
-    # end
-    # ```
-    def stream(query : String, args : Array(::DB::Any) = [] of ::DB::Any, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
-      CQL::Execution.run(self, query, args, :select) do |connection|
-        connection.as(Connection).stream(query, args, fetch_size, timeout) { |rows| yield rows }
-      end
-    end
-
-    def stream(query, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
-      sql, params = query.to_sql
-      stream(sql, params, fetch_size, timeout) { |rows| yield rows }
-    end
-
     # Runs raw SQL (no rows wanted) as a telemetry-observed statement.
     # Without arguments the text may be a script of several statements.
     def exec(sql : String, args : Array(::DB::Any) = [] of ::DB::Any) : ::DB::ExecResult
@@ -141,17 +128,8 @@ module CQL::Postgres
       connection.unprepared.exec("SET LOCAL synchronous_commit TO #{synchronous_commit ? "on" : "off"}") unless synchronous_commit.nil?
     end
 
-    private def operation_of(sql : String) : Symbol
-      case sql.lstrip[0, 6].downcase
-      when "insert" then :insert
-      when "update" then :update
-      when "delete" then :delete
-      else               :select
-      end
-    end
-
     private def pipelined_statement(pinned, connection : Connection, batch : LazyBatch, sql : String, params : Array(::DB::Any), index : Int32) : PipelineResult | ServerError
-      outcome = CQL::Execution.run(pinned, sql, params, operation_of(sql), track: false) do |_|
+      outcome = CQL::Execution.run(pinned, sql, params, OperationKind.of(sql), track: false) do |_|
         batch.outcome(index).tap { |result| raise result if result.is_a?(ServerError) }
       end
       PipelineResult.new(outcome.as(Result), Statement.new(connection, sql, prepared: true))

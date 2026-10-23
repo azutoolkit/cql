@@ -1,5 +1,6 @@
 require "../executor"
 require "./connection"
+require "./query_streaming"
 
 module CQL::Postgres
   enum IsolationLevel
@@ -14,22 +15,26 @@ module CQL::Postgres
   end
 
   # An open transaction on one pooled connection. Statements run `using(scope)`
-  # join it, and `savepoint` nests inside it.
-  class TransactionScope < CQL::ConnectionExecutor
-    def initialize(adapter : CQL::Adapter, connection : ::DB::Connection, @transaction : ::DB::Transaction)
-      super(adapter, connection)
+  # join it, and `savepoint` nests inside it. The scope is only good for the
+  # block it was given to: afterwards the connection is back in the pool, so
+  # using it again raises `TransactionClosed`.
+  class TransactionScope
+    include CQL::Executor
+    include QueryStreaming
+
+    getter adapter : CQL::Adapter
+
+    def initialize(@adapter : CQL::Adapter, @connection : Connection, @transaction : ::DB::Transaction)
+      @finished = false
     end
 
-    # Streams a query's rows on the transaction's connection. See `AsyncEngine#stream`.
-    def stream(query : String, args : Array(::DB::Any) = [] of ::DB::Any, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
-      CQL::Execution.run(self, query, args, :select) do |connection|
-        connection.as(Connection).stream(query, args, fetch_size, timeout) { |rows| yield rows }
-      end
+    def exec_query(& : ::DB::Connection -> _)
+      ensure_open
+      yield @connection
     end
 
-    def stream(query, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
-      sql, params = query.to_sql
-      stream(sql, params, fetch_size, timeout) { |rows| yield rows }
+    protected def finish : Nil
+      @finished = true
     end
 
     # Runs the block inside a SAVEPOINT: if it raises, only its own work is
@@ -37,7 +42,19 @@ module CQL::Postgres
     # `DB::Rollback` to undo it quietly, which makes this return nil). The
     # yielded scope can open savepoints of its own.
     def savepoint(& : TransactionScope -> T) : T? forall T
-      @transaction.transaction { |nested| yield TransactionScope.new(@adapter, @connection, nested) }
+      ensure_open
+      @transaction.transaction do |nested|
+        scope = TransactionScope.new(@adapter, @connection, nested)
+        begin
+          yield scope
+        ensure
+          scope.finish
+        end
+      end
+    end
+
+    private def ensure_open : Nil
+      raise TransactionClosed.new("the transaction has ended; this scope can no longer run statements") if @finished
     end
   end
 end

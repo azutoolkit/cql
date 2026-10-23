@@ -253,6 +253,38 @@ describe CQL::Postgres::AsyncEngine do
     ]
   end
 
+  it "refuses a transaction scope that outlived its transaction" do
+    statements = recording_simple_server
+    engine = engine_for(statements[:server])
+    escaped = nil
+    engine.transaction { |tx| escaped = tx }
+    expect_raises(PG::TransactionClosed) { escaped.not_nil!.exec_query(&.itself) }
+    expect_raises(PG::TransactionClosed) { escaped.not_nil!.stream("SELECT 1", &.itself) }
+    expect_raises(PG::TransactionClosed) { escaped.not_nil!.savepoint { } }
+    nested = nil
+    engine.transaction { |tx| tx.savepoint { |inner| nested = inner } }
+    expect_raises(PG::TransactionClosed) { nested.not_nil!.exec_query(&.itself) }
+  end
+
+  it "defaults the adapter from the URL scheme" do
+    server = FakePG.start { |client| client.read_startup; client.ok_handshake; client.idle }
+    PG::AsyncEngine.connect(server.url(query: "sslmode=disable")).adapter.should eq CQL::Adapter::Postgres
+    cockroach = FakePG.start { |client| client.read_startup; client.ok_handshake; client.idle }
+    PG::AsyncEngine.connect(cockroach.url(query: "sslmode=disable").sub("postgres:", "cockroachdb:")).adapter.should eq CQL::Adapter::CockroachDB
+  end
+
+  it "keeps secrets out of inspect" do
+    engine = engine_for(recording_simple_server[:server])
+    engine.with_connection do |connection|
+      connection.session.simple_query("SELECT secret_marker")
+      text = connection.inspect + connection.session.inspect + engine.pool.inspect + engine.pool.config.inspect
+      text.should contain "process_id=4242"
+      text.should_not contain "secret_marker"
+      text.should_not contain "777"    # the cancel key from the fake server
+      text.should_not contain "secret" # the password in the URL
+    end
+  end
+
   it "refuses deferrable transactions on CockroachDB" do
     engine = PG::AsyncEngine.new(PG::Pool.new(PG::Config.parse("postgres://h/db")), CQL::Adapter::CockroachDB)
     expect_raises(ArgumentError, /CockroachDB/) { engine.transaction(deferrable: true) { |_| } }

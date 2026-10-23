@@ -10,6 +10,10 @@ module CQL::Postgres
   class ProtocolError < Error
   end
 
+  # A `TransactionScope` was used after its transaction ended.
+  class TransactionClosed < Error
+  end
+
   # A `RowStream` was read after its block ended, or after its statement failed.
   class StreamClosed < Error
   end

@@ -45,6 +45,24 @@ describe CQL::Postgres::Driver do
     #  ["application_name", "client_encoding", "database", "protocol", "user"]
   end
 
+  it "reports a refused or unreachable server as DB::ConnectionRefused, which crystal-db retries, but not a server error" do
+    closed = TCPServer.new("127.0.0.1", 0)
+    closed_port = closed.local_address.port
+    closed.close
+    builder = PG::Driver.new.connection_builder(URI.parse("postgres://u@127.0.0.1:#{closed_port}/db?sslmode=disable"))
+    expect_raises(DB::ConnectionRefused) { builder.build }
+
+    hung_up = FakePG.start(&.read_startup)
+    expect_raises(DB::ConnectionRefused) { PG::Driver.new.connection_builder(URI.parse("postgres://u@127.0.0.1:#{hung_up.port}/db?sslmode=disable")).build }
+
+    rejecting = FakePG.start do |client|
+      client.read_startup
+      client.error("28000", "no", {'S' => "FATAL", 'V' => "FATAL"})
+    end
+    refused = PG::Driver.new.connection_builder(URI.parse("postgres://u@127.0.0.1:#{rejecting.port}/db?sslmode=disable"))
+    expect_raises(PG::InvalidAuthorization) { refused.build }
+  end
+
   it "leaves the cockroachdb name alone until it is opted in" do
     before = PG::Driver.registered?("cockroachdb")
     PG::Driver.register

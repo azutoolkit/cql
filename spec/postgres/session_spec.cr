@@ -1007,6 +1007,36 @@ describe CQL::Postgres::Session do
     session.ping.should be_true
   end
 
+  it "gives up on a ping the server never answers and closes the socket" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.read_message # the ping, never answered
+      sleep 5.seconds
+    end
+    session = connect(server)
+    started = Time.instant
+    session.ping(200.milliseconds).should be_false
+    (Time.instant - started).should be < 2.seconds
+    session.closed?.should be_true
+  end
+
+  it "closes the socket when a timed-out request is still blocked after the cancel grace" do
+    server = FakePG.start do |client|
+      startup = client.read_startup
+      next if startup["protocol"] == "cancel" # the cancel request: accepted, never acted on
+      client.ok_handshake
+      client.read_message
+      sleep 5.seconds
+    end
+    session = connect(server)
+    session.cancel_grace = 200.milliseconds
+    started = Time.instant
+    expect_raises(PG::QueryTimeout) { session.query("SELECT 1", timeout: 200.milliseconds) }
+    (Time.instant - started).should be < 3.seconds
+    session.closed?.should be_true
+  end
+
   it "starts cockroachdb:// URLs at protocol 3.0" do
     PG::Config.parse("cockroachdb://root@h/db").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_0
     PG::Config.parse("cockroachdb://root@h/db?max_protocol_version=3.2").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_2

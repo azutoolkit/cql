@@ -37,8 +37,14 @@ module CQL::Postgres
       translating_lost { @session.simple_query(sql) }
     end
 
-    def ping : Bool
-      @session.ping
+    def inspect(io : IO) : Nil
+      io << "#<" << self.class << ' '
+      @session.inspect(io)
+      io << '>'
+    end
+
+    def ping(timeout : Time::Span = CQL::Postgres::Session::PING_TIMEOUT) : Bool
+      @session.ping(timeout)
     end
 
     # Per-borrower state (notice and notification handlers) does not outlive a checkout.

@@ -53,6 +53,8 @@ module CQL::Postgres
     getter statement_cache_size : Int32
     getter startup_options : Hash(String, String)
     getter driver_options : Hash(String, String)
+    # The URL said `cockroachdb://`.
+    getter? cockroachdb : Bool
     protected getter password : String?
 
     # The protocol versions this connection may use. It asks for the newest and
@@ -68,7 +70,7 @@ module CQL::Postgres
     def initialize(@host = "localhost", @port = 5432, @user = "postgres", @password = nil, database : String? = nil,
                    @ssl_mode = SSLMode::Prefer, @ssl_root_cert = nil, @connect_timeout = DEFAULT_CONNECT_WAIT.seconds,
                    @application_name = "cql", @statement_cache_size = 256,
-                   @startup_options = {} of String => String, @driver_options = {} of String => String)
+                   @startup_options = {} of String => String, @driver_options = {} of String => String, @cockroachdb = false)
       raise ArgumentError.new("min_protocol_version #{min_protocol_version} is newer than max_protocol_version #{max_protocol_version}") if min_protocol_version > max_protocol_version
       @database = database || @user
     end
@@ -107,7 +109,8 @@ module CQL::Postgres
         application_name: pop(params, "application_name") || "cql",
         statement_cache_size: number(pop(params, "statement_cache_size"), "statement_cache_size") || 256,
         startup_options: startup_options(params),
-        driver_options: driver_options
+        driver_options: driver_options,
+        cockroachdb: uri.scheme == "cockroachdb"
       )
     end
 
@@ -131,8 +134,18 @@ module CQL::Postgres
       params.delete(name)
     end
 
-    private def self.number(text : String?, name : String) : Int32?
+    def self.number(text : String?, name : String) : Int32?
       text.try { |value| value.to_i? || raise ArgumentError.new("#{name} must be a whole number, got #{value.inspect}") }
+    end
+
+    # A positive or zero count of seconds (at most a year), or nil when absent.
+    def self.seconds(text : String?, name : String) : Time::Span?
+      text.try { |value| value.to_f?.try { |number| number.seconds if number.finite? && 0 <= number <= 31_536_000 } || raise ArgumentError.new("#{name} must be a number of seconds up to a year, got #{value.inspect}") }
+    end
+
+    # A whole number that may not fit in 32 bits, or nil when absent.
+    def self.whole(text : String?, name : String) : Int64?
+      text.try { |value| value.to_i64? || raise ArgumentError.new("#{name} must be a whole number, got #{value.inspect}") }
     end
 
     private def self.timeout(text : String?) : Time::Span?

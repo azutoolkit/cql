@@ -81,11 +81,18 @@ Real-world benchmarks (1M records, complex queries):
 This is the default driver for `postgres://` and `postgresql://` URLs: `require "cql"` loads it and registers it with
 crystal-db, so `CQL::Schema` and `DB.open` use it without the `pg` shard. If your app requires `pg` before `cql` (it
 keeps the names) or after it (it replaces them), the `pg` shard's driver serves those URLs instead, so remove
-`require "pg"` to switch, or compile with `-Dcql_no_postgres_driver` to keep this driver out of crystal-db's registry.
+`require "pg"` to switch, or compile with `-Dcql_no_postgres_driver` to keep this driver out of crystal-db's registry
+(that flag also wins over `-Dcql_postgres_driver_cockroachdb`; call the `register` methods yourself if you want them).
+Differences from the `pg` shard to know about when switching: `sslmode` takes `disable`, `prefer`, `require` or
+`verify-full` only (`verify-ca`, `allow` and the libpq options `sslcert`, `sslkey`, `auth_methods` and similar are
+rejected, not ignored); `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` are read from the environment when the URL omits
+them; arrays decode to their text form and `numeric` to `CQL::Postgres::Types::DecimalText`, so `read(Float64)` and
+`read(Array(Int32))` raise `TypeCastError` (register a codec with `Types.register`); connection failures reach
+crystal-db's pool as `DB::ConnectionRefused`, so `retry_attempts` and `retry_delay` apply.
 `cockroachdb://` is opt-in, because only CockroachDB 24.3 was checked: call `CQL::Postgres::Driver.register_cockroachdb`
 (or compile with `-Dcql_postgres_driver_cockroachdb`) to let `DB.open("cockroachdb://...")` use it. A Schema with
 `CQL::Adapter::CockroachDB` rewrites its URL to `postgres://`, so it follows the `postgres` rule above, and
-`AsyncEngine.connect("cockroachdb://...")` needs no registration. crystal-db's own pool serves
+`AsyncEngine.connect("cockroachdb://...")` needs no registration and picks the CockroachDB adapter. crystal-db's own pool serves
 `Schema` and `DB.open`; the engine's `pool_size`/`max_queries` options only apply to `AsyncEngine`. Write a literal `+`
 in a user name or password as `%2B` (crystal-db reads `+` as a space). See "CockroachDB", "PostgreSQL versions" and "PgBouncer" below for what was verified against real servers.
 
@@ -126,7 +133,7 @@ results[0].as(CQL::Postgres::PipelineResult).all(as: String)
 What it does:
 
 - **Protocol version**: it asks for 3.2 (PostgreSQL 18; longer cancel keys) and follows the server's
-  `NegotiateProtocolVersion`, or retries on 3.0 when an older server or proxy rejects the startup. Pin it with
+  `NegotiateProtocolVersion`, or retries on 3.0 when an older server or proxy rejects the startup, answers with something that is not a protocol message, or closes the connection without answering (a stall is not retried: `connect_timeout` ends it). Pin it with
   `min_protocol_version` / `max_protocol_version` (`3.0` or `3.2`) in the URL. Covered by byte-fixture and fake-server
   specs, and by live specs against real PostgreSQL 11 to 18 servers, PgBouncer 1.22 and 1.24 and CockroachDB (see below). A server that rejects 3.2 costs every new connection one extra attempt, so set `max_protocol_version=3.0` for it. OAuth authentication (PostgreSQL 18) is not
   supported.
@@ -134,6 +141,12 @@ What it does:
   (`sslmode=disable|prefer|require|verify-full`), Unix sockets (`?host=/var/run/postgresql`), simple and extended
   queries with per-connection prepared-statement caching, binary results for common types, `COPY` in and out,
   `LISTEN`/`NOTIFY` and notice callbacks, cancel requests and per-statement timeouts (`Session#query(..., timeout:)`, reached through `connection.session`).
+  A cancel request carries the session's secret key and is sent over a new, unencrypted connection even under
+  `sslmode=require`, as libpq does before version 17. A timed-out request whose cancel does not help (a dead path, a
+  server that ignores it) has its socket closed after `cancel_grace` (5 seconds by default), and `Session#ping` closes
+  a connection that does not answer within its timeout; the health checks of one checkout share a `checkout_timeout`
+  budget, so idle connections on a silently dropped path delay a checkout by about one timeout, not one each
+  (waiting for a free slot and opening a connection take their own time on top).
 - **Concurrency**: one request in flight per connection, enforced with a lock, so a connection shared between fibers is
   safe (they queue). `AsyncEngine` borrows connections from a pool (`pool_size`, `checkout_timeout`,
   `health_check_after` URL options), pings connections idle longer than `health_check_after` (30s by default) before reuse and discards ones left mid-transaction.
@@ -147,7 +160,7 @@ What it does:
 - **Errors**: `ErrorResponse` becomes a typed `CQL::Postgres::ServerError` (`UniqueViolation`, `ForeignKeyViolation`,
   `NotNullViolation`, `SerializationFailure`, `DeadlockDetected`, `UndefinedTable`, ...). The message carries the
   server's wording only for SQLSTATE classes known not to quote data; `#server_message` and `#detail` hold the rest and
-  can contain bound values. Bound values and passwords never appear in driver messages or telemetry.
+  can contain bound values. Bound values and passwords never appear in driver messages, and telemetry carries no bound values unless you turn on `CQL::Telemetry`'s `capture_params`.
 - **Values** are always bound as parameters. `Int*`, `Float*`, `Bool`, `String`, `Bytes`, `Time`, `UUID`, `JSON::Any`,
   arrays and `nil` are accepted; results decode `int2/4/8`, `float4/8`, `bool`, `text`, `bytea`, `uuid`, `date`,
   `time`, `timestamp(tz)`, `json(b)` and `numeric` (as `CQL::Postgres::Types::DecimalText`, exact text, to avoid
@@ -196,7 +209,8 @@ Things to know:
   | 14.24, 15.19, 16.15, 17.11 | 3.0 (same) | 4 bytes | pass | pass |
   | 18.6 | 3.2 | 32 bytes | pass | pass |
 
-  Each version also passes: re-preparing after a schema change, pipelining and failure isolation, COPY in and out,
+  Untested: PostgreSQL 19 and later (no binaries were available), PostgreSQL on non-Linux or non-x86_64 hosts, and
+  distribution-patched builds. Each version also passes: re-preparing after a schema change, pipelining and failure isolation, COPY in and out,
   cancel after a statement timeout, and `synchronous_commit: false` per transaction (`SHOW` reads `off` inside and `on`
   after). Which majors upstream still supports changes yearly; check postgresql.org/support/versioning.
 - **PgBouncer** 1.22 (`script/pgbouncer-matrix`, spec `spec/postgres/pgbouncer_spec.cr`, real PgBouncer in front of

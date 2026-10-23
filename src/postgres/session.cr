@@ -36,7 +36,13 @@ module CQL::Postgres
     private enum Deadline
       Running
       Expiring
+      Dropping
       Done
+
+      # The timeout fired, whether or not the socket is already being closed.
+      def expired? : Bool
+        expiring? || dropping?
+      end
     end
 
     getter config : Config
@@ -48,6 +54,9 @@ module CQL::Postgres
     getter last_used : Time::Instant
     # Requests run on this session so far (a pipeline counts once).
     getter requests : Int64 = 0_i64
+    # How long a request may keep running after its timeout fired and the cancel
+    # was sent before the socket is closed under it.
+    property cancel_grace : Time::Span = CANCEL_GRACE
     property on_notice : Proc(Hash(Char, String), Nil)? = nil
     property on_notification : Proc(Notification, Nil)? = nil
 
@@ -104,6 +113,11 @@ module CQL::Postgres
       @closed
     end
 
+    # Identity and state only: the cancel key, staged protocol bytes and SQL stay out of logs.
+    def inspect(io : IO) : Nil
+      io << "#<" << self.class << " process_id=" << @process_id << " closed=" << @closed << '>'
+    end
+
     def in_transaction? : Bool
       transaction_status != 'I'
     end
@@ -146,10 +160,13 @@ module CQL::Postgres
       exclusive(timeout) { run_copy_out(sql) { |chunk| yield chunk } }
     end
 
-    # One cheap round trip (an empty query).
-    def ping : Bool
-      exclusive { run_simple("") }
-      true
+    # One cheap round trip (an empty query). If the server does not answer
+    # within *timeout* the socket is closed (a silently dropped path would
+    # otherwise block this forever) and the answer is false.
+    def ping(timeout : Time::Span = PING_TIMEOUT) : Bool
+      answered = false
+      exclusive { answered = with_hard_deadline(timeout) { run_simple("") } }
+      answered && !@closed
     rescue Error
       false
     end
@@ -229,6 +246,30 @@ module CQL::Postgres
       raise ex
     end
 
+    PING_TIMEOUT = 5.seconds
+    CANCEL_GRACE = 5.seconds
+
+    # Closes the socket if the block is still running after *timeout*: the
+    # blocked read fails, the request ends as a lost connection. Returns true
+    # if the block finished first; the watchdog and the block settle that
+    # atomically, so a healthy socket is never closed behind a true.
+    private def with_hard_deadline(timeout : Time::Span, &) : Bool
+      state = Atomic(Deadline).new(Deadline::Running)
+      finished = Channel(Nil).new
+      spawn do
+        select
+        when finished.receive?
+        when timeout(timeout) then hard_close if state.compare_and_set(Deadline::Running, Deadline::Dropping)[1]
+        end
+      end
+      begin
+        yield
+      ensure
+        finished.close
+      end
+      state.compare_and_set(Deadline::Running, Deadline::Done)[1]
+    end
+
     # Cancels the statement when *timeout* passes. A cancel racing with a
     # statement that just finished could hit the next one, so unless the server
     # confirmed the cancel the session is dropped instead of reused. The
@@ -246,6 +287,12 @@ module CQL::Postgres
             @deadline_expired = true
             cancel_or_drop
             cancel_sent.send(nil)
+            # The cancel travels on a new connection; if this one is dead (or the
+            # server ignores the cancel) the request would block for ever.
+            select
+            when finished.receive?
+            when timeout(@cancel_grace) then hard_close if state.compare_and_set(Deadline::Expiring, Deadline::Dropping)[1]
+            end
           end
         end
       end
@@ -253,25 +300,26 @@ module CQL::Postgres
       begin
         yield
       rescue ex : QueryCanceled
-        confirmed = state.get.expiring?
+        confirmed = state.get.expired?
         raise confirmed ? QueryTimeout.new("statement canceled after #{timeout}") : ex
       rescue ex : IO::Error | OpenSSL::Error | ConnectionLost
-        raise ex unless state.get.expiring?
+        raise ex unless state.get.expired?
         raise undelivered_cancel(timeout)
       rescue ex : CallerError
-        raise ex unless state.get.expiring? && (ex.cause.is_a?(ConnectionLost) || (ex.cause.is_a?(IO::Error) || ex.cause.is_a?(OpenSSL::Error)))
+        raise ex unless state.get.expired? && (ex.cause.is_a?(ConnectionLost) || (ex.cause.is_a?(IO::Error) || ex.cause.is_a?(OpenSSL::Error)))
         raise undelivered_cancel(timeout)
       ensure
         finished.close
         unless state.compare_and_set(Deadline::Running, Deadline::Done)[1]
           cancel_sent.receive
-          hard_close unless confirmed
+          keep = confirmed && state.compare_and_set(Deadline::Expiring, Deadline::Done)[1]
+          hard_close unless keep
         end
       end
     end
 
     private def undelivered_cancel(timeout : Time::Span) : QueryTimeout
-      QueryTimeout.new("statement exceeded #{timeout} and the cancel request could not be delivered")
+      QueryTimeout.new("statement exceeded #{timeout} and the cancel request could not be delivered or did not stop it")
     end
 
     private def cancel_or_drop : Nil
