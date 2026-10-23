@@ -362,3 +362,11 @@ Create tests for the following injection attempts:
 - [OWASP SQL Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html)
 - [CWE-89: SQL Injection](https://cwe.mitre.org/data/definitions/89.html)
 - Crystal DB Documentation
+
+## Update (0.0.589)
+
+Since the 2025-10-11 audit, CQL added validation of DDL identifiers that cannot be bound as parameters
+(index, constraint, rename and foreign key names, and aggregate aliases), safe raw SQL fragments, and
+compile-time column checks in the typed `where` DSL. See the `[Unreleased]` Security section of
+`CHANGELOG.md` and `docs/explanation/safety-guardrails.md`. The findings above have not been re-audited
+line by line for this release.

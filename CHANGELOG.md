@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Fixed broken links, version pins and wrong class names across `README.md` and `docs/`; CockroachDB is listed wherever dialects are enumerated.
+- Rewrote the caching how-to pages (`per-request`, `redis`, `query-cache`) against the real `CQL::Cache` API.
+- Added how-to pages for the native PostgreSQL driver, CockroachDB, CTEs, window functions, set operations, upsert, row locking, raw fragments, `explain`, JSON/geo predicates and the typed `where` DSL; plus schema dump/validation, UUID/ULID keys, safety guardrails and the query profiler.
+- Added `benchmarks/README.md` and `script/README.md`.
+
 ### Added
 
 - PostgreSQL driver binary parameters (`binary_params=true`, off by default: measured faster for arrays and for statements with several parameters, about even for a single value; see the README) chosen per parameter from the server's `ParameterDescription` for int2/4/8, float4/8, bool, uuid, timestamp(tz), date, numeric, jsonb and arrays of them, falling back to the text form whenever there is no equivalent binary one; CockroachDB keeps float4 and numeric as text. Binary `COPY`: `Session#copy_in_binary` / `copy_out_binary` (and on `Connection`), which raise `ArgumentError` if the server runs the statement as text. `Session#encode` builds a parameter for the session's setting; `ParamEncoder.encode(value, binary)` defers one.
@@ -118,25 +125,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parameterized query support
 - Prepared statement usage by default
 
-## [0.0.435] - Current
+## [0.0.435]
 
 ### Summary
 
-Current stable release with comprehensive ORM functionality.
+Last release with its own heading in this file. Entries for later versions (up to 0.0.589) are listed under `[Unreleased]` above.
 
 ## Migration Guide
 
-### Upgrading from v0.x to v1.0
+### Deprecated parameters
 
 #### Deprecated `cascade` Parameter
 
-**Before (v0.x):**
+**Deprecated:**
 
 ```crystal
 has_many :posts, foreign_key: :user_id, cascade: true
 ```
 
-**After (v1.0):**
+**Preferred:**
 
 ```crystal
 has_many :posts, foreign_key: :user_id, dependent: :destroy
