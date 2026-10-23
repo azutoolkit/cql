@@ -45,6 +45,14 @@ module CQL::Postgres
       end
     end
 
+    # Where a stream stands, for `cancel`: not streaming, streaming, or
+    # canceled while streaming (the server may have had nothing to cancel).
+    private enum StreamState
+      Idle
+      Streaming
+      Canceled
+    end
+
     getter config : Config
     getter process_id : Int32
     getter secret_key : Bytes
@@ -113,8 +121,8 @@ module CQL::Postgres
       @queued = 0
       @owed = 0
       @deadline_expired = false
-      @streaming = false
-      @cancel_requested = false
+      @stream_state = Atomic(StreamState).new(StreamState::Idle)
+      @cancels_in_flight = Atomic(Int32).new(0)
       @last_used = Time.instant
     end
 
@@ -183,10 +191,16 @@ module CQL::Postgres
     # Asks the server, over a second connection, to cancel what this session is
     # running. Safe to call from any fiber.
     def cancel : Nil
-      # Between the fetches of a stream nothing runs on the server, which then
-      # ignores the cancel; remember it so the next fetch raises instead.
-      @cancel_requested = true if @streaming
-      Transport.cancel(@config, @process_id, @secret_key)
+      @cancels_in_flight.add(1)
+      begin
+        Transport.cancel(@config, @process_id, @secret_key, @cancel_grace)
+        # Once that returns the signal is out. A statement that is running
+        # raises 57014 itself; between the fetches of a stream nothing runs, the
+        # server ignores the cancel, and the next fetch has to raise instead.
+        @stream_state.compare_and_set(StreamState::Streaming, StreamState::Canceled)
+      ensure
+        @cancels_in_flight.sub(1)
+      end
     end
 
     # Forgets every cached statement after the server dropped them
@@ -299,10 +313,13 @@ module CQL::Postgres
         when timeout(timeout)
           if state.compare_and_set(Deadline::Running, Deadline::Expiring)[1]
             @deadline_expired = true
-            cancel_or_drop
-            cancel_sent.send(nil)
+            spawn do
+              cancel_or_drop
+              cancel_sent.send(nil)
+            end
             # The cancel travels on a new connection; if this one is dead (or the
-            # server ignores the cancel) the request would block for ever.
+            # server ignores the cancel) the request would block for ever. The
+            # grace runs alongside the cancel, not after it.
             select
             when finished.receive?
             when timeout(@cancel_grace) then hard_close if state.compare_and_set(Deadline::Expiring, Deadline::Dropping)[1]
@@ -314,6 +331,9 @@ module CQL::Postgres
       begin
         yield
       rescue ex : QueryCanceled
+        # A QueryCanceled here is normally the server's. The driver raises its own for a
+        # user cancel during a stream, after the deadline check, so at worst that is
+        # reported as the timeout; the session stays in sync either way.
         confirmed = state.get.expired?
         raise confirmed ? QueryTimeout.new("statement canceled after #{timeout}") : ex
       rescue ex : IO::Error | OpenSSL::Error | ConnectionLost
@@ -325,9 +345,13 @@ module CQL::Postgres
       ensure
         finished.close
         unless state.compare_and_set(Deadline::Running, Deadline::Done)[1]
-          cancel_sent.receive
-          keep = confirmed && state.compare_and_set(Deadline::Expiring, Deadline::Done)[1]
-          hard_close unless keep
+          if state.get.dropping?
+            hard_close
+          else
+            cancel_sent.receive
+            keep = confirmed && state.compare_and_set(Deadline::Expiring, Deadline::Done)[1]
+            hard_close unless keep
+          end
         end
       end
     end

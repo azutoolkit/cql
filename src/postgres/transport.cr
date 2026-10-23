@@ -43,11 +43,13 @@ module CQL::Postgres
 
     # Sends an out-of-band CancelRequest for the session identified by the key.
     # The request itself is never encrypted, as in libpq before version 17.
-    def self.cancel(config : Config, process_id : Int32, secret_key : Bytes) : Nil
+    # Returns once the postmaster has hung up, which it does after signalling the
+    # backend, or after *wait* if it never does (a proxy that accepts and sits).
+    def self.cancel(config : Config, process_id : Int32, secret_key : Bytes, wait : Time::Span = 5.seconds) : Nil
       io = open(config)
       Wire::Frontend.cancel_request(io, process_id, secret_key)
       io.flush
-      wait_for_hang_up(io)
+      wait_for_hang_up(io, wait)
     ensure
       io.try(&.close)
     end
@@ -55,7 +57,8 @@ module CQL::Postgres
     # The postmaster closes its side once it has signalled the backend, so
     # waiting for that (as libpq does) means the cancel cannot land on a
     # statement sent after this returns.
-    private def self.wait_for_hang_up(io : IO) : Nil
+    private def self.wait_for_hang_up(io : IO, wait : Time::Span) : Nil
+      io.read_timeout = wait if io.responds_to?(:read_timeout=)
       io.read(Bytes.new(1))
     rescue IO::Error
     end

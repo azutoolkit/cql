@@ -9,14 +9,15 @@ module CQL::Postgres
     # fetch raises `QueryTimeout` and the session is dropped unless the server
     # confirmed a cancel. `Session#cancel` ends a stream that still has rows to
     # fetch: it cancels the fetch in progress, or, if the portal is suspended and
-    # the server has nothing to cancel, makes the next fetch raise `QueryCanceled`.
-    # COPY cannot be streamed.
+    # the server has nothing to cancel, makes the next fetch raise `QueryCanceled`
+    # (rows already buffered, up to the fetch size, are still delivered first).
+    # A cancel still in flight when the block ends is waited for, so it cannot hit
+    # the session's next statement. COPY cannot be streamed.
     def stream(sql : String, params : Array(Types::Param) = [] of Types::Param, fetch_size : Int32 = 1000,
                cache : Bool = true, timeout : Time::Span? = nil, & : RowStream -> T) : T forall T
       raise ArgumentError.new("fetch_size must be positive, got #{fetch_size}") unless fetch_size > 0
       exclusive(timeout) do
-        @cancel_requested = false
-        @streaming = true
+        @stream_state.set(StreamState::Streaming)
         begin
           rows = open_stream(sql, params, cache, fetch_size)
           begin
@@ -25,7 +26,8 @@ module CQL::Postgres
             finish_stream(rows)
           end
         ensure
-          @streaming = false
+          @stream_state.set(StreamState::Idle)
+          settle_cancels
         end
       end
     end
@@ -35,7 +37,7 @@ module CQL::Postgres
     # goes out, so a Bind already staged is never left behind.
     protected def fetch_rows(rows : RowStream, fetch_size : Int32) : Nil
       raise QueryTimeout.new("the stream timed out") if @deadline_expired
-      raise QueryCanceled.user_request if @cancel_requested
+      raise QueryCanceled.user_request if @stream_state.get.canceled?
       request_batch(rows, fetch_size)
     end
 
@@ -111,6 +113,18 @@ module CQL::Postgres
       rescue ServerError
       end
       raise ArgumentError.new("COPY cannot be streamed; use copy_in or copy_out")
+    end
+
+    # A cancel made during the stream may still be on its way to the server.
+    # Wait (briefly) for it to be delivered before the session is handed on, so
+    # it cannot land on the next statement. (Accepted gaps: a user cancel issued
+    # during a plain query that ends on its own is not waited for, and one that
+    # outlives this wait can mark a stream started right after it as canceled.)
+    private def settle_cancels : Nil
+      deadline = Time.instant + @cancel_grace
+      while !@closed && @cancels_in_flight.get > 0 && Time.instant < deadline
+        sleep 1.millisecond
+      end
     end
 
     # Closing the portal matters inside a transaction, where Sync would
