@@ -77,6 +77,7 @@
 
 ### Configuration
 
+- [Configure CQL](how-to/configuration/configure-cql.md)
 - [Configure Database Connection](how-to/configuration/database-connection.md)
 - [Set Up Connection Pooling](how-to/configuration/connection-pooling.md)
 - [Configure Multiple Environments](how-to/configuration/environments.md)
@@ -121,6 +122,7 @@
 
 - [Reference Overview](reference/README.md)
 - [Quick Reference](reference/quick-reference.md)
+- [Configuration Reference](reference/configuration.md)
 
 ### API Reference
 

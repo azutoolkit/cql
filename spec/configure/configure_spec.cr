@@ -1,0 +1,141 @@
+require "../spec_helper"
+require "../../src/postgres"
+
+private def with_crystal_env(env : String, &)
+  previous = ENV["CRYSTAL_ENV"]?
+  ENV["CRYSTAL_ENV"] = env
+  CQL.reset_config!
+  yield
+ensure
+  previous ? (ENV["CRYSTAL_ENV"] = previous) : ENV.delete("CRYSTAL_ENV")
+  CQL.reset_config!
+end
+
+describe "CQL.configure" do
+  after_each do
+    CQL.reset_config!
+    CQL::Performance.disable_sql_logging
+  end
+
+  describe "environment defaults" do
+    it "sizes the pool per environment" do
+      {"development" => 5, "test" => 1, "production" => 25}.each do |env, size|
+        with_crystal_env(env) { CQL.config.pool.size.should eq(size) }
+      end
+    end
+
+    it "logs SQL in development unless told otherwise" do
+      with_crystal_env("development") do
+        CQL.config.sql_logging?.should be_true
+        CQL.configure(&.sql_logging=(false))
+        CQL.config.sql_logging?.should be_false
+      end
+    end
+
+    it "follows the environment when it is changed after the defaults were applied" do
+      with_crystal_env("development") do
+        CQL.configure(&.env=("production"))
+        CQL.config.sql_logging?.should be_false
+      end
+    end
+
+    it "honors CQL_NO_SQL_LOG in development" do
+      ENV["CQL_NO_SQL_LOG"] = "1"
+      with_crystal_env("development") { CQL.config.sql_logging?.should be_false }
+    ensure
+      ENV.delete("CQL_NO_SQL_LOG")
+    end
+
+    it "does not log SQL in production by default" do
+      with_crystal_env("production") { CQL.config.sql_logging?.should be_false }
+    end
+  end
+
+  describe "validation" do
+    it "rejects a non-positive pool size" do
+      expect_raises(ArgumentError, /pool_size/) { CQL.configure(&.pool_size=(0)) }
+    end
+
+    it "rejects an unsupported database scheme" do
+      expect_raises(ArgumentError, /Unsupported database URL/) { CQL.configure(&.db=("oracle://x")) }
+    end
+  end
+
+  describe "pool_size" do
+    it "keeps pool.size in step" do
+      CQL.configure(&.pool_size=(7))
+      CQL.config.pool.size.should eq(7)
+    end
+
+    it "never leaves the initial or idle pool larger than the maximum" do
+      with_crystal_env("development") do
+        CQL.configure(&.pool_size=(1))
+        CQL.config.pool.initial_size.should eq(1)
+        CQL.config.pool.max_idle_size.should eq(1)
+      end
+    end
+  end
+
+  describe "full_db_url" do
+    it "opens through the native PostgreSQL driver without unknown startup parameters" do
+      {"postgres://u@localhost/app", "cockroachdb://root@localhost:26257/defaultdb"}.each do |url|
+        CQL.configure(&.db=(url))
+
+        driver_config = CQL::Postgres::Config.from_uri(
+          URI.parse(CQL.config.full_db_url),
+          ignoring: CQL::Postgres::Driver::DB_OWNED_KEYS + CQL::Postgres::Driver::COMPAT_IGNORED_KEYS)
+        driver_config.startup_options.should be_empty
+      end
+    end
+
+    it "carries pool and SQLite settings" do
+      CQL.configure do |config|
+        config.db = "sqlite3://./x.db"
+        config.pool_size = 3
+        config.sqlite.busy_timeout = 1234
+      end
+
+      url = CQL.config.full_db_url
+      url.should contain("max_pool_size=3")
+      url.should contain("busy_timeout=1234")
+    end
+
+    it "lets params already in the URL win" do
+      CQL.configure { |config| config.db = "sqlite3://./x.db?max_pool_size=9" }
+      CQL.config.full_db_url.should contain("max_pool_size=9")
+      CQL.config.full_db_url.should_not contain("max_pool_size=10")
+    end
+  end
+
+  describe ".build_schema" do
+    it "defines tables with the schema DSL and applies the configured connection settings" do
+      with_crystal_env("test") do
+        CQL.configure do |config|
+          config.db = CQLSpecSupport.sqlite_uri("configure_build_schema.db")
+          config.sqlite.busy_timeout = 4321
+        end
+
+        schema = CQL.build_schema(:configured) do
+          table :things do
+            primary :id, Int64
+            text :name
+          end
+        end
+
+        schema.tables.has_key?(:things).should be_true
+        schema.exec_query(&.scalar("PRAGMA busy_timeout")).should eq(4321)
+      end
+    end
+
+    it "sets up SQL logging in development without raising" do
+      with_crystal_env("development") do
+        CQL.configure { |config| config.db = CQLSpecSupport.sqlite_uri("configure_build_schema_dev.db") }
+
+        CQL.build_schema(:configured_dev) { }.should be_a(CQL::Schema)
+        logging_enabled = false
+        CQL::Performance.monitor.configure { |performance| logging_enabled = performance.logging.enabled? }
+        logging_enabled.should be_true
+      end
+    end
+  end
+end
