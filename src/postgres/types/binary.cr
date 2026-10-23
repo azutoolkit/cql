@@ -121,10 +121,10 @@ module CQL::Postgres::Types
     end
 
     def self.encode(value : Array, oid : UInt32) : Bytes?
-      element_oid = ARRAY_ELEMENT[oid]? || return nil
+      element_oid = ARRAY_ELEMENT[oid]? || return
       return array_header(0, false, element_oid, [] of Int32) if value.empty?
       shape = ArrayShape.new
-      return nil unless shape.add(value, 0, element_oid)
+      return unless shape.add(value, 0, element_oid)
       body = array_header(shape.dimensions.size, shape.nulls?, element_oid, shape.dimensions)
       io = IO::Memory.new(body.size + shape.cells.sum { |cell| 4 + (cell.try(&.size) || 0) })
       io.write(body)
@@ -203,9 +203,9 @@ module CQL::Postgres::Types
     # and the number of decimal digits after the point. Only plain decimals
     # ("-12.50") are converted; NaN, infinities and exponent forms go as text.
     def self.numeric(text : String) : Bytes?
-      match = /\A([+-]?)([0-9]*)(?:\.([0-9]*))?\z/.match(text) || return nil
+      match = /\A([+-]?)([0-9]*)(?:\.([0-9]*))?\z/.match(text) || return
       whole, fraction = match[2], match[3]? || ""
-      return nil if whole.empty? && fraction.empty? || fraction.size > NUMERIC_MAX_SCALE
+      return if whole.empty? && fraction.empty? || fraction.size > NUMERIC_MAX_SCALE
       groups = digit_groups(whole.lstrip('0'), fraction)
       weight = (whole.lstrip('0').size + 3) // 4 - 1
       while (first = groups.first?) && first == 0
@@ -215,7 +215,7 @@ module CQL::Postgres::Types
       while groups.last? == 0
         groups.pop
       end
-      return nil if groups.size > Int16::MAX || weight > Int16::MAX || weight < Int16::MIN
+      return if groups.size > Int16::MAX || weight > Int16::MAX || weight < Int16::MIN
       negative = match[1] == "-" && !groups.empty?
       io = IO::Memory.new(8 + groups.size * 2)
       io.write_bytes(groups.size.to_i16, IO::ByteFormat::BigEndian)

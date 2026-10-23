@@ -75,7 +75,7 @@ describe CQL::Postgres::BinaryCopy do
       rows.size.should eq 2
       rows[0][0].should eq 1_i64
       rows[0][1].should eq "héllo"
-      rows[0][2].should eq true
+      rows[0][2].should be_true
       rows[0][3].to_s.should eq "-12.50"
       rows[0][4].should eq id
       rows[0][5].should eq stamp

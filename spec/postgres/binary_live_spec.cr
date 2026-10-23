@@ -216,7 +216,7 @@ describe "binary COPY against a live server" do
       first = rows[0]
       first[0].should eq 1_i64
       first[1].should eq "héllo"
-      first[2].should eq true
+      first[2].should be_true
       first[3].to_s.should eq "-12.50"
       first[4].should eq id
       first[5].should eq stamp

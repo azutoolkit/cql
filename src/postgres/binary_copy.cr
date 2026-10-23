@@ -108,15 +108,15 @@ module CQL::Postgres
 
       # The next row, or nil when it has not fully arrived (or the trailer came).
       private def next_tuple : Array(Types::Value)?
-        return nil if available < 2
+        return if available < 2
         count = peek_int16(0)
         if count == -1
           @buffer.pos += 2
           @done = true
-          return nil
+          return
         end
         raise ProtocolError.new("a binary COPY row has #{count} fields for #{@types.size} columns") unless count == @types.size
-        return nil unless row_complete?
+        return unless row_complete?
         @buffer.pos += 2
         @types.map { |oid| read_field(oid) }
       end
@@ -136,7 +136,7 @@ module CQL::Postgres
 
       private def read_field(oid : UInt32) : Types::Value
         size = @buffer.read_bytes(Int32, IO::ByteFormat::BigEndian)
-        return nil if size == -1
+        return if size == -1
         field = @buffer.to_slice[@buffer.pos, size]
         @buffer.pos += size
         Types::Binary.decode(oid, field)
