@@ -14,6 +14,7 @@ Comprehensive documentation of CQL's classes and methods:
 
 Database-specific features and considerations:
 
+- [Database Support Matrix](database-support.md) - Feature support across SQLite, PostgreSQL, MySQL and CockroachDB
 
 ## Quick Reference
 

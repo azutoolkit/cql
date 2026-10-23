@@ -60,11 +60,15 @@ def up
     timestamps
 
     foreign_key [:user_id], references: :users, references_columns: [:id]
-    index [:user_id]
-    index [:published]
   end
 
   schema.posts.create!
+
+  # Indexes are created separately; `index` inside the table block is not emitted by create!
+  schema.alter :posts do
+    create_index :idx_posts_user_id, [:user_id]
+    create_index :idx_posts_published, [:published]
+  end
 end
 
 def down
@@ -73,6 +77,8 @@ end
 ```
 
 ## Add Columns
+
+`schema.alter :users` looks the table up in the schema and raises `CQL::Schema::Error` ("Table 'users' not found") if it was never declared, so declare it with `schema.table` or load your generated schema file first.
 
 ```crystal
 class AddAvatarToUsers < CQL::Migration(4)

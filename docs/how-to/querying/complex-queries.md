@@ -35,11 +35,15 @@ User.where { (active == true) & ((role == "admin") | (role == "moderator")) }.al
 
 ## Subqueries
 
+Collect the ids first, then use them in an `IN` condition (`pluck` on a query needs the Crystal type to read the column as):
+
 ```crystal
-# Get users who have posts
-active_author_ids = Post.where(published: true).pluck(:user_id)
+# Get users who have published posts
+active_author_ids = Post.where(published: true).pluck(:user_id, as: Int64)
 authors = User.where { id.in(active_author_ids) }.all
 ```
+
+Because values are always bound as parameters, the list is never interpolated into the SQL.
 
 ## Aggregations
 
@@ -64,28 +68,41 @@ avg_age = User.where(active: true).avg(:age)
 
 ### Min/Max
 
+`min`/`max` read numeric columns. For dates, order and take the first row instead:
+
 ```crystal
-oldest_post = Post.min(:created_at)
+fewest_views = Post.min(:views_count)
 most_views = Post.max(:views_count)
+oldest_post = Post.order(created_at: :asc).first
 ```
 
 ## Grouping Results
 
+Use the query builder on the schema for `GROUP BY`/`HAVING`, and tell `all` what shape each row has:
+
 ```crystal
-# Posts per category
-Category.all.map do |cat|
-  {
-    name: cat.name,
-    posts: cat.posts.count
-  }
-end
+# Posts per category, only categories with more than 5 posts
+rows = MyDB.query
+  .from(:posts)
+  .select(:category_id, count: :id)
+  .group(:category_id)
+  .having { count(:id) > 5 }
+  .all(as: {Int64, Int64})
+
+rows.each { |category_id, post_count| puts "#{category_id}: #{post_count}" }
 ```
+
+Model queries also expose `group(:column)` and `having { ... }`, but their rows are mapped to the model, so use the schema query for aggregates.
 
 ## Select Specific Columns
 
 ```crystal
-# Only fetch needed columns
-names = User.where(active: true).pluck(:name)
+# Only fetch needed columns, as plain values
+names = User.where(active: true).pluck(:name, as: String)
+
+# Or lightweight rows with only the selected columns filled in
+rows = User.where(active: true).select(:id, :name).all
+rows.first.name  # => String? (other columns are nil)
 ```
 
 ## Order by Multiple Columns
@@ -109,27 +126,39 @@ Post.order(created_at: :desc)
 ## Distinct Results
 
 ```crystal
-unique_categories = Post.select(:category_id).distinct.all
+unique_categories = Post.distinct(:category_id, as: Int64)
+
+# or on a query
+Post.where(published: true).select(:category_id).distinct.all
 ```
 
 ## Query Related Records
+
+Query the associated model directly, keyed on the foreign key. This gives you the full query builder, scopes and typed `where` blocks:
 
 ```crystal
 user = User.find!(1)
 
 # Posts with conditions
-published_posts = user.posts.where(published: true).all
+published_posts = Post.where(user_id: user.id!, published: true).all
 
 # Ordered posts
-recent_posts = user.posts.order(created_at: :desc).limit(5).all
+recent_posts = Post.where(user_id: user.id!).order(created_at: :desc).limit(5).all
+```
+
+`user.posts` returns a `Collection`. Its `where`, `order`, `limit` and `offset` return a plain `CQL::Query`, so finish with `.all(Post)`:
+
+```crystal
+user.posts.where(published: true).all(Post)
+user.posts.order(created_at: :desc).limit(5).all(Post)
 ```
 
 ## Complex Example
 
 ```crystal
-# Get top 10 active users with most published posts
+# Top 10 active users by published post count
 users_with_counts = User.where(active: true).all.map do |user|
-  post_count = user.posts.where(published: true).count
+  post_count = Post.where(user_id: user.id!, published: true).count
   {user: user, post_count: post_count}
 end
 
@@ -142,21 +171,39 @@ top_users.each do |h|
 end
 ```
 
-## Raw SQL (when needed)
+This issues one count query per user. For large tables, use a joined `GROUP BY` query (see above) or `preload` and count in memory.
 
-For very complex queries:
+## Joins
+
+Join through a declared association and filter on the joined table with a typed block:
 
 ```crystal
-result = MyDB.exec(<<-SQL
-  SELECT u.name, COUNT(p.id) as post_count
-  FROM users u
-  LEFT JOIN posts p ON p.user_id = u.id AND p.published = true
-  WHERE u.active = true
-  GROUP BY u.id
-  ORDER BY post_count DESC
-  LIMIT 10
-SQL
-)
+User.joins(:posts) { posts.published == true }.all
+User.left_joins(:profile).where { age > 18 }.all
+```
+
+## Raw SQL (when needed)
+
+Add a SQL fragment with bound values to any query. `?` binds positionally and `:name` binds by name:
+
+```crystal
+User.where("lower(email) = ? AND age > :age", "john@example.com", age: 18).all
+```
+
+For a whole statement, run it on a pooled connection and map the rows yourself:
+
+```crystal
+rows = MyDB.exec_query do |conn|
+  conn.query_all(<<-SQL, as: {String, Int64})
+    SELECT u.name, COUNT(p.id) AS post_count
+    FROM users u
+    LEFT JOIN posts p ON p.user_id = u.id AND p.published = true
+    WHERE u.active = true
+    GROUP BY u.id
+    ORDER BY post_count DESC
+    LIMIT 10
+  SQL
+end
 ```
 
 ## Verify Query Works
@@ -164,8 +211,8 @@ SQL
 ```crystal
 # Setup test data
 user = User.create!(name: "John", email: "john@example.com", active: true)
-Post.create!(title: "Post 1", body: "...", user_id: user.id.not_nil!, published: true, views_count: 150)
-Post.create!(title: "Post 2", body: "...", user_id: user.id.not_nil!, published: true, views_count: 50)
+Post.create!(title: "Post 1", body: "...", user_id: user.id!, published: true, views_count: 150)
+Post.create!(title: "Post 2", body: "...", user_id: user.id!, published: true, views_count: 50)
 
 # Test query
 popular = Post.where(published: true).where { views_count > 100 }.all

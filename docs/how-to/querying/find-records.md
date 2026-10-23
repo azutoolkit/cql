@@ -13,18 +13,22 @@ else
 end
 ```
 
+`find?` is an alias of `find`.
+
 ## Find by ID (raise if not found)
 
 ```crystal
-user = User.find!(1)  # Raises if not found
+user = User.find!(1)  # Raises DB::NoResultsError if not found
 puts user.name
 ```
 
 ## Find by Attribute
 
 ```crystal
-user = User.find_by(email: "john@example.com")
+user = User.find_by(email: "john@example.com")   # => User? (nil when no match)
 puts user.try(&.name)
+
+user = User.find_by!(email: "john@example.com")  # Raises DB::NoResultsError
 ```
 
 ## Find by Multiple Attributes
@@ -36,7 +40,8 @@ post = Post.find_by(user_id: 1, published: true)
 ## Find First Record
 
 ```crystal
-user = User.first
+user = User.first          # => User?
+user = User.first!         # Raises when the table is empty
 puts user.try(&.name)
 ```
 
@@ -45,6 +50,12 @@ puts user.try(&.name)
 ```crystal
 user = User.last
 puts user.try(&.name)
+```
+
+`last` loads the matching rows and returns the final one. On large tables, order descending and take the first row instead:
+
+```crystal
+user = User.order(id: :desc).first
 ```
 
 ## Find All Records
@@ -76,6 +87,22 @@ puts "User exists: #{exists}"
 ```crystal
 user = User.find_by(email: "john@example.com")
 user ||= User.new("John", "john@example.com")
+```
+
+## Find or Create
+
+```crystal
+user = User.find_or_create_by(email: "john@example.com", name: "John")
+```
+
+`find_or_create_by` looks the record up by all the given attributes and calls `create!` with them when nothing matches.
+
+## Pluck Values
+
+```crystal
+emails = User.where(active: true).pluck(:email, as: String)   # => Array(String)
+newest_id = User.order(id: :desc).pick(:id, as: Int64)         # => Int64?
+ids = User.where(active: true).ids                             # => Array(Int64)
 ```
 
 ## Safe Navigation

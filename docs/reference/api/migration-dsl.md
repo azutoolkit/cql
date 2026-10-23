@@ -4,7 +4,7 @@ Complete reference for the CQL Migration DSL (Domain Specific Language).
 
 ## Migration Class
 
-Migrations inherit from `CQL::Migration(VERSION)` where VERSION is an integer (typically a timestamp):
+Migrations inherit from `CQL::Migration(VERSION)` where VERSION is an integer (typically a timestamp, stored as `Int64`). The class registers itself with `CQL::Migrator` when it is defined, and the migrator exposes the database as `schema`:
 
 ```crystal
 class CreateUsers < CQL::Migration(20250125001401)
@@ -33,11 +33,13 @@ class CreateUsers < CQL::Migration(1)
       column :email, String, null: false
       column :active, Bool, default: true
       timestamps
-
-      index [:email], unique: true
     end
 
     schema.users.create!
+
+    schema.alter :users do
+      create_index :idx_users_email, [:email], unique: true
+    end
   end
 
   def down
@@ -77,7 +79,7 @@ column :name, String                      # Required string
 column :bio, String, null: true           # Nullable
 column :active, Bool, default: true       # With default
 column :email, String, null: false, unique: true
-column :score, Int32, default: 0, index: true
+column :score, Int32, default: 0
 ```
 
 **Options:**
@@ -86,9 +88,9 @@ column :score, Int32, default: 0, index: true
 | `null` | Bool | Allow NULL values (default: false) |
 | `default` | T | Default value |
 | `unique` | Bool | Add unique constraint |
-| `index` | Bool | Create index on column |
+| `index` | Bool | Records an index on the column in memory; `create!` does not emit it, use `create_index` |
 | `size` | Int32 | Column size (for VARCHAR) |
-| `as` | String | SQL column alias |
+| `as` | String | Alias used when selecting the column |
 
 ### Type-Specific Column Methods
 
@@ -111,21 +113,27 @@ boolean :active, default: true
 timestamp :created_at
 date :birthday
 json :metadata
+blob :avatar
+interval :duration
+lock_version                              # Int32 `version` column for optimistic locking
 ```
 
 ### Supported Types
 
-| Crystal Type | SQL Type |
-|--------------|----------|
-| `Int32` | INTEGER |
-| `Int64` | BIGINT |
-| `Float32` | FLOAT |
-| `Float64` | DOUBLE PRECISION |
-| `String` | VARCHAR / TEXT |
-| `Bool` | BOOLEAN |
-| `Time` | TIMESTAMP |
-| `Date` | DATE |
-| `JSON::Any` | JSON / JSONB |
+| Crystal Type | PostgreSQL | CockroachDB | MySQL | SQLite |
+|--------------|-----------|-------------|-------|--------|
+| `Int32` | INTEGER | INT4 | INT | INTEGER |
+| `Int64` | BIGINT | BIGINT | BIGINT | BIGINT |
+| `Float32` | REAL | REAL | FLOAT | FLOAT |
+| `Float64` | DOUBLE PRECISION | DOUBLE PRECISION | DOUBLE | DOUBLE |
+| `String` | VARCHAR | VARCHAR | VARCHAR(255) | TEXT |
+| `Bool` | BOOLEAN | BOOLEAN | TINYINT(1) | BOOLEAN |
+| `Time` | TIMESTAMP | TIMESTAMP | DATETIME | TIMESTAMP |
+| `Time::Span` | INTERVAL | INTERVAL | TIME | INTERVAL |
+| `Slice(UInt8)` | BYTEA | BYTEA | BLOB | BLOB |
+| `JSON::Any` | JSONB | JSONB | JSON | TEXT |
+
+`UInt32` and `UInt64` are also mapped. See `CQL::DB_TYPE_MAPPING`.
 
 ### timestamps
 
@@ -145,23 +153,11 @@ Both columns are timestamps with current timestamp as default.
 
 ### index
 
-Creates an index within a table definition:
-
-```crystal
-schema.table :users do
-  column :email, String
-  column :first_name, String
-  column :last_name, String
-
-  index [:email], unique: true            # Unique index
-  index [:email]                          # Regular index
-  index [:first_name, :last_name]         # Composite index
-end
-```
+`index [:cols], unique: bool` inside a table block builds a `CQL::Index` object for the table, but `create!` does not emit `CREATE INDEX` for it. Create indexes in a migration with `create_index` instead.
 
 ### create_index / drop_index
 
-Manage indexes in alter operations:
+Create and drop indexes in alter operations (the name comes first):
 
 ```crystal
 schema.alter :users do
@@ -187,6 +183,8 @@ schema.table :posts do
 end
 ```
 
+A single-column overload takes `column :user_id` instead of an array. `references_columns` may be a Symbol or an Array and defaults to the referenced table's primary key (`:id`).
+
 **Parameters:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -195,7 +193,7 @@ end
 | `references_columns` | Array(Symbol) | Target column(s) |
 | `on_delete` | Symbol | `:cascade`, `:restrict`, `:set_null`, `:no_action` |
 | `on_update` | Symbol | `:cascade`, `:restrict`, `:set_null`, `:no_action` |
-| `name` | String | Optional constraint name |
+| `name` | String (`Symbol` in `schema.alter`) | Optional constraint name; defaults to `fk_<table>_<columns>` |
 
 ### Composite Foreign Keys
 
@@ -242,8 +240,10 @@ end
 | `foreign_key [:cols], references: :table` | Add foreign key |
 | `drop_foreign_key :name` | Drop foreign key |
 | `rename_table :new_name` | Rename the table |
-| `unique_constraint [:cols]` | Add unique constraint |
-| `check_constraint "expression"` | Add check constraint |
+
+`unique_constraint [:cols]` and `check_constraint "expression"` exist on tables (inside `schema.table`) but not in `schema.alter`.
+
+`schema.alter` raises `CQL::Schema::Error` if the table is not registered in the schema. SQLite does not support `change_column`, adding a foreign key or dropping a foreign key to an existing table; these raise `CQL::SQLiteUnsupportedFeatureError` with a workaround message. `drop_column` on a column the table does not know only logs an error.
 
 ### Alter Examples
 
@@ -277,11 +277,13 @@ class CreateBlogSchema < CQL::Migration(1)
       column :username, String, null: false
       column :role, String, default: "member"
       timestamps
-
-      index [:email], unique: true
-      index [:username], unique: true
     end
     schema.users.create!
+
+    schema.alter :users do
+      create_index :idx_users_email, [:email], unique: true
+      create_index :idx_users_username, [:username], unique: true
+    end
 
     # Create posts table
     schema.table :posts do
@@ -294,10 +296,13 @@ class CreateBlogSchema < CQL::Migration(1)
       timestamps
 
       foreign_key [:user_id], references: :users, references_columns: [:id]
-      index [:user_id]
-      index [:published]
     end
     schema.posts.create!
+
+    schema.alter :posts do
+      create_index :idx_posts_user_id, [:user_id]
+      create_index :idx_posts_published, [:published]
+    end
   end
 
   def down
@@ -310,27 +315,37 @@ end
 ## Migration Execution
 
 ```crystal
-migrator = schema.migrator
+migrator = schema.migrator                                      # auto_sync: true by default
+migrator = schema.migrator(CQL::MigratorConfig.new(auto_sync: false))
 
-# Apply migrations
+# Apply migrations (one transaction, version order)
 migrator.up                    # Apply all pending
-migrator.up(1)                 # Apply 1 migration
+migrator.up(1)                 # Run at most the first 1 migration in order
 
-# Rollback migrations
-migrator.down                  # Rollback all
+# Rollback migrations (one transaction, newest first)
+migrator.down                  # Rollback ALL applied migrations
 migrator.down(1)               # Rollback 1 migration
 migrator.rollback              # Alias for down(1)
 
 # Other operations
-migrator.redo                  # Rollback and reapply last
-migrator.up_to(version)        # Apply up to specific version
-migrator.down_to(version)      # Rollback to specific version
+migrator.redo                  # rollback (1) then up
+migrator.up_to(version)        # Apply up to and including version (Int64)
+migrator.down_to(version)      # See the caveat in the rollback guide
 
 # Status
-migrator.applied_migrations    # List applied migrations
-migrator.pending_migrations    # List pending migrations
-migrator.last                  # Get last applied migration
+migrator.applied_migrations    # Array(CQL::MigrationRecord): id, name, version
+migrator.pending_migrations    # Array of migration classes
+migrator.last                  # Last applied migration class, or nil
+migrator.print_applied_migrations
+migrator.print_pending_migrations
+
+# Schema file
+migrator.update_schema_file
+migrator.verify_schema_consistency   # Bool
+migrator.bootstrap_schema
 ```
+
+`CQL::MigratorConfig` takes `schema_file_path`, `schema_name`, `schema_symbol`, `migration_table_name` (default `:cql_schema_migrations`) and `auto_sync`. With `auto_sync` on, the schema file is rewritten from the database when the migrator is created and after `up`/`down`.
 
 ## See Also
 

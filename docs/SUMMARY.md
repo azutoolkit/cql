@@ -31,6 +31,7 @@
 - [Implement Soft Deletes](how-to/models/soft-delete.md)
 - [Add Optimistic Locking](how-to/models/optimistic-locking.md)
 - [Use Timestamps](how-to/models/timestamps.md)
+- [Use UUID and ULID Primary Keys](how-to/models/uuid-ulid-primary-keys.md)
 
 ### Relationships
 
@@ -47,6 +48,16 @@
 - [Create Query Scopes](how-to/querying/scopes.md)
 - [Paginate Results](how-to/querying/pagination.md)
 - [Use Cursor Pagination](how-to/querying/cursor-pagination.md)
+- [Write Typed Queries](how-to/querying/typed-where-dsl.md)
+- [Use CTEs and Recursive CTEs](how-to/querying/ctes.md)
+- [Use Window Functions](how-to/querying/window-functions.md)
+- [Combine Queries with Set Operations](how-to/querying/set-operations.md)
+- [Upsert Records](how-to/querying/upsert.md)
+- [Lock Rows](how-to/querying/row-locking.md)
+- [Use FULL and CROSS Joins](how-to/querying/joins-full-cross.md)
+- [Use Raw SQL Fragments Safely](how-to/querying/raw-fragments.md)
+- [Inspect Queries with to_sql and explain](how-to/querying/explain-and-to-sql.md)
+- [Query JSON and Geospatial Columns](how-to/querying/json-and-geo-predicates.md)
 
 ### Data Operations
 
@@ -62,6 +73,7 @@
 - [Rollback Migrations](how-to/migrations/rollback.md)
 - [Add Columns](how-to/migrations/add-columns.md)
 - [Create Indexes](how-to/migrations/indexes.md)
+- [Dump and Validate Your Schema](how-to/migrations/schema-dump-and-validation.md)
 
 ### Configuration
 
@@ -69,6 +81,15 @@
 - [Set Up Connection Pooling](how-to/configuration/connection-pooling.md)
 - [Configure Multiple Environments](how-to/configuration/environments.md)
 - [Enable SSL Connections](how-to/configuration/ssl.md)
+- [Use CockroachDB](how-to/configuration/cockroachdb.md)
+
+### Native PostgreSQL Driver
+
+- [Native PostgreSQL Driver](how-to/postgres-native/README.md)
+- [Use AsyncEngine and Its Connection Pool](how-to/postgres-native/async-engine.md)
+- [Stream Large Results and Pipeline Statements](how-to/postgres-native/streaming-and-pipelining.md)
+- [Bulk Load with COPY and Send Binary Parameters](how-to/postgres-native/copy-and-binary-params.md)
+- [Configure TLS, Poolers, Timeouts and Transactions](how-to/postgres-native/tls-and-poolers.md)
 
 ### Caching
 
@@ -82,6 +103,7 @@
 - [Avoid N+1 Queries](how-to/performance/n-plus-one.md)
 - [Monitor Performance](how-to/performance/monitoring.md)
 - [Telemetry](how-to/performance/telemetry.md)
+- [Profile Queries and Detect N+1](how-to/performance/query-profiler.md)
 
 ### Testing
 
@@ -105,6 +127,7 @@
 - [Migration DSL](reference/api/migration-dsl.md)
 - [Validation Options](reference/api/validation-options.md)
 - [Callback Hooks](reference/api/callback-hooks.md)
+- [Database Support](reference/database-support.md)
 
 ### Resources
 
@@ -120,6 +143,7 @@
   - [Active Record Pattern](explanation/design-patterns/active-record.md)
   - [Repository Pattern](explanation/design-patterns/repository.md)
 - [Typed Query DSL: Before and After](explanation/dsl-before-after.md)
+- [Safety Guardrails](explanation/safety-guardrails.md)
 
 ## Resources
 

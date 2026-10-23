@@ -18,6 +18,7 @@ Architectural patterns supported by CQL:
 ## Query DSL
 
 - [Typed Query DSL: Before and After](dsl-before-after.md) - What the typed DSL catches at compile time
+- [Safety Guardrails](safety-guardrails.md) - Parameter binding, identifier validation and compile-time checks
 
 ## Architecture
 
