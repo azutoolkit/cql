@@ -207,34 +207,89 @@ module CQL::Postgres::Types
     # and the number of decimal digits after the point. Only plain decimals
     # ("-12.50") are converted; NaN, infinities and exponent forms go as text.
     def self.numeric(text : String) : Bytes?
-      match = /\A([+-]?)([0-9]*)(?:\.([0-9]*))?\z/.match(text) || return
-      whole, fraction = match[2], match[3]? || ""
+      bytes = text.to_slice
+      sign = bytes[0]? == '-'.ord ? NUMERIC_NEGATIVE : NUMERIC_POSITIVE
+      position = bytes[0]? == '-'.ord || bytes[0]? == '+'.ord ? 1 : 0
+      whole_start = position
+      position = skip_digits(bytes, position)
+      whole = bytes[whole_start, position - whole_start]
+      fraction = Bytes.empty
+      if bytes[position]? == '.'.ord
+        fraction_start = position + 1
+        position = skip_digits(bytes, fraction_start)
+        fraction = bytes[fraction_start, position - fraction_start]
+      end
+      return unless position == bytes.size
       return if whole.empty? && fraction.empty? || fraction.size > NUMERIC_MAX_SCALE
-      groups = digit_groups(whole.lstrip('0'), fraction)
-      weight = (whole.lstrip('0').size + 3) // 4 - 1
-      while (first = groups.first?) && first == 0
-        groups.shift
-        weight -= 1
-      end
-      while groups.last? == 0
-        groups.pop
-      end
-      return if groups.size > Int16::MAX || weight > Int16::MAX || weight < Int16::MIN
-      negative = match[1] == "-" && !groups.empty?
-      io = IO::Memory.new(8 + groups.size * 2)
-      io.write_bytes(groups.size.to_i16, IO::ByteFormat::BigEndian)
-      io.write_bytes((groups.empty? ? 0 : weight).to_i16, IO::ByteFormat::BigEndian)
-      io.write_bytes(negative ? NUMERIC_NEGATIVE : NUMERIC_POSITIVE, IO::ByteFormat::BigEndian)
-      io.write_bytes(fraction.size.to_u16, IO::ByteFormat::BigEndian)
-      groups.each { |group| io.write_bytes(group.to_i16, IO::ByteFormat::BigEndian) }
-      io.to_slice
+      write_numeric(sign, whole, fraction)
     end
 
-    # The integer part padded on the left and the fraction on the right to whole
-    # groups of four digits, each group read as a number.
-    private def self.digit_groups(whole : String, fraction : String) : Array(Int32)
-      padded = whole.rjust((whole.size + 3) // 4 * 4, '0') + fraction.ljust((fraction.size + 3) // 4 * 4, '0')
-      Array.new(padded.size // 4) { |index| padded[index * 4, 4].to_i }
+    private def self.skip_digits(bytes : Bytes, position : Int32) : Int32
+      while (byte = bytes[position]?) && byte >= '0'.ord && byte <= '9'.ord
+        position += 1
+      end
+      position
+    end
+
+    # Cuts the digits into base-10000 groups counted from the decimal point, drops
+    # the zero groups at either end and writes the header and the groups. (Written
+    # as a byte pass because this runs once per numeric parameter.)
+    private def self.write_numeric(sign : UInt16, whole : Bytes, fraction : Bytes) : Bytes?
+      groups = Array(Int16).new((whole.size + 3) // 4 + (fraction.size + 3) // 4)
+      integer_size = add_integer_groups(whole, groups)
+      add_fraction_groups(fraction, groups)
+      first = groups.index { |group| group != 0 }
+      return numeric_bytes(NUMERIC_POSITIVE, 0, fraction.size, Slice(Int16).empty) unless first
+      weight = integer_size - 1 - first
+      kept = Slice.new(groups.to_unsafe + first, (groups.rindex { |group| group != 0 } || first) - first + 1)
+      return if kept.size > Int16::MAX || weight > Int16::MAX || weight < Int16::MIN
+      numeric_bytes(sign, weight, fraction.size, kept)
+    end
+
+    # Appends the integer part, without its leading zeros, in groups of four counted
+    # from its right end; returns how many groups that is.
+    private def self.add_integer_groups(whole : Bytes, groups : Array(Int16)) : Int32
+      start = 0
+      while start < whole.size && whole[start] == '0'.ord
+        start += 1
+      end
+      digits = whole[start..]
+      head = digits.size % 4
+      groups << group_value(digits, 0, head) if head > 0
+      index = head
+      while index < digits.size
+        groups << group_value(digits, index, 4)
+        index += 4
+      end
+      (digits.size + 3) // 4
+    end
+
+    private def self.add_fraction_groups(fraction : Bytes, groups : Array(Int16)) : Nil
+      ((fraction.size + 3) // 4).times { |index| groups << fraction_group(fraction, index * 4) }
+    end
+
+    # The *length* digits of *bytes* from *start* as a number.
+    private def self.group_value(bytes : Bytes, start : Int32, length : Int32) : Int16
+      value = 0
+      length.times { |offset| value = value * 10 + (bytes[start + offset] - '0'.ord) }
+      value.to_i16
+    end
+
+    # A fraction's last group may be short: its digits are the leading ones of the group.
+    private def self.fraction_group(bytes : Bytes, start : Int32) : Int16
+      length = Math.min(4, bytes.size - start)
+      (group_value(bytes, start, length) * 10_i16 ** (4 - length)).to_i16
+    end
+
+    private def self.numeric_bytes(sign : UInt16, weight : Int32, scale : Int32, groups : Slice(Int16)) : Bytes
+      Bytes.new(8 + groups.size * 2).tap do |buffer|
+        format = IO::ByteFormat::BigEndian
+        format.encode(groups.size.to_i16, buffer[0, 2])
+        format.encode(weight.to_i16, buffer[2, 2])
+        format.encode(sign, buffer[4, 2])
+        format.encode(scale.to_u16, buffer[6, 2])
+        groups.each_with_index { |group, index| format.encode(group, buffer[8 + index * 2, 2]) }
+      end
     end
   end
 end
