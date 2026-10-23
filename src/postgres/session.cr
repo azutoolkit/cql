@@ -68,8 +68,15 @@ module CQL::Postgres
       attempt(config, requested)
     rescue ex : ServerError | UnrecognizedStartupReply
       raise ex unless rejected_version?(ex) && requested.try { |version| version > ProtocolVersion::V3_0 } && config.min_protocol_version <= ProtocolVersion::V3_0
-      Log.info { "the server rejected protocol #{requested}; reconnecting with 3.0 (set max_protocol_version=3.0 to skip the first attempt)" }
+      Log.info { "#{fallback_reason(ex, requested)}; reconnecting with 3.0 (set max_protocol_version=3.0 to skip the first attempt)" }
       attempt(config, ProtocolVersion::V3_0)
+    end
+
+    private def self.fallback_reason(error : Error, requested : ProtocolVersion?) : String
+      case error
+      when UnrecognizedStartupReply then "the server did not answer a protocol #{requested} startup like PostgreSQL (#{error.message})"
+      else                               "the server rejected protocol #{requested}"
+      end
     end
 
     private def self.rejected_version?(error : Error) : Bool
@@ -81,18 +88,18 @@ module CQL::Postgres
     end
 
     private def self.attempt(config : Config, version : ProtocolVersion) : Session
-      io = Transport.connect(config)
+      stream = Transport.open_stream(config)
       begin
-        outcome = Handshake.new(config, io, version).run
-        Transport.relax(io)
-        new(config, io, outcome)
+        outcome = Handshake.new(config, stream.io, version).run
+        Transport.relax(stream.io)
+        new(config, stream.io, outcome, stream.socket)
       rescue ex
-        io.close
+        stream.socket.close
         raise ex
       end
     end
 
-    def initialize(@config : Config, @io : IO, outcome : Handshake::Outcome)
+    def initialize(@config : Config, @io : IO, outcome : Handshake::Outcome, @socket : IO = io)
       @process_id = outcome.process_id
       @secret_key = outcome.secret_key
       @protocol_version = outcome.version
@@ -187,6 +194,8 @@ module CQL::Postgres
     end
 
     # Ends the session politely (Terminate) once any in-flight request is done.
+    # The Terminate write can still wait on a dead path with a full send buffer
+    # (the write timeout is lifted after startup); use `hard_close` to cut that short.
     def close : Nil
       return if @closed
       @lock.synchronize do
@@ -204,7 +213,7 @@ module CQL::Postgres
     # Drops the stream immediately.
     def hard_close : Nil
       @closed = true
-      @io.close
+      @socket.close # the descriptor itself: a TLS close_notify could block on a dead path
     rescue IO::Error | OpenSSL::Error
     end
 

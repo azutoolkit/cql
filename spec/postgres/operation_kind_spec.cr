@@ -26,6 +26,17 @@ describe CQL::Postgres::OperationKind do
     end
   end
 
+  it "knows a backslash escapes a quote inside E'...' but not inside a plain string" do
+    CQL::Postgres::OperationKind.of("WITH x AS (SELECT E'it\\'s delete') SELECT * FROM x").should eq :select
+    CQL::Postgres::OperationKind.of("WITH x AS (SELECT 'a\\') DELETE FROM t").should eq :delete
+  end
+
+  it "finds the first word past comments and whitespace without needing the rest" do
+    CQL::Postgres::OperationKind.of("  \n -- c\n /* d */ update t set a = 1").should eq :update
+    CQL::Postgres::OperationKind.of("").should eq :select
+    CQL::Postgres::OperationKind.of("-- only a comment").should eq :select
+  end
+
   it "handles a huge literal without running out of regex stack" do
     CQL::Postgres::OperationKind.of("WITH x AS (SELECT '#{"a'' b" * 300_000}') SELECT * FROM x").should eq :select
   end

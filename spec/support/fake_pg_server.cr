@@ -3,6 +3,8 @@ require "digest/sha256"
 require "openssl/hmac"
 require "openssl/pkcs5"
 require "base64"
+require "openssl"
+require "file_utils"
 
 # A scripted PostgreSQL server on a loopback port. It builds and parses frames
 # by hand (no driver code), so specs exercise the real wire format.
@@ -14,12 +16,20 @@ class FakePG
     getter received = [] of Char
 
     def initialize(@io : TCPSocket)
+      @stream = @io.as(IO)
+    end
+
+    # Answers an SSLRequest with S and speaks TLS from here on.
+    def upgrade_to_tls(context : OpenSSL::SSL::Context::Server) : Nil
+      @io.write("S".to_slice)
+      @io.flush
+      @stream = OpenSSL::SSL::Socket::Server.new(@io, context, sync_close: false)
     end
 
     def read_startup : Hash(String, String)
-      length = @io.read_bytes(Int32, IO::ByteFormat::NetworkEndian)
+      length = @stream.read_bytes(Int32, IO::ByteFormat::NetworkEndian)
       body = Bytes.new(length - 4)
-      @io.read_fully(body)
+      @stream.read_fully(body)
       protocol = IO::ByteFormat::NetworkEndian.decode(Int32, body[0, 4])
       if protocol == 80877102
         return {"protocol" => "cancel", "pid" => IO::ByteFormat::NetworkEndian.decode(Int32, body[4, 4]).to_s,
@@ -32,10 +42,10 @@ class FakePG
 
     # {type, payload}; nil when the client hung up.
     def read_message : {Char, Bytes}?
-      type = @io.read_byte || return
-      length = @io.read_bytes(Int32, IO::ByteFormat::NetworkEndian)
+      type = @stream.read_byte || return
+      length = @stream.read_bytes(Int32, IO::ByteFormat::NetworkEndian)
       payload = Bytes.new(length - 4)
-      @io.read_fully(payload)
+      @stream.read_fully(payload)
       @received << type.chr
       {type.chr, payload}
     end
@@ -57,8 +67,8 @@ class FakePG
     end
 
     def send(type : Char, payload : Bytes = Bytes.empty) : Nil
-      @io.write(FakePG.frame(type, payload))
-      @io.flush
+      @stream.write(FakePG.frame(type, payload))
+      @stream.flush
     end
 
     def int32(value : Int32) : Bytes
@@ -306,6 +316,7 @@ class ScriptedIO < IO
   def initialize(backend_frames : Bytes = Bytes.empty, @fail_writes_after : Int32? = nil, @close_raises : Bool = false, @tls_failure : Bool = false)
     @input = IO::Memory.new(backend_frames)
     @writes = 0
+    @closed = false
   end
 
   def read(slice : Bytes) : Int32
@@ -324,8 +335,44 @@ class ScriptedIO < IO
 
   def close : Nil
     raise OpenSSL::Error.new("SSL_shutdown: shutdown while in init") if @close_raises
+    @closed = true
     super
+  end
+
+  def closed? : Bool
+    @closed
   end
 end
 
 Spec.after_each { FakePG.finish }
+
+# A self-signed certificate for 127.0.0.1/localhost, made once per process with
+# the openssl command line tool (nil when it is not installed).
+module TlsFixture
+  @@paths : {String, String}? = nil
+  @@tried = false
+
+  def self.paths : {String, String}?
+    return @@paths if @@tried
+    @@tried = true
+    dir = File.tempname("cql-tls-fixture")
+    Dir.mkdir(dir, 0o700)
+    at_exit { FileUtils.rm_rf(dir) }
+    key, certificate = File.join(dir, "key.pem"), File.join(dir, "cert.pem")
+    status = Process.run("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=localhost",
+                                     "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1", "-keyout", key, "-out", certificate],
+      output: Process::Redirect::Close, error: Process::Redirect::Close)
+    @@paths = status.success? ? {key, certificate} : nil
+  rescue File::Error | IO::Error
+    @@paths = nil
+  end
+
+  def self.server_context : OpenSSL::SSL::Context::Server?
+    paths.try do |(key, certificate)|
+      OpenSSL::SSL::Context::Server.new.tap do |context|
+        context.private_key = key
+        context.certificate_chain = certificate
+      end
+    end
+  end
+end

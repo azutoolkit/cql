@@ -1037,6 +1037,17 @@ describe CQL::Postgres::Session do
     session.closed?.should be_true
   end
 
+  it "hard-closes the socket under the stream, not the stream's own close (a TLS close_notify could block)" do
+    stream = ScriptedIO.new
+    socket = ScriptedIO.new
+    config = PG::Config.parse("postgres://u@127.0.0.1/db")
+    session = PG::Session.new(config, stream, PG::Handshake::Outcome.new(1, Bytes[0, 0, 0, 1], {} of String => String, 'I', PG::ProtocolVersion::V3_0), socket)
+    session.hard_close
+    session.closed?.should be_true
+    socket.closed?.should be_true
+    stream.closed?.should be_false
+  end
+
   it "starts cockroachdb:// URLs at protocol 3.0" do
     PG::Config.parse("cockroachdb://root@h/db").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_0
     PG::Config.parse("cockroachdb://root@h/db?max_protocol_version=3.2").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_2

@@ -10,8 +10,19 @@ module CQL::Postgres
   class ProtocolError < Error
   end
 
+  # TLS was required and could not be had: the server refused it, answered the
+  # SSLRequest with something else, or failed the handshake or certificate
+  # check. Not an `IO::Error`: retrying cannot fix it, so connection pools
+  # must not.
+  class TLSRefused < Error
+  end
+
   # A `TransactionScope` was used after its transaction ended.
   class TransactionClosed < Error
+  end
+
+  # A `RowStream` was read by a fiber other than the one that opened it.
+  class WrongFiber < Error
   end
 
   # A `RowStream` was read after its block ended, or after its statement failed.

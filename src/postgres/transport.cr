@@ -9,17 +9,28 @@ module CQL::Postgres
   # connecting and starting up is bounded by `connect_timeout`; call `relax`
   # once the session is up.
   module Transport
+    # The byte stream to talk over, and the socket under it. Closing the socket
+    # ends the connection at once; closing a TLS stream first sends close_notify,
+    # which can block for good on a dead path with a full send buffer.
+    record Stream, io : IO, socket : IO
+
     def self.connect(config : Config) : IO
+      open_stream(config).io
+    end
+
+    def self.open_stream(config : Config) : Stream
       socket = open(config)
       begin
-        socket.is_a?(TCPSocket) ? negotiate_tls(socket, config) : socket
+        Stream.new(socket.is_a?(TCPSocket) ? negotiate_tls(socket, config) : socket, socket)
       rescue ex
         socket.close
         raise ex
       end
+    rescue ex : TLSRefused
+      raise ex
     rescue ex : IO::TimeoutError
       raise IO::TimeoutError.new("cannot connect to #{config.address}: #{ex.message}", cause: ex)
-    rescue ex : Socket::Error | IO::Error | OpenSSL::Error
+    rescue ex : Socket::Error | IO::Error
       raise IO::Error.new("cannot connect to #{config.address}: #{ex.message}", cause: ex)
     end
 
@@ -57,9 +68,10 @@ module CQL::Postgres
       return socket if config.ssl_mode.disable?
       Wire::Frontend.ssl_request(socket)
       case answer = read_unbuffered_byte(socket)
+      when nil     then raise IO::Error.new("the server closed the connection after the SSLRequest")
       when 'S'.ord then tls(socket, config)
-      when 'N'.ord then config.ssl_mode.prefer? ? socket : raise IO::Error.new("the server does not support TLS")
-      else              raise IO::Error.new("unexpected reply #{answer.try(&.chr).inspect} to SSLRequest")
+      when 'N'.ord then config.ssl_mode.prefer? ? socket : raise TLSRefused.new("#{config.address} does not support TLS, which the sslmode requires")
+      else              raise TLSRefused.new("#{config.address} answered the SSLRequest with #{answer.chr.inspect}, not S or N")
       end
     end
 
@@ -80,6 +92,10 @@ module CQL::Postgres
         context.verify_mode = OpenSSL::SSL::VerifyMode::NONE
       end
       OpenSSL::SSL::Socket::Client.new(socket, context: context, sync_close: true, hostname: config.host)
+    rescue ex : OpenSSL::Error
+      # A peer that hangs up mid-handshake is a network event a retry can fix; a refusal or a bad certificate is not.
+      raise IO::Error.new("the server closed the connection during the TLS handshake", cause: ex) if ex.message.try(&.matches?(/unexpected eof/i))
+      raise TLSRefused.new("TLS to #{config.address} failed: #{ex.message}", cause: ex)
     end
   end
 end

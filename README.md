@@ -142,10 +142,10 @@ What it does:
   queries with per-connection prepared-statement caching, binary results for common types, `COPY` in and out,
   `LISTEN`/`NOTIFY` and notice callbacks, cancel requests and per-statement timeouts (`Session#query(..., timeout:)`, reached through `connection.session`).
   A cancel request carries the session's secret key and is sent over a new, unencrypted connection even under
-  `sslmode=require`, as libpq does before version 17. A timed-out request whose cancel does not help (a dead path, a
+  `sslmode=require`, as libpq does before version 17. Dropping a connection closes the socket itself, never a TLS close_notify, which could block on a dead path. TLS that is required but unavailable (declined, a failed handshake, a bad certificate) raises `CQL::Postgres::TLSRefused`, not an `IO::Error`, so crystal-db's pool does not retry it. A timed-out request whose cancel does not help (a dead path, a
   server that ignores it) has its socket closed after `cancel_grace` (5 seconds by default), and `Session#ping` closes
   a connection that does not answer within its timeout; the health checks of one checkout share a `checkout_timeout`
-  budget, so idle connections on a silently dropped path delay a checkout by about one timeout, not one each
+  budget, so idle connections on a silently dropped path delay a checkout by about one timeout, not one each; a single ping waits at most 5 seconds
   (waiting for a free slot and opening a connection take their own time on top).
 - **Concurrency**: one request in flight per connection, enforced with a lock, so a connection shared between fibers is
   safe (they queue). `AsyncEngine` borrows connections from a pool (`pool_size`, `checkout_timeout`,

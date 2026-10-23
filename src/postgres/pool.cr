@@ -187,7 +187,7 @@ module CQL::Postgres
         verdict = quick_verdict(connection)
         if verdict.nil?
           budget = @options.checkout_timeout - (Time.instant - started)
-          verdict = !(pinged && budget < MIN_PING_BUDGET) && connection.ping(Math.max(budget, MIN_PING_BUDGET))
+          verdict = !(pinged && budget < MIN_PING_BUDGET) && connection.ping(Math.min(Math.max(budget, MIN_PING_BUDGET), CQL::Postgres::Session::PING_TIMEOUT))
           pinged = true
         end
         return connection if verdict

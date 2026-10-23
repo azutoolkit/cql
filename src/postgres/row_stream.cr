@@ -24,7 +24,7 @@ module CQL::Postgres
     end
 
     def next
-      raise Error.new("a stream must be read by the fiber that opened it") unless Fiber.current == @reader
+      raise WrongFiber.new("a stream must be read by the fiber that opened it") unless Fiber.current == @reader
       fetch_more if @buffer.empty? && !@finished
       row = @buffer.shift?
       raise StreamClosed.new("the stream was closed before all its rows were read") if row.nil? && @closed && !@completed

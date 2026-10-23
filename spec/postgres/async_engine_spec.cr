@@ -280,8 +280,8 @@ describe CQL::Postgres::AsyncEngine do
       text = connection.inspect + connection.session.inspect + engine.pool.inspect + engine.pool.config.inspect
       text.should contain "process_id=4242"
       text.should_not contain "secret_marker"
-      text.should_not contain "777"    # the cancel key from the fake server
-      text.should_not contain "secret" # the password in the URL
+      text.should_not contain "0, 0, 3, 9" # the cancel key from the fake server, as bytes
+      text.should_not contain "secret"     # the password in the URL
     end
   end
 

@@ -28,6 +28,10 @@ private def connect(server : FakePG) : PG::Session
   PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable")))
 end
 
+private def uncached(server : FakePG) : PG::Session
+  PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&statement_cache_size=0")))
+end
+
 describe "CQL::Postgres streaming" do
   describe "protocol (fake server)" do
     it "fetches through a portal in row-limited Execute+Flush rounds and ends with one Sync" do
@@ -240,6 +244,82 @@ describe "CQL::Postgres streaming" do
         result.receive
       end
       outcome.should be_a PG::Error
+    end
+
+    describe "uncached statements (statement_cache_size=0)" do
+      it "ends the open request with a Sync when the parameter count is wrong, and stays usable" do
+        server = FakePG.start do |client|
+          client.read_startup
+          client.ok_handshake
+          client.expect('P'); client.expect('D'); client.expect('H')
+          client.send('1'); client.parameter_description([23_u32]); client.row_description(int4_columns)
+          client.expect('S'); client.ready # no Bind was sent
+          client.idle
+        end
+        session = uncached(server)
+        expect_raises(ArgumentError, /takes 1 parameters/) { session.stream("SELECT n FROM t WHERE n = $1", &.to_a) }
+        session.closed?.should be_false
+        session.ping.should be_true
+      end
+
+      it "ends the open request with a Sync when describing fails, and stays usable" do
+        server = FakePG.start do |client|
+          client.read_startup
+          client.ok_handshake
+          client.expect('P'); client.expect('D'); client.expect('H')
+          client.error("42601", "syntax error")
+          client.expect('S'); client.ready
+          client.idle
+        end
+        session = uncached(server)
+        expect_raises(PG::ServerError, /42601/) { session.stream("SELEC", &.to_a) }
+        session.closed?.should be_false
+        session.ping.should be_true
+      end
+
+      it "drops the session, sending no Bind, when the deadline passes between Describe and Bind" do
+        received = Channel(Array(Char)).new(1)
+        server = FakePG.start do |client|
+          startup = client.read_startup
+          next if startup["protocol"] == "cancel"
+          client.ok_handshake
+          client.expect('P'); client.expect('D'); client.expect('H')
+          sleep 400.milliseconds # the 200ms deadline passes while the describe is outstanding
+          client.send('1'); client.parameter_description([] of UInt32); client.row_description(int4_columns)
+          while client.read_message
+          end
+          received.send(client.received.dup)
+        end
+        session = uncached(server)
+        expect_raises(PG::QueryTimeout) { session.stream("SELECT n", timeout: 200.milliseconds, &.to_a) }
+        session.closed?.should be_true
+        select
+        when seen = received.receive then seen.should_not contain 'B'
+        when timeout(3.seconds) then fail "the server never saw the client hang up"
+        end
+      end
+    end
+
+    it "raises WrongFiber when read from a fiber other than the one that opened it" do
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        client.serve_prepare([] of UInt32, int4_columns)
+        client.expect('B'); client.expect('E'); client.expect('H')
+        client.send('2'); client.data_row(number_row(1)); client.send('s')
+        client.expect('C'); client.expect('S'); client.send('3'); client.ready
+      end
+      outcome = connect(server).stream("SELECT n", fetch_size: 1) do |rows|
+        result = Channel(Exception?).new
+        spawn do
+          rows.next
+          result.send(nil)
+        rescue ex
+          result.send(ex)
+        end
+        result.receive
+      end
+      outcome.should be_a PG::WrongFiber
     end
 
     it "rejects a fetch size of zero" do

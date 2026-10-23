@@ -31,7 +31,7 @@ module CQL::Postgres
 
       # crystal-db's pool drops the cause when its retries run out, so say why here (the message names no secret).
       private def refused(ex : Exception) : NoReturn
-        Log.warn { "could not open a PostgreSQL connection: #{ex.message}" }
+        Session::Log.warn { "could not open a PostgreSQL connection: #{ex.message}" }
         raise ::DB::ConnectionRefused.new(ex.message, cause: ex)
       end
     end
