@@ -14,6 +14,8 @@ end
 # Both records created, or neither
 ```
 
+`Model.transaction` delegates to `Schema#transaction`, yields the `DB::Transaction` (the block may ignore it), and returns the block's value (`nil` when the block raised `DB::Rollback`).
+
 ## Automatic Rollback on Error
 
 If any operation fails, all changes are rolled back:
@@ -26,6 +28,8 @@ User.transaction do
 end
 # Neither record is created
 ```
+
+The exception is re-raised after the rollback, so wrap the call in `begin`/`rescue` if the caller should keep running.
 
 ## Handle Transaction Errors
 
@@ -86,9 +90,9 @@ def create_post_with_comments(author : User, title : String, comments : Array(St
 end
 ```
 
-## Nested Operations
+## Operations Inside One Transaction
 
-All nested operations are part of the same transaction:
+Everything run on the same fiber inside the block, including `schema.exec` and queries, joins the same transaction:
 
 ```crystal
 User.transaction do
@@ -107,23 +111,23 @@ end
 
 ## Manual Rollback
 
-Raise an exception to trigger rollback:
+Raise `DB::Rollback` to roll back without an error propagating (the block ends quietly):
 
 ```crystal
 User.transaction do
   user = User.create!(name: "John", email: "john@example.com")
 
-  if some_condition_fails
-    raise "Validation failed"  # Rolls back the transaction
-  end
+  raise DB::Rollback.new("changed my mind") if some_condition_fails
 
   # Continue with more operations
 end
 ```
 
+Any other exception also rolls back, but is re-raised. Calling `tx.rollback` on the yielded transaction rolls back too; note that `Telemetry` still reports such a transaction as `Commit` (see below).
+
 ## Transaction with Return Value
 
-Return a value from the transaction:
+The block's value is returned (`nil` after a `DB::Rollback`):
 
 ```crystal
 result = User.transaction do
@@ -132,8 +136,73 @@ result = User.transaction do
   {user: user, profile: profile}
 end
 
-puts "Created user: #{result[:user].name}"
+puts "Created user: #{result.try(&.[:user].name)}"
 ```
+
+## Savepoints (Nested Transactions)
+
+Pass the outer transaction to `Model.transaction` to open a savepoint. Rolling back the inner block leaves the outer work intact:
+
+```crystal
+User.transaction do |tx|
+  User.create!(name: "Outer")
+
+  User.transaction(tx) do |inner|
+    User.create!(name: "Inner")
+    inner.rollback            # or: raise DB::Rollback.new
+  end
+end
+# "Outer" is committed, "Inner" is not
+```
+
+If the inner block raises any other exception and it propagates out of the outer block too, everything is rolled back.
+
+On the native PostgreSQL engine, `tx.savepoint { |inner| ... }` does the same:
+
+```crystal
+engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
+
+engine.transaction do |tx|
+  AppDB.insert.into(:accounts).values(name: "outer").using(tx).commit
+  tx.savepoint do |inner|
+    AppDB.insert.into(:accounts).values(name: "inner").using(inner).commit
+    raise DB::Rollback.new   # undoes only "inner"
+  end
+end
+```
+
+A failing savepoint block is rolled back to its savepoint and its exception propagates, unless it is `DB::Rollback`, in which case `savepoint` returns `nil`. A scope used after its transaction ended raises `CQL::Postgres::TransactionClosed`.
+
+## Isolation Levels and Transaction Options
+
+`Schema#transaction` and `Model.transaction` take no options. On the native PostgreSQL/CockroachDB engine, `AsyncEngine#transaction` accepts them per transaction:
+
+```crystal
+engine.transaction(isolation: :serializable) { |tx| ... }
+engine.transaction(isolation: :repeatable_read, read_only: true, deferrable: true) { |tx| ... }
+engine.transaction(synchronous_commit: false) { |tx| ... }   # SET LOCAL; a crash may lose this commit
+```
+
+`isolation:` takes `:read_uncommitted`, `:read_committed`, `:repeatable_read` or `:serializable` (`CQL::Postgres::IsolationLevel`). `deferrable: true` raises `ArgumentError` on CockroachDB. Statements must be pinned to the transaction with `.using(tx)`. See the [native PostgreSQL driver guide](../postgres-native/README.md).
+
+## Transaction Events
+
+Subscribe to begin/commit/rollback of every `Schema#transaction`:
+
+```crystal
+CQL::Telemetry.subscribe_transactions("metrics") do |event|
+  # event.state    => Begin, Commit or Rollback (CQL::Telemetry::TransactionState)
+  # event.id       => shared by the Begin and its Commit/Rollback
+  # event.duration => time since Begin (zero for Begin; includes pool wait)
+  # event.nested   => a transaction was already open on this fiber
+  # event.error    => what caused a Rollback, if anything
+  Log.info { "tx #{event.id} #{event.state} #{event.duration}" }
+end
+
+CQL::Telemetry.unsubscribe_transactions("metrics")
+```
+
+`DB::Rollback` is reported as a `Rollback` with that error. `Model.transaction(tx)` savepoints emit no events. See [Telemetry](../performance/telemetry.md).
 
 ## Cleanup Operations
 

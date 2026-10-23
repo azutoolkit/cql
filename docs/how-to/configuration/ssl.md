@@ -12,7 +12,7 @@ Configure SSL/TLS for secure database connections.
 
 ### Basic SSL
 
-Enable SSL in your connection URL:
+Enable SSL in your connection URL. `postgres://` URLs are handled by CQL's native driver (see the [native PostgreSQL driver guide](../postgres-native/README.md)); `cockroachdb://` URLs take the same parameters (see [CockroachDB](cockroachdb.md)):
 
 ```crystal
 MyDB = CQL::Schema.define(
@@ -25,22 +25,24 @@ end
 
 ### SSL Modes
 
+The native driver accepts four modes (default `prefer`):
+
 | Mode | Description |
 |------|-------------|
 | `disable` | No SSL |
-| `allow` | Try non-SSL first, then SSL |
-| `prefer` | Try SSL first, then non-SSL |
-| `require` | SSL required, no certificate verification |
-| `verify-ca` | SSL required, verify CA |
-| `verify-full` | SSL required, verify CA and hostname |
+| `prefer` | Try SSL first, then non-SSL; encrypts without verifying the server |
+| `require` | SSL required; encrypts without verifying the server (like libpq) |
+| `verify-full` | SSL required, verify certificate chain and hostname |
+
+`allow` and `verify-ca` are rejected with an `ArgumentError`. `CQL.configure`'s `ssl.mode` validator accepts them, but a native-driver URL built from it will not connect, so stick to the four modes above.
 
 ### With Certificate Verification
+
+`sslrootcert` is only accepted with `sslmode=verify-full`, and adds your CA to the system trust store. Client certificate options (`sslcert`, `sslkey`, `sslcrl`, ...) are not supported by the native driver and raise `ArgumentError` rather than being ignored:
 
 ```crystal
 uri = "postgres://user:pass@host/db?" + {
   "sslmode"     => "verify-full",
-  "sslcert"     => "/path/to/client.crt",
-  "sslkey"      => "/path/to/client.key",
   "sslrootcert" => "/path/to/ca.crt"
 }.map { |k, v| "#{k}=#{v}" }.join("&")
 
@@ -67,24 +69,32 @@ Store certificates securely:
 ```crystal
 uri = "postgres://#{ENV["DB_USER"]}:#{ENV["DB_PASS"]}@#{ENV["DB_HOST"]}/#{ENV["DB_NAME"]}?" +
       "sslmode=verify-full&" +
-      "sslcert=#{ENV["SSL_CERT_PATH"]}&" +
-      "sslkey=#{ENV["SSL_KEY_PATH"]}&" +
       "sslrootcert=#{ENV["SSL_CA_PATH"]}"
 ```
+
+## Configure SSL with `CQL.configure`
+
+```crystal
+CQL.configure do |config|
+  config.db = ENV["DATABASE_URL"]
+  config.ssl.mode = "verify-full"
+  config.ssl.ca_path = ENV["SSL_CA_PATH"]
+end
+
+url = CQL.config.full_db_url   # appends sslmode and sslrootcert (sslca for MySQL)
+```
+
+`ssl.cert_path` and `ssl.key_path` add `sslcert`/`sslkey`, which the native PostgreSQL driver rejects. Production defaults to `ssl.mode = "require"`.
 
 ## Verify SSL Connection
 
 Test that SSL is working:
 
 ```crystal
-# PostgreSQL
-result = MyDB.exec("SHOW ssl")
-puts "SSL enabled: #{result.first["ssl"]}"
-
-# Or check connection info
-MyDB.exec("SELECT pg_backend_pid()") do |rs|
-  puts "Connected with SSL"
-end
+# PostgreSQL: `SHOW ssl` reflects the server setting, not this connection;
+# pg_stat_ssl reports whether the current connection is encrypted.
+encrypted = MyDB.exec_query(&.scalar("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()"))
+puts "Connection encrypted: #{encrypted}"
 ```
 
 ## Cloud Database SSL
@@ -115,6 +125,7 @@ end
 - Verify server has SSL enabled
 - Check firewall allows SSL port
 - Try `sslmode=require` first
+- A `CQL::Postgres::TLSRefused` error means the server refused TLS while `sslmode` demanded it
 
 ## See Also
 

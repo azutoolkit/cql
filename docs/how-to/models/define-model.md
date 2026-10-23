@@ -32,6 +32,8 @@ include CQL::ActiveRecord::Model(Int64)
 
 The type parameter specifies your primary key type: `Int32`, `Int64`, `UUID`, or `String` (for ULIDs).
 
+The module provides `id`, `id!`, `id?` and `id=` for you, typed as `Pk?` (for example `Int64?`). Declaring `property id : Int64?` yourself, as the examples below do, is optional.
+
 ### 2. Set the Database Context
 
 ```crystal
@@ -51,7 +53,7 @@ This raises a `CQL schema mapping error` if a model getter type disagrees with t
 ### 3. Define Properties
 
 ```crystal
-property id : Int64?          # Primary key (nullable for new records)
+property id : Int64?          # Primary key (optional; provided by the module)
 property name : String        # Required field
 property active : Bool = false  # With default value
 property bio : String?        # Nullable field
@@ -68,7 +70,7 @@ end
 
 ## Primary Key Types
 
-### Integer (default)
+### Integer
 
 ```crystal
 struct Product
@@ -82,6 +84,8 @@ end
 
 ### UUID
 
+`UUID` keys are generated client-side on insert and stored as text, so the column is `primary :id, String, auto_increment: false` (see `spec/patterns/active_record/uuid_primary_key_spec.cr`).
+
 ```crystal
 struct Session
   include CQL::ActiveRecord::Model(UUID)
@@ -93,6 +97,8 @@ end
 ```
 
 ### ULID (for sortable IDs)
+
+`Model(String)` primary keys are filled with a 26-character ULID on insert. Declare the column as `primary :id, String, auto_increment: false`.
 
 ```crystal
 struct Event
@@ -169,16 +175,16 @@ user.save
 user.id        # => 1 (now assigned)
 
 # Find it again
-found = User.find(user.id)
+found = User.find(user.id!)    # => User? (nil when no row matches)
 ```
 
 ## Common Issues
 
-**"No database context defined"**: Ensure you called `db_context` with correct schema and table.
+**`Nil assertion failed` from `User.schema` or `User.table`**: The model never called `db_context`. Pass the schema constant and the table symbol.
 
-**"Could not find column"**: Property names must match database column names.
+**Query or insert fails on an unknown column**: Property names must match database column names. Use `@[DB::Field(ignore: true)]` for properties that are not columns.
 
-**"Type mismatch"**: Crystal property types must match database column types.
+**Type mismatch when reading rows**: Crystal property types must match database column types.
 
 **"CQL schema mapping error"**: You enabled `CQL_VALIDATE_SCHEMA_MAPPINGS=1` and a model getter type does not match the schema column type. Update either the schema or the model property type.
 

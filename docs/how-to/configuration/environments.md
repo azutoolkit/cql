@@ -8,6 +8,30 @@ This guide shows you how to configure different database connections for develop
 CRYSTAL_ENV = ENV["CRYSTAL_ENV"]? || "development"
 ```
 
+## Built-in Environment Defaults
+
+`CQL.configure` reads `CRYSTAL_ENV` (override with `config.env`) and applies defaults for `production`, `test` and `development`; any other name gets the development defaults:
+
+| Setting | development | test | production |
+|---------|-------------|------|------------|
+| `pool_size` | 5 | 1 | 25 |
+| `config.db` | unchanged | `sqlite3://:memory:` | unchanged |
+| `auto_sync` | true | true | false |
+| `verify_schema` | true | false | true |
+| `ssl.mode` | `prefer` | `prefer` | `require` |
+| `log_level` | Debug | Error | Info |
+
+Development also turns SQL logging on unless `CQL_NO_SQL_LOG` is set.
+
+```crystal
+CQL.configure do |config|
+  config.db = ENV["DATABASE_URL"]
+  config.pool_size = 25
+end
+```
+
+Environment defaults are applied when the configuration is first created, from `CRYSTAL_ENV`. Setting `config.env` inside the block only changes the value later reads see (for example `migrator_config_for`), so prefer setting `CRYSTAL_ENV`.
+
 ## Environment-Based Configuration
 
 ```crystal
@@ -138,8 +162,8 @@ if CRYSTAL_ENV == "development"
 end
 
 if CRYSTAL_ENV == "production"
-  # Use connection pooling
-  # Enable SSL
+  # Size the pool via max_pool_size in the URL (see connection-pooling.md)
+  # Require SSL via sslmode=require in the URL (see ssl.md)
 end
 ```
 

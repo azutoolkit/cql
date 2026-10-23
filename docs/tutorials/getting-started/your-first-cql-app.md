@@ -41,19 +41,17 @@ dependencies:
     version: ~> 0.0.589
 
   # Choose your database driver:
-  pg: # For PostgreSQL
+  pg: # Optional for PostgreSQL: CQL ships its own native driver
     github: will/crystal-pg
-    version: "~> 0.26.0"
+    version: "~> 0.29.0"
 
   # OR
   mysql: # For MySQL
     github: crystal-lang/crystal-mysql
-    version: "~> 0.14.0"
 
   # OR
   sqlite3: # For SQLite
     github: crystal-lang/crystal-sqlite3
-    version: "~> 0.18.0"
 ```
 
 Install the dependencies:
@@ -61,6 +59,8 @@ Install the dependencies:
 ```shell
 shards install
 ```
+
+> **PostgreSQL note:** `require "cql"` registers a native PostgreSQL driver for `postgres://` URLs, so the `pg` shard is not needed. If you do add it, require it before or after `cql` and it serves those URLs instead.
 
 ## Step 3: Set Up Database Connection
 
@@ -70,8 +70,7 @@ Create a file to configure your database connection. The setup varies slightly b
 
 ```crystal
 # src/database.cr
-require "cql"
-require "pg"
+require "cql" # includes the native PostgreSQL driver; add `require "pg"` only if you use the pg shard
 
 DATABASE_URL = ENV["DATABASE_URL"]? || "postgres://username:password@localhost:5432/myapp_development"
 
@@ -85,6 +84,8 @@ end
 ```
 
 ### SQLite
+
+Create the database directory first (`mkdir -p db`), then:
 
 ```crystal
 # src/database.cr
@@ -153,14 +154,13 @@ Create a model that maps to your users table:
 
 ```crystal
 # src/models/user.cr
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
 
   # Connect to the database and table
   db_context AcmeDB, :users
 
-  # Define your model attributes
-  property id : Int64?
+  # Define your model attributes (`id` is provided by the Model(Int64) module)
   property name : String
   property email : String
   property active : Bool = false
@@ -172,6 +172,8 @@ struct User
   end
 end
 ```
+
+Models are classes, not structs: `save` assigns the new primary key to the instance, which a struct copy would not see.
 
 ## Step 6: Initialize the Database and Run Migrations
 
@@ -190,14 +192,11 @@ config = CQL::MigratorConfig.new(
   auto_sync: true
 )
 
-# Initialize the database
-AcmeDB.init
-
 # Create migrator and apply migrations
 migrator = AcmeDB.migrator(config)
 migrator.up
 
-puts "Database initialized with #{migrator.applied_migrations.size} migrations"
+puts "Database ready with #{migrator.applied_migrations.size} migrations"
 ```
 
 Run the setup:
@@ -215,15 +214,13 @@ Now you can interact with your data. Create a main application file:
 require "./database"
 require "./models/*"
 
-AcmeDB.init
-
 # CREATE: Add new users
 user = User.new(name: "Alice Johnson", email: "alice@example.com", active: true)
 
 if user.save
   puts "User created with ID: #{user.id}"
 else
-  puts "Failed to create user"
+  puts "Failed to create user" # a callback halted the save
 end
 
 # Or create and save in one step
@@ -254,6 +251,9 @@ if found_user
   found_user.save
   puts "User updated"
 end
+
+# Or update in one step
+found_user.try(&.update!(name: "Alice J."))
 
 # DELETE: Remove users
 inactive = User.where(active: false).first
@@ -299,12 +299,11 @@ Create the Post model:
 
 ```crystal
 # src/models/post.cr
-struct Post
+class Post
   include CQL::ActiveRecord::Model(Int64)
 
   db_context AcmeDB, :posts
 
-  property id : Int64?
   property title : String
   property body : String
   property user_id : Int64
@@ -323,12 +322,11 @@ Update the User model to include the association:
 
 ```crystal
 # src/models/user.cr (updated)
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
 
   db_context AcmeDB, :users
 
-  property id : Int64?
   property name : String
   property email : String
   property active : Bool = false
@@ -343,7 +341,7 @@ struct User
 end
 ```
 
-Run migrations and test:
+Run the migrations again (`crystal src/setup.cr`), then try it out:
 
 ```crystal
 # Create user and posts
@@ -378,12 +376,11 @@ end
 Enhance your User model with validations:
 
 ```crystal
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
 
   db_context AcmeDB, :users
 
-  property id : Int64?
   property name : String
   property email : String
   property active : Bool = false
@@ -399,6 +396,15 @@ struct User
   def initialize(@name : String, @email : String, @active : Bool = false)
   end
 end
+```
+
+Check validity before saving. `save` and `save!` run validations and raise `CQL::ActiveRecord::Validations::ValidationError` when a record is invalid:
+
+```crystal
+user = User.new(name: "", email: "nope")
+user.valid?                       # => false
+user.errors.map(&.message)
+# => ["name must be present", "name must have a size of 1..100", "email must match the pattern /@/"]
 ```
 
 ## Step 10: Use Transactions
@@ -435,7 +441,7 @@ myapp/
 │   │   ├── user.cr        # User model
 │   │   └── post.cr        # Post model
 │   └── schemas/
-│       └── acme_schema.cr # Auto-generated schema
+│       └── acme_schema.cr # Auto-generated schema (written by the migrator)
 ├── migrations/
 │   ├── 001_create_users.cr
 │   └── 002_create_posts.cr
@@ -447,9 +453,11 @@ myapp/
 
 ### Database Connection Issues
 
+`CQL::Schema.define` opens the connection immediately, so connection problems surface there:
+
 ```crystal
 begin
-  AcmeDB.init
+  AcmeDB.exec("SELECT 1")
   puts "Database connection successful"
 rescue ex
   puts "Database connection failed: #{ex.message}"
@@ -464,7 +472,7 @@ puts "Applied migrations: #{migrator.applied_migrations.size}"
 puts "Pending migrations: #{migrator.pending_migrations.size}"
 
 # Reset database (development only)
-migrator.down_to(0)  # Rollback all
+migrator.down        # Roll back all migrations
 migrator.up          # Reapply all
 ```
 
