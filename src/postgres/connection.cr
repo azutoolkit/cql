@@ -6,6 +6,8 @@ module CQL::Postgres
   # A crystal-db connection over a wire `Session`: what `Executor#exec_query`
   # yields, so every CQL statement type runs on it unchanged.
   class Connection < ::DB::Connection
+    DRIVER_NAME = "postgres"
+
     getter session : CQL::Postgres::Session
 
     # crystal-db's own per-connection statement-wrapper cache is off: the
@@ -22,6 +24,11 @@ module CQL::Postgres
     # error or a timeout) is closed for good, even if nobody called `close`.
     def closed? : Bool
       super || @session.closed?
+    end
+
+    # crystal-db 0.15 requires it: the name the driver is registered with.
+    def driver_name : String
+      DRIVER_NAME
     end
 
     def build_prepared_statement(query) : ::DB::Statement

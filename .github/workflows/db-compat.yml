@@ -1,0 +1,19 @@
+name: crystal-db compatibility
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    container:
+      image: crystallang/crystal:1.22.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile CQL against every supported crystal-db
+        run: script/check_db_compat 0.13.1 0.14.0 0.15.0 latest

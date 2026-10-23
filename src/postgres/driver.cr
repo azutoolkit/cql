@@ -11,7 +11,7 @@ module CQL::Postgres
   # crystal-db keeps its own pool; the options it owns are removed from the URL
   # before the rest is read as a `Config`.
   class Driver < ::DB::Driver
-    NAMES            = {"postgres", "postgresql"}
+    NAMES            = {Connection::DRIVER_NAME, "postgresql"}
     COCKROACHDB_NAME = "cockroachdb"
     DB_OWNED_KEYS    = {"initial_pool_size", "max_pool_size", "max_idle_pool_size", "checkout_timeout", "retry_attempts", "retry_delay", "prepared_statements", "prepared_statements_cache"}
 

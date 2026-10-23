@@ -31,6 +31,11 @@ private def serve_pets(client : FakePG::Client, params = 0) : Nil
 end
 
 describe CQL::Postgres::Connection do
+  it "names its driver for crystal-db 0.15, which requires DB::Connection#driver_name" do
+    server = FakePG.start { |client| client.read_startup; client.ok_handshake }
+    open_connection(server).driver_name.should eq("postgres")
+  end
+
   it "is a crystal-db connection that maps rows into tuples, models and scalars" do
     server = FakePG.start do |client|
       client.read_startup
