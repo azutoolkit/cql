@@ -47,7 +47,7 @@ How long to wait for an available connection:
 checkout_timeout 5.seconds  # Default: 5 seconds
 ```
 
-If timeout is reached, raises `CQL::ConnectionTimeout`.
+If timeout is reached, raises `CQL::Postgres::PoolTimeout` (native PostgreSQL driver).
 
 ### retry_attempts
 

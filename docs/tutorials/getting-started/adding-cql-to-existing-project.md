@@ -24,7 +24,7 @@ Add CQL to your existing `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.435
+    version: ~> 0.0.589
 
   # Keep your existing database driver or add one
   pg:

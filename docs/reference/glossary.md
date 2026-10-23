@@ -8,7 +8,7 @@ Common terms and definitions used in CQL documentation.
 A design pattern where objects carry both data and behavior. In CQL, models that include `CQL::ActiveRecord::Model` follow this pattern.
 
 ### Adapter
-The database-specific driver that CQL uses to communicate with different database systems. CQL supports PostgreSQL, MySQL, and SQLite adapters.
+The database-specific driver that CQL uses to communicate with different database systems. CQL supports PostgreSQL, MySQL, SQLite and CockroachDB adapters.
 
 ### Association
 A relationship between two models. See: belongs_to, has_one, has_many.

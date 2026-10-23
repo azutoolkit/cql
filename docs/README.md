@@ -21,7 +21,7 @@ Add CQL to your `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.435
+    version: ~> 0.0.589
 
   # Choose your database driver:
   pg:  # PostgreSQL
@@ -108,7 +108,7 @@ puts "Created user #{user.id}: #{user.name}"
 - **Type Safety** - Catch errors at compile time
 - **Relationship Integrity** - Validate `belongs_to` and `has_many` foreign-key/primary-key types during compilation
 - **Schema Mapping Checks** - Opt-in boot validation for model getter types against schema columns
-- **Multiple Databases** - PostgreSQL, MySQL, SQLite
+- **Multiple Databases** - PostgreSQL, MySQL, SQLite, CockroachDB
 - **Active Record** - Familiar patterns for rapid development
 - **Migrations** - Version-controlled schema changes
 - **Validations** - Built-in data integrity

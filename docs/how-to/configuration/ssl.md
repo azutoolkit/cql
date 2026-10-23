@@ -56,7 +56,7 @@ uri = "mysql://user:pass@host/db?" + {
   "ssl-ca"   => "/path/to/ca.pem"
 }.map { |k, v| "#{k}=#{v}" }.join("&")
 
-MyDB = CQL::Schema.define(:my_db, adapter: CQL::Adapter::MySQL, uri: uri) do
+MyDB = CQL::Schema.define(:my_db, adapter: CQL::Adapter::MySql, uri: uri) do
 end
 ```
 

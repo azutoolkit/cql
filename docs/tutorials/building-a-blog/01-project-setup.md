@@ -52,7 +52,7 @@ version: 0.1.0
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.435
+    version: ~> 0.0.589
   sqlite3:
     github: crystal-lang/crystal-sqlite3
     version: "~> 0.18.0"

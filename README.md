@@ -329,7 +329,7 @@ Add CQL and your database driver to your `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.435"
+    version: "~> 0.0.589"
 
   # Choose your database driver:
   pg: # Optional: CQL ships its own PostgreSQL driver
@@ -764,8 +764,9 @@ detector.analyze_queries(queries) do |pattern|
 end
 
 # Generate beautiful performance reports
-report_generator = CQL::Performance::Reports::HTMLReportGenerator.new
-report_generator.generate_report(monitor.events, "performance_report.html")
+report = CQL::Performance::PerformanceReport.new(10.seconds, total_queries: 120, slow_queries: 3, errors: 0)
+report_generator = CQL::Performance::UnifiedReportGenerator.new
+File.write("performance_report.html", report_generator.generate("html", report))
 puts "📊 Performance report generated: performance_report.html"
 ```
 
@@ -808,40 +809,37 @@ Comprehensive guides for every level:
 ### Getting Started
 
 - **[Installation Guide](./docs/installation.md)** - Set up CQL in your project
-- **[Getting Started](./docs/guides/getting-started.md)** - Your first CQL application
-- **[Schema Definition](./docs/core-concepts/schemas.md)** - Type-safe database schemas
-- **[Configuration](./docs/guides/configuration.md)** - Environment setup and database connections
+- **[Getting Started](./docs/tutorials/getting-started/your-first-cql-app.md)** - Your first CQL application
+- **[Configuration](./docs/how-to/configuration/database-connection.md)** - Environment setup and database connections
 
 ### Core Features
 
-- **[Defining Models](./docs/guides/active-record-with-cql/defining-models.md)** - Active Record model setup
-- **[CRUD Operations](./docs/guides/active-record-with-cql/crud-operations.md)** - Create, read, update, delete
-- **[Complex Queries](./docs/guides/active-record-with-cql/complex-queries.md)** - Advanced querying and N+1 prevention
-- **[Validations](./docs/guides/active-record-with-cql/validations.md)** - Data validation and integrity
-- **[Relationships](./docs/guides/active-record-with-cql/relations/README.md)** - Model associations and relationships
+- **[Defining Models](./docs/how-to/models/define-model.md)** - Active Record model setup
+- **[CRUD Operations](./docs/how-to/data-operations/create.md)** - Create, read, update, delete
+- **[Complex Queries](./docs/how-to/querying/complex-queries.md)** - Advanced querying and N+1 prevention
+- **[Validations](./docs/how-to/models/add-validations.md)** - Data validation and integrity
+- **[Relationships](./docs/how-to/relationships/has-many.md)** - Model associations and relationships
 
 ### Advanced Topics
 
-- **[Transactions](./docs/guides/active-record-with-cql/transactions.md)** - Managing database transactions
-- **[Migrations](./docs/guides/active-record-with-cql/migrations.md)** - Schema evolution and versioning
-- **[Schema Dump](./docs/guides/schema-dump.md)** - Reverse-engineer existing databases
-- **[Callbacks](./docs/guides/active-record-with-cql/callbacks.md)** - Lifecycle hooks and callbacks
-- **[Scopes](./docs/guides/active-record-with-cql/scopes.md)** - Reusable query methods
-- **[Optimistic Locking](./docs/guides/active-record-with-cql/optimistic-locking.md)** - Concurrency control
+- **[Transactions](./docs/how-to/data-operations/transactions.md)** - Managing database transactions
+- **[Migrations](./docs/how-to/migrations/run-migrations.md)** - Schema evolution and versioning
+- **[Callbacks](./docs/how-to/models/use-callbacks.md)** - Lifecycle hooks and callbacks
+- **[Scopes](./docs/how-to/querying/scopes.md)** - Reusable query methods
+- **[Optimistic Locking](./docs/how-to/models/optimistic-locking.md)** - Concurrency control
 
 ### Performance & Production
 
-- **[Advanced Caching](./docs/guides/advanced-caching-architecture.md)** - Multi-layer caching strategies
-- **[Performance Monitoring](./docs/guides/performance-optimization.md)** - Query profiling and optimization
-- **[Security Guide](./docs/guides/security-guide.md)** - Production security best practices
-- **[Testing Strategies](./docs/guides/testing-strategies.md)** - Testing CQL applications
+- **[Advanced Caching](./docs/how-to/caching/query-cache.md)** - Multi-layer caching strategies
+- **[Performance Monitoring](./docs/how-to/performance/monitoring.md)** - Query profiling and optimization
+- **[Testing Strategies](./docs/how-to/testing/test-models.md)** - Testing CQL applications
 
 ### Reference
 
-- **[Quick Reference](./docs/guides/quick-reference.md)** - Cheat sheet for common operations
-- **[Architecture Overview](./docs/guides/architecture-overview.md)** - Understanding CQL's design
-- **[FAQ](./docs/faqs.md)** - Frequently asked questions
-- **[Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
+- **[Quick Reference](./docs/reference/quick-reference.md)** - Cheat sheet for common operations
+- **[Architecture Overview](./docs/explanation/README.md)** - Understanding CQL's design
+- **[FAQ](./docs/resources/faq.md)** - Frequently asked questions
+- **[Troubleshooting](./docs/how-to/troubleshooting/connection-errors.md)** - Common issues and solutions
 
 ## Development & Testing
 
@@ -902,7 +900,7 @@ We welcome contributions! Here's how to get involved:
 - Follow Crystal coding conventions and style guidelines
 - Add comprehensive tests for new features and bug fixes
 - Update documentation for API changes and new features
-- Ensure compatibility across all supported databases (PostgreSQL, MySQL, SQLite)
+- Ensure compatibility across all supported databases (PostgreSQL, MySQL, SQLite, CockroachDB)
 - Use meaningful commit messages following [conventional commits](https://conventionalcommits.org/)
 - Add performance benchmarks for query-related features
 - Consider security implications for new features
@@ -931,7 +929,7 @@ shards install
 crystal examples/run_examples.cr
 ```
 
-**[Get Started Now →](./docs/guides/getting-started.md) • [Try Examples →](./examples/) • [Join Community →](https://github.com/azutoolkit/cql/discussions)**
+**[Get Started Now →](./docs/tutorials/getting-started/your-first-cql-app.md) • [Try Examples →](./examples/) • [Join Community →](https://github.com/azutoolkit/cql/discussions)**
 
 ---
 

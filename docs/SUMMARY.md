@@ -81,6 +81,7 @@
 - [Optimize Queries](how-to/performance/optimize-queries.md)
 - [Avoid N+1 Queries](how-to/performance/n-plus-one.md)
 - [Monitor Performance](how-to/performance/monitoring.md)
+- [Telemetry](how-to/performance/telemetry.md)
 
 ### Testing
 
@@ -118,6 +119,7 @@
 - [Design Patterns](explanation/design-patterns/active-record.md)
   - [Active Record Pattern](explanation/design-patterns/active-record.md)
   - [Repository Pattern](explanation/design-patterns/repository.md)
+- [Typed Query DSL: Before and After](explanation/dsl-before-after.md)
 
 ## Resources
 

@@ -117,7 +117,7 @@ user = User.create!(
 The same model code works with different databases:
 
 ```crystal
-# Works with PostgreSQL, MySQL, or SQLite
+# Works with PostgreSQL, MySQL, SQLite, or CockroachDB
 User.where(active: true).order(created_at: :desc).all
 ```
 

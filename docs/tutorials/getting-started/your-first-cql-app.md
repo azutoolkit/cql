@@ -18,7 +18,7 @@ This tutorial walks you through building your first application with CQL from sc
 Before starting, ensure you have:
 
 - **Crystal** (latest stable version recommended)
-- **A supported database**: PostgreSQL, MySQL, or SQLite
+- **A supported database**: PostgreSQL, MySQL, SQLite, or CockroachDB
 - Basic familiarity with Crystal syntax
 
 ## Step 1: Create Your Project
@@ -38,7 +38,7 @@ Add CQL and your database driver to `shard.yml`:
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.435
+    version: ~> 0.0.589
 
   # Choose your database driver:
   pg: # For PostgreSQL

@@ -1,6 +1,6 @@
 # Installation
 
-Complete setup guide for CQL with PostgreSQL, MySQL, and SQLite.
+Complete setup guide for CQL with PostgreSQL, MySQL, SQLite and CockroachDB.
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ cd myapp
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.435"
+    version: "~> 0.0.589"
 
   # Choose your database driver
   sqlite3:
@@ -319,6 +319,5 @@ shards install
 
 ## Next Steps
 
-- [Configuration Guide](guides/configuration.md) - Environment-specific setup
-- [Getting Started](guides/getting-started.md) - Build your first app
-- [Schema Design](core-concepts/schemas.md) - Design your database
+- [Configuration Guide](how-to/configuration/database-connection.md) - Environment-specific setup
+- [Getting Started](tutorials/getting-started/your-first-cql-app.md) - Build your first app
