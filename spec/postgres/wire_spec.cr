@@ -288,6 +288,8 @@ describe CQL::Postgres::Wire::Backend do
 
   it "decodes copy responses" do
     backend('G', "00" + "0001" + "0000").as(Wire::Backend::CopyResponse).direction.should eq 'G'
+    backend('G', "01" + "0001" + "0001").as(Wire::Backend::CopyResponse).binary.should be_true
+    backend('G', "00" + "0001" + "0000").as(Wire::Backend::CopyResponse).binary.should be_false
     backend('H', "00" + "0002" + "00000000").as(Wire::Backend::CopyResponse).column_count.should eq 2
   end
 

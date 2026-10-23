@@ -261,6 +261,39 @@ describe "binary parameters on a session" do
     sizes.each(&.should(be > 50000))
   end
 
+  it "keeps float4 and numeric as text on a server that sends crdb_version, and the rest in binary" do
+    bound = nil
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake({"server_version" => "13.0.0", "client_encoding" => "UTF8", "crdb_version" => "CockroachDB CCL v24.3.5"})
+      client.serve_prepare([700_u32, 1700_u32, 20_u32, 1007_u32], [] of {String, UInt32})
+      bound = raw_bind(client.expect('B'))
+      client.expect('E'); client.expect('S')
+      client.send('2'); client.command_complete("SELECT 1"); client.ready
+    end
+    session = connect(server)
+    params = [0.1_f32, PG::Types::DecimalText.new("100000000"), 5_i64, [1, 2]].map { |value| session.encode(value) }
+    session.query("SELECT $1, $2, $3, $4", params)
+    bound.not_nil![:formats].should eq [0_i16, 0_i16, 1_i16, 1_i16]
+    bound.not_nil![:values][0..1].should eq ["0.1".to_slice.hexstring, "100000000".to_slice.hexstring]
+    session.binary_params_sent.should eq 2
+  end
+
+  it "sends text for the types in the text-only list when asked to resolve" do
+    numeric = PG::Types::ParamEncoder.encode(PG::Types::DecimalText.new("1.5"), true).deferred.not_nil!
+    numeric.resolve(OID::NUMERIC, Binary::COCKROACHDB_TEXT_ONLY).format.should eq PG::Types::Param::TEXT
+    numeric.resolve(OID::NUMERIC, [] of UInt32).format.should eq PG::Types::Param::BINARY
+    numeric.resolve(nil, [] of UInt32).format.should eq PG::Types::Param::TEXT
+  end
+
+  it "hints at least the text size for values that fall back to text, so a pipeline batch cannot outgrow its limit" do
+    [Time.utc(2000, 1, 1, 0, 0, 0, nanosecond: 123_456_000), UUID.random, -1.2345678901234567e-300, Int128::MIN, true].each do |value|
+      param = PG::Types::ParamEncoder.encode(value, true)
+      text = PG::Types::ParamEncoder.encode(value).value.not_nil!.size
+      param.deferred.not_nil!.size_hint.should be >= text
+    end
+  end
+
   it "does not print parameter values when inspected" do
     PG::Types::ParamEncoder.encode("secret-value").inspect.should_not contain "secret"
     PG::Types::ParamEncoder.encode(123456789, true).inspect.should_not contain "123456789"

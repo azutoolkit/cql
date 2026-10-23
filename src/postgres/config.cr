@@ -73,6 +73,10 @@ module CQL::Postgres
       end
     end
 
+    private def check_binary_params : Nil
+      binary_params?
+    end
+
     def max_protocol_version : ProtocolVersion
       ProtocolVersion.parse(driver_options["max_protocol_version"]? || "latest")
     end
@@ -81,7 +85,7 @@ module CQL::Postgres
                    @ssl_mode = SSLMode::Prefer, @ssl_root_cert = nil, @connect_timeout = DEFAULT_CONNECT_WAIT.seconds,
                    @application_name = "cql", @statement_cache_size = 256,
                    @startup_options = {} of String => String, @driver_options = {} of String => String, @cockroachdb = false)
-      binary_params?
+      check_binary_params
       raise ArgumentError.new("min_protocol_version #{min_protocol_version} is newer than max_protocol_version #{max_protocol_version}") if min_protocol_version > max_protocol_version
       @database = database || @user
     end

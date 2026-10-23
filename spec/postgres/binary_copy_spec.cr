@@ -162,3 +162,93 @@ describe "binary COPY on a session" do
     received.includes?('c').should be_false
   end
 end
+
+private def copy_response(direction : Char, binary : Bool, columns : Int16 = 1_i16) : Bytes
+  io = IO::Memory.new
+  io.write_byte(binary ? 1_u8 : 0_u8)
+  io.write_bytes(columns, IO::ByteFormat::BigEndian)
+  columns.times { io.write_bytes(binary ? 1_i16 : 0_i16, IO::ByteFormat::BigEndian) }
+  io.to_slice.dup
+end
+
+describe "binary COPY out on a session" do
+  it "reads rows from chunks cut in the middle of a row" do
+    stream = written([OID::INT4, OID::TEXT]) { |rows| rows.row(1, "one"); rows.row(2, "two") }
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('Q')
+      client.send('H', copy_response('H', true, 2_i16))
+      [stream[0, 20], stream[20, 9], stream[29, stream.size - 29]].each { |piece| client.send('d', piece) }
+      client.send('c')
+      client.command_complete("COPY 2")
+      client.ready
+    end
+    session = PG::Session.connect(PG::Config.parse(server.url))
+    rows = [] of Array(PG::Types::Value)
+    session.copy_out_binary("COPY t TO STDOUT (FORMAT binary)", [OID::INT4, OID::TEXT]) { |row| rows << row }.should eq 2
+    rows.should eq [[1, "one"], [2, "two"]]
+    session.closed?.should be_false
+  end
+
+  it "fails a malformed stream with ProtocolError and drops the session" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('Q')
+      client.send('H', copy_response('H', true))
+      client.send('d', "this is not a binary copy stream".to_slice)
+      client.send('d', Bytes[1, 2, 3])
+      client.send('c')
+      client.command_complete("COPY 0")
+      client.ready
+    end
+    session = PG::Session.connect(PG::Config.parse(server.url))
+    error = expect_raises(PG::ProtocolError, /signature/) { session.copy_out_binary("COPY t TO STDOUT (FORMAT binary)", [OID::INT4]) { |_| } }
+    error.message.to_s.should_not contain "this is not"
+    session.closed?.should be_true
+  end
+
+  it "refuses a text COPY out when binary was asked for, after reading it to the end" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('Q')
+      client.send('H', copy_response('H', false))
+      client.send('d', "1\n".to_slice)
+      client.send('c')
+      client.command_complete("COPY 1")
+      client.ready
+    end
+    session = PG::Session.connect(PG::Config.parse(server.url))
+    seen = 0
+    expect_raises(ArgumentError, /text format/) { session.copy_out_binary("COPY t TO STDOUT", [OID::INT4]) { |_| seen += 1 } }
+    seen.should eq 0
+    session.closed?.should be_false
+  end
+
+  it "refuses a text COPY in when binary was asked for, before any data moves, and aborts the COPY" do
+    received = [] of Char
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('Q')
+      client.send('G', copy_response('G', false))
+      loop do
+        type, _ = client.read_message || break
+        received << type
+        break if type == 'f'
+      end
+      client.error("57014", "COPY from stdin failed")
+      client.ready
+      client.expect('Q')
+      client.command_complete("SELECT 1")
+      client.ready
+    end
+    session = PG::Session.connect(PG::Config.parse(server.url))
+    expect_raises(ArgumentError, /FORMAT binary/) { session.copy_in_binary("COPY t FROM STDIN", [OID::INT4]) { |rows| rows.row(1) } }
+    received.should eq ['f']
+    session.closed?.should be_false
+    session.simple_query("SELECT 1").size.should eq 1
+  end
+end

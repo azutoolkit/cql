@@ -60,8 +60,12 @@ module CQL::Postgres::Types
       value.to_json.bytesize + 4
     end
 
+    # Numbers, times and uuids: a bound that covers their text form (a time is 29
+    # characters, a uuid 36, an Int128 up to 40), since that is what goes out when
+    # no binary form applies. Deliberately generous: an array of them splits a
+    # pipeline batch earlier than strictly needed, which costs a round trip, never a stall.
     def self.size_hint(value) : Int32
-      16
+      40
     end
 
     def self.encode(value : Bool, oid : UInt32) : Bytes?

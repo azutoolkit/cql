@@ -1,16 +1,30 @@
 module CQL::Postgres
   class Session
-    private def run_copy_in(sql : String, &) : Int64
+    private def run_copy_in(sql : String, binary_required : Bool = false, &) : Int64
       rows = 0_i64
       queue_query(sql)
       flush
       until_ready(copy_in: true) do |message|
         case message
-        when Wire::Backend::CopyResponse    then stream_copy_in { |writer| yield writer } if message.direction == 'G'
+        when Wire::Backend::CopyResponse    then accept_copy_in(message, binary_required) { |writer| yield writer }
         when Wire::Backend::CommandComplete then rows = message.rows_affected
         end
       end
       rows
+    end
+
+    private def accept_copy_in(message : Wire::Backend::CopyResponse, binary_required : Bool, &) : Nil
+      return unless message.direction == 'G'
+      stream_copy_in do |writer|
+        require_binary(message) if binary_required
+        yield writer
+      end
+    end
+
+    # A binary COPY method on a statement the server runs as text would load
+    # garbage (or fail with a confusing message): refuse before any data moves.
+    private def require_binary(message : Wire::Backend::CopyResponse) : Nil
+      raise ArgumentError.new("the COPY runs in text format; add (FORMAT binary) to the statement") unless message.binary
     end
 
     private def stream_copy_in(&) : Nil
@@ -29,12 +43,13 @@ module CQL::Postgres
       raise ex
     end
 
-    private def run_copy_out(sql : String, &) : Int64
+    private def run_copy_out(sql : String, binary_required : Bool = false, &) : Int64
       rows = 0_i64
       queue_query(sql)
       flush
       until_ready do |message|
         case message
+        when Wire::Backend::CopyResponse    then require_binary(message) if binary_required
         when Wire::Backend::CopyData        then yield message.data
         when Wire::Backend::CommandComplete then rows = message.rows_affected
         end

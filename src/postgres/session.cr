@@ -197,7 +197,8 @@ module CQL::Postgres
 
     # `COPY ... FROM STDIN (FORMAT binary)` with the signature and trailer
     # handled for you: *types* are the OIDs of the copied columns and the block
-    # writes rows. If the block raises, the COPY is aborted like `copy_in`.
+    # writes rows. If the block raises, the COPY is aborted like `copy_in`. A
+    # statement the server runs as text raises `ArgumentError` before any data moves.
     #
     # ```
     # session.copy_in_binary("COPY t (id, name) FROM STDIN (FORMAT binary)", [Types::OID::INT8, Types::OID::TEXT]) do |rows|
@@ -205,19 +206,22 @@ module CQL::Postgres
     # end
     # ```
     def copy_in_binary(sql : String, types : Array(UInt32), timeout : Time::Span? = nil, & : BinaryCopy::Writer ->) : Int64
-      copy_in(sql, timeout) do |copy|
-        writer = BinaryCopy::Writer.new(copy, types)
-        yield writer
-        writer.finish
+      exclusive(timeout) do
+        run_copy_in(sql, binary_required: true) do |copy|
+          writer = BinaryCopy::Writer.new(copy, types)
+          yield writer
+          writer.finish
+        end
       end
     end
 
     # `COPY ... TO STDOUT (FORMAT binary)`: yields each row decoded by the
     # column *types* (OIDs; a type without a decoder arrives as raw bytes).
-    # Stopping early, timeouts and cancel behave as in `copy_out`.
+    # Stopping early, timeouts and cancel behave as in `copy_out`; a statement the
+    # server runs as text raises `ArgumentError` once its output has been read.
     def copy_out_binary(sql : String, types : Array(UInt32), timeout : Time::Span? = nil, &on_row : Array(Types::Value) ->) : Int64
       reader = BinaryCopy::Reader.new(types, &on_row)
-      rows = copy_out(sql, timeout) { |chunk| reader.feed(chunk) }
+      rows = exclusive(timeout) { run_copy_out(sql, binary_required: true) { |chunk| reader.feed(chunk) } }
       reader.finish
       rows
     end

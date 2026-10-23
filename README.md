@@ -227,7 +227,7 @@ Things to know:
   rows may be split across chunks, and a damaged stream or a trailer that never came raises `ProtocolError` (without
   quoting data). Each value must have a binary form for its column type (the list above plus text, json and
   bytea); there is no conversion between kinds, and a mismatch raises `ArgumentError` naming the column and the Crystal
-  class only. Types without a decoder (arrays among them) come back as raw `Bytes`. Timeouts, `cancel` and an exception
+  class only. A statement the server runs as text (no `(FORMAT binary)`) raises `ArgumentError` too, before any data is sent (`copy_in_binary`) or after the output has been read (`copy_out_binary`). Types without a decoder (arrays among them) come back as raw `Bytes`. Timeouts, `cancel` and an exception
   in the block (the way to stop early; there is no `break`) behave as in the text `copy_in` / `copy_out` (the same
   code path). A damaged row raises `ProtocolError` while it is read, which drops the connection (a stream that ends without its trailer raises the same error afterwards, with the session left in sync). CockroachDB's float4 and numeric
   differences above apply to binary `COPY FROM` too (not tested: it cannot copy the rows back out in binary). Checked live on PostgreSQL 16, 18
