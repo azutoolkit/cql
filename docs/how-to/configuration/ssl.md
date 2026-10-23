@@ -4,13 +4,49 @@ Configure SSL/TLS for secure database connections.
 
 ## Prerequisites
 
-- CQL installed and configured
+- CQL installed
 - Database server with SSL enabled
 - SSL certificates (if using certificate verification)
 
-## PostgreSQL SSL
+## Configure SSL with `CQL.configure`
 
-### Basic SSL
+`CQL.configure` is the entrypoint. The `config.ssl` object holds the settings, and `CQL.build_schema` adds them to the connection URL:
+
+```crystal
+CQL.configure do |config|
+  config.db = ENV["DATABASE_URL"]
+  config.ssl.mode = "verify-full"
+  config.ssl.ca_path = ENV["SSL_CA_PATH"]
+end
+
+MyDB = CQL.build_schema(:my_db) do
+end
+
+puts CQL.config.full_db_url   # ...&sslmode=verify-full&sslrootcert=/path/to/ca.crt
+```
+
+| `config.ssl.*` | Default | URL parameter (PostgreSQL, CockroachDB) | URL parameter (MySQL) |
+|----------------|---------|------------------------------------------|-----------------------|
+| `mode` | `prefer` | `sslmode` | `sslmode` |
+| `ca_path` | none | `sslrootcert` | `sslca` |
+| `cert_path` | none | `sslcert` | `sslcert` |
+| `key_path` | none | `sslkey` | `sslkey` |
+
+Only `mode` is always sent; the paths are added when set. SQLite gets no SSL parameters. Production defaults to `ssl.mode = "require"` (see [Configure Multiple Environments](environments.md)). A `sslmode` already in `config.db` wins over `ssl.mode`.
+
+`CQL.configure` accepts `disable`, `allow`, `prefer`, `require`, `verify-ca` and `verify-full`, and raises `ArgumentError` for anything else. That list is wider than what the native PostgreSQL driver supports (see [SSL Modes](#ssl-modes)): `allow` and `verify-ca` pass `CQL.configure` but the native driver then refuses the URL. Likewise `cert_path` and `key_path` add `sslcert`/`sslkey`, which the native driver rejects. `ssl.mode` is always sent, so set `ssl.mode = "verify-full"` whenever you set `ca_path`: the native driver rejects `sslrootcert` with any other mode.
+
+The crystal-mysql version in `lib/` has no TLS code and does not read these parameters, so for MySQL they do not encrypt the connection. Check the shard version you use before relying on MySQL SSL.
+
+For the full lifecycle see [Configure CQL](configure-cql.md) and the [configuration reference](../../reference/configuration.md).
+
+## Low-Level: SSL in the URI with `Schema.define`
+
+`CQL::Schema.define` ignores `CQL.config`, so SSL is whatever you put in the URI. The sections below show the URI parameters, which are the same ones `config.ssl` produces.
+
+### PostgreSQL SSL
+
+#### Basic SSL
 
 Enable SSL in your connection URL. `postgres://` URLs are handled by CQL's native driver (see the [native PostgreSQL driver guide](../postgres-native/README.md)); `cockroachdb://` URLs take the same parameters (see [CockroachDB](cockroachdb.md)):
 
@@ -23,7 +59,7 @@ MyDB = CQL::Schema.define(
 end
 ```
 
-### SSL Modes
+#### SSL Modes
 
 The native driver accepts four modes (default `prefer`):
 
@@ -34,9 +70,9 @@ The native driver accepts four modes (default `prefer`):
 | `require` | SSL required; encrypts without verifying the server (like libpq) |
 | `verify-full` | SSL required, verify certificate chain and hostname |
 
-`allow` and `verify-ca` are rejected with an `ArgumentError`. `CQL.configure`'s `ssl.mode` validator accepts them, but a native-driver URL built from it will not connect, so stick to the four modes above.
+`allow` and `verify-ca` are rejected with an `ArgumentError`. `CQL.configure`'s `ssl.mode` validator still accepts them, but a native-driver URL built from it will not connect, so stick to the four modes above.
 
-### With Certificate Verification
+#### With Certificate Verification
 
 `sslrootcert` is only accepted with `sslmode=verify-full`, and adds your CA to the system trust store. Client certificate options (`sslcert`, `sslkey`, `sslcrl`, ...) are not supported by the native driver and raise `ArgumentError` rather than being ignored:
 
@@ -50,7 +86,9 @@ MyDB = CQL::Schema.define(:my_db, adapter: CQL::Adapter::Postgres, uri: uri) do
 end
 ```
 
-## MySQL SSL
+### MySQL SSL
+
+The crystal-mysql version in `lib/` does not read these parameters (it has no TLS handling), so verify your driver version supports them.
 
 ```crystal
 uri = "mysql://user:pass@host/db?" + {
@@ -62,7 +100,7 @@ MyDB = CQL::Schema.define(:my_db, adapter: CQL::Adapter::MySql, uri: uri) do
 end
 ```
 
-## Environment Variables
+### Environment Variables
 
 Store certificates securely:
 
@@ -71,20 +109,6 @@ uri = "postgres://#{ENV["DB_USER"]}:#{ENV["DB_PASS"]}@#{ENV["DB_HOST"]}/#{ENV["D
       "sslmode=verify-full&" +
       "sslrootcert=#{ENV["SSL_CA_PATH"]}"
 ```
-
-## Configure SSL with `CQL.configure`
-
-```crystal
-CQL.configure do |config|
-  config.db = ENV["DATABASE_URL"]
-  config.ssl.mode = "verify-full"
-  config.ssl.ca_path = ENV["SSL_CA_PATH"]
-end
-
-url = CQL.config.full_db_url   # appends sslmode and sslrootcert (sslca for MySQL)
-```
-
-`ssl.cert_path` and `ssl.key_path` add `sslcert`/`sslkey`, which the native PostgreSQL driver rejects. Production defaults to `ssl.mode = "require"`.
 
 ## Verify SSL Connection
 
@@ -129,6 +153,8 @@ end
 
 ## See Also
 
+- [Configure CQL](configure-cql.md)
+- [Configuration reference](../../reference/configuration.md)
 - [Configure Database Connection](database-connection.md)
 - [Configure Multiple Environments](environments.md)
 - [Fix Connection Errors](../troubleshooting/connection-errors.md)

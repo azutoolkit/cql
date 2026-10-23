@@ -31,7 +31,7 @@ module CQL
   # ```
   # CQL.configure do |config|
   #   config.db = "postgresql://localhost/myapp"
-  #   config.sql_logging_async = true # Async SQL logging
+  #   config.sql_logging_colorize = false # Plain SQL logging output
   # end
   # ```
   module Configure
@@ -92,11 +92,18 @@ module CQL
 
       # === 🎨 SQL LOGGING ===
       # Enable beautiful SQL logging (auto-enabled in development)
-      property sql_logging : Bool = false
+      @sql_logging : Bool?
+
+      def sql_logging=(@sql_logging : Bool?)
+      end
+
+      def sql_logging : Bool
+        sql_logging?
+      end
 
       # SQL logging options
       property sql_logging_colorize : Bool = true # Colorize SQL output
-      property sql_logging_async : Bool = false   # Use async logging (not recommended for dev)
+      property sql_logging_async : Bool = false   # Unused: kept for compatibility
 
       # === 📊 PERFORMANCE MONITORING ===
       # Enable performance monitoring and tracking
@@ -108,7 +115,16 @@ module CQL
 
       # === 🔗 CONNECTION POOL ===
       # Number of database connections in pool
-      property pool_size : Int32 = 10
+      getter pool_size : Int32 = 10
+
+      def pool_size=(size : Int32)
+        @pool_size = size
+        pool.size = size
+        return unless size.positive?
+
+        pool.initial_size = Math.min(pool.initial_size, size)
+        pool.max_idle_size = Math.min(pool.max_idle_size, size)
+      end
 
       # Detailed connection pool settings
       getter pool : ConnectionPoolConfig = ConnectionPoolConfig.new
@@ -155,7 +171,12 @@ module CQL
 
       # Check if SQL logging is enabled
       def sql_logging? : Bool
-        sql_logging || (env == "development" && !ENV.has_key?("CQL_NO_SQL_LOG"))
+        explicit = @sql_logging
+        explicit.nil? ? development_logging_default? : explicit
+      end
+
+      private def development_logging_default? : Bool
+        env == "development" && !ENV.has_key?("CQL_NO_SQL_LOG")
       end
 
       # Check if performance monitoring is enabled
@@ -297,20 +318,9 @@ module CQL
 
         effective_logger.info { "🎨 Setting up beautiful SQL logging..." }
 
-        CQL.enable_sql_logging do |config|
-          config.enabled = true
-          config.colorize_output = sql_logging_colorize
-          config.async_processing = sql_logging_async
+        CQL::Performance.enable_sql_logging(colorize: sql_logging_colorize)
 
-          # Smart defaults for development
-          if env == "development"
-            config.show_params = true
-            config.show_execution_time = true
-            config.highlight_slow_queries = true
-          end
-        end
-
-        effective_logger.info { "✅ SQL logging ready - #{sql_logging_async ? "async" : "sync"} mode" }
+        effective_logger.info { "✅ SQL logging ready" }
       end
 
       # === 💾 CACHE SETUP ===
@@ -377,11 +387,6 @@ module CQL
         strategy = EnvironmentStrategyFactory.create(env)
         strategy.apply(self)
         sync_pool_size # Re-sync after environment changes
-
-        # Auto-enable SQL logging in development unless explicitly disabled
-        if env == "development"
-          @sql_logging = true unless ENV.has_key?("CQL_NO_SQL_LOG")
-        end
       end
     end
 
@@ -458,8 +463,9 @@ module CQL
   # === 🗂️ SCHEMA & MIGRATION HELPERS ===
 
   # Create a schema with smart defaults
-  def self.build_schema(name : Symbol, &block) : Schema
-    schema = Schema.define(name, config.db, config.adapter, &block)
+  def self.build_schema(name : Symbol, &) : Schema
+    schema = Schema.new(name, config.full_db_url, config.adapter)
+    with schema yield
 
     # Auto-setup based on configuration
     config.setup_cache_system if config.cache.on?

@@ -44,7 +44,7 @@ driver serves `postgres://` URLs. Remove `require "pg"` to switch to the native 
 Differences to know about when switching:
 
 - `sslmode` takes `disable`, `prefer`, `require` or `verify-full`. `verify-ca`, `allow` and the libpq options
-  `sslcert`, `sslkey` and `auth_methods` are rejected, not ignored.
+  `sslcert` and `sslkey` are rejected, not ignored. `auth_methods` (written for the `pg` shard) is accepted and ignored.
 - `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` are read from the environment when the URL omits them.
 - Arrays decode to their text form and `numeric` to `CQL::Postgres::Types::DecimalText`, so `read(Float64)` and
   `read(Array(Int32))` raise `TypeCastError`. Register a codec with `CQL::Postgres::Types.register` to decode more.

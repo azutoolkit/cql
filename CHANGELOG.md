@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `CQL.build_schema` now compiles and runs: the table-definition block runs against the new schema (it previously failed with `undefined method 'table' for top-level`), and the SQL logging setup calls `CQL::Performance.enable_sql_logging` (the development default used a method that did not exist).
+- `CQL.build_schema` opens the database through `config.full_db_url`, so `pool.*`, `ssl.*`, SQLite/MySQL/PostgreSQL settings and `adapter_options` now reach the connection. URL parameters still win.
+- The native PostgreSQL driver accepts and ignores the `auth_methods` URL option that `CQL.configure` adds for the `pg` shard, instead of sending it to the server as a startup parameter (which PostgreSQL rejects). This matters now that `CQL.build_schema` opens through `config.full_db_url`.
+- `config.sql_logging` is now unset until you assign it: unset follows the environment (on in `development` unless `CQL_NO_SQL_LOG` is set, evaluated when queried), and `config.sql_logging = false` turns it off in development.
+- `config.pool_size=` updates `config.pool.size` and keeps `pool.initial_size` and `pool.max_idle_size` from exceeding it.
+- `config.sql_logging_async` is unused and kept only for compatibility.
+- Because `CQL.build_schema` now applies `full_db_url`, SQLite connections opened through it use the configured defaults (`journal_mode=wal`, `synchronous=normal`, `foreign_keys=1`, `busy_timeout=5000`); set `config.sqlite.*` to change them.
+
 ### Documentation
 
 - Fixed broken links, version pins and wrong class names across `README.md` and `docs/`; CockroachDB is listed wherever dialects are enumerated.

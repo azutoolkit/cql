@@ -19,6 +19,7 @@ Database-specific features and considerations:
 ## Quick Reference
 
 - [Quick Reference Card](quick-reference.md) - Common operations at a glance
+- [Configuration Reference](configuration.md) - Every `CQL.configure` setting, default and validation rule
 - [Glossary](glossary.md) - CQL terminology and definitions
 - [Error Codes](error-codes.md) - Common errors and their meanings
 

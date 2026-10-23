@@ -6,11 +6,37 @@ and what behaves differently from PostgreSQL.
 CockroachDB support was verified against CockroachDB v24.3.5 (single node, insecure and secure with
 `sslmode=verify-full` and a password).
 
-## Connect with CQL::Schema
+## Connect with `CQL.configure`
+
+`CQL.configure` is the entrypoint. A `cockroachdb://` URL selects `CQL::Adapter::CockroachDB`; `config.adapter` reports it:
 
 ```crystal
 require "cql"
 
+CQL.configure do |config|
+  config.db = "cockroachdb://app:secret@crdb.internal:26257/app?sslmode=verify-full&max_protocol_version=3.0"
+end
+
+CQL.config.adapter   # => CQL::Adapter::CockroachDB
+
+MyDB = CQL.build_schema(:my_db) do
+end
+```
+
+`CQL.build_schema` opens the schema through `config.full_db_url`, so pool, SSL (`ssl.mode`, `ssl.ca_path` as `sslrootcert`) and `adapter_options` settings apply, and parameters already in the URL win. CockroachDB uses the PostgreSQL settings object (`config.postgres`). See [Configure Database Connection](database-connection.md), [Set Up Connection Pooling](connection-pooling.md) and [Enable SSL Connections](ssl.md).
+
+Two things to watch with the defaults:
+
+- `full_db_url` adds `sslmode` from `config.ssl.mode` (`prefer`, or `require` in production), which only matters when the URL has no `sslmode`.
+- `config.postgres.auth_methods` is added as `auth_methods`; the native driver accepts and ignores it.
+
+No registration is required for `Schema` or `CQL.build_schema`: `CQL::Adapter::CockroachDB` rewrites the scheme to `postgres://` before handing it to crystal-db, so the connection follows the same rules as a PostgreSQL schema. The URL needs a host. Without a `sslmode`, the driver default is `prefer`.
+
+## Low-Level: `Schema.define`
+
+`CQL::Schema.define` ignores `CQL.config` and uses the URI as given:
+
+```crystal
 MyDB = CQL::Schema.define(
   :my_db,
   adapter: CQL::Adapter::CockroachDB,
@@ -20,10 +46,6 @@ end
 
 MyDB.init
 ```
-
-The URL needs a host. `CQL::Adapter::CockroachDB` rewrites the scheme to `postgres://` before handing it to
-crystal-db, so the connection follows the same rules as a PostgreSQL schema, and no registration is required for
-`Schema`. Without a `sslmode`, the driver default is `prefer`.
 
 ## Connect with AsyncEngine
 
@@ -40,7 +62,7 @@ See [AsyncEngine and pool options](../postgres-native/async-engine.md) for the p
 
 ## Open `cockroachdb://` with DB.open
 
-Registration for plain crystal-db is opt-in, because only CockroachDB 24.3 was checked. Do it in code:
+Registration for plain crystal-db (`DB.open`) is opt-in, because only CockroachDB 24.3 was checked. Do it in code:
 
 ```crystal
 CQL::Postgres::Driver.register_cockroachdb
@@ -65,7 +87,7 @@ CockroachDB answers a protocol 3.2 startup with HTTP/2 bytes instead of an error
 
 - `cockroachdb://` URLs given to `DB.open` or `AsyncEngine.connect` start at protocol 3.0 (the URL defaults
   `max_protocol_version` to `3.0`).
-- A `Schema` on `CQL::Adapter::CockroachDB` uses a `postgres://` URL, so it starts at 3.2 and pays one failed attempt
+- A schema on `CQL::Adapter::CockroachDB` (`CQL.build_schema` or `Schema.define`) uses a `postgres://` URL, so it starts at 3.2 and pays one failed attempt
   per new connection. Avoid that by pinning the version:
 
 ```crystal

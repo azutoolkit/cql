@@ -14,6 +14,8 @@ module CQL::Postgres
     NAMES            = {Connection::DRIVER_NAME, "postgresql"}
     COCKROACHDB_NAME = "cockroachdb"
     DB_OWNED_KEYS    = {"initial_pool_size", "max_pool_size", "max_idle_pool_size", "checkout_timeout", "retry_attempts", "retry_delay", "prepared_statements", "prepared_statements_cache"}
+    # Accepted for configuration written for the `pg` shard (`CQL.configure` emits it); this driver negotiates SCRAM/MD5 itself.
+    COMPAT_IGNORED_KEYS = {"auth_methods"}
 
     class Builder < ::DB::ConnectionBuilder
       def initialize(@config : Config, @options : ::DB::Connection::Options)
@@ -60,7 +62,7 @@ module CQL::Postgres
     def connection_builder(uri : URI) : ::DB::ConnectionBuilder
       params = HTTP::Params.parse(uri.query || "")
       options = connection_options(params).copy_with(prepared_statements_cache: false)
-      Builder.new(Config.from_uri(uri, ignoring: DB_OWNED_KEYS), options)
+      Builder.new(Config.from_uri(uri, ignoring: DB_OWNED_KEYS + COMPAT_IGNORED_KEYS), options)
     end
   end
 end

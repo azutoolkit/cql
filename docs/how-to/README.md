@@ -56,6 +56,7 @@
 
 ## Configuration
 
+- [Configure CQL](configuration/configure-cql.md)
 - [Configure Database Connection](configuration/database-connection.md)
 - [Set Up Connection Pooling](configuration/connection-pooling.md)
 - [Configure Multiple Environments](configuration/environments.md)

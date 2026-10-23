@@ -100,7 +100,7 @@ end
 
 `verify_schema_consistency` regenerates the schema text and compares it to the file. It returns `false` when the file is missing, differs, or the database cannot be read. The comparison is exact text, so keep hand edits out of generated files (see [Run Migrations](run-migrations.md)).
 
-`CQL::Configure.verify_schema(schema, auto_fix: true)` does the same check and rewrites the file when `auto_sync` is enabled in your configuration.
+`CQL.verify_schema(schema, auto_fix: true)` does the same check and rewrites the file when `auto_sync` is enabled in your configuration.
 
 ## Raw Structure Dumps
 

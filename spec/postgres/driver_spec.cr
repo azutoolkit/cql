@@ -45,6 +45,19 @@ describe CQL::Postgres::Driver do
     #  ["application_name", "client_encoding", "database", "protocol", "user"]
   end
 
+  it "accepts the auth_methods option written for the pg shard without sending it to the server" do
+    startup = nil
+    server = FakePG.start do |client|
+      startup = client.read_startup
+      client.auth(3)
+      client.cstrings(client.expect('p'))
+      client.ok_handshake
+      client.idle
+    end
+    build_through_driver("postgres://a:b@127.0.0.1:#{server.port}/app?sslmode=disable&auth_methods=scram-sha-256%2Cmd5").close
+    startup.not_nil!.has_key?("auth_methods").should be_false
+  end
+
   it "reports a refused or unreachable server as DB::ConnectionRefused, which crystal-db retries, but not a server error" do
     closed = TCPServer.new("127.0.0.1", 0)
     closed_port = closed.local_address.port
