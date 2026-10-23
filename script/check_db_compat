@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Compiles CQL (including its native PostgreSQL layer) against each crystal-db
+# version it claims to support, so a new abstract member in DB::Connection,
+# DB::Statement, DB::ResultSet or DB::Driver fails here instead of in users' projects.
+#
+#   script/check_db_compat [db-version ...]   (default: every supported version; "latest" = newest release)
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+versions=("$@")
+[ ${#versions[@]} -gt 0 ] || versions=(0.13.1 0.14.0 0.15.0)
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+for version in "${versions[@]}"; do
+  project="$work/db-$version"
+  mkdir -p "$project"
+  constraint="version: $version"
+  [ "$version" != latest ] || constraint=""
+  cat > "$project/shard.yml" <<YAML
+name: db_compat
+version: 0.1.0
+dependencies:
+  cql:
+    path: "$root"
+  db:
+    github: crystal-lang/crystal-db
+    $constraint
+YAML
+  echo 'require "cql"; CQL::Postgres::Connection' > "$project/check.cr"
+  echo "== crystal-db $version"
+  (cd "$project" && shards install --ignore-crystal-version >/dev/null && crystal build --no-codegen check.cr)
+done
+echo "CQL compiles against crystal-db: ${versions[*]}"

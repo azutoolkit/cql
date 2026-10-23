@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- CQL's native PostgreSQL layer (`CQL::Postgres`) compiles against crystal-db 0.15, which made `DB::Connection#driver_name` abstract (`CQL::Postgres::Connection#driver_name` returns `"postgres"`). The SQLite, MySQL and `pg` drivers CQL's own specs use still need releases that support db 0.15. `script/check_db_compat` and the `crystal-db compatibility` workflow (also weekly, against the latest db) compile the native layer against crystal-db 0.13.1, 0.14.0, 0.15.0.
 - `Model.create!(**fields)` and `Model.create!(attrs)` on PostgreSQL and CockroachDB now read the new key through `RETURNING` (as `create!(record)` already did for Int64 keys) instead of `last_insert_id`, which crystal-pg always reports as 0, so the row was inserted but `find!(0)` raised `DB::NoResultsError`. Int32 keys are read as `INT4`; `create!(record)` with an Int32 key on PostgreSQL still fails and is not changed here.
 - Subqueries (`IN (SELECT ...)`, `EXISTS`, `INSERT ... SELECT`) no longer discard the parameters bound by the enclosing query (SELECT, UPDATE and DELETE), and PostgreSQL `$n` numbering now continues across them.
 - Multi-row `INSERT` on PostgreSQL numbers each row's placeholders (it emitted `($1,$2),($1,$2)`); rows are aligned by column name and rows with a different column set raise `ArgumentError`.
