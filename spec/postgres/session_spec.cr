@@ -1048,6 +1048,46 @@ describe CQL::Postgres::Session do
     stream.closed?.should be_false
   end
 
+  it "bounds a timed-out request by the grace even when the cancel peer accepts the connection and never hangs up" do
+    server = FakePG.start do |client|
+      startup = client.read_startup
+      if startup["protocol"] == "cancel"
+        sleep 5.seconds # accepts the cancel and never hangs up
+        next
+      end
+      client.ok_handshake
+      client.read_message
+      sleep 5.seconds
+    end
+    session = connect(server)
+    session.cancel_grace = 200.milliseconds
+    started = Time.instant
+    expect_raises(PG::QueryTimeout) { session.query("SELECT 1", timeout: 100.milliseconds) }
+    (Time.instant - started).should be < 2.seconds
+    session.closed?.should be_true
+  end
+
+  it "does not take a cancel the driver raised itself for the server's confirmation, and drops the session" do
+    server = FakePG.start do |client|
+      startup = client.read_startup
+      next if startup["protocol"] == "cancel"
+      client.ok_handshake
+      client.serve_prepare([] of UInt32, [{"n", 23_u32}])
+      client.expect('B'); client.expect('E'); client.expect('H')
+      client.send('2'); client.data_row([Bytes[0, 0, 0, 1]] of Bytes?); client.send('s')
+      sleep 3.seconds
+    end
+    session = connect(server)
+    expect_raises(PG::QueryTimeout) do
+      session.stream("SELECT n", fetch_size: 1, timeout: 150.milliseconds) do |rows|
+        rows.next
+        sleep 400.milliseconds # the deadline passes: the watchdog cancels, no Close/Sync can follow
+        raise PG::QueryCanceled.user_request
+      end
+    end
+    session.closed?.should be_true # a portal is still open and nothing confirmed the cancel
+  end
+
   it "starts cockroachdb:// URLs at protocol 3.0" do
     PG::Config.parse("cockroachdb://root@h/db").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_0
     PG::Config.parse("cockroachdb://root@h/db?max_protocol_version=3.2").max_protocol_version.should eq CQL::Postgres::ProtocolVersion::V3_2

@@ -44,9 +44,10 @@ module CQL::Postgres
     # Sends an out-of-band CancelRequest for the session identified by the key.
     # The request itself is never encrypted, as in libpq before version 17.
     # Returns once the postmaster has hung up, which it does after signalling the
-    # backend, or after *wait* if it never does (a proxy that accepts and sits).
-    def self.cancel(config : Config, process_id : Int32, secret_key : Bytes, wait : Time::Span = 5.seconds) : Nil
-      io = open(config)
+    # backend. Connecting and waiting for that are each capped at *wait* (a proxy
+    # may accept and sit).
+    def self.cancel(config : Config, process_id : Int32, secret_key : Bytes, wait : Time::Span) : Nil
+      io = open(config, connect_wait: wait)
       Wire::Frontend.cancel_request(io, process_id, secret_key)
       io.flush
       wait_for_hang_up(io, wait)
@@ -63,16 +64,17 @@ module CQL::Postgres
     rescue IO::Error
     end
 
-    private def self.open(config : Config) : TCPSocket | UNIXSocket
+    private def self.open(config : Config, connect_wait : Time::Span? = nil) : TCPSocket | UNIXSocket
+      connect_timeout = [config.connect_timeout, connect_wait].compact.min?
       socket = if config.unix_socket?
                  UNIXSocket.new(config.socket_path)
                else
-                 TCPSocket.new(config.host, config.port, connect_timeout: config.connect_timeout).tap do |tcp|
+                 TCPSocket.new(config.host, config.port, dns_timeout: connect_timeout, connect_timeout: connect_timeout).tap do |tcp|
                    tcp.tcp_nodelay = true
                    tcp.keepalive = true
                  end
                end
-      socket.read_timeout = socket.write_timeout = config.connect_timeout
+      socket.read_timeout = socket.write_timeout = connect_timeout
       socket
     end
 

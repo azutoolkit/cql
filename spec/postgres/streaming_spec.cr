@@ -32,6 +32,43 @@ private def uncached(server : FakePG) : PG::Session
   PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&statement_cache_size=0")))
 end
 
+# The fake backend: serves one streamed statement (two rows), plain queries, and records when
+# the cancel handler finished and when the first message of the *next* request arrived.
+private def serve_with_slow_cancel(arrived : Channel(Nil), cancel_done : Channel(Time::Instant), next_request : Channel(Time::Instant), hang_up_after = 400.milliseconds, record_query = 1) : FakePG
+  FakePG.start do |client|
+    startup = client.read_startup
+    if startup["protocol"] == "cancel"
+      arrived.send(nil)
+      sleep hang_up_after
+      cancel_done.send(Time.instant)
+      next
+    end
+    client.ok_handshake
+    executes = 0
+    queries = 0
+    while message = client.read_message
+      case message[0]
+      when 'P'
+        client.expect('D'); client.expect('S')
+        client.send('1'); client.parameter_description([] of UInt32); client.row_description(int4_columns); client.ready
+      when 'B' then executes = 0
+      when 'E'
+        client.expect('H')
+        if (executes += 1) == 1
+          client.send('2'); client.data_row(number_row(1)); client.send('s')
+        else
+          client.data_row(number_row(2)); client.command_complete("SELECT 2")
+        end
+      when 'C' then client.expect('S'); client.send('3'); client.ready
+      when 'Q'
+        next_request.send(Time.instant) if (queries += 1) == record_query
+        client.send('I'); client.ready
+      else break
+      end
+    end
+  end
+end
+
 describe "CQL::Postgres streaming" do
   describe "protocol (fake server)" do
     it "fetches through a portal in row-limited Execute+Flush rounds and ends with one Sync" do
@@ -395,27 +432,62 @@ describe "CQL::Postgres streaming" do
       session.stream("SELECT n", &.to_a).should eq [[1]]
     end
 
-    it "waits for a cancel still on its way when the stream ends, so it cannot reach the next statement" do
-      server = FakePG.start do |client|
-        startup = client.read_startup
-        if startup["protocol"] == "cancel"
-          sleep 400.milliseconds # slow to signal the backend and hang up
-          next
+    describe "a cancel still on its way when the request ends" do
+      {"normal end" => 0, "early break" => 1, "block error" => 2}.each do |exit_kind, mode|
+        it "is waited for when the stream ends by #{exit_kind}, before the next request goes out" do
+          arrived = Channel(Nil).new
+          cancel_done = Channel(Time::Instant).new(1)
+          next_request = Channel(Time::Instant).new(1)
+          session = connect(serve_with_slow_cancel(arrived, cancel_done, next_request))
+          spawn { session.cancel }
+          arrived.receive # the cancel is under way and will take 400 ms
+          case mode
+          when 0 then session.stream("SELECT n", fetch_size: 1, &.to_a)
+          when 1 then session.stream("SELECT n", fetch_size: 1, &.first)
+          else        expect_raises(Exception, "boom") { session.stream("SELECT n", fetch_size: 1) { |_| raise "boom" } }
+          end
+          session.ping.should be_true
+          cancel_done.receive.should be <= next_request.receive
+          session.stream("SELECT n", fetch_size: 1, &.to_a).should eq [[1], [2]] # the late cancel did not leak into this one
         end
-        client.ok_handshake
-        client.serve_prepare([] of UInt32, int4_columns)
-        client.expect('B'); client.expect('E'); client.expect('H')
-        client.send('2'); client.data_row(number_row(1)); client.command_complete("SELECT 1")
-        client.expect('C'); client.expect('S'); client.send('3'); client.ready
       end
-      session = connect(server)
-      started = Time.instant
-      session.stream("SELECT n") do |rows|
+
+      it "is waited for when a plain request ends, before the next request goes out" do
+        arrived = Channel(Nil).new
+        cancel_done = Channel(Time::Instant).new(1)
+        next_request = Channel(Time::Instant).new(1)
+        session = connect(serve_with_slow_cancel(arrived, cancel_done, next_request, record_query: 2)) # the 1st query is the one the cancel overlaps
         spawn { session.cancel }
-        Fiber.yield
-        rows.to_a
+        arrived.receive
+        session.simple_query("SELECT 1")
+        session.ping.should be_true
+        cancel_done.receive.should be <= next_request.receive
       end
-      (Time.instant - started).should be >= 300.milliseconds
+
+      it "reports a session unhealthy to a ping while a cancel is still on its way" do
+        arrived = Channel(Nil).new
+        session = connect(serve_with_slow_cancel(arrived, Channel(Time::Instant).new(1), Channel(Time::Instant).new(1)))
+        spawn { session.cancel }
+        arrived.receive
+        started = Time.instant
+        session.ping.should be_false
+        (Time.instant - started).should be < 200.milliseconds
+      end
+
+      it "drops the session when the cancel is still not delivered after the wait" do
+        arrived = Channel(Nil).new
+        cancel_done = Channel(Time::Instant).new(1)
+        next_request = Channel(Time::Instant).new(1)
+        session = connect(serve_with_slow_cancel(arrived, cancel_done, next_request, hang_up_after: 3.seconds))
+        session.cancel_grace = 1.second
+        spawn { session.cancel } # waits for the hang-up for up to 1 s
+        arrived.receive
+        session.cancel_grace = 50.milliseconds # the request now gives it only 100 ms
+        started = Time.instant
+        session.stream("SELECT n", fetch_size: 1, &.first)
+        (Time.instant - started).should be < 1.second
+        session.closed?.should be_true
+      end
     end
 
     it "does not wait on a peer that accepts the cancel connection and never hangs up" do
@@ -433,6 +505,24 @@ describe "CQL::Postgres streaming" do
       started = Time.instant
       session.cancel
       (Time.instant - started).should be < 2.seconds
+    end
+
+    it "ignores a cancel that lands on the cleanup after the block, which already finished" do
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        client.serve_prepare([] of UInt32, int4_columns)
+        client.expect('B'); client.expect('E'); client.expect('H')
+        client.send('2'); client.data_row(number_row(1)); client.send('s')
+        client.expect('C'); client.expect('S')
+        client.error("57014", "canceling statement due to user request") # the cancel hit the Close/Sync
+        client.ready
+        client.idle
+      end
+      session = connect(server)
+      session.stream("SELECT n", fetch_size: 1, &.first).should eq [1]
+      session.closed?.should be_false
+      session.ping.should be_true
     end
 
     it "rejects a fetch size of zero" do
