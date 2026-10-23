@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# TLS probes against real servers: starts a TLS-enabled PostgreSQL (own throwaway cluster and
+# self-signed certificate, valid for the name `localhost` only) and runs script/tls_probes.cr, which checks
+# what the driver does with TLS that is refused, unverifiable, or has the wrong host name, and that crystal-db's
+# pool does not retry those. The TLS server stays up afterwards on PG_TLS_PORT (default 5640), which is what
+# spec/postgres/blackhole_spec.cr uses as CQL_TLS_PG_PORT. For throwaway test machines and CI only (the superuser `cql` is trusted).
+#
+#   PG_TLS_BIN=/usr/lib/postgresql/16/bin NOTLS_PG_PORT=5516 [CRDB_PORT=26257 CRDB_CA=/path/ca.crt] script/tls-probes
+set -euo pipefail
+
+BIN="${PG_TLS_BIN:?set PG_TLS_BIN to a PostgreSQL bin directory}"
+DIR="${PG_TLS_DIR:-/tmp/cql-pg-tls}"
+PORT="${PG_TLS_PORT:-5640}"
+if [ -L "$DIR" ]; then echo "tls-probes: $DIR is a symlink" >&2; exit 1; fi
+
+as_server_user() {
+  if [ "$(id -u)" = 0 ]; then su postgres -s /bin/bash -c "$*"; else bash -c "$*"; fi
+}
+
+mkdir -p "$DIR"
+if [ "$(id -u)" = 0 ]; then chown postgres "$DIR"; fi
+if ! openssl x509 -checkend 0 -noout -in "$DIR/server.crt" >/dev/null 2>&1; then
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost" \
+    -keyout "$DIR/server.key" -out "$DIR/server.crt" >/dev/null 2>&1
+  if [ "$(id -u)" = 0 ]; then chown postgres "$DIR/server.key" "$DIR/server.crt"; fi
+  chmod 600 "$DIR/server.key"
+fi
+if [ ! -f "$DIR/data/PG_VERSION" ]; then
+  rm -rf "$DIR/data"
+  as_server_user "'$BIN/initdb' -D '$DIR/data' -U cql --auth=trust >/dev/null"
+  echo "hostssl all cql 127.0.0.1/32 trust" > "$DIR/data/pg_hba.conf"
+  printf "port = %s\nlisten_addresses = '127.0.0.1'\nunix_socket_directories = '%s'\nfsync = off\nssl = on\nssl_cert_file = '%s'\nssl_key_file = '%s'\n" \
+    "$PORT" "$DIR" "$DIR/server.crt" "$DIR/server.key" >> "$DIR/data/postgresql.conf"
+fi
+if ! as_server_user "'$BIN/pg_ctl' -D '$DIR/data' status >/dev/null"; then
+  as_server_user "'$BIN/pg_ctl' -D '$DIR/data' -l '$DIR/log' -w start >/dev/null"
+fi
+
+TLS_PG_PORT="$PORT" TLS_CA="$DIR/server.crt" crystal run script/tls_probes.cr

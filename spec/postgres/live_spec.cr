@@ -104,7 +104,7 @@ describe "CQL::Postgres against a live server" do
   it "negotiates the newest protocol the server supports, and cancels with that version's key" do
     require_live!
     session = live_session
-    server_major = session.server_parameters["server_version"].split('.').first.to_i
+    server_major = session.server_parameters["server_version"][/\A\d+/].to_i # "19rc1" for a release candidate
     expected = server_major >= 18 ? PG::ProtocolVersion::V3_2 : PG::ProtocolVersion::V3_0
     session.protocol_version.should eq expected
     session.secret_key.size.should be >= 4

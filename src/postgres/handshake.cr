@@ -71,7 +71,11 @@ module CQL::Postgres
       Wire::Backend.read(@io, MAX_MESSAGE_SIZE).tap { @heard = true }
     rescue ex : ProtocolError
       raise @heard ? ex : UnrecognizedStartupReply.new(ex.message)
-    rescue ex : IO::EOFError
+    rescue ex : IO::TimeoutError
+      raise ex # a stall is not a rejection
+    rescue ex : IO::Error
+      # The peer hung up (EOF) or reset the connection (Odyssey does, on a 3.2 startup)
+      # before saying anything.
       raise @heard ? ex : UnrecognizedStartupReply.new("the server closed the connection without answering the startup message", cause: ex)
     end
 

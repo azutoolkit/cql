@@ -26,7 +26,7 @@ end
 
 describe "PgBouncer" do
   describe "transaction pooling without prepared-statement support" do
-    it "does not understand protocol 3.2, so the driver reconnects with 3.0" do
+    it "ends up on protocol 3.0 (1.22 rejects the 3.2 startup, newer versions negotiate down)" do
       session = pooler_session("CQL_PGB_TX", "&statement_cache_size=0")
       begin
         session.protocol_version.should eq PG::ProtocolVersion::V3_0
