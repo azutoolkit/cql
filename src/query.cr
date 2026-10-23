@@ -1202,7 +1202,7 @@ module CQL
         end
         # Implicit SELECT * using String aliases
         @query_tables.each do |table_alias_str, info|
-          pk = info[:table].primary
+          pk = info[:table].primary_key
           if pk && !selected_columns.any? { |col| col.alias_name == table_alias_str && col.column.name == pk.name }
             # Pass String alias
             selected_columns << Expression::Column.new(pk, alias_name: table_alias_str)
@@ -1339,7 +1339,7 @@ module CQL
         return col if col.name.to_s == column_name_str
       end
       # Check primary key using string comparison
-      pk = table.primary
+      pk = table.primary_key
       return pk if pk && pk.name.to_s == column_name_str
       nil # Not found
     end

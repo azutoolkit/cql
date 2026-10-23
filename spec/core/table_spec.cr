@@ -44,6 +44,57 @@ describe CQL::Table do
       primary.as(CQL::PrimaryKey(Int64)).unique?.should be_true
     end
 
+    it "reads the primary key without changing it" do
+      table = TableDB.table(:primary_readers) do
+        primary :uid, Int64
+        text :name
+      end
+
+      table.primary.should be_a(CQL::PrimaryKey(Int64))
+      table.primary.name.should eq :uid
+      table.columns.keys.should eq([:uid, :name])
+      table.primary.type.should eq("BIGINT")
+    end
+
+    it "declares a default id key for a bare primary" do
+      table = TableDB.table(:bare_primary) { primary }
+
+      table.primary.should be_a(CQL::PrimaryKey(Int32))
+      table.columns.keys.should eq([:id])
+    end
+
+    it "keeps an Int64 key through a select" do
+      TableDB.table(:select_keeps_key) do
+        primary :id, Int64
+        text :name
+      end
+      TableDB.query.from(:select_keeps_key).select(:name).to_sql
+
+      TableDB.select_keeps_key.primary.should be_a(CQL::PrimaryKey(Int64))
+      TableDB.select_keeps_key.primary.type.should eq("BIGINT")
+    end
+
+    it "does not declare a key on a table without one when it is queried" do
+      TableDB.table(:keyless_links) do
+        bigint :a_id
+        bigint :b_id
+      end
+      sql, _params = TableDB.query.from(:keyless_links).to_sql
+
+      sql.should_not contain("keyless_links.id")
+      TableDB.keyless_links.columns.keys.should eq([:a_id, :b_id])
+    end
+
+    it "does not turn a plain id column into a key when it is queried" do
+      TableDB.table(:plain_id) do
+        column :id, Int64
+        text :name
+      end
+      TableDB.query.from(:plain_id).to_sql
+
+      TableDB.plain_id.columns[:id].should be_a(CQL::Column(Int64))
+    end
+
     it "adds regular column" do
       table = TableDB.table(:customers) do
         column :name, String

@@ -101,7 +101,7 @@ module Expression
         return col if col.name.to_s == column_name_str
       end
       # Check primary key using string comparison
-      pk = table.primary
+      pk = table.primary_key
       return pk if pk && pk.name.to_s == column_name_str
       nil # Not found
     end

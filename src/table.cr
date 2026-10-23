@@ -42,7 +42,7 @@ module CQL
 
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
-    getter primary : BaseColumn = PrimaryKey(Int32).new(:id)
+    @primary : BaseColumn = PrimaryKey(Int32).new(:id)
     getter as_name : String?
     getter foreign_keys : Array(ForeignKey) = [] of ForeignKey
     getter unique_constraints : Array(UniqueConstraint) = [] of UniqueConstraint
@@ -179,11 +179,11 @@ module CQL
 
       # Return the primary key column name(s)
       # Tables can have composite primary keys, but typically have a single primary key
-      [referenced_table.primary.name]
+      [referenced_table.primary_key.try(&.name) || :id]
     end
 
     # Adds a new primary key column to the table.
-    # - **@param** name [Symbol] the name of the column to be added (default: :id)
+    # - **@param** name [Symbol] the name of the column to be added
     # - **@param** type [T.class] the data type of the column (default: Int32)
     # - **@param** auto_increment [Bool] whether the column should auto increment (default: true)
     # - **@param** as_name [String, nil] an optional alias for the column
@@ -197,7 +197,7 @@ module CQL
     # primary :id, Int32, auto_increment: false
     # ```
     def primary(
-      name : Symbol = :id,
+      name : Symbol,
       type : T.class = Int32,
       auto_increment : Bool = true,
     ) forall T
@@ -206,6 +206,17 @@ module CQL
       @primary = primary
       @columns[name] = @primary
       @primary
+    end
+
+    # The declared primary key, or nil. Unlike `primary`, reading it never changes the table.
+    def primary_key : BaseColumn?
+      @columns.each_value.find(&.is_a?(PrimaryKey))
+    end
+
+    # A bare `primary` in a table block declares the default `id` (Int32) key; once a key
+    # is declared it returns that key. Query building uses `primary_key`, which never declares one.
+    def primary : BaseColumn
+      primary_key || primary(:id, Int32)
     end
 
     # Adds a new column to the table.
