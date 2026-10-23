@@ -31,11 +31,53 @@ module CQL::Postgres
     end
 
     private def prepared(sql : String, cache : Bool) : PreparedStatement
-      return unwrap(describe_all([sql], [""]).first) unless cache && @cache.enabled?
+      return describe_unnamed(sql) unless cache && @cache.enabled?
       @cache.fetch(sql) || begin
         evicted = @cache.evict(room: 1)
         unwrap(describe_all([sql], [@cache.next_name], evicted).first).tap { |statement| @cache.store(sql, statement) }
       end
+    end
+
+    # Parse + Describe of the unnamed statement WITHOUT a Sync: the Bind that
+    # follows belongs to the same request, so a transaction-mode pooler keeps
+    # both on one server connection (the unnamed statement lives only there).
+    private def describe_unnamed(sql : String) : PreparedStatement
+      Wire::Frontend.parse(@out, "", sql)
+      Wire::Frontend.describe_statement(@out, "")
+      Wire::Frontend.flush(@out)
+      flush
+      param_count = 0
+      columns = [] of Column
+      loop do
+        case message = receive
+        when Wire::Backend::ParameterDescription then param_count = message.type_oids.size
+        when Wire::Backend::RowDescription       then columns = message.fields.map { |field| Column.new(field.name, field.type_oid, Types.codec_for(field.type_oid)) }; break
+        when Wire::Backend::NoData               then break
+        when Wire::Backend::ErrorResponse        then abandon_request(ServerError.from(message.fields))
+        end
+      end
+      PreparedStatement.new("", param_count, columns)
+    end
+
+    # The server is waiting for the rest of the request: end it with a Sync and
+    # raise what went wrong.
+    private def abandon_request(failure : Exception) : NoReturn
+      queue_sync
+      flush
+      until_ready(extended: true) { }
+      raise failure
+    rescue IO::Error | OpenSSL::Error | ConnectionLost
+      hard_close
+      raise failure # the server hung up after its error (a FATAL): that error is the story
+    end
+
+    # Runs *work* between describing and binding. The unnamed statement's request
+    # is still open, so if the work fails before the Bind is sent it is ended first.
+    private def binding(statement : PreparedStatement, &)
+      yield
+    rescue ex
+      discard_unsent
+      statement.name.empty? ? abandon_request(ex) : raise(ex)
     end
 
     # Parse + Describe each statement, every one ending in its own Sync so a
@@ -93,8 +135,10 @@ module CQL::Postgres
     end
 
     private def execute_bound(statement : PreparedStatement, params : Array(Types::Param)) : Nil
-      check_parameters(statement, params)
-      write_execution(statement, params)
+      binding(statement) do
+        check_parameters(statement, params)
+        write_execution(statement, params)
+      end
       flush
     end
 

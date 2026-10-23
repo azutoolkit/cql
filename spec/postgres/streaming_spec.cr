@@ -204,6 +204,22 @@ describe "CQL::Postgres streaming" do
       engine.pool.stats.in_use.should eq 0
     end
 
+    it "streams an uncached statement in one request: Parse+Describe+Flush, Bind+Execute+Flush, then Close+Sync" do
+      server = FakePG.start do |client|
+        client.read_startup
+        client.ok_handshake
+        client.expect('P'); client.expect('D'); client.expect('H')
+        client.send('1'); client.parameter_description([] of UInt32); client.row_description(int4_columns)
+        client.expect('B'); client.expect('E'); client.expect('H')
+        client.send('2'); client.data_row(number_row(1)); client.data_row(number_row(2)); client.send('s')
+        client.expect('E'); client.expect('H')
+        client.data_row(number_row(3)); client.command_complete("SELECT 3")
+        client.expect('C'); client.expect('S'); client.send('3'); client.ready
+      end
+      session = PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&statement_cache_size=0")))
+      session.stream("SELECT n", fetch_size: 2, &.to_a).should eq [[1], [2], [3]]
+    end
+
     it "rejects a fetch size of zero" do
       expect_raises(ArgumentError, /fetch_size/) { connect(FakePG.start { |client| client.read_startup; client.ok_handshake; client.idle }).stream("SELECT 1", fetch_size: 0, &.to_a) }
     end

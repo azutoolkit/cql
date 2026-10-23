@@ -128,7 +128,7 @@ What it does:
 - **Protocol version**: it asks for 3.2 (PostgreSQL 18; longer cancel keys) and follows the server's
   `NegotiateProtocolVersion`, or retries on 3.0 when an older server or proxy rejects the startup. Pin it with
   `min_protocol_version` / `max_protocol_version` (`3.0` or `3.2`) in the URL. Covered by byte-fixture and fake-server
-  specs, and by live specs against real PostgreSQL 11 to 18 servers, PgBouncer 1.22 and CockroachDB (see below). A server that rejects 3.2 costs every new connection one extra attempt, so set `max_protocol_version=3.0` for it. OAuth authentication (PostgreSQL 18) is not
+  specs, and by live specs against real PostgreSQL 11 to 18 servers, PgBouncer 1.22 and 1.24 and CockroachDB (see below). A server that rejects 3.2 costs every new connection one extra attempt, so set `max_protocol_version=3.0` for it. OAuth authentication (PostgreSQL 18) is not
   supported.
 - **Protocol**: startup, trust/cleartext/MD5/SCRAM-SHA-256 authentication, TLS through SSLRequest
   (`sslmode=disable|prefer|require|verify-full`), Unix sockets (`?host=/var/run/postgresql`), simple and extended
@@ -156,8 +156,8 @@ What it does:
 
 Things to know:
 
-- **CockroachDB**: verified against a real CockroachDB v24.3.5 single node (insecure mode, so no TLS or password
-  authentication): `spec/postgres/live_spec.cr` passes there, except the LISTEN/NOTIFY example, which stays pending
+- **CockroachDB**: verified against a real CockroachDB v24.3.5 single node, insecure and also secure (TLS with
+  `sslmode=verify-full` and a password): `spec/postgres/live_spec.cr` and `streaming_spec.cr` pass there, except the LISTEN/NOTIFY example, which stays pending
   because CockroachDB has no LISTEN. CockroachDB answers a protocol 3.2 startup with HTTP/2 bytes instead of an error;
   `cockroachdb://` URLs given to `DB.open` or `AsyncEngine.connect` therefore start at 3.0 (a `Schema` on
   `CQL::Adapter::CockroachDB` uses a `postgres://` URL, so it starts at 3.2 and pays one failed attempt per new
@@ -206,10 +206,12 @@ Things to know:
   collide between clients (SQLSTATE `42P05`, and `26000` when a statement is missing on the next server connection):
   use `statement_cache_size=0` there. Session mode behaves like a direct connection. Streaming works in transaction mode with `max_prepared_statements`, and a
   stream's portal pins the pooler's server connection until the block ends (another client of a one-connection pool
-  waits for it; checked with `default_pool_size = 1`). `statement_cache_size=0` sends Parse/Describe and Bind in separate
-  transactions, which a pooler with several server connections may route to different ones: only a single server
-  connection was tested. Not tested: PgBouncer 1.23 and
-  later, other poolers (Odyssey, pgcat, RDS Proxy), TLS to the pooler.
+  waits for it; checked with `default_pool_size = 1`). `statement_cache_size=0` describes the unnamed statement without a
+  Sync, so Bind stays in the same request and a transaction-mode pooler keeps both on one server connection; before that
+  change, 8 clients over 3 PgBouncer server connections failed about half the runs (`bind message supplies N
+  parameters, but prepared statement "" requires M`, or worse, another client's statement), after it 25 of 25 runs passed. Everything above was also run
+  against PgBouncer 1.24.1 built from source (10 of 10 examples). Not tested: other poolers (Odyssey, pgcat, RDS Proxy),
+  TLS to the pooler.
 - `sslrootcert` adds a CA to the system trust store (Crystal's TLS context cannot drop the system roots); `prefer` and
   `require` encrypt without verifying the server, like libpq.
 - `playground/postgres_async_demo.cr` is a runnable tour, and `benchmarks/pg_wire_bench.cr` compares the engine with
@@ -221,7 +223,7 @@ Verified on one Linux machine; CI has not run this yet. The live specs in `spec/
 transactions, pipelining, COPY, cancellation, pool, `NOTIFY`) run when `DATABASE_URL` points at a server and are pending
 otherwise; the PostgreSQL, PgBouncer and CockroachDB results above come from running them against real servers.
 TLS modes and Unix sockets were tried by hand against PostgreSQL 16 earlier and otherwise have byte-level fixture and
-fake-server specs only. CockroachDB was tested without TLS or passwords.
+fake-server specs only. CockroachDB was tested insecure and with TLS plus a password; PostgreSQL 19 was not tested (no binaries were available).
 
 ## Safety Guardrails
 

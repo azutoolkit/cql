@@ -9,10 +9,10 @@ set -euo pipefail
 DIR="${PGB_DIR:-/tmp/cql-pgbouncer}"
 BACKEND_PORT="${PGB_BACKEND_PORT:-5516}"
 # name port pool_mode max_prepared_statements default_pool_size
-INSTANCES=("tx 6501 transaction 0 1" "txps 6502 transaction 100 1" "session 6503 session 0 3")
+INSTANCES=("tx 6501 transaction 0 1" "txps 6502 transaction 100 1" "session 6503 session 0 3" "txmulti 6504 transaction 0 3")
 
 if [ -L "$DIR" ]; then echo "pgbouncer-matrix: $DIR is a symlink" >&2; exit 1; fi
-PGBOUNCER="$(command -v pgbouncer || true)"
+PGBOUNCER="${PGBOUNCER:-$(command -v pgbouncer || true)}"
 if [ -z "$PGBOUNCER" ]; then echo "pgbouncer-matrix: pgbouncer is not installed" >&2; exit 1; fi
 
 as_server_user() {
@@ -59,6 +59,6 @@ stop() {
 case "${1:-}" in
   start) start ;;
   stop) stop ;;
-  run) CQL_PGB_TX=6501 CQL_PGB_TX_PS=6502 CQL_PGB_SESSION=6503 crystal spec spec/postgres/pgbouncer_spec.cr ;;
+  run) CQL_PGB_TX=6501 CQL_PGB_TX_PS=6502 CQL_PGB_SESSION=6503 CQL_PGB_TX_MULTI=6504 crystal spec spec/postgres/pgbouncer_spec.cr ;;
   *) echo "usage: $0 start|run|stop" >&2; exit 2 ;;
 esac

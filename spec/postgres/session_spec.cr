@@ -195,12 +195,13 @@ describe CQL::Postgres::Session do
     received.first(7).should eq ['P', 'D', 'S', 'B', 'E', 'S', 'C']
   end
 
-  it "uses the unnamed statement when caching is off" do
+  it "uses the unnamed statement when caching is off, describing it without a Sync so Bind stays in the same request" do
     statement = nil
     server = FakePG.start do |client|
       client.read_startup
       client.ok_handshake
-      client.serve_prepare([] of UInt32, int4_column)
+      client.expect('P'); client.expect('D'); client.expect('H') # no Sync: a pooler must not move the request
+      client.send('1'); client.parameter_description([] of UInt32); client.row_description(int4_column)
       statement = parse_bind(client.expect('B'))[:statement]
       client.expect('E'); client.expect('S')
       client.send('2'); client.command_complete("SELECT 0"); client.ready
@@ -950,6 +951,60 @@ describe CQL::Postgres::Session do
   it "explains prepared-statement collisions behind a transaction-mode pooler" do
     PG::ServerError.from({'S' => "ERROR", 'C' => "42P05", 'M' => "prepared statement \"cql_1\" already exists"}).message.to_s.should contain "statement_cache_size=0"
     PG::ServerError.from({'S' => "ERROR", 'C' => "26000", 'M' => "prepared statement \"cql_1\" does not exist"}).message.to_s.should contain "statement_cache_size=0"
+  end
+
+  it "ends the open request with a Sync when an unnamed statement cannot be bound, and stays usable" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('P'); client.expect('D'); client.expect('H')
+      client.send('1'); client.parameter_description([23_u32]); client.row_description(int4_column)
+      client.expect('S'); client.ready # the wrong parameter count is caught before any Bind
+      client.idle
+    end
+    session = PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&statement_cache_size=0")))
+    expect_raises(ArgumentError, /takes 1 parameters/) { session.query("SELECT n FROM t WHERE n = $1") }
+    session.closed?.should be_false
+    session.ping.should be_true
+  end
+
+  it "describes a statement without rows (NoData) and runs it in the same request" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('P'); client.expect('D'); client.expect('H')
+      client.send('1'); client.parameter_description([] of UInt32); client.send('n')
+      client.expect('B'); client.expect('E'); client.expect('S')
+      client.send('2'); client.command_complete("INSERT 0 1"); client.ready
+    end
+    session = PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&statement_cache_size=0")))
+    session.query("INSERT INTO t DEFAULT VALUES").rows_affected.should eq 1
+  end
+
+  it "raises the server's FATAL, not a lost connection, when it hangs up while describing the unnamed statement" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('P'); client.expect('D'); client.expect('H')
+      client.error("57P01", "terminating connection due to administrator command", {'S' => "FATAL", 'V' => "FATAL"})
+    end
+    session = PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&statement_cache_size=0")))
+    expect_raises(PG::ServerError, /57P01/) { session.query("SELECT 1") }
+    session.closed?.should be_true
+  end
+
+  it "ends the open request with a Sync when describing the unnamed statement fails" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('P'); client.expect('D'); client.expect('H')
+      client.error("42601", "syntax error")
+      client.expect('S'); client.ready
+      client.idle
+    end
+    session = PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&statement_cache_size=0")))
+    expect_raises(PG::ServerError) { session.query("SELEC") }
+    session.ping.should be_true
   end
 
   it "starts cockroachdb:// URLs at protocol 3.0" do

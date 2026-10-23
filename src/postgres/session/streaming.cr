@@ -31,9 +31,11 @@ module CQL::Postgres
 
     private def open_stream(sql : String, params : Array(Types::Param), cache : Bool, fetch_size : Int32, retried : Bool = false) : RowStream
       statement = prepared(sql, cache)
-      check_parameters(statement, params)
       rows = RowStream.new(self, statement.columns, fetch_size)
-      Wire::Frontend.bind(@out, statement.name, params, statement.result_formats)
+      binding(statement) do
+        check_parameters(statement, params)
+        Wire::Frontend.bind(@out, statement.name, params, statement.result_formats)
+      end
       fetch_rows(rows, fetch_size)
       rows
     rescue ex : ServerError
@@ -78,10 +80,7 @@ module CQL::Postgres
 
     private def abandon_stream(rows : RowStream, failure : Exception) : NoReturn
       rows.abort
-      queue_sync
-      flush
-      until_ready(extended: true) { }
-      raise failure
+      abandon_request(failure)
     end
 
     private def refuse_streamed_copy(rows : RowStream, message : Wire::Backend::CopyResponse) : NoReturn

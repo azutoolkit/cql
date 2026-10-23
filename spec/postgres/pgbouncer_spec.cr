@@ -6,6 +6,7 @@ require "../../src/postgres"
 #   CQL_PGB_TX          transaction pooling, max_prepared_statements = 0, default_pool_size = 1
 #   CQL_PGB_TX_PS       transaction pooling, max_prepared_statements = 100, default_pool_size = 1
 #   CQL_PGB_SESSION     session pooling, default_pool_size = 3
+#   CQL_PGB_TX_MULTI    transaction pooling, max_prepared_statements = 0, default_pool_size = 3
 # (each a port on 127.0.0.1; the role cql_scram authenticates with SCRAM through PgBouncer, password: secret)
 private alias PG = CQL::Postgres
 
@@ -72,6 +73,29 @@ describe "PgBouncer" do
       ensure
         session.close
       end
+    end
+  end
+
+  describe "transaction pooling over several server connections without prepared-statement support" do
+    it "runs unnamed statements, streams included, from many clients at once" do
+      pending! "set CQL_PGB_TX_MULTI (see script/pgbouncer-matrix)" unless ENV["CQL_PGB_TX_MULTI"]?
+      done = Channel(Exception?).new
+      8.times do
+        spawn do
+          session = pooler_session("CQL_PGB_TX_MULTI", "&statement_cache_size=0")
+          begin
+            10.times { plus_one(session).should eq 2 }
+            session.stream("SELECT g::int4 FROM generate_series(1, 500) g", fetch_size: 50, &.to_a).size.should eq 500
+            done.send(nil)
+          ensure
+            session.close
+          end
+        rescue ex
+          done.send(ex)
+        end
+      end
+      failures = Array.new(8) { done.receive }.compact
+      failures.should be_empty
     end
   end
 
