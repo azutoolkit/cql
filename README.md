@@ -208,19 +208,25 @@ Things to know:
   multi-dimensional arrays of those and of text/varchar/bpchar, with NULL elements (ragged arrays stay text).
   Strings, `json`, `bytea` and anything else are unchanged. Values are still bound parameters; the choice is made from
   the server's own `ParameterDescription`. `Session#binary_params_sent` counts what went out in binary. Each type is
-  checked against PostgreSQL 16, 18 and 19rc1 and CockroachDB 24.3 by sending the same value as text and as binary
+  checked against PostgreSQL 16, 18 and 19rc1 (a release candidate) and CockroachDB 24.3 by sending the same value as text and as binary
   (`spec/postgres/binary_live_spec.cr`) and requiring the same answer. CockroachDB reads float4 (0.1 returns as
   0.10000000149011612) and numeric (`100000000` returns as `1E+8`, `-0.00` as `0`) differently, so those stay text
   there (detected from its `crdb_version` parameter), and it has no multi-dimensional arrays at all. **It is off by
-  default because it is not faster everywhere.** `benchmarks/pg_binary_params_bench.cr` on PostgreSQL 16 over loopback
+  default.** `benchmarks/pg_binary_params_bench.cr` on PostgreSQL 16 over loopback
   (medians of 7 rounds of 5000 statements, encoding included in the timing, statements per second, text then binary):
-  six scalars 15945 / 17343, one int8 21139 / 20059, one timestamptz 20148 / 20320, a 7-column insert 13346 / 13861
-  (within a few percent either way), one numeric 21187 / 20131 and numeric[200] 5066 / 3331 (slower: the numeric
-  encoder is slower than formatting the text), int8[1000] 2112 / 3236, text[200] 7172 / 8593, and timestamptz[500]
-  941 / 5010 (5.3 times faster). One machine, one run: turn it on for arrays and timestamps, leave it off for
-  numerics. A deferred parameter keeps a reference to the array or JSON value it was made from, so mutate it
+  six scalars 15751 / 18358, one int8 19958 / 19509, one timestamptz 18431 / 18717, one numeric 19176 / 19385, a
+  7-column insert 12902 / 13654, int8[1000] 1944 / 3009, text[200] 7224 / 8339, numeric[200] 5113 / 5877 and
+  timestamptz[500] 904 / 4929 (5.4 times faster). A single value is within the few percent that separate two runs
+  (an earlier numeric encoder was slower than text until it was rewritten as a byte pass); several parameters and
+  arrays gain 6% to 440%. One machine and one run.
+  The default stays text: it is the established behaviour and binary is not shown to help a lone value. A deferred parameter keeps a
+  reference to the array or JSON value it was made from, so mutate it
   only after the statement has returned. Because the choice waits for the server's types, an array holding a value
   that cannot be bound raises when the statement is bound (after the describe round trip), not when the parameter is created.
+  Also run live by pointing `DATABASE_URL` at them for `spec/postgres/binary_live_spec.cr`: through PgBouncer 1.26.1 in session mode and in transaction mode
+  with `max_prepared_statements` (0 failures; in transaction mode without it, use `statement_cache_size=0`, and the
+  pipeline example then raises because pipelining needs the cache), and on a secure CockroachDB 24.3.5 node with
+  `sslmode=require` and `verify-full` plus a password (0 failures).
 - **Binary COPY**: `session.copy_in_binary(sql, types) { |rows| rows.row(1_i64, "a", nil) }` and
   `session.copy_out_binary(sql, types) { |row| ... }` (also on `Connection`) take the `COPY ... (FORMAT binary)`
   statement and the column type OIDs (`CQL::Postgres::Types::OID`). The signature, header and trailer are handled,

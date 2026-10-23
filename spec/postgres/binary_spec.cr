@@ -100,6 +100,21 @@ describe CQL::Postgres::Types::Binary do
       Binary.numeric_text(Binary.numeric("007").not_nil!).should eq "7"
     end
 
+    it "reads back 5000 random decimals exactly, whatever their length and zeros" do
+      random = Random.new(20261023)
+      5000.times do
+        whole = Array.new(random.rand(0..30)) { random.rand(10) == 0 ? '0' : ('0' + random.rand(10)) }.join
+        fraction = Array.new(random.rand(0..30)) { random.rand(3) == 0 ? '0' : ('0' + random.rand(10)) }.join
+        next if whole.empty? && fraction.empty?
+        sign = random.rand(4) == 0 ? "-" : ""
+        text = "#{sign}#{whole}#{fraction.empty? ? "" : "." + fraction}"
+        kept = whole.lstrip('0')
+        nonzero = !(kept + fraction).delete('0').empty?
+        expected = "#{nonzero ? sign : ""}#{kept.empty? ? "0" : kept}#{fraction.empty? ? "" : "." + fraction}"
+        Binary.numeric_text(Binary.numeric(text).not_nil!).should eq expected
+      end
+    end
+
     it "reads NaN and infinities the server sends" do
       Binary.numeric_text(Bytes[0, 0, 0, 0, 0xc0, 0, 0, 0]).should eq "NaN"
       Binary.numeric_text(Bytes[0, 0, 0, 0, 0xd0, 0, 0, 0]).should eq "Infinity"

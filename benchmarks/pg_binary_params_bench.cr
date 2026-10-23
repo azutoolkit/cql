@@ -2,6 +2,7 @@
 #
 #   DATABASE_URL=postgres://user@localhost/db crystal run --release benchmarks/pg_binary_params_bench.cr
 #
+# BENCH_ONLY runs only the workloads whose name contains it.
 # Settings (environment): BENCH_OPS (statements per workload and round, default 5000), BENCH_ROUNDS (default 7;
 # text and binary alternate inside every round and the median is reported). Each workload sends the same values
 # both ways and checks that the server returned the same rows first. It creates the table
@@ -64,6 +65,7 @@ puts "server: #{setup.query("SELECT version()").rows.first.first.to_s[0, 60]}"
 puts "#{OPS} statements per workload and round, #{ROUNDS} rounds, medians (statements per second)"
 puts "%-58s %10s %10s %8s" % {"workload", "text", "binary", "binary/text"}
 workloads.each do |workload|
+  next if ENV["BENCH_ONLY"]?.try { |only| !workload.name.includes?(only) }
   expected = text.query(workload.sql, workload.params.call(text)).rows.map(&.map(&.to_s))
   actual = binary.query(workload.sql, workload.params.call(binary)).rows.map(&.map(&.to_s))
   abort "#{workload.name}: binary and text results differ: #{expected} vs #{actual}" unless expected == actual
