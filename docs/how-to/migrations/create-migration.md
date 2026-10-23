@@ -35,9 +35,11 @@ class CreateUsers < CQL::Migration(1)
 end
 ```
 
+A migration registers itself with `CQL::Migrator` when its class is defined, so `require` every migration file before running the migrator. `up` and `down` receive no arguments; the schema is available as `schema`. `schema.table :users do ... end` declares the table and `schema.users.create!` / `schema.users.drop!` create and drop it.
+
 ## Migration Number
 
-The number in `CQL::Migration(N)` must be unique. Use sequential numbers or timestamps:
+The number in `CQL::Migration(N)` is the version (stored as `Int64`) and must be unique; migrations run in ascending version order. Use sequential numbers or timestamps:
 
 ```crystal
 class CreateUsers < CQL::Migration(1)              # Sequential
@@ -110,6 +112,8 @@ end
 
 ## Add Foreign Key
 
+Not supported on SQLite (`CQL::SQLiteUnsupportedFeatureError`): declare `foreign_key` inside the `schema.table` block when creating the table instead.
+
 ```crystal
 class AddPostsForeignKey < CQL::Migration(6)
   def up
@@ -145,6 +149,8 @@ end
 ```
 
 ## Change Column Type
+
+PostgreSQL, CockroachDB and MySQL only: SQLite raises `CQL::SQLiteUnsupportedFeatureError` for `change_column` (as it does for `foreign_key` and `drop_foreign_key` in `schema.alter`). Recreate the table instead.
 
 ```crystal
 class ChangeViewsCount < CQL::Migration(8)
@@ -185,9 +191,8 @@ end
 Create a simple test:
 
 ```crystal
-# Test migration
-MyDB.init
-migrator = MyDB.migrator
+# Test migration (auto_sync: false keeps it from rewriting your schema file)
+migrator = MyDB.migrator(CQL::MigratorConfig.new(auto_sync: false))
 migrator.up
 
 # Check table exists

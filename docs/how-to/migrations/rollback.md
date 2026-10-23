@@ -6,41 +6,48 @@ This guide shows you how to rollback database migrations.
 
 ```crystal
 migrator = MyDB.migrator(config)
-migrator.down
+migrator.rollback
 puts "Rolled back one migration"
 ```
+
+`rollback(steps = 1)` rolls back the newest applied migration. Note that `down(steps)` defaults to **all** migrations, so call `migrator.down` without an argument only when you mean to undo everything. The whole rollback runs in one transaction and prints a table of the migrations it reverted.
 
 ## Rollback Multiple Migrations
 
 ```crystal
 # Rollback last 3 migrations
-3.times { migrator.down }
+migrator.rollback(3)
 ```
 
 ## Rollback to Specific Version
 
+Count the applied migrations newer than the target and roll back that many:
+
 ```crystal
-# Rollback to version 5
-migrator.down_to(5)
+target = 5_i64
+steps = migrator.applied_migrations.count { |record| record.version > target }
+migrator.rollback(steps) if steps > 0
 ```
+
+`migrator.down_to(version)` exists, but it rolls back `position + 1` migrations, where `position` is the index of `version` in the ordered list of all registered migrations. That only equals "roll back to `version`" for some layouts, so prefer the explicit count above.
 
 ## Rollback All Migrations
 
 ```crystal
 # Rollback everything (use with caution!)
-migrator.down_to(0)
+migrator.down
 ```
 
 ## Check Before Rollback
 
 ```crystal
-puts "Current version: #{migrator.current_version}"
+puts "Current version: #{migrator.last.try(&.version) || 0}"
 puts "Applied migrations: #{migrator.applied_migrations.size}"
 
 # Only rollback if there are migrations to rollback
 if migrator.applied_migrations.any?
-  migrator.down
-  puts "Rolled back to version: #{migrator.current_version}"
+  migrator.rollback
+  puts "Rolled back to version: #{migrator.last.try(&.version) || 0}"
 else
   puts "No migrations to rollback"
 end
@@ -53,8 +60,6 @@ end
 require "./database"
 require "../migrations/*"
 
-MyDB.init
-
 config = CQL::MigratorConfig.new(
   schema_file_path: "src/schemas/app_schema.cr",
   schema_name: :AppSchema,
@@ -63,7 +68,7 @@ config = CQL::MigratorConfig.new(
 
 migrator = MyDB.migrator(config)
 
-current = migrator.current_version
+current = migrator.last.try(&.version) || 0_i64
 puts "Current version: #{current}"
 
 if current == 0
@@ -73,8 +78,8 @@ end
 
 print "Rollback migration #{current}? (y/n): "
 if gets.try(&.strip) == "y"
-  migrator.down
-  puts "Rolled back to version: #{migrator.current_version}"
+  migrator.rollback
+  puts "Rolled back to version: #{migrator.last.try(&.version) || 0}"
 else
   puts "Cancelled"
 end
@@ -97,11 +102,11 @@ class DropLegacyTable < CQL::Migration(10)
 end
 ```
 
-When you try to rollback:
+When you try to rollback, the exception aborts the rollback transaction and nothing is reverted:
 
 ```crystal
 begin
-  migrator.down
+  migrator.rollback
 rescue ex
   puts "Rollback failed: #{ex.message}"
 end
@@ -116,7 +121,7 @@ def refresh_database
   migrator = MyDB.migrator(config)
 
   puts "Rolling back all migrations..."
-  migrator.down_to(0)
+  migrator.down
 
   puts "Re-running all migrations..."
   migrator.up
@@ -134,7 +139,7 @@ migrator = MyDB.migrator(config)
 before = migrator.applied_migrations.size
 
 # Rollback
-migrator.down
+migrator.rollback
 
 # Verify
 after = migrator.applied_migrations.size

@@ -159,7 +159,12 @@ generator.register_formatter("csv", CsvReportFormatter.new)
 generator.available_formats # => ["text", "json", "html", "console", "logger", "csv"]
 ```
 
-Pass the generator to a monitor with `Monitor.new(report_generator: generator)`, then call `monitor.generate_report("csv")`.
+Hand the generator to a monitor and use it:
+
+```crystal
+CQL::Performance.monitor = CQL::Performance::Monitor.new(report_generator: generator)
+puts CQL::Performance.report("csv")
+```
 
 ## Track Statements CQL Does Not Run
 

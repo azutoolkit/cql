@@ -11,7 +11,7 @@ This is the first part of a five-part tutorial series where you'll build a compl
 
 ## Prerequisites
 
-- Crystal 1.0+ installed
+- Crystal 1.12.2+ installed
 - Basic understanding of Crystal syntax
 - Familiarity with database concepts
 - Completed [Your First CQL App](../getting-started/your-first-cql-app.md) tutorial (recommended)
@@ -55,7 +55,6 @@ dependencies:
     version: ~> 0.0.589
   sqlite3:
     github: crystal-lang/crystal-sqlite3
-    version: "~> 0.18.0"
 
 targets:
   blog_engine:
@@ -128,19 +127,18 @@ MIGRATOR_CONFIG = CQL::MigratorConfig.new(
 # src/blog_engine.cr
 require "./database"
 require "./models/*"
+require "../migrations/*"
 
 module BlogEngine
   VERSION = "0.1.0"
 
   def self.setup
-    # Initialize database connection
-    BlogDB.init
+    # CQL::Schema.define already opened the connection pool; check that it answers
+    BlogDB.exec("SELECT 1")
     puts "Database connected"
   end
 
   def self.migrate
-    require "../migrations/*"
-
     migrator = BlogDB.migrator(MIGRATOR_CONFIG)
     pending = migrator.pending_migrations.size
 
@@ -153,12 +151,9 @@ module BlogEngine
     end
   end
 end
-
-# Run setup when executed directly
-if PROGRAM_NAME.includes?("blog_engine")
-  BlogEngine.setup
-end
 ```
+
+`require` is resolved at compile time, so the models and migrations are required at the top of the file, not inside a method.
 
 ## Step 6: Create a Setup Script
 
@@ -187,7 +182,7 @@ Create a simple verification script:
 require "./database"
 
 begin
-  BlogDB.init
+  BlogDB.exec("SELECT 1")
   puts "Database connection: OK"
 rescue ex
   puts "Database connection: FAILED"

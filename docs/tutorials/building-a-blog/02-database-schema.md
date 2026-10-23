@@ -207,6 +207,7 @@ Setting up Blog Engine...
 =========================
 Database connected
 Running 4 pending migration(s)...
+(a table listing the four applied migrations)
 Migrations complete
 
 Setup complete!
@@ -221,8 +222,6 @@ Create a verification script to inspect the created tables:
 require "./database"
 require "../migrations/*"
 
-BlogDB.init
-
 migrator = BlogDB.migrator(MIGRATOR_CONFIG)
 
 puts "Migration Status"
@@ -232,7 +231,7 @@ puts "Pending: #{migrator.pending_migrations.size}"
 puts ""
 puts "Applied migrations:"
 migrator.applied_migrations.each do |m|
-  puts "  - Migration #{m}"
+  puts "  - #{m.version} #{m.name}"
 end
 ```
 
@@ -272,14 +271,17 @@ Comments ──────┬─── belongs to ──> Post
 
 ## Common Column Types
 
-| CQL Type | SQLite | PostgreSQL | MySQL |
+| Crystal type (helper) | SQLite | PostgreSQL | MySQL |
 |----------|--------|------------|-------|
-| `primary` | INTEGER | BIGSERIAL | BIGINT |
-| `bigint` | INTEGER | BIGINT | BIGINT |
-| `integer` | INTEGER | INTEGER | INT |
-| `text` | TEXT | TEXT | TEXT |
-| `boolean` | INTEGER | BOOLEAN | TINYINT |
-| `timestamps` | TEXT (x2) | TIMESTAMP (x2) | DATETIME (x2) |
+| `Int32` (`integer`) | INTEGER | INTEGER | INT |
+| `Int64` (`bigint`) | BIGINT | BIGINT | BIGINT |
+| `String` (`text`, `varchar`) | TEXT | VARCHAR | VARCHAR(255) |
+| `Bool` (`boolean`) | BOOLEAN | BOOLEAN | TINYINT(1) |
+| `Float64` (`double`) | DOUBLE | DOUBLE PRECISION | DOUBLE |
+| `Time` (`timestamp`) | TIMESTAMP | TIMESTAMP | DATETIME |
+| `timestamps` | `created_at` and `updated_at` as `Time` columns defaulting to the current time | | |
+
+An auto-increment `primary` key becomes `INTEGER PRIMARY KEY AUTOINCREMENT` on SQLite, `... GENERATED ALWAYS AS IDENTITY PRIMARY KEY` on PostgreSQL and `AUTO_INCREMENT` on MySQL. CockroachDB follows PostgreSQL, except that `Int32` columns are declared `INT4`.
 
 ## Summary
 

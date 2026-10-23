@@ -2,6 +2,22 @@
 
 This guide shows you how to create database indexes to improve query performance.
 
+## Index While Creating a Table
+
+Inside a `schema.table` block, index a column with `index: true` or declare an index explicitly:
+
+```crystal
+schema.table :users do
+  primary :id, Int64
+  column :email, String, unique: true, index: true
+  column :status, String
+  column :created_at, Time
+  index [:status, :created_at]
+end
+```
+
+To add or remove an index on an existing table, use `schema.alter` as below. Index names are always given explicitly there.
+
 ## Create a Simple Index
 
 ```crystal

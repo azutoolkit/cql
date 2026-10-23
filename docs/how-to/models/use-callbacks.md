@@ -7,7 +7,7 @@ This guide shows you how to use lifecycle callbacks to run code at specific poin
 ### Validation Callbacks
 
 - `before_validation` - Before validations run
-- `after_validation` - After validations complete
+- `after_validation` - Runs right after `before_validation`, before the validations themselves are evaluated
 
 ### Save Callbacks (create and update)
 
@@ -28,6 +28,12 @@ This guide shows you how to use lifecycle callbacks to run code at specific poin
 
 - `before_destroy` - Before deleting a record
 - `after_destroy` - After deleting a record
+
+Destroy callbacks run from the instance method `delete!` (and the soft-delete `delete!`/`force_delete!`).
+
+### When Callbacks Run
+
+Callbacks run through `save`, `save!` and the instance `delete!`. The shortcuts `create!`, `update!`, `touch` and the class-level `delete!`, `delete_by!`, `delete_all` and `update_all` write to the database directly and skip callbacks.
 
 ## Basic Usage
 
@@ -65,8 +71,8 @@ end
 When saving a new record:
 
 1. `before_validation`
-2. Validations run
-3. `after_validation`
+2. `after_validation`
+3. Validations run
 4. `before_save`
 5. `before_create`
 6. INSERT into database
@@ -76,23 +82,23 @@ When saving a new record:
 When updating an existing record:
 
 1. `before_validation`
-2. Validations run
-3. `after_validation`
+2. `after_validation`
+3. Validations run
 4. `before_save`
 5. `before_update`
 6. UPDATE in database
 7. `after_update`
 8. `after_save`
 
-When destroying:
+When deleting with `record.delete!`:
 
 1. `before_destroy`
 2. DELETE from database
-3. `after_destroy`
+3. `after_destroy` (only if a row was deleted)
 
 ## Halting the Chain
 
-Return `false` from a `before_*` callback to halt execution:
+Return `false` from a callback to halt execution (any other return value continues). `save` then returns `false`:
 
 ```crystal
 struct Article
@@ -110,18 +116,19 @@ struct Article
 
   private def check_can_publish
     if @published && @title.empty?
-      errors.add(:title, "cannot be blank when publishing")
       return false  # Halt - save won't proceed
     end
     true
   end
 end
 
-# This save will fail
+# This save is halted before anything is written
 article = Article.new(title: "", published: true)
 article.save  # => false
-article.errors.first.message  # => "cannot be blank when publishing"
+article.persisted?  # => false
 ```
+
+A halted callback does not add to `errors`; `errors` only reports the results of `validate` rules (see [Add Validations](add-validations.md)).
 
 ## Common Use Cases
 
@@ -137,19 +144,15 @@ private def normalize_data
 end
 ```
 
-### Setting Timestamps
+### Setting Custom Timestamps
+
+`created_at` and `updated_at` are set automatically by `save` (see [Use Timestamps](timestamps.md)). Use callbacks only for other time columns:
 
 ```crystal
-before_create :set_created_at
-before_save :set_updated_at
+before_create :set_activated_at
 
-private def set_created_at
-  @created_at = Time.utc
-  true
-end
-
-private def set_updated_at
-  @updated_at = Time.utc
+private def set_activated_at
+  @activated_at = Time.utc
   true
 end
 ```
@@ -202,10 +205,11 @@ struct User
   property name : String
   property email : String
   property status : String = "pending"
+  property checked_at : Time?
 
   before_save :normalize_data
   before_save :check_permissions
-  before_save :set_timestamps
+  before_save :stamp_check
 
   def initialize(@name : String, @email : String)
   end
@@ -217,14 +221,13 @@ struct User
 
   private def check_permissions
     if @status == "banned"
-      errors.add(:status, "banned users cannot be saved")
-      return false  # Halts - set_timestamps won't run
+      return false  # Halts - stamp_check won't run
     end
     true
   end
 
-  private def set_timestamps
-    @updated_at = Time.utc
+  private def stamp_check
+    @checked_at = Time.utc
     true
   end
 end
@@ -233,7 +236,7 @@ end
 ## Best Practices
 
 1. **Keep callbacks simple** - Complex logic belongs in service objects
-2. **Always return true** unless you intend to halt
+2. **Always return true** unless you intend to halt (a callback whose last expression is `false` halts the chain)
 3. **Make callback methods private** - They're internal to the model
 4. **Avoid external API calls** in callbacks without error handling
 5. **Test callbacks** - Ensure they work as expected
