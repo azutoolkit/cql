@@ -198,6 +198,41 @@ Things to know:
   PostgreSQL 16 (200000 rows of two columns): 1000 rows held at once and +1.7 MB peak memory streamed, 200000 rows and
   +45 MB read whole; streaming took 125 ms against 82 ms because of its 200 round trips.
 - Infinite and out-of-range dates and timestamps raise `CQL::Postgres::UnsupportedValue`.
+- **Binary parameters** (`binary_params=true` in the URL, off by default). Parameters are normally sent as text and
+  the server infers their types. With the option on, a parameter that is a `Bool`, `Int`, `Float32`/`Float64`, `UUID`,
+  `Time`, `DecimalText`, `JSON::Any` or an `Array` of those waits until the statement has been described, and is then
+  sent in binary if the type the server reported has a form for it: int2/int4/int8 (the value must fit, otherwise
+  the text goes and the server reports the range error itself), float4 (from a `Float32`) and float8 (a `Float64` is
+  never narrowed to float4), bool, uuid, timestamp and timestamptz (cut to microseconds like the text form) and date,
+  numeric (from `DecimalText` or an integer; NaN, infinities and exponent forms stay text), jsonb, and one- or
+  multi-dimensional arrays of those and of text/varchar/bpchar, with NULL elements (ragged arrays stay text).
+  Strings, `json`, `bytea` and anything else are unchanged. Values are still bound parameters; the choice is made from
+  the server's own `ParameterDescription`. `Session#binary_params_sent` counts what went out in binary. Each type is
+  checked against PostgreSQL 16, 18 and 19rc1 and CockroachDB 24.3 by sending the same value as text and as binary
+  (`spec/postgres/binary_live_spec.cr`) and requiring the same answer. CockroachDB reads float4 (0.1 returns as
+  0.10000000149011612) and numeric (`100000000` returns as `1E+8`, `-0.00` as `0`) differently, so those stay text
+  there (detected from its `crdb_version` parameter), and it has no multi-dimensional arrays at all. **It is off by
+  default because it is not faster everywhere.** `benchmarks/pg_binary_params_bench.cr` on PostgreSQL 16 over loopback
+  (medians of 7 rounds of 5000 statements, encoding included in the timing, statements per second, text then binary):
+  six scalars 15945 / 17343, one int8 21139 / 20059, one timestamptz 20148 / 20320, a 7-column insert 13346 / 13861
+  (within a few percent either way), one numeric 21187 / 20131 and numeric[200] 5066 / 3331 (slower: the numeric
+  encoder is slower than formatting the text), int8[1000] 2112 / 3236, text[200] 7172 / 8593, and timestamptz[500]
+  941 / 5010 (5.3 times faster). One machine, one run: turn it on for arrays and timestamps, leave it off for
+  numerics. A deferred parameter keeps a reference to the array or JSON value it was made from, so mutate it
+  only after the statement has returned. Because the choice waits for the server's types, an array holding a value
+  that cannot be bound raises when the statement is bound (after the describe round trip), not when the parameter is created.
+- **Binary COPY**: `session.copy_in_binary(sql, types) { |rows| rows.row(1_i64, "a", nil) }` and
+  `session.copy_out_binary(sql, types) { |row| ... }` (also on `Connection`) take the `COPY ... (FORMAT binary)`
+  statement and the column type OIDs (`CQL::Postgres::Types::OID`). The signature, header and trailer are handled,
+  rows may be split across chunks, and a damaged stream or a trailer that never came raises `ProtocolError` (without
+  quoting data). Each value must have a binary form for its column type (the list above plus text, json and
+  bytea); there is no conversion between kinds, and a mismatch raises `ArgumentError` naming the column and the Crystal
+  class only. Types without a decoder (arrays among them) come back as raw `Bytes`. Timeouts, `cancel` and an exception
+  in the block (the way to stop early; there is no `break`) behave as in the text `copy_in` / `copy_out` (the same
+  code path). A damaged row raises `ProtocolError` while it is read, which drops the connection (a stream that ends without its trailer raises the same error afterwards, with the session left in sync). CockroachDB's float4 and numeric
+  differences above apply to binary `COPY FROM` too (not tested: it cannot copy the rows back out in binary). Checked live on PostgreSQL 16, 18
+  and 19rc1: 10002 rows of 11 columns round-trip, early stop, timeout, cancel and abort leave the session usable.
+  CockroachDB 24.3 accepts binary `COPY FROM` but answers binary `COPY TO` with `0A000 unimplemented`.
 - Behind PgBouncer in transaction mode use `statement_cache_size=0` (the unnamed statement is used; pipelining needs the
   cache). See "PgBouncer" below.
 - **PostgreSQL versions** (`script/pg-matrix start` then `run` starts one server per major and runs

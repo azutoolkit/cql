@@ -6,6 +6,8 @@ require "./result"
 require "./row_stream"
 require "./statement_cache"
 require "./copy_stream"
+require "./binary_copy"
+require "./types/binary"
 
 module CQL::Postgres
   # One protocol-v3 conversation with a server over a single stream.
@@ -128,10 +130,22 @@ module CQL::Postgres
       @stream_state = Atomic(StreamState).new(StreamState::Idle)
       @cancels_in_flight = Atomic(Int32).new(0)
       @last_used = Time.instant
+      @binary_params = config.binary_params?
+      @binary_params_sent = 0_i64
+      @binary_text_only = outcome.parameters.has_key?("crdb_version") || config.cockroachdb? ? Types::Binary::COCKROACHDB_TEXT_ONLY : [] of UInt32
     end
+
+    # How many bind parameters have gone out in binary on this session (the
+    # ones `binary_params` allowed and the server's types had a form for).
+    getter binary_params_sent : Int64
 
     def closed? : Bool
       @closed
+    end
+
+    # A value as a bind parameter for this session, in binary if its config allows.
+    def encode(value) : Types::Param
+      Types::ParamEncoder.encode(value, @binary_params)
     end
 
     # Identity and state only: the cancel key, staged protocol bytes and SQL stay out of logs.
@@ -179,6 +193,33 @@ module CQL::Postgres
     # exception is re-raised.
     def copy_out(sql : String, timeout : Time::Span? = nil, & : Bytes ->) : Int64
       exclusive(timeout) { run_copy_out(sql) { |chunk| yield chunk } }
+    end
+
+    # `COPY ... FROM STDIN (FORMAT binary)` with the signature and trailer
+    # handled for you: *types* are the OIDs of the copied columns and the block
+    # writes rows. If the block raises, the COPY is aborted like `copy_in`.
+    #
+    # ```
+    # session.copy_in_binary("COPY t (id, name) FROM STDIN (FORMAT binary)", [Types::OID::INT8, Types::OID::TEXT]) do |rows|
+    #   rows.row(1_i64, "a")
+    # end
+    # ```
+    def copy_in_binary(sql : String, types : Array(UInt32), timeout : Time::Span? = nil, & : BinaryCopy::Writer ->) : Int64
+      copy_in(sql, timeout) do |copy|
+        writer = BinaryCopy::Writer.new(copy, types)
+        yield writer
+        writer.finish
+      end
+    end
+
+    # `COPY ... TO STDOUT (FORMAT binary)`: yields each row decoded by the
+    # column *types* (OIDs; a type without a decoder arrives as raw bytes).
+    # Stopping early, timeouts and cancel behave as in `copy_out`.
+    def copy_out_binary(sql : String, types : Array(UInt32), timeout : Time::Span? = nil, &on_row : Array(Types::Value) ->) : Int64
+      reader = BinaryCopy::Reader.new(types, &on_row)
+      rows = copy_out(sql, timeout) { |chunk| reader.feed(chunk) }
+      reader.finish
+      rows
     end
 
     # One cheap round trip (an empty query). If the server does not answer

@@ -5,7 +5,7 @@ module CQL::Postgres
 
   # A statement the server has parsed: how many parameters it takes and the
   # shape of its rows.
-  record PreparedStatement, name : String, param_count : Int32, columns : Array(Column) do
+  record PreparedStatement, name : String, param_count : Int32, columns : Array(Column), param_oids : Array(UInt32) = [] of UInt32 do
     def result_formats : Array(Int16)
       columns.map(&.codec.format)
     end

@@ -20,9 +20,10 @@ module CQL::Postgres
     end
 
     private def run(args : Enumerable) : Result
+      session = connection.as(Connection).session
       params = [] of Types::Param
-      args.each { |arg| params << Types::ParamEncoder.encode(arg) }
-      connection.as(Connection).session.query(command, params, cache: @prepared)
+      args.each { |arg| params << session.encode(arg) }
+      session.query(command, params, cache: @prepared)
     rescue ex : ConnectionLost
       raise ::DB::ConnectionLost.new(connection, cause: ex)
     end

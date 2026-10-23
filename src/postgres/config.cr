@@ -35,7 +35,7 @@ module CQL::Postgres
   # roots). Query values are percent-decoded only; `+` stays a plus.
   class Config
     SCHEMES              = {"postgres", "postgresql", "cockroachdb"}
-    DRIVER_OPTION_KEYS   = {"pool_size", "pool_min_size", "checkout_timeout", "health_check_after", "max_queries", "max_idle_lifetime", "min_protocol_version", "max_protocol_version"}
+    DRIVER_OPTION_KEYS   = {"pool_size", "pool_min_size", "checkout_timeout", "health_check_after", "max_queries", "max_idle_lifetime", "min_protocol_version", "max_protocol_version", "binary_params"}
     RESERVED_PARAMETERS  = {"user", "database", "dbname", "password", "hostaddr", "client_encoding", "replication"}
     UNSUPPORTED_LIBPQ    = {"sslcert", "sslkey", "sslcrl", "sslcompression", "sslsni", "sslpassword", "channel_binding", "require_auth", "target_session_attrs", "passfile", "service", "gssencmode", "krbsrvname"}
     DEFAULT_CONNECT_WAIT = 10.0
@@ -63,6 +63,16 @@ module CQL::Postgres
       ProtocolVersion.parse(driver_options["min_protocol_version"]? || "3.0")
     end
 
+    # Send bind parameters in PostgreSQL's binary format where the server's
+    # parameter type has one (off by default; see the README).
+    def binary_params? : Bool
+      case value = driver_options["binary_params"]?
+      when nil, "false", "off", "0" then false
+      when "true", "on", "1"        then true
+      else                               raise ArgumentError.new("binary_params must be true or false, got #{value.inspect}")
+      end
+    end
+
     def max_protocol_version : ProtocolVersion
       ProtocolVersion.parse(driver_options["max_protocol_version"]? || "latest")
     end
@@ -71,6 +81,7 @@ module CQL::Postgres
                    @ssl_mode = SSLMode::Prefer, @ssl_root_cert = nil, @connect_timeout = DEFAULT_CONNECT_WAIT.seconds,
                    @application_name = "cql", @statement_cache_size = 256,
                    @startup_options = {} of String => String, @driver_options = {} of String => String, @cockroachdb = false)
+      binary_params?
       raise ArgumentError.new("min_protocol_version #{min_protocol_version} is newer than max_protocol_version #{max_protocol_version}") if min_protocol_version > max_protocol_version
       @database = database || @user
     end

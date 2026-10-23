@@ -84,6 +84,14 @@ module CQL::Postgres
       translating_lost { @session.copy_out(sql) { |chunk| yield chunk } }
     end
 
+    def copy_in_binary(sql : String, types : Array(UInt32), & : BinaryCopy::Writer ->) : Int64
+      translating_lost { @session.copy_in_binary(sql, types) { |rows| yield rows } }
+    end
+
+    def copy_out_binary(sql : String, types : Array(UInt32), & : Array(Types::Value) ->) : Int64
+      translating_lost { @session.copy_out_binary(sql, types) { |row| yield row } }
+    end
+
     # Runs a query and yields a result set that reads rows from the server
     # *fetch_size* at a time, so a large result is never held whole. The
     # connection is busy until the block returns; stopping early is fine. See
@@ -99,7 +107,7 @@ module CQL::Postgres
     end
 
     def stream(sql : String, args : Enumerable, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
-      params = args.map { |arg| Types::ParamEncoder.encode(arg) }.to_a
+      params = args.map { |arg| @session.encode(arg) }.to_a
       translating_lost do
         @session.stream(sql, params, fetch_size, timeout: timeout) do |rows|
           yield ResultSet.new(Statement.new(self, sql, prepared: true), rows)

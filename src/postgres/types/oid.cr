@@ -22,5 +22,22 @@ module CQL::Postgres::Types
     NUMERIC     = 1700_u32
     UUID        = 2950_u32
     JSONB       = 3802_u32
+
+    # array types
+    BOOL_ARRAY        = 1000_u32
+    INT2_ARRAY        = 1005_u32
+    INT4_ARRAY        = 1007_u32
+    TEXT_ARRAY        = 1009_u32
+    BPCHAR_ARRAY      = 1014_u32
+    VARCHAR_ARRAY     = 1015_u32
+    INT8_ARRAY        = 1016_u32
+    FLOAT4_ARRAY      = 1021_u32
+    FLOAT8_ARRAY      = 1022_u32
+    DATE_ARRAY        = 1182_u32
+    TIMESTAMP_ARRAY   = 1115_u32
+    TIMESTAMPTZ_ARRAY = 1185_u32
+    NUMERIC_ARRAY     = 1231_u32
+    UUID_ARRAY        = 2951_u32
+    JSONB_ARRAY       = 3807_u32
   end
 end
