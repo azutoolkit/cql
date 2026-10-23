@@ -62,8 +62,12 @@ module CQL::Postgres
     getter last_used : Time::Instant
     # Requests run on this session so far (a pipeline counts once).
     getter requests : Int64 = 0_i64
-    # How long a request may keep running after its timeout fired and the cancel
-    # was sent before the socket is closed under it.
+    # The patience for cancelling. A timed-out request has this long, from the
+    # moment its timeout fires, for the cancel to take effect before its socket is
+    # closed under it. A cancel's own connect and wait for the postmaster's
+    # hang-up are each capped at it, and a request that was cancelled waits up to
+    # twice this for the cancel to finish before the session is handed on (and
+    # drops the session if it still has not).
     property cancel_grace : Time::Span = CANCEL_GRACE
     property on_notice : Proc(Hash(Char, String), Nil)? = nil
     property on_notification : Proc(Notification, Nil)? = nil
@@ -181,6 +185,7 @@ module CQL::Postgres
     # within *timeout* the socket is closed (a silently dropped path would
     # otherwise block this forever) and the answer is false.
     def ping(timeout : Time::Span = PING_TIMEOUT) : Bool
+      return false if cancels_pending? # a late cancel could hit whatever runs next: not a connection to trust
       answered = false
       exclusive { answered = with_hard_deadline(timeout) { run_simple("") } }
       answered && !@closed
@@ -197,6 +202,9 @@ module CQL::Postgres
         # Once that returns the signal is out. A statement that is running
         # raises 57014 itself; between the fetches of a stream nothing runs, the
         # server ignores the cancel, and the next fetch has to raise instead.
+        # The mark is made only now: set earlier, a stream could end on it and
+        # free the session while the cancel is still on its way, and that late
+        # signal would land on the next statement.
         @stream_state.compare_and_set(StreamState::Streaming, StreamState::Canceled)
       ensure
         @cancels_in_flight.sub(1)
@@ -243,6 +251,7 @@ module CQL::Postgres
         @requests += 1
         guarded { with_deadline(timeout) { yield } }
       ensure
+        settle_cancels
         @last_used = Time.instant
       end
     end
@@ -331,11 +340,12 @@ module CQL::Postgres
       begin
         yield
       rescue ex : QueryCanceled
-        # A QueryCanceled here is normally the server's. The driver raises its own for a
-        # user cancel during a stream, after the deadline check, so at worst that is
-        # reported as the timeout; the session stays in sync either way.
-        confirmed = state.get.expired?
-        raise confirmed ? QueryTimeout.new("statement canceled after #{timeout}") : ex
+        # Only the server's own 57014 confirms the cancel. One the driver raised
+        # itself (LocalCancel) says nothing about the statement or the portal, so
+        # a session that ends this way is dropped.
+        expired = state.get.expired?
+        confirmed = expired && !ex.is_a?(LocalCancel)
+        raise expired ? QueryTimeout.new("statement canceled after #{timeout}") : ex
       rescue ex : IO::Error | OpenSSL::Error | ConnectionLost
         raise ex unless state.get.expired?
         raise undelivered_cancel(timeout)
@@ -358,6 +368,27 @@ module CQL::Postgres
 
     private def undelivered_cancel(timeout : Time::Span) : QueryTimeout
       QueryTimeout.new("statement exceeded #{timeout} and the cancel request could not be delivered or did not stop it")
+    end
+
+    # A cancel made during this request may still be on its way to the server
+    # (its connect, write and wait for the hang-up are each capped at the grace).
+    # Wait for it before the lock is released, so the late signal cannot land on
+    # the next statement; if it is still not delivered, the session cannot be told
+    # apart from one a cancel is about to hit, so drop it. (A cancel counts as
+    # delivered once its request was written and the hang-up wait ended, even if the
+    # peer never hung up: the signal was sent, only its confirmation is missing.
+    # A cancel begun while no request holds the lock is not covered.)
+    private def settle_cancels : Nil
+      return unless cancels_pending?
+      deadline = Time.instant + @cancel_grace * 2 + 100.milliseconds # connect and hang-up wait, each capped at the grace
+      while !@closed && cancels_pending? && Time.instant < deadline
+        sleep 1.millisecond
+      end
+      hard_close if !@closed && cancels_pending?
+    end
+
+    private def cancels_pending? : Bool
+      @cancels_in_flight.get > 0
     end
 
     private def cancel_or_drop : Nil
