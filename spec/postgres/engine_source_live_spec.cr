@@ -3,11 +3,11 @@ require "../../src/postgres"
 
 # A Schema on the engine's pool against a real PostgreSQL (DATABASE_URL, default postgres://localhost/cql_test):
 # models, transactions with savepoints and fiber isolation. Pending when no server accepts this driver. Its table lives
-# in a PostgreSQL schema of its own (cql_src_live_<pid>, via search_path), so concurrent runs do not collide.
+# in a PostgreSQL schema of its own (cql_src_live_<random>, via search_path), so concurrent runs do not collide.
 
 private alias PG = CQL::Postgres
 
-private PG_SCHEMA = "cql_src_live_#{Process.pid}"
+private PG_SCHEMA = "cql_src_live_#{Random::Secure.hex(4)}"
 
 # Only a postgres:// or cockroachdb:// URL can serve this spec; anything else builds a schema that is never used.
 private LIVE_URL   = postgres_database_url.try { |url| url.starts_with?("postgres") || url.starts_with?("cockroachdb") ? url : nil } || "postgres://localhost:1/none"
@@ -15,8 +15,11 @@ private ENGINE_URL = "#{LIVE_URL}#{LIVE_URL.includes?('?') ? '&' : '?'}search_pa
 
 private def live? : Bool
   session = PG::Session.connect(PG::Config.parse(LIVE_URL))
-  session.query("CREATE SCHEMA IF NOT EXISTS #{PG_SCHEMA}")
-  session.close
+  begin
+    session.query("CREATE SCHEMA IF NOT EXISTS #{PG_SCHEMA}")
+  ensure
+    session.close
+  end
   true
 rescue
   false
@@ -60,9 +63,13 @@ describe "CQL::Schema on a Postgres::EngineSource (live)" do
 
   after_all do
     next unless live?
+    LiveSchema.close
     session = PG::Session.connect(PG::Config.parse(LIVE_URL))
-    session.query("DROP SCHEMA IF EXISTS #{PG_SCHEMA} CASCADE")
-    session.close
+    begin
+      session.query("DROP SCHEMA IF EXISTS #{PG_SCHEMA} CASCADE")
+    ensure
+      session.close
+    end
   end
 
   it "saves, finds and deletes a model on the engine pool" do
@@ -99,11 +106,9 @@ describe "CQL::Schema on a Postgres::EngineSource (live)" do
     LiveSchema.transaction do |_tx|
       LivePerson.new("inside").save!
       spawn do # another fiber does not see the uncommitted row
-        begin
-          done.send(LivePerson.query.count.to_i64)
-        rescue
-          done.send(-1_i64)
-        end
+        done.send(LivePerson.query.count.to_i64)
+      rescue
+        done.send(-1_i64)
       end
       done.receive.should eq 0
     end
