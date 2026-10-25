@@ -57,6 +57,20 @@ module CQL
       get(kind).not_nil!
     end
 
+    # Whether the statement returns at least *count* rows. Steps through at most
+    # *count* rows without reading a column, so nothing is decoded.
+    def returns_rows?(count : Int32) : Bool
+      execute do |conn, sql, params|
+        conn.query(sql, args: params) do |rows|
+          seen = 0
+          while seen < count && rows.move_next
+            seen += 1
+          end
+          seen == count
+        end
+      end
+    end
+
     # Yields each row mapped to *kind*.
     def each(as kind : U.class, &block : U ->) forall U
       all(kind).each { |record| block.call(record) }

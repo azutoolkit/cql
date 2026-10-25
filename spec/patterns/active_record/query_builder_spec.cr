@@ -770,6 +770,145 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
   end
 
+  describe "existence checks without counting" do
+    it "answers exists? and any? with one LIMIT select and no COUNT" do
+      create_last_user("Alpha", 30)
+
+      results = [] of Bool
+      statements = count_queries do
+        results << TestUser.query.where(name: "Alpha").exists?
+        results << TestUser.query.where(name: "Alpha").any?
+        results << TestUser.query.exists?(name: "Alpha")
+        results << TestUser.exists?(name: "Alpha")
+        results << TestUser.exists?
+      end
+
+      results.should eq([true] * 5)
+      statements.size.should eq(5)
+      statements.each do |sql|
+        sql.should contain("LIMIT ?")
+        sql.should_not contain("COUNT(")
+      end
+    end
+
+    it "returns false with the same SQL shape when nothing matches" do
+      results = [] of Bool
+      statements = count_queries do
+        results << TestUser.query.where(name: "Nobody").exists?
+        results << TestUser.query.where(name: "Nobody").any?
+        results << TestUser.exists?(name: "Nobody")
+        results << TestUser.exists?
+      end
+
+      results.should eq([false] * 4)
+      statements.size.should eq(4)
+      statements.each do |sql|
+        sql.should contain("LIMIT ?")
+        sql.should_not contain("COUNT(")
+      end
+    end
+
+    it "reflects whether a row exists past the offset" do
+      create_last_users
+
+      results = [] of Bool
+      statements = count_queries do
+        results << TestUser.query.order(:id).offset(2).exists?
+        results << TestUser.query.order(:id).offset(3).exists?
+      end
+
+      results.should eq([true, false])
+      statements.each do |sql|
+        sql.should contain("LIMIT ?")
+        sql.should_not contain("COUNT(")
+      end
+    end
+
+    it "makes many? false for zero or one row and true for two or more with one LIMIT select" do
+      outcomes = [] of Bool
+      statements = [] of String
+
+      statements.concat count_queries { outcomes << TestUser.query.many? }
+      create_last_user("Alpha", 30)
+      statements.concat count_queries { outcomes << TestUser.query.many? }
+      create_last_user("Bravo", 30)
+      statements.concat count_queries { outcomes << TestUser.query.many? }
+      create_last_user("Charlie", 30)
+      statements.concat count_queries { outcomes << TestUser.query.where(age: 30).many? }
+      statements.concat count_queries { outcomes << TestUser.many? }
+
+      outcomes.should eq([false, false, true, true, true])
+      statements.size.should eq(5)
+      statements.each do |sql|
+        sql.should contain("LIMIT ?")
+        sql.should_not contain("COUNT(")
+      end
+    end
+
+    it "respects the query's own limit and offset" do
+      create_last_users
+
+      TestUser.query.limit(0).exists?.should be_false
+      TestUser.query.limit(1).many?.should be_false
+      TestUser.query.limit(5).offset(2).exists?.should be_true
+      TestUser.query.limit(5).offset(2).many?.should be_false
+    end
+
+    it "counts groups, not rows, for a grouped query" do
+      create_last_user("Bravo", 30)
+      create_last_user("Charlie", 30)
+
+      TestUser.query.group(:age).exists?.should be_true
+      TestUser.query.group(:age).many?.should be_false
+
+      create_last_user("Alpha", 40)
+
+      TestUser.query.group(:age).many?.should be_true
+      TestUser.query.where(name: "Nobody").group(:age).exists?.should be_false
+    end
+
+    it "checks a distinct query" do
+      TestUser.query.distinct.exists?.should be_false
+      create_last_user("Alpha", 30)
+      TestUser.query.distinct.exists?.should be_true
+    end
+
+    it "selects the table-qualified primary key for a join" do
+      UserDB.posts.create!
+      author = create_last_user("Author", 30)
+      create_last_user("Silent", 40)
+
+      TestUser.query.join(:posts).exists?.should be_false
+      Post.create!(title: "Post", body: "Body", user_id: author.id)
+
+      result = false
+      statements = count_queries { result = TestUser.query.join(:posts).exists? }
+
+      result.should be_true
+      statements.size.should eq(1)
+      statements.first.should contain("SELECT users.id FROM users INNER JOIN posts")
+      statements.first.should contain("LIMIT ?")
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "ignores soft-deleted rows in Model.exists?" do
+      SoftDeletableDB.users.create!
+      LastSoftDeletableUser.new("Deleted", "deleted@example.com").tap(&.create!).delete!
+
+      LastSoftDeletableUser.exists?.should be_false
+      LastSoftDeletableUser.exists?(name: "Deleted").should be_false
+
+      LastSoftDeletableUser.new("Kept", "kept@example.com").create!
+
+      LastSoftDeletableUser.exists?.should be_true
+      LastSoftDeletableUser.exists?(name: "Kept").should be_true
+      LastSoftDeletableUser.exists?(name: "Deleted").should be_false
+    ensure
+      SoftDeletableDB.users.drop!
+    end
+  end
+
   describe "#to_sql" do
     it "converts to SQL string for debugging" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)

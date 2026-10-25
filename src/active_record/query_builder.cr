@@ -317,14 +317,19 @@ module CQL
         # - **@param** column [Symbol] The column to count (defaults to *)
         # - **@return** [Int64] The count result
         def count(column : Symbol = :*)
-          result = count_query(column)
-          result = result.get(Int64 | Int32 | Nil) if result.responds_to?(:get)
-          result || 0_i64
+          read_count(count_query(column))
         end
 
         # The `CQL::Query` that `count` runs, on the same executor as this query.
         def count_query(column : Symbol = :*) : CQL::Query
-          query = @query.clone
+          count_query_for(@query.clone, column)
+        end
+
+        private def read_count(query : CQL::Query) : Int64 | Int32
+          query.get(Int64 | Int32 | Nil) || 0_i64
+        end
+
+        private def count_query_for(query : CQL::Query, column : Symbol) : CQL::Query
           windowed = !query.limit.nil? || !query.offset.nil?
           query.unscope(:order) if column == :* || !windowed
           return query.count(column) unless windowed
@@ -349,9 +354,34 @@ module CQL
         end
 
         private def select_primary_key(query : CQL::Query) : CQL::Query
+          primary_key_column(query).try { |column| query.select(column) } || query
+        end
+
+        private def primary_key_column(query : CQL::Query) : String?
           table_alias, info = query.query_tables.first
-          primary_key = info[:table].primary_key
-          primary_key ? query.select("#{table_alias}.#{primary_key.name}") : query
+          info[:table].primary_key.try { |primary_key| "#{table_alias}.#{primary_key.name}" }
+        end
+
+        # Whether the query returns at least *rows* rows, reading no more than that:
+        # stepping over an unshaped query's primary key rows, or counting the capped window.
+        private def returns_at_least?(rows : Int32) : Bool
+          query = @query.clone.unscope(:order).limit(capped_limit(rows))
+          column = primary_key_column(query) unless shapes_rows?(query)
+          return read_count(count_query_for(query, :*)) >= rows unless column
+          query.select(column).returns_rows?(rows)
+        end
+
+        # The query's own limit when it is tighter than *rows*; a negative limit means none.
+        private def capped_limit(rows : Int32) : Int32
+          limit = @query.limit
+          limit && limit >= 0 ? Math.min(limit, rows) : rows
+        end
+
+        # An explicit select, DISTINCT or grouping decides which rows come back.
+        private def shapes_rows?(query : CQL::Query) : Bool
+          selected = !query.columns.empty? || !query.select_expressions.empty?
+          deduplicated = query.distinct? || !query.distinct_on.empty?
+          selected || deduplicated || !query.group_by.empty? || !query.having.nil?
         end
 
         # Add sum aggregate
@@ -547,8 +577,7 @@ module CQL
         # Check if any records exist
         # - **@return** [Bool] True if records exist
         def exists? : Bool
-          count_result = count
-          count_result > 0
+          returns_at_least?(1)
         end
 
         def exists?(**conditions)
@@ -844,7 +873,7 @@ module CQL
         # Check if many records exist (more than one)
         # - **@return** [Bool] True if more than one record exists
         def many?
-          count > 1
+          returns_at_least?(2)
         end
 
         # Get the count of records

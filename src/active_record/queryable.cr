@@ -326,8 +326,7 @@ module CQL
         # Check if any records exist matching the current query
         # - **@return** [Bool] True if records exist
         def self.exists? : Bool
-          count_result = count
-          count_result > 0
+          query.exists?
         end
 
         # Check if no records exist matching the current query
