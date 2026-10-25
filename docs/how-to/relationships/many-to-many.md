@@ -186,6 +186,14 @@ This deletes the join row. What happens to the tag itself depends on `dependent:
 post.tags.clear
 ```
 
+`clear` follows `dependent:` the same way `delete` does. To unlink every tag and keep the tags, whatever `dependent:` says, delete the join rows:
+
+```crystal
+post.tags.delete_all    # => Int64, the number of join rows removed
+```
+
+`nullify_all` does the same thing: a many-to-many link lives in the join table, so unlinking deletes the join row.
+
 ## Verify It Works
 
 ```crystal
