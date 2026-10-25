@@ -119,6 +119,89 @@ describe "Custom primary key column" do
     end
   end
 
+  describe "finding by primary key" do
+    it "finds a row through .find, .find? and .find!" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+      Label.find(7).try(&.name).should eq("Noir")
+      Label.find?(7).try(&.name).should eq("Noir")
+      Label.find!(7).name.should eq("Noir")
+    end
+
+    it "reports a missing key as nil or DB::NoResultsError naming the key column" do
+      Label.find?(99).should be_nil
+      Label.query.find(99).should be_nil
+      expect_raises(DB::NoResultsError, "No records found with label_no=99") { Label.find!(99) }
+      expect_raises(DB::NoResultsError, "No records found with label_no=99") { Label.query.find!(99) }
+    end
+
+    it "finds a row through the query builder" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+      Label.query.find(7).try(&.name).should eq("Noir")
+    end
+
+    it "finds the rows of an array of keys" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc'), (9, 'Gris')")
+
+      Label.query.where_primary_key([7, 8]).all.compact_map(&.id).sort!.should eq([7, 8])
+    end
+
+    it "matches one key with = and an array of keys with IN" do
+      Label.query.where_primary_key(7).to_sql_with_params.should eq(
+        {"SELECT labels.label_no, labels.name FROM labels WHERE labels.label_no = ?", [7]}
+      )
+      Label.query.where_primary_key([7, 8]).to_sql_with_params.should eq(
+        {"SELECT labels.label_no, labels.name FROM labels WHERE labels.label_no IN (?, ?)", [7, 8]}
+      )
+    end
+
+    it "matches no rows for an empty array of keys" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+      Label.query.where_primary_key([] of Int32).all.should be_empty
+    end
+
+    it "lists key values through ids" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (8, 'Blanc')")
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+      Label.query.ids(as: Int32).sort.should eq([7, 8])
+      Label.ids(as: Int32).sort.should eq([7, 8])
+    end
+
+    it "returns no rows from none" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+      Label.query.none.all.should be_empty
+    end
+
+    it "makes none's condition independent of the key type" do
+      insert_badge(UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35"))
+
+      Badge.query.none.to_sql_with_params.should eq(
+        {"SELECT badges.badge_uuid, badges.name FROM badges WHERE 1 = 0", [] of DB::Any}
+      )
+      Badge.none.all.should be_empty
+    end
+
+    it "finds a UUID-keyed row" do
+      uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+      insert_badge(uuid)
+
+      Badge.find(uuid).try(&.id).should eq(uuid)
+      Badge.query.find(uuid).try(&.id).should eq(uuid)
+    end
+
+    it "binds UUID keys as text" do
+      uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+      insert_badge(uuid)
+
+      Badge.query.where_primary_key(uuid).to_sql_with_params[1].should eq([uuid.to_s])
+      Badge.query.where_primary_key([uuid]).all.map(&.id).should eq([uuid])
+    end
+  end
+
   describe "with a UUID primary key" do
     uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
 
