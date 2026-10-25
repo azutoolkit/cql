@@ -175,7 +175,7 @@ Everything after `CQL.configure` reads the same object:
 CQL.config.env           # => "development"
 CQL.config.adapter       # => CQL::Adapter::SQLite
 CQL.config.full_db_url   # => "sqlite3://./db/development.db?initial_pool_size=2&..."
-CQL.config.sql_logging?  # => true in development unless CQL_NO_SQL_LOG is set
+CQL.config.sql_logging?  # => true when CRYSTAL_ENV=development unless CQL_NO_SQL_LOG is set; false when CRYSTAL_ENV is unset
 ```
 
 Call `CQL.configure` again at any time to adjust the same config; each call re-validates. Do it before `CQL.build_schema`, because the schema captures `full_db_url` when it is built.

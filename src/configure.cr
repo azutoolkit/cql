@@ -10,11 +10,10 @@ module CQL
   #
   # Quick setup for different environments:
   #
-  # **Development** (minimal config - auto-detects environment)
+  # **Development** (run with `CRYSTAL_ENV=development` to get SQL logging)
   # ```
   # CQL.configure do |config|
   #   config.db = "postgresql://localhost/myapp"
-  #   # That's it! SQL logging auto-enabled
   # end
   # ```
   #
@@ -45,8 +44,16 @@ module CQL
       # Primary database connection URL
       property db : String = "sqlite3://./db/development.db"
 
-      # Environment (auto-detects from CRYSTAL_ENV)
-      property env : String = ENV["CRYSTAL_ENV"]? || "development"
+      # Environment (auto-detects from CRYSTAL_ENV; unset means development)
+      getter env : String = ENV["CRYSTAL_ENV"]? || "development"
+
+      # Whether the environment was named (CRYSTAL_ENV or `env=`) rather than defaulted.
+      @env_named : Bool = ENV.has_key?("CRYSTAL_ENV")
+
+      def env=(value : String)
+        @env = value
+        @env_named = true
+      end
 
       # Timezone for date/time operations
       property timezone : Symbol = :utc
@@ -91,7 +98,7 @@ module CQL
       property verify_schema : Bool = false
 
       # === 🎨 SQL LOGGING ===
-      # Enable beautiful SQL logging (auto-enabled in development)
+      # Enable SQL logging (on by default when CRYSTAL_ENV=development or `env = "development"`)
       @sql_logging : Bool?
 
       def sql_logging=(@sql_logging : Bool?)
@@ -176,7 +183,7 @@ module CQL
       end
 
       private def development_logging_default? : Bool
-        env == "development" && !ENV.has_key?("CQL_NO_SQL_LOG")
+        @env_named && env == "development" && !ENV.has_key?("CQL_NO_SQL_LOG")
       end
 
       # Check if performance monitoring is enabled
@@ -421,7 +428,7 @@ module CQL
   # CQL.configure do |c|
   #   c.db = "postgresql://localhost/myapp"
   # end
-  # # Auto-enables: SQL logging
+  # # With CRYSTAL_ENV=development this also turns on SQL logging
   # ```
   #
   # **Production Ready**

@@ -5,6 +5,12 @@ require "./query_builder"
 
 module CQL
   module ActiveRecord
+    # Marks a model's `self.query` as CQL's own, whose SQL is the same on every call (the plain
+    # table query, or SoftDeletable's `deleted_at IS NULL`). A model that overrides `self.query`
+    # loses the mark, so statements built from it are rendered per call.
+    annotation StaticQuery
+    end
+
     # The Queryable module provides Active Record-style chainable query methods
     # that integrate with the CQL::Query system. It implements the Active Record
     # query interface while maintaining type safety and performance.
@@ -54,6 +60,7 @@ module CQL
         # ```
         # User.query.where(active: true)
         # ```
+        @[CQL::ActiveRecord::StaticQuery]
         def self.query
           QueryBuilder({{@type.id}}).from_model({{@type.id}})
         end
@@ -339,20 +346,41 @@ module CQL
         # - **@param** id [Int32 | Int64 | UUID | String] The primary key value
         # - **@return** [T?] The record or nil if not found
         def self.find(id)
-          {% if Pk == UUID %}
-            # Convert UUID to string for query compatibility
-            query.where(id: id.to_s).first
-          {% else %}
-            query.where(id: id).first
-          {% end %}
+          find?(id)
         end
 
         def self.find?(id)
           {% if Pk == UUID %}
-            query.where(id: id.to_s).first
+            key = id.to_s
           {% else %}
-            query.where(id: id).first
+            key = id
           {% end %}
+          # `@type` is the receiver, so a subclass, or a model whose `self.query` is not CQL's own,
+          # renders the statement per call.
+          \{% begin %}
+            \{% scope = @type.class.methods.find { |method| method.name == "query" && method.args.empty? } %}
+            \{% if scope && scope.annotation(CQL::ActiveRecord::StaticQuery) %}
+              return find_statement.bind(key).get(self) if key.is_a?(DB::Any)
+            \{% end %}
+          \{% end %}
+          query.where(id: key).first
+        end
+
+        # The query's SQL does not change between calls (see `StaticQuery`), so it is rendered once
+        # per model and schema/table, and only the id is rebound.
+        @@find_statement : CQL::StatementTemplate? = nil
+
+        private def self.find_statement : CQL::StatementTemplate
+          cached = @@find_statement
+          return cached if cached && cached.renders?(schema, table)
+          @@find_statement = render_find_statement
+        end
+
+        # The id is the last WHERE value, bound just before the LIMIT.
+        private def self.render_find_statement : CQL::StatementTemplate
+          sentinel = {% if Pk == Int32 || Pk == Int64 %}0{% else %}""{% end %}
+          sql, params = query.where(id: sentinel).query.limit(1).to_sql
+          CQL::StatementTemplate.new(schema, table, sql, params, value_index: params.size - 2)
         end
 
         # Find record by primary key, raises if not found

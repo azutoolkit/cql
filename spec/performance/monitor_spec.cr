@@ -1,7 +1,54 @@
 require "../spec_helper"
 require "log/spec"
 
+private class CountingFormatter < CQL::Performance::SQLFormatter
+  getter calls = 0
+
+  def format(sql : String, params : Array(DB::Any) = [] of DB::Any,
+             execution_time : Time::Span? = nil, rows_affected : Int64? = nil,
+             context : String? = nil) : String
+    @calls += 1
+    super
+  end
+end
+
 describe CQL::Performance::Monitor do
+  describe "query logging" do
+    it "formats a query only when its log level is emitted" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.logging.enabled = true
+      formatter = CountingFormatter.new(colorize_enabled: false)
+      monitor = CQL::Performance::Monitor.new(config: config, sql_formatter: formatter)
+
+      Log.capture("*", level: :warn) { monitor.track("SELECT 1") { 1 } }
+      formatter.calls.should eq(0)
+
+      Log.capture("*", level: :info) { monitor.track("SELECT 1") { 1 } }
+      formatter.calls.should eq(1)
+    end
+
+    it "logs slow queries at warn and very slow ones at error" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.logging.enabled = true
+      config.profiling.slow_query_threshold = 0.seconds
+      config.profiling.very_slow_threshold = 1.hour
+      slow = CQL::Performance::Monitor.new(config: config, sql_formatter: CQL::Performance::SQLFormatter.new(colorize_enabled: false))
+      Log.capture("*") do |logs|
+        slow.track("SELECT 2") { 2 }
+        logs.check(:warn, /SELECT 2/)
+      end
+
+      config.profiling.very_slow_threshold = 0.seconds
+      very_slow = CQL::Performance::Monitor.new(config: config, sql_formatter: CQL::Performance::SQLFormatter.new(colorize_enabled: false))
+      Log.capture("*") do |logs|
+        very_slow.track("SELECT 3") { 3 }
+        logs.check(:error, /SELECT 3/)
+      end
+    end
+  end
+
   describe "#initialize" do
     it "creates a monitor with default config" do
       config = CQL::Performance::Config.new
@@ -627,6 +674,72 @@ describe "CQL::Performance.enable_sql_logging" do
         CQL::Performance.track("SELECT 1") { 1 }
         logs.check(:info, /SELECT 1/)
       end
+    end
+  end
+end
+
+describe "CQL::Performance::Monitor SQL logging of bound values" do
+  secret = "secret@example.com"
+  sql = "SELECT * FROM users WHERE email = ?"
+
+  # Every statement counts as slow, so its log line is a warning.
+  build_monitor = ->(include_params : Bool) do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = true
+    config.logging.colorize = false
+    config.logging.pretty_format = false
+    config.logging.include_params = include_params
+    config.profiling.slow_query_threshold = Time::Span.zero
+    CQL::Performance::Monitor.new(config: config)
+  end
+
+  it "leaves bound values out of a slow statement's log line when include_params is off" do
+    monitor = build_monitor.call(false)
+
+    Log.capture("*") do |logs|
+      monitor.track(sql, [secret] of DB::Any) { 1 }
+
+      logs.check(:warn, /SQL \(.*\)\n  SELECT/).entry.message.should_not contain(secret)
+    end
+  end
+
+  it "leaves bound values out of a failed statement's log line when include_params is off" do
+    monitor = build_monitor.call(false)
+
+    Log.capture("*") do |logs|
+      expect_raises(RuntimeError, "boom") do
+        monitor.track(sql, [secret] of DB::Any) { raise RuntimeError.new("boom") }
+      end
+
+      message = logs.check(:error, /Query failed: boom/).entry.message
+      message.should_not contain(secret)
+      message.should_not contain("Params:")
+    end
+  end
+
+  it "logs bound values once include_params is turned on" do
+    monitor = build_monitor.call(false)
+    monitor.configure(&.logging.include_params=(true))
+
+    Log.capture("*") do |logs|
+      monitor.track(sql, [secret] of DB::Any) { 1 }
+
+      logs.check(:warn, /Parameters: \[secret@example\.com\]/)
+    end
+  end
+
+  it "truncates a failed statement's bound values at max_param_length" do
+    monitor = build_monitor.call(true)
+    monitor.configure(&.logging.max_param_length=(10))
+    long_value = "a" * 50
+
+    Log.capture("*") do |logs|
+      expect_raises(RuntimeError, "boom") do
+        monitor.track(sql, [long_value] of DB::Any) { raise RuntimeError.new("boom") }
+      end
+
+      logs.check(:error, /Params: \[a{10}\.\.\.\]/).entry.message.should_not contain(long_value)
     end
   end
 end

@@ -11,6 +11,16 @@ ensure
   CQL.reset_config!
 end
 
+private def without_crystal_env(&)
+  previous = ENV["CRYSTAL_ENV"]?
+  ENV.delete("CRYSTAL_ENV")
+  CQL.reset_config!
+  yield
+ensure
+  ENV["CRYSTAL_ENV"] = previous if previous
+  CQL.reset_config!
+end
+
 describe "CQL.configure" do
   after_each do
     CQL.reset_config!
@@ -30,6 +40,37 @@ describe "CQL.configure" do
         CQL.configure(&.sql_logging=(false))
         CQL.config.sql_logging?.should be_false
       end
+    end
+
+    it "does not log SQL when CRYSTAL_ENV is unset" do
+      without_crystal_env do
+        CQL.config.env.should eq("development")
+        CQL.config.sql_logging?.should be_false
+      end
+    end
+
+    it "logs SQL when development is declared in the configure block" do
+      without_crystal_env do
+        CQL.configure(&.env=("development"))
+        CQL.config.sql_logging?.should be_true
+      end
+    end
+
+    it "logs SQL when asked to even with CRYSTAL_ENV unset" do
+      without_crystal_env do
+        CQL.configure(&.sql_logging=(true))
+        CQL.config.sql_logging?.should be_true
+      end
+    end
+
+    it "honors CQL_NO_SQL_LOG when development is declared in the configure block" do
+      ENV["CQL_NO_SQL_LOG"] = "1"
+      without_crystal_env do
+        CQL.configure(&.env=("development"))
+        CQL.config.sql_logging?.should be_false
+      end
+    ensure
+      ENV.delete("CQL_NO_SQL_LOG")
     end
 
     it "follows the environment when it is changed after the defaults were applied" do
@@ -124,6 +165,20 @@ describe "CQL.configure" do
 
         schema.tables.has_key?(:things).should be_true
         schema.exec_query(&.scalar("PRAGMA busy_timeout")).should eq(4321)
+      end
+    end
+
+    it "leaves the performance monitor off when CRYSTAL_ENV is unset" do
+      disabled = CQL::Performance::Config.new
+      disabled.monitoring.enabled = false
+
+      with_global_monitor(CQL::Performance::Monitor.new(config: disabled)) do
+        without_crystal_env do
+          CQL.configure { |config| config.db = CQLSpecSupport.sqlite_uri("configure_build_schema_unset.db") }
+
+          CQL.build_schema(:configured_unset) { }
+          CQL::Performance.monitor.enabled?.should be_false
+        end
       end
     end
 

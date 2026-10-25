@@ -12,13 +12,21 @@ describe CQL::Performance::SQLFormatter do
   end
 
   describe "#format" do
-    it "formats SQL with params" do
-      formatter = CQL::Performance::SQLFormatter.new(colorize_enabled: false, pretty_format: false)
+    it "formats SQL with params when include_params is on" do
+      formatter = CQL::Performance::SQLFormatter.new(colorize_enabled: false, pretty_format: false, include_params: true)
       result = formatter.format("SELECT * FROM users WHERE id = ?", [1] of DB::Any)
       result.should contain("SQL")
       result.should contain("SELECT * FROM users WHERE id = ?")
       result.should contain("Parameters:")
       result.should contain("[1]")
+    end
+
+    it "leaves the bound values out by default" do
+      formatter = CQL::Performance::SQLFormatter.new(colorize_enabled: false, pretty_format: false)
+      result = formatter.format("SELECT * FROM users WHERE email = ?", ["secret@example.com"] of DB::Any)
+      result.should contain("SELECT * FROM users WHERE email = ?")
+      result.should_not contain("Parameters:")
+      result.should_not contain("secret@example.com")
     end
 
     it "formats SQL without params" do
@@ -101,6 +109,12 @@ describe CQL::Performance::SQLFormatter do
       result.should eq("[short]")
     end
 
+    it "escapes control characters so a value cannot start a new log line" do
+      formatter = CQL::Performance::SQLFormatter.new(colorize_enabled: false)
+      result = formatter.format_params(["a\nERROR forged"] of DB::Any)
+      result.should eq("[a\\nERROR forged]")
+    end
+
     it "formats multiple parameters separated by commas" do
       formatter = CQL::Performance::SQLFormatter.new(colorize_enabled: false)
       params = [1, "two", 3] of DB::Any
@@ -129,6 +143,13 @@ describe CQL::Performance::SQLFormatter do
       formatter.configure(max_sql: 20)
       result = formatter.format("SELECT * FROM users WHERE id = 1 AND name = 'test'")
       result.should contain("...")
+    end
+
+    it "updates include_params setting" do
+      formatter = CQL::Performance::SQLFormatter.new(colorize_enabled: false, pretty_format: false)
+      formatter.configure(include_params: true)
+      result = formatter.format("SELECT * FROM users WHERE id = ?", [7] of DB::Any)
+      result.should contain("Parameters: [7]")
     end
 
     it "updates max_param_length setting" do

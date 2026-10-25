@@ -171,7 +171,7 @@ module CQL::Performance
       record_execution(sql, params, Time::Span.zero, nil, ex.message)
 
       # Log error if configured
-      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
+      Log.error { failure_message(ex, sql, params) } if @config.logging.enabled?
 
       raise ex
     end
@@ -189,21 +189,30 @@ module CQL::Performance
       detector.try(&.record_query(sql, normalized_sql: normalized_sql))
     end
 
+    # Logs at a level chosen by duration; the message is formatted only if that level is emitted.
     private def log_query(sql : String, params : Array(DB::Any),
                           execution_time : Time::Span, rows_affected : Int64?)
-      output = @sql_formatter.format(sql, params, execution_time, rows_affected, @context)
-
-      # Determine log level based on execution time
       case categorize_duration(execution_time,
         @config.profiling.slow_query_threshold,
         @config.profiling.very_slow_threshold)
       when :very_slow
-        Log.error { output }
+        Log.error { format_query(sql, params, execution_time, rows_affected) }
       when :slow
-        Log.warn { output }
+        Log.warn { format_query(sql, params, execution_time, rows_affected) }
       else
-        Log.info { output }
+        Log.info { format_query(sql, params, execution_time, rows_affected) }
       end
+    end
+
+    private def format_query(sql : String, params : Array(DB::Any),
+                             execution_time : Time::Span, rows_affected : Int64?) : String
+      @sql_formatter.format(sql, params, execution_time, rows_affected, @context)
+    end
+
+    private def failure_message(ex : Exception, sql : String, params : Array(DB::Any)) : String
+      message = "Query failed: #{ex.message}\nSQL: #{sql}"
+      formatted_params = @sql_formatter.loggable_params(params)
+      formatted_params ? "#{message}\nParams: #{formatted_params}" : message
     end
 
     private def extract_rows_affected(result) : Int64?
@@ -255,7 +264,8 @@ module CQL::Performance
         colorize_enabled: @config.logging.colorize?,
         pretty_format: @config.logging.pretty_format?,
         max_sql_length: @config.logging.max_sql_length,
-        max_param_length: @config.logging.max_param_length
+        max_param_length: @config.logging.max_param_length,
+        include_params: @config.logging.include_params?
       )
     end
 
@@ -276,7 +286,8 @@ module CQL::Performance
         colorize: @config.logging.colorize?,
         pretty: @config.logging.pretty_format?,
         max_sql: @config.logging.max_sql_length,
-        max_param: @config.logging.max_param_length
+        max_param: @config.logging.max_param_length,
+        include_params: @config.logging.include_params?
       )
 
       # Recreate components if needed

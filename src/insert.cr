@@ -50,7 +50,7 @@ module CQL
     @values : Array(Array(DB::Any)) = Array(Array(DB::Any)).new
     # Column names (in order) established by the first row; later rows are
     # aligned to this order and must provide exactly the same columns.
-    @column_order : Array(Symbol) = [] of Symbol
+    @column_index : Hash(Symbol, Int32) = {} of Symbol => Int32
     @back : Array(Expression::Column) = Array(Expression::Column).new
     @query : Query? = nil
     # Upsert: the conflict target, then what to do about it (nil = not chosen yet).
@@ -327,27 +327,45 @@ module CQL
     end
 
     private def build_values(fields)
-      pairs = [] of {Symbol, DB::Any}
+      @column_index.empty? ? add_first_row(fields) : add_row(fields)
+    end
+
+    # The first row fixes the columns. Every column is resolved before touching state, so a bad
+    # column leaves the insert unchanged.
+    private def add_first_row(fields)
+      columns = [] of Expression::Column
+      row = [] of DB::Any
       fields.each do |field, value|
-        pairs << {field, value.is_a?(JSON::Any) ? value.to_json.as(DB::Any) : value.as(DB::Any)}
+        columns << Expression::Column.new(find_column(field))
+        row << db_value(value)
       end
-
-      if @column_order.empty?
-        # Resolve every column before touching state so a bad column leaves the
-        # insert unchanged.
-        columns = pairs.map { |(field, _)| Expression::Column.new(find_column(field)) }
-        columns.each { |column| @columns << column }
-        @column_order = pairs.map(&.[0])
-      else
-        names = pairs.map(&.[0])
-        unless names.size == @column_order.size && (names - @column_order).empty?
-          raise ArgumentError.new(
-            "All rows in a bulk insert must have the same columns: expected #{@column_order.join(", ")}, got #{names.join(", ")}")
-        end
-        pairs = @column_order.map { |name| pairs.find! { |(field, _)| field == name } }
+      columns.each_with_index do |column, index|
+        @columns << column
+        @column_index[column.column.name] = index
       end
+      @values << row
+    end
 
-      @values << pairs.map(&.[1])
+    # Later rows must name the same columns, in any order; values are placed by column position.
+    private def add_row(fields)
+      row = Array(DB::Any).new(@column_index.size, nil)
+      count = 0
+      fields.each do |field, value|
+        index = @column_index[field]? || raise_column_mismatch(fields)
+        row[index] = db_value(value)
+        count += 1
+      end
+      raise_column_mismatch(fields) unless count == @column_index.size
+      @values << row
+    end
+
+    private def db_value(value) : DB::Any
+      value.is_a?(JSON::Any) ? value.to_json.as(DB::Any) : value.as(DB::Any)
+    end
+
+    private def raise_column_mismatch(fields) : NoReturn
+      raise ArgumentError.new(
+        "All rows in a bulk insert must have the same columns: expected #{@column_index.keys.join(", ")}, got #{fields.keys.join(", ")}")
     end
 
     private def find_table(table : Symbol) : Table

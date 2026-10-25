@@ -100,6 +100,15 @@ describe "CQL::Performance Utilities" do
 
   describe "SQLUtils" do
     describe ".normalize_sql" do
+      it "normalizes a repeated statement once and keeps a bounded cache" do
+        sql = "SELECT * FROM users WHERE id = $1 -- cached"
+        first = CQL::Performance::SQLUtils.normalize_sql(sql)
+
+        CQL::Performance::SQLUtils.normalize_sql(sql).should be(first)
+        (CQL::Performance::SQLUtils::NORMALIZED_CACHE_LIMIT + 5).times { |i| CQL::Performance::SQLUtils.normalize_sql("SELECT #{i}") }
+        CQL::Performance::SQLUtils.normalized_cache_size.should be <= CQL::Performance::SQLUtils::NORMALIZED_CACHE_LIMIT
+      end
+
       it "replaces positional parameters with ?" do
         normalized = CQL::Performance::SQLUtils.normalize_sql("SELECT * FROM users WHERE id = $1")
         normalized.should eq("SELECT * FROM users WHERE id = ?")
