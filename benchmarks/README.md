@@ -1,10 +1,10 @@
 # Benchmarks
 
-Two scripts measure the native PostgreSQL driver (`CQL::Postgres`) against a real server. Neither one ships with results: numbers depend on your hardware, network, server settings and Crystal build, so run them in the environment you care about.
+Two scripts measure the native PostgreSQL driver (`CQL::Postgres`) against a real server, and one measures SQL generation on SQLite without a server. None ships with results: numbers depend on your hardware, network, server settings and Crystal build, so run them in the environment you care about.
 
-Both read the server from `DATABASE_URL`, create their own scratch table, and should be run with `--release` for meaningful timings. Run them from the repository root.
+The PostgreSQL scripts read the server from `DATABASE_URL` and create their own scratch table. All of them should be run with `--release` for meaningful timings, from the repository root.
 
-## Requirements
+## Requirements (PostgreSQL scripts)
 
 - Crystal and the repository's dependencies (`shards install --ignore-crystal-version`). `pg_wire_bench.cr` also compiles the `pg` shard, which is a development dependency in `shard.yml`.
 - A PostgreSQL server you can write to. Use a disposable database: the scripts drop and create tables.
@@ -63,6 +63,23 @@ Workloads: six mixed scalars in one statement, single `int8`, `timestamptz` and 
 | `BENCH_ONLY` | none | run only workloads whose name contains this text |
 
 Parameter encoding is part of what is timed. It creates and drops the unlogged table `cql_binary_bench_items`.
+
+## `sqlite_bench.cr`
+
+Measures query building and SQL generation: each workload builds a query on an in-memory SQLite `CQL::Schema` and calls `to_sql`. No database is queried, so it needs no server and no `DATABASE_URL`.
+
+```bash
+crystal run --release benchmarks/sqlite_bench.cr
+BENCH_ONLY=insert crystal run --release benchmarks/sqlite_bench.cr   # one workload
+```
+
+Workloads: a `where` by id, a ten-condition `where`, a join with order and limit, and a 500-row multi-row insert. Each one is reported by `Benchmark.ips` as iterations per second, time per iteration and bytes allocated per iteration.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BENCH_ONLY` | none | run only workloads whose name contains this text |
+
+Building the query is part of what is timed; the insert's row hashes are built once beforehand. It runs with the library's default configuration, so the numbers reflect what an application gets out of the box. `BENCH_ONLY` ignores case, and a filter that matches nothing exits with an error.
 
 ## Related
 
