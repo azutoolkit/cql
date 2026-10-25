@@ -61,6 +61,16 @@ users = User.all
 users.each { |u| puts u.name }
 ```
 
+## Iterate Over Many Records
+
+`each` loads the matching rows, releases the connection, then yields them, so the block may run other queries and `break` stops early. For large tables use `find_each`, which loads one batch at a time and pages by primary key:
+
+```crystal
+User.query.where(active: true).find_each(batch_size: 500) do |user|
+  user.touch
+end
+```
+
 ## Find with Order
 
 ```crystal

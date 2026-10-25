@@ -71,15 +71,16 @@ module CQL
       end
     end
 
-    # Yields each row mapped to *kind*.
-    def each(as kind : U.class, &block : U ->) forall U
-      all(kind).each { |record| block.call(record) }
+    # Yields each row mapped to *kind*. The rows are read first and the connection released
+    # before the block runs, so the block may run other queries; use `find_each` for large results.
+    def each(as kind : U.class, & : U ->) : Nil forall U
+      all(kind).each { |record| yield record }
     end
 
-    private def execute(&block : DB::Connection, String, Array(DB::Any) -> T) : T forall T
+    private def execute(&)
       sql, params = to_sql
       CQL::Cache::RequestQueryCacheHelper.with_cache(sql, params) do
-        CQL::Execution.run(executor, sql, params, :select) { |connection| block.call(connection, sql, params) }
+        CQL::Execution.run(executor, sql, params, :select) { |connection| yield connection, sql, params }
       end
     end
   end

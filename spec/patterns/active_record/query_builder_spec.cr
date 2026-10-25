@@ -730,6 +730,29 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
       count.should eq(2)
     end
+
+    it "yields models in query order and stops at a break" do
+      %w[Ada Bo Cy].each_with_index { |name, i| create_last_user(name, 20 + i) }
+
+      names = [] of String
+      TestUser.query.order(age: :asc).each do |user|
+        names << user.name.not_nil!
+        break if names.size == 2
+      end
+
+      names.should eq(%w[Ada Bo])
+      UserDB.pool_stats.in_flight.should eq(0)
+      TestUser.query.order(age: :asc).all.map(&.name).should eq(%w[Ada Bo Cy])
+    end
+
+    it "releases the connection when the block raises" do
+      create_last_user("Ada", 20)
+
+      expect_raises(Exception, "boom") { TestUser.query.each { |_| raise "boom" } }
+
+      UserDB.pool_stats.in_flight.should eq(0)
+      TestUser.count.should eq(1)
+    end
   end
 
   describe "#exists?" do

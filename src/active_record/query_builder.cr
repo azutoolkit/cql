@@ -536,8 +536,8 @@ module CQL
 
         # Iterate over each result
         # - **@yield** [T] Each model instance
-        def each(&block : T ->)
-          row_query(T).each(as: T, &block)
+        def each(& : T ->)
+          row_query(T).each(as: T) { |record| yield record }
         end
 
         # Fetches one row with the order reversed; queries that reshape their rows
@@ -867,8 +867,8 @@ module CQL
           last(as_kind) || raise "No records found"
         end
 
-        def each(&block : T::Row ->)
-          @query.each(as: T::Row, &block)
+        def each(& : T::Row ->)
+          @query.each(as: T::Row) { |record| yield record }
         end
       end
     end
