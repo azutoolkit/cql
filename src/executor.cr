@@ -59,18 +59,26 @@ module CQL
       end
 
       started = Time.instant
+      connected = nil
       begin
-        result = Telemetry.in_span(operation, sql) { executor.exec_query { |connection| yield connection } }
+        result = Telemetry.in_span(operation, sql) do
+          executor.exec_query do |connection|
+            connected = Time.instant
+            yield connection
+          end
+        end
       rescue ex
-        report(executor.adapter, operation, sql, params, started, ex, nil, monitor)
+        report(executor.adapter, operation, sql, params, started, connected, ex, nil, monitor)
         raise ex
       end
-      report(executor.adapter, operation, sql, params, started, nil, result, monitor)
+      report(executor.adapter, operation, sql, params, started, connected, nil, result, monitor)
       result
     end
 
-    private def self.report(adapter, operation, sql, params, started, error, result, monitor) : Nil
-      event = Telemetry.query_event(adapter, operation, sql, params, Time.instant - started, error, result)
+    # A statement whose connection never arrived waited for it until it failed.
+    private def self.report(adapter, operation, sql, params, started, connected, error, result, monitor) : Nil
+      finished = Time.instant
+      event = Telemetry.query_event(adapter, operation, sql, params, finished - started, error, result, (connected || finished) - started)
       Telemetry.publish(event)
       monitor.try &.record(event, params)
     end

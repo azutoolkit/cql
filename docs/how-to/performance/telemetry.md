@@ -13,7 +13,7 @@ CQL::Telemetry.log_queries                       # one debug log line per statem
 ```
 
 An event carries `sql`, `operation` (`:select`, `:insert`, `:update`, `:delete`, `:ddl`,
-`:explain`), `duration`, `param_count`, `adapter`, `error`, `rows_affected`, `context`, `params` (only with `capture_params`) and `success?`.
+`:explain`), `duration`, `pool_wait`, `param_count`, `adapter`, `error`, `rows_affected`, `context`, `params` (only with `capture_params`) and `success?`.
 
 ## Parameters are redacted by default
 
@@ -80,7 +80,9 @@ end
 `using` works on queries, inserts, updates and deletes, so a transaction's connection can be
 passed explicitly instead of relying on the fiber-local one.
 
-Statements served from the result cache emit no event, and the duration includes pool wait time.
+Statements served from the result cache emit no event, and the duration includes pool wait time:
+`event.pool_wait` is the part of it spent waiting for a pooled connection (about zero on a transaction or pinned
+connection), and a checkout that fails counts its wait until the failure.
 `Schema#alter` and migrations bypass telemetry. `event.error.message` may contain data, so
 redact it before shipping it anywhere.
 

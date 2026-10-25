@@ -133,6 +133,46 @@ describe CQL::Telemetry do
     end
   end
 
+  describe "pool wait" do
+    it "is within the duration for an ordinary statement" do
+      add_user.call("ada")
+
+      events.last.pool_wait.should be >= Time::Span.zero
+      events.last.pool_wait.should be <= events.last.duration
+    end
+
+    it "measures the wait for a connection held by another fiber" do
+      busy = spec_sqlite_schema("telemetry_pool_wait.db", "?initial_pool_size=0&max_pool_size=1&checkout_timeout=5")
+      done = Channel(Nil).new
+      busy.with_connection do |_connection|
+        spawn { busy.exec("SELECT 1"); done.send(nil) }
+        Fiber.yield
+        sleep 20.milliseconds
+      end
+      done.receive
+
+      events.last.pool_wait.should be >= 10.milliseconds
+      events.last.pool_wait.should be <= events.last.duration
+    end
+
+    it "counts a failed checkout's wait until the failure" do
+      busy = spec_sqlite_schema("telemetry_pool_timeout.db", "?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05")
+      busy.with_connection do |_connection|
+        expect_raises(DB::PoolTimeout) { busy.exec("SELECT 1") }
+      end
+
+      events.last.error.should be_a(DB::PoolTimeout)
+      events.last.pool_wait.should be >= 40.milliseconds
+      events.last.pool_wait.should eq(events.last.duration)
+    end
+
+    it "is zero for an event built with the original nine arguments" do
+      event = CQL::Telemetry::QueryEvent.new("SELECT 1", 0, nil, 1.millisecond, nil, CQL::Adapter::SQLite, :select, nil, nil)
+
+      event.pool_wait.should eq(Time::Span.zero)
+    end
+  end
+
   describe "subscribers" do
     it "stop receiving events once unsubscribed" do
       CQL::Telemetry.unsubscribe("spec")

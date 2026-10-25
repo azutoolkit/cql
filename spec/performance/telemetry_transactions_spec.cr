@@ -1,11 +1,7 @@
 require "../spec_helper"
 
-private def sqlite_schema(name : String, params : String = "")
-  CQL::Schema.new(:telemetry_tx, spec_sqlite_uri(name) + params, CQL::Adapter::SQLite)
-end
-
 describe "CQL::Telemetry transactions" do
-  schema = sqlite_schema("telemetry_transactions.db")
+  schema = spec_sqlite_schema("telemetry_transactions.db")
   events = [] of CQL::Telemetry::TransactionEvent
 
   before_each do
@@ -36,7 +32,7 @@ describe "CQL::Telemetry transactions" do
   end
 
   it "publishes Begin before the pool checkout and counts the wait in the duration" do
-    busy = sqlite_schema("telemetry_tx_busy.db", "?initial_pool_size=0&max_pool_size=1&checkout_timeout=5")
+    busy = spec_sqlite_schema("telemetry_tx_busy.db", "?initial_pool_size=0&max_pool_size=1&checkout_timeout=5")
     done = Channel(Nil).new
     busy.with_connection do |_connection|
       spawn { busy.transaction { |_tx| }; done.send(nil) }
@@ -49,7 +45,7 @@ describe "CQL::Telemetry transactions" do
   end
 
   it "reports a failed checkout as Rollback" do
-    busy = sqlite_schema("telemetry_tx_timeout.db", "?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05")
+    busy = spec_sqlite_schema("telemetry_tx_timeout.db", "?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05")
     busy.with_connection do |_connection|
       expect_raises(DB::PoolTimeout) { busy.transaction { |_tx| } }
     end
@@ -145,13 +141,13 @@ end
 
 describe "CQL::Schema#pool_stats" do
   it "is all zeros before the first query when the pool starts empty" do
-    schema = sqlite_schema("pool_stats_empty.db", "?initial_pool_size=0")
+    schema = spec_sqlite_schema("pool_stats_empty.db", "?initial_pool_size=0")
 
     schema.pool_stats.should eq(CQL::PoolStats.new(0, 0, 0, 0))
   end
 
   it "counts the connection opened by a query as idle again afterwards" do
-    schema = sqlite_schema("pool_stats_query.db", "?initial_pool_size=0&max_pool_size=4")
+    schema = spec_sqlite_schema("pool_stats_query.db", "?initial_pool_size=0&max_pool_size=4")
     schema.exec("SELECT 1")
 
     stats = schema.pool_stats
@@ -162,7 +158,7 @@ describe "CQL::Schema#pool_stats" do
   end
 
   it "counts a connection held by a transaction as in flight" do
-    schema = sqlite_schema("pool_stats_tx.db")
+    schema = spec_sqlite_schema("pool_stats_tx.db")
 
     schema.transaction { |_tx| schema.pool_stats.in_flight.should eq(1) }
 

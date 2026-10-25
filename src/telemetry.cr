@@ -32,8 +32,13 @@ module CQL
       getter operation : Symbol
       getter rows_affected : Int64?
       getter context : String?
+      # Time spent waiting for a pooled connection; about zero on a pinned or
+      # transaction connection. Included in `duration`; measured by
+      # `CQL::Execution.run` (zero in events built by `Telemetry.observe`).
+      getter pool_wait : Time::Span
 
-      def initialize(@sql, @param_count, @params, @duration, @error, @adapter, @operation, @rows_affected, @context)
+      def initialize(@sql, @param_count, @params, @duration, @error, @adapter, @operation, @rows_affected, @context,
+                     @pool_wait = Time::Span.zero)
       end
 
       def success? : Bool
@@ -254,9 +259,9 @@ module CQL
 
     # :nodoc:
     def self.query_event(adapter : Adapter, operation : Symbol, sql : String, params : Array(DB::Any),
-                         duration : Time::Span, error : Exception?, result) : QueryEvent
+                         duration : Time::Span, error : Exception?, result, pool_wait : Time::Span = Time::Span.zero) : QueryEvent
       context = @@mutex.synchronize { @@contexts[Fiber.current]? }
-      QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows_affected(result), context)
+      QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows_affected(result), context, pool_wait)
     end
 
     # :nodoc:

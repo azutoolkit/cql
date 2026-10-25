@@ -42,6 +42,11 @@ def spec_sqlite_uri(name : String)
   CQLSpecSupport.sqlite_uri(name)
 end
 
+# A schema on its own SQLite file; *params* is appended to the URI (e.g. pool settings).
+def spec_sqlite_schema(name : String, params : String = "") : CQL::Schema
+  CQL::Schema.new(:spec_sqlite, spec_sqlite_uri(name) + params, CQL::Adapter::SQLite)
+end
+
 def postgres_available?
   CQLSpecSupport.postgres_available?
 end
