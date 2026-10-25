@@ -14,6 +14,12 @@ module Expression
     # and the parameter index
     abstract def placeholder_format(param_index : Int32) : String
 
+    # The most parameters one prepared statement may bind. The protocols allow 65535, but the
+    # `pg` shard writes the count as a signed Int16.
+    def max_bind_params : Int32
+      Int16::MAX.to_i32
+    end
+
     # Dumps only the DB structure (no data) to a string
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String

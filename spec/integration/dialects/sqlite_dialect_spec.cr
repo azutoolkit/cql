@@ -11,6 +11,12 @@ module Expression
       end
     end
 
+    describe "#max_bind_params" do
+      it "allows 999 bound parameters, the default of every SQLite build" do
+        CQL::Adapter::SQLite.dialect.max_bind_params.should eq(999)
+      end
+    end
+
     describe "#structure_dump" do
       it "returns empty string for structure dumps" do
         dialect = SqliteDialect.new

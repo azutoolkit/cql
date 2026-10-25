@@ -18,6 +18,10 @@ describe "CockroachDB adapter" do
     cockroach.sql_type(Slice(UInt8)).should eq("BYTEA")
   end
 
+  it "allows 32767 bound parameters, the most every driver accepts" do
+    cockroach.dialect.max_bind_params.should eq(32767)
+  end
+
   it "generates PostgreSQL-style SQL for queries, CTEs, windows and upserts" do
     generator = -> { Expression::Generator.new(cockroach) }
 
