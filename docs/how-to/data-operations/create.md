@@ -104,12 +104,12 @@ Product.upsert_all([
 ], on_conflict: :sku)
 ```
 
-- By default an existing row takes every inserted column except the `on_conflict` columns, `id` and `created_at`, so
+- By default an existing row takes every inserted column except the `on_conflict` columns, the primary key (`id` unless the model declares `primary_key:`) and `created_at`, so
   `updated_at` is refreshed. On a table without `updated_at`, rows that insert nothing else leave existing rows unchanged.
 - `update: [:price]` changes only the listed columns, exactly as given (it does not add `updated_at`, and it may name
-  `id` or `created_at`). `update: [] of Symbol` leaves existing rows unchanged while still inserting new ones.
-- `on_conflict: :id` needs every row to carry its id: generated UUID or ULID ids never match, so it raises
-  `ArgumentError` when an id would be generated.
+  the primary key or `created_at`). `update: [] of Symbol` leaves existing rows unchanged while still inserting new ones.
+- `on_conflict` on the primary key (`:id`, or the column named by `primary_key:`) needs every row to carry its key:
+  generated UUID or ULID keys never match, so it raises `ArgumentError` when a key would be generated.
 - The `on_conflict` columns must be inserted columns covered by a unique index or primary key. MySQL ignores them and
   matches on any unique key.
 - The return value is the rows affected as the database reports it: one per inserted or updated row on SQLite and

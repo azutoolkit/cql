@@ -12,11 +12,11 @@ Cursor pagination is better than offset pagination for:
 
 ## Built-in Cursor Helpers
 
-Models include helpers for id-based cursors. Each returns an `Array` of records:
+Models include helpers for primary-key cursors; they use the model's primary key column (`Model.primary_key_column`, `id` unless `db_context` declares `primary_key:`). Each returns an `Array` of records:
 
 ```crystal
-Post.after_cursor(last_seen_id, limit: 20)    # id > cursor, ascending
-Post.before_cursor(first_seen_id, limit: 20)  # id < cursor, returned in ascending order
+Post.after_cursor(last_seen_id, limit: 20)    # primary key > cursor, ascending
+Post.before_cursor(first_seen_id, limit: 20)  # primary key < cursor, returned in ascending order
 Post.paginate_by(:views_count, 500, limit: 20) # views_count > 500, ordered by views_count
 ```
 
