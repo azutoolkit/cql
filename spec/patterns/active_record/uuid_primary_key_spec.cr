@@ -196,6 +196,18 @@ describe "UUID Primary Key Support" do
     end
   end
 
+  describe "query delete_all" do
+    it "deletes the matching UUID rows in bulk" do
+      gone = UuidSession.create!(token: "gone", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+      kept = UuidSession.create!(token: "kept", user_id: 2_i64, created_at: Time.utc, updated_at: Time.utc)
+
+      UuidSession.where(token: "gone").delete_all.should eq(1)
+
+      UuidSession.find(gone.id!).should be_nil
+      UuidSession.find!(kept.id!).token.should eq("kept")
+    end
+  end
+
   describe ".insert_all" do
     it "generates a UUID for each row without an id" do
       UuidSession.insert_all([{token: "bulk a", user_id: 1_i64}, {token: "bulk b", user_id: 2_i64}]).should eq(2)

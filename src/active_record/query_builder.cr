@@ -730,11 +730,16 @@ module CQL
         # Get array of primary key values
         # - **@return** [Array] Array of primary key values
         def ids(as as_kind = Int64)
-          # Use a different approach to get just the ID values
-          # We need to get the raw values, not deserialize into models
           query = @query.clone
+          query.columns.clear
+          query.select_expressions.clear
           query.columns << T.cql_column(:id)
           query.all(as: as_kind)
+        end
+
+        # The query whose ids `delete_all` removes; the order only matters under a limit or offset.
+        private def id_scope : QueryBuilder(T)
+          @query.limit || @query.offset ? self : unscope(:order)
         end
 
         # Get maximum value of a column
@@ -792,9 +797,12 @@ module CQL
           clone_builder.tap(&.query.unscope(scope_type))
         end
 
-        # Delete all records matching current scope
-        # - **@return** [Int64] Number of deleted records
-        def delete_all
+        # Deletes the matching records and returns how many. A model with destroy callbacks loads
+        # and deletes each record so they run; others delete by id in bulk (soft-deletable models
+        # set `deleted_at`).
+        def delete_all : Int64
+          return T.delete_ids(id_scope.ids(as: T.stored_id_type)) unless T.destroy_callbacks?
+
           records = all
           records.each(&.delete!)
           records.size.to_i64

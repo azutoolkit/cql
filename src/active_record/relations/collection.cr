@@ -452,7 +452,7 @@ module CQL::ActiveRecord::Relations
     # ```
     def ids=(ids : Array(Pk))
       safe_db_operation do
-        id_chunks(ids, other_params: 1) do |chunk|
+        CQL::ActiveRecord::IdChunks.each(ids, Target.adapter.dialect.max_bind_params - 1) do |chunk|
           CQL::Update.new(Target.schema).table(Target.table).set({@key => @id}).where(id: chunk).commit
         end
         reload
@@ -672,14 +672,6 @@ module CQL::ActiveRecord::Relations
       end
 
       @records
-    end
-
-    # Yields *ids* (deduplicated, UUIDs as strings) in chunks that fit one statement beside
-    # *other_params* other bound values.
-    protected def id_chunks(ids : Array(Pk), other_params : Int32 = 0, &) : Nil
-      ids.uniq.each_slice(Target.adapter.dialect.max_bind_params - other_params) do |chunk|
-        yield chunk.map { |id| id.is_a?(UUID) ? id.to_s.as(DB::Any) : id.as(DB::Any) }
-      end
     end
 
     # Scopes the base query to the parent record; the caller's query is never mutated.

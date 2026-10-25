@@ -1362,6 +1362,90 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       deleted_count.should be_a(Int64)
       deleted_count.should eq(2)
     end
+
+    it "runs each record's destroy callbacks when the model declares them" do
+      create_last_user("Ada", 30)
+      create_last_user("Linus", 40)
+      CallbackTracker.clear
+
+      TestUser.where(age: 30).delete_all.should eq(1)
+
+      CallbackTracker.order.count("before_destroy").should eq(1)
+      CallbackTracker.order.count("after_destroy").should eq(1)
+      TestUser.all.map(&.name).should eq(["Linus"])
+    end
+
+    it "deletes by id in one SELECT and one DELETE when the model has no destroy callbacks" do
+      UserDB.posts.create!
+      3.times { |i| Post.create!(title: "Gone #{i}", body: "gone") }
+      kept = Post.create!(title: "Kept", body: "kept")
+
+      deleted = 0_i64
+      selects = [] of String
+      deletes = count_queries(:delete) { selects = count_queries { deleted = Post.where(body: "gone").delete_all } }
+
+      deleted.should eq(3)
+      selects.size.should eq(1)
+      deletes.size.should eq(1)
+      Post.all.map(&.id!).should eq([kept.id!])
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "splits the DELETE into chunks within the bind limit" do
+      UserDB.posts.create!
+      count = Post.adapter.dialect.max_bind_params
+      Post.insert_all((1..count).map { |i| {title: "P#{i}", body: "bulk"} })
+
+      deleted = 0_i64
+      deletes = count_queries(:delete) { deleted = Post.where(body: "bulk").delete_all }
+
+      deleted.should eq(count)
+      deletes.size.should eq(2)
+      Post.count.should eq(0)
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "deletes only the rows a limit and order select" do
+      UserDB.posts.create!
+      %w[c a b].each { |title| Post.create!(title: title, body: "b") }
+
+      Post.order(title: :asc).limit(2).delete_all.should eq(2)
+
+      Post.all.map(&.title).should eq(["c"])
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "runs no DELETE when nothing matches" do
+      UserDB.posts.create!
+      Post.create!(title: "Kept", body: "kept")
+
+      count_queries(:delete) { Post.where(body: "none").delete_all.should eq(0) }.should be_empty
+      Post.count.should eq(1)
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "deletes only the rows a join condition selects" do
+      UserDB.posts.create!
+      ada = create_last_user("Ada", 30)
+      bob = create_last_user("Bob", 40)
+      2.times { |i| Post.create!(title: "Ada #{i}", body: "b", user_id: ada.id!) }
+      Post.create!(title: "Bob", body: "b", user_id: bob.id!)
+
+      Post.query.joins(:user) { user.name == "Ada" }.delete_all.should eq(2)
+
+      Post.all.map(&.title).should eq(["Bob"])
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "reports which models declare destroy callbacks" do
+      TestUser.destroy_callbacks?.should be_true
+      Post.destroy_callbacks?.should be_false
+    end
   end
 
   describe "#group_by" do

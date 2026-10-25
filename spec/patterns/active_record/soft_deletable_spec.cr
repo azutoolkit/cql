@@ -167,6 +167,34 @@ describe CQL::ActiveRecord::SoftDeletable do
     end
   end
 
+  describe "QueryBuilder#delete_all" do
+    it "soft deletes the matching rows with one UPDATE and no DELETE" do
+      gone = SoftDeletableUser.new("Gone", "gone@example.com", 20)
+      gone.save!
+      kept = SoftDeletableUser.new("Kept", "kept@example.com", 50)
+      kept.save!
+
+      deleted = 0_i64
+      updates = [] of String
+      deletes = count_queries(:delete) { updates = count_queries(:update) { deleted = SoftDeletableUser.where(age: 20).delete_all } }
+
+      deleted.should eq(1)
+      updates.size.should eq(1)
+      deletes.should be_empty
+      SoftDeletableUser.all.map(&.name).should eq(["Kept"])
+      SoftDeletableUser.with_deleted.find!(gone.id!).deleted_at.should_not be_nil
+    end
+
+    it "skips rows that are already soft deleted unless with_deleted is used" do
+      user = SoftDeletableUser.new("Twice", "twice@example.com", 20)
+      user.save!
+      user.delete!
+
+      SoftDeletableUser.where(age: 20).delete_all.should eq(0)
+      SoftDeletableUser.with_deleted.where(age: 20).delete_all.should eq(1)
+    end
+  end
+
   describe "class methods" do
     it "provides acts_as_paranoid? to check if model uses soft deletes" do
       SoftDeletableUser.acts_as_paranoid?.should be_true

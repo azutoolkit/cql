@@ -54,6 +54,13 @@ Comment.delete_all
 User.where(role: "guest").delete_all
 ```
 
+`delete_all` on a query returns the number of rows deleted. When the model declares no `before_destroy` or
+`after_destroy` callbacks, it reads the matching ids with one SELECT and deletes them with one `DELETE ... WHERE id IN
+(...)` per chunk of the database's bind-parameter limit, without loading records (a soft-deletable model sets
+`deleted_at` with an UPDATE instead). A model with destroy callbacks loads each record and deletes it, so the callbacks
+run. An override of the instance `delete!` alone does not count: declare a destroy callback if that code must run.
+The statements are not wrapped in a transaction; open one if the delete must be all or nothing.
+
 ## Soft Delete (if enabled)
 
 If using soft deletes:

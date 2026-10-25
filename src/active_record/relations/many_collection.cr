@@ -264,9 +264,7 @@ module CQL
         if Target.responds_to?(:acts_as_paranoid?)
           target_ids.each { |id| safe_db_operation { Target.delete!(id) } }
         else
-          id_chunks(target_ids) do |chunk|
-            safe_db_operation { CQL::Delete.new(Target.schema).from(Target.table).where(id: chunk).commit }
-          end
+          safe_db_operation { Target.delete_ids(target_ids) }
         end
       end
 

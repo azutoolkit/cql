@@ -62,6 +62,12 @@ module CQL
         BEFORE_DESTROY    = [] of Symbol
         AFTER_DESTROY     = [] of Symbol
 
+        # Whether the model declares before_destroy or after_destroy callbacks. Bulk deletes
+        # load and delete record by record only then, so the callbacks run.
+        def self.destroy_callbacks? : Bool
+          \{{ !BEFORE_DESTROY.empty? || !AFTER_DESTROY.empty? }}
+        end
+
         # Define before validation callback
         # - **@param** method [Symbol] The method to call before validation
         # - **@return** [Nil]

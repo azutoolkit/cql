@@ -223,6 +223,11 @@ module CQL
             .commit
         end
 
+        # Soft deletes a chunk of ids for `delete_ids`: sets `deleted_at` instead of deleting.
+        protected def self.delete_chunk(ids : Array(DB::Any)) : Int64
+          CQL::Update.new(schema).table(table).set({:deleted_at => Time.utc.as(DB::Any)}).where(id: ids).commit.rows_affected
+        end
+
         # Soft delete all records in the table
         def self.delete_all
           all.each(&.delete!)

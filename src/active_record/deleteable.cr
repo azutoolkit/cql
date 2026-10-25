@@ -76,6 +76,24 @@ module CQL
             .commit
         end
 
+        # Deletes the rows with *ids* without callbacks, one statement per chunk of the dialect's
+        # bind limit, and returns the number deleted.
+        def self.delete_ids(ids : Array) : Int64
+          deleted = 0_i64
+          CQL::ActiveRecord::IdChunks.each(ids, adapter.dialect.max_bind_params - 1) { |chunk| deleted += delete_chunk(chunk) }
+          deleted
+        end
+
+        # The type ids are stored as (UUIDs as strings), for reading them back.
+        def self.stored_id_type
+          {% if Pk == UUID %}String{% else %}Pk{% end %}
+        end
+
+        # The statement `delete_ids` sends for one chunk of ids (soft deletes update instead).
+        protected def self.delete_chunk(ids : Array(DB::Any)) : Int64
+          CQL::Delete.new(schema).from(table).where(id: ids).commit.rows_affected
+        end
+
         # Check if the record has been destroyed (deleted from the database)
         # - **@return** [Bool] True if the record has been destroyed, false otherwise
         #
