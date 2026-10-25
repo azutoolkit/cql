@@ -14,6 +14,8 @@ module CQL::Performance
   class PerformanceMetrics
     include TimingUtils
 
+    private alias QueryStatistics = Hash(String, NamedTuple(count: Int32, total_ms: Float64, avg_ms: Float64, min_ms: Float64, max_ms: Float64))
+
     # Helper method to convert values to JSON::Any recursively
     def self.to_json_any(value) : JSON::Any
       case value
@@ -289,38 +291,26 @@ module CQL::Performance
       start_time ||= Time.utc
       collection_duration = Time.utc - start_time
 
-      # Query metrics
-      query_metrics = build_query_metrics(profiler, collection_duration, error_count)
-
-      # N+1 metrics
-      n_plus_one_metrics = build_n_plus_one_metrics(detector)
-
-      # Cache metrics
-      cache_metrics = build_cache_metrics(cache)
-
-      # System metrics
-      system_metrics = build_system_metrics(start_time)
-
-      # Health metrics
-      health_metrics = build_health_metrics(profiler, detector, cache)
-
-      # Top queries
-      top_queries = build_top_queries(profiler, config.try(&.logging.include_params?) || false)
-
-      # Patterns
-      patterns = build_performance_patterns(profiler, detector)
-
-      # Issues
+      # Each source is read once (each under its own lock), and every section is built from those reads.
+      statistics = profiler.try(&.statistics) || QueryStatistics.new
+      slowest_queries = profiler.try(&.slowest_queries(1000)) || [] of QueryData
+      n_plus_one_patterns = detector.try(&.patterns) || [] of NPlusOnePattern
       issues = collect_issues(profiler, detector)
+
+      query_metrics = if profiler
+                        build_query_metrics(statistics, slowest_queries, collection_duration, error_count)
+                      else
+                        empty_query_metrics(error_count)
+                      end
 
       new(
         query_metrics,
-        n_plus_one_metrics,
-        cache_metrics,
-        system_metrics,
-        health_metrics,
-        top_queries,
-        patterns,
+        build_n_plus_one_metrics(n_plus_one_patterns),
+        build_cache_metrics(cache),
+        build_system_metrics(start_time),
+        build_health_metrics(statistics, slowest_queries, n_plus_one_patterns, issues, cache),
+        build_top_queries(statistics, slowest_queries, config.try(&.logging.include_params?) || false),
+        build_performance_patterns(statistics, n_plus_one_patterns),
         issues,
         collection_duration
       )
@@ -445,16 +435,15 @@ module CQL::Performance
       end
     end
 
-    private def self.build_query_metrics(profiler : QueryProfilerInterface?, duration : Time::Span, error_count : Int32 = 0) : QueryMetrics
-      unless profiler
-        return QueryMetrics.new(
-          0_i64, 0_i64, 0_i64, error_count.to_i64,
-          Time::Span.zero, Time::Span.zero, Time::Span.zero, Time::Span.zero,
-          0.0, 0.0, 0.0
-        )
-      end
+    private def self.empty_query_metrics(error_count : Int32) : QueryMetrics
+      QueryMetrics.new(
+        0_i64, 0_i64, 0_i64, error_count.to_i64,
+        Time::Span.zero, Time::Span.zero, Time::Span.zero, Time::Span.zero,
+        0.0, 0.0, 0.0
+      )
+    end
 
-      stats = profiler.statistics
+    private def self.build_query_metrics(stats : QueryStatistics, slowest_queries : Array(QueryData), duration : Time::Span, error_count : Int32) : QueryMetrics
       total_queries = stats.values.sum(&.[:count]).to_i64
       total_time = stats.values.sum(&.[:total_ms]).milliseconds
       avg_time = total_queries > 0 ? total_time / total_queries : Time::Span.zero
@@ -462,8 +451,8 @@ module CQL::Performance
       max_time = stats.values.max_of?(&.[:max_ms]) || 0.0
 
       # Count slow queries
-      slow_queries = profiler.slowest_queries(1000).size.to_i64
-      very_slow_queries = profiler.slowest_queries(1000).count { |query| query.execution_time > 1.second }
+      slow_queries = slowest_queries.size.to_i64
+      very_slow_queries = slowest_queries.count { |query| query.execution_time > 1.second }
 
       # Calculate rates
       error_queries = error_count.to_i64
@@ -487,12 +476,7 @@ module CQL::Performance
       )
     end
 
-    private def self.build_n_plus_one_metrics(detector : NPlusOneDetectorInterface?) : NPlusOneMetrics
-      unless detector
-        return NPlusOneMetrics.new(0, 0, 0, 0, 0, 0_i64, 0.0, 0, 0.0)
-      end
-
-      patterns = detector.patterns
+    private def self.build_n_plus_one_metrics(patterns : Array(NPlusOnePattern)) : NPlusOneMetrics
       total_patterns = patterns.size
       total_repetitions = patterns.sum(&.repetition_count).to_i64
       avg_repetitions = total_patterns > 0 ? total_repetitions.to_f64 / total_patterns : 0.0
@@ -558,9 +542,8 @@ module CQL::Performance
       )
     end
 
-    private def self.build_health_metrics(profiler : QueryProfilerInterface?, detector : NPlusOneDetectorInterface?, cache : CQL::Cache::CacheInterface?) : HealthMetrics
-      # Collect issues
-      issues = collect_issues(profiler, detector)
+    private def self.build_health_metrics(stats : QueryStatistics, slowest_queries : Array(QueryData), patterns : Array(NPlusOnePattern),
+                                          issues : Array(Issue), cache : CQL::Cache::CacheInterface?) : HealthMetrics
       critical_issues = issues.count(&.severity.== :critical)
       high_issues = issues.count(&.severity.== :high)
       medium_issues = issues.count(&.severity.== :medium)
@@ -568,8 +551,8 @@ module CQL::Performance
       total_issues = issues.size
 
       # Calculate health scores
-      query_health_score = calculate_query_health_score(profiler)
-      n_plus_one_health_score = calculate_n_plus_one_health_score(detector)
+      query_health_score = calculate_query_health_score(stats, slowest_queries)
+      n_plus_one_health_score = calculate_n_plus_one_health_score(patterns)
       cache_health_score = calculate_cache_health_score(cache)
       system_health_score = 100 # Placeholder
 
@@ -595,21 +578,8 @@ module CQL::Performance
       )
     end
 
-    private def self.build_top_queries(profiler : QueryProfilerInterface?, include_params : Bool) : TopQueries
-      unless profiler
-        return TopQueries.new(
-          [] of QueryData,
-          [] of NamedTuple(sql: String, count: Int64, avg_time: Time::Span),
-          [] of NamedTuple(sql: String, errors: Int64, error_rate: Float64),
-          [] of NamedTuple(sql: String, total_time: Time::Span, count: Int64)
-        )
-      end
-
-      # Slowest queries
-      slowest_queries = profiler.slowest_queries(10)
-
+    private def self.build_top_queries(stats : QueryStatistics, slowest_queries : Array(QueryData), include_params : Bool) : TopQueries
       # Most frequent queries
-      stats = profiler.statistics
       most_frequent = stats.map do |sql, stat|
         {
           sql:      sql,
@@ -630,25 +600,17 @@ module CQL::Performance
         }
       end.sort_by!(&.[:total_time]).reverse!.first(10)
 
-      TopQueries.new(slowest_queries, most_frequent, highest_error_queries, most_expensive, include_params)
+      TopQueries.new(slowest_queries.first(10), most_frequent, highest_error_queries, most_expensive, include_params)
     end
 
-    private def self.build_performance_patterns(profiler : QueryProfilerInterface?, detector : NPlusOneDetectorInterface?) : PerformancePatterns
-      # N+1 patterns
-      n_plus_one_patterns = detector.try(&.patterns) || [] of NPlusOnePattern
-
-      # Query patterns
-      query_patterns = [] of NamedTuple(pattern: String, count: Int64, avg_time: Time::Span)
-      if profiler
-        stats = profiler.statistics
-        query_patterns = stats.map do |sql, stat|
-          {
-            pattern:  sql,
-            count:    stat[:count].to_i64,
-            avg_time: stat[:avg_ms].milliseconds,
-          }
-        end.sort_by!(&.[:count]).reverse!.first(20)
-      end
+    private def self.build_performance_patterns(stats : QueryStatistics, n_plus_one_patterns : Array(NPlusOnePattern)) : PerformancePatterns
+      query_patterns = stats.map do |sql, stat|
+        {
+          pattern:  sql,
+          count:    stat[:count].to_i64,
+          avg_time: stat[:avg_ms].milliseconds,
+        }
+      end.sort_by!(&.[:count]).reverse!.first(20)
 
       # Time distribution
       time_distribution = {
@@ -670,15 +632,12 @@ module CQL::Performance
       issues
     end
 
-    private def self.calculate_query_health_score(profiler : QueryProfilerInterface?) : Int32
-      return 100 unless profiler
-
-      stats = profiler.statistics
+    private def self.calculate_query_health_score(stats : QueryStatistics, slowest_queries : Array(QueryData)) : Int32
       return 100 if stats.empty?
 
       total_queries = stats.values.sum(&.[:count])
-      slow_queries = profiler.slowest_queries(1000).size
-      very_slow_queries = profiler.slowest_queries(1000).count { |query| query.execution_time > 1.second }
+      slow_queries = slowest_queries.size
+      very_slow_queries = slowest_queries.count { |query| query.execution_time > 1.second }
 
       score = 100
       score -= (slow_queries.to_f / total_queries * 20).to_i if total_queries > 0
@@ -686,10 +645,7 @@ module CQL::Performance
       [score, 0].max
     end
 
-    private def self.calculate_n_plus_one_health_score(detector : NPlusOneDetectorInterface?) : Int32
-      return 100 unless detector
-
-      patterns = detector.patterns
+    private def self.calculate_n_plus_one_health_score(patterns : Array(NPlusOnePattern)) : Int32
       return 100 if patterns.empty?
 
       critical_patterns = patterns.count { |pattern| pattern.repetition_count > 50 }

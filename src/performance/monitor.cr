@@ -329,25 +329,4 @@ module CQL::Performance
   def self.configure(&)
     monitor.configure { |config| yield config }
   end
-
-  # Convenience methods for metrics
-  def self.metrics : PerformanceMetrics
-    monitor.metrics
-  end
-
-  def self.metrics_summary : Hash(String, String | Int32 | Int64 | Float64)
-    monitor.metrics_summary
-  end
-
-  def self.healthy? : Bool
-    monitor.healthy?
-  end
-
-  def self.critical_issues : Array(Issue)
-    monitor.critical_issues
-  end
-
-  def self.high_priority_issues : Array(Issue)
-    monitor.high_priority_issues
-  end
 end

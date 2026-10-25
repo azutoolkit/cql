@@ -122,8 +122,12 @@ module CQL::Performance
     monitor.metrics_summary
   end
 
-  def self.is_healthy? : Bool
+  def self.healthy? : Bool
     monitor.healthy?
+  end
+
+  def self.is_healthy? : Bool
+    healthy?
   end
 
   def self.critical_issues : Array(Issue)
