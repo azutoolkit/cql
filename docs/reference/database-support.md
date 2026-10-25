@@ -59,7 +59,9 @@ key, not only the columns you name.
 
 `back(:id, :name)` on `Insert`, `Update` and `Delete` emits `RETURNING` where supported. MySQL drops the clause. On
 SQLite before 3.35, requesting columns raises `CQL::SQLiteUnsupportedFeatureError` with a workaround (run a separate
-`SELECT`).
+`SELECT`). `Insert#get(as:)`/`get!(as:)` run the insert and read the returned row. `Dialect#supports_returning?`
+tells whether `Model.create!` can read the new row from its INSERT: true on PostgreSQL and CockroachDB, false on SQLite
+and MySQL, which read it back with a `SELECT`.
 
 ### DISTINCT ON
 

@@ -53,6 +53,21 @@ user = User.create!(
 puts "Created user #{user.id}"
 ```
 
+`create!` returns the row as stored, including the values the database filled in (column defaults, generated ids). On
+PostgreSQL and CockroachDB it gets the row from the `INSERT ... RETURNING` statement itself; on SQLite and MySQL it
+reads the row back with a second statement. A model that defines its own `self.query` (for example a tenant filter),
+and a subclass of a model, always read the row back through `self.query`, so the record must match that scope or
+`create!` raises `DB::NoResultsError` after the row is inserted.
+
+On PostgreSQL and CockroachDB, `CQL::Insert` exposes the same thing for your own statements: `get(as:)` runs the insert
+and reads the row its `back` columns return (nil when `on_conflict(...).do_nothing` skips it), and `get!` raises
+instead of returning nil. On SQLite and MySQL they raise `CQL::DialectError`, and without `back` columns
+`ArgumentError`, before anything is inserted:
+
+```crystal
+id, name = CQL::Insert.new(schema).into(:users).values(name: "Ada").back(:id, :name).get!({Int64, String})
+```
+
 ## Create Multiple Records
 
 ```crystal

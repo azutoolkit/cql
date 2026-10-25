@@ -16,7 +16,7 @@ CQL::Performance.enable_sql_logging                # SQL is logged by the monito
 
 The environment can enable it as well: `CQL_MONITORING_ENABLED=true`, or `CRYSTAL_ENV`/`CQL_ENV=development` (see the table below). `CQL.build_schema` calls `enable_sql_logging` when `sql_logging` is on, which is the default when `CRYSTAL_ENV=development` (not when it is unset). Enabling is one-way: `monitor_performance = false` and `CQL.reset_config!` do not switch off a monitor that is already on; use `CQL::Performance.disable!` for that.
 
-Health checks and dashboards that read `CQL::Performance.metrics` only see data once monitoring is on, so enable it explicitly in production if you rely on them. The profiler keeps slow queries, including their bound parameters, in memory.
+Health checks and dashboards that read `CQL::Performance.metrics` only see data once monitoring is on, so enable it explicitly in production if you rely on them. The profiler keeps slow queries, including their bound parameters, in memory; the JSON export leaves the parameters out unless `logging.include_params` is on (see [Health and Metrics](#health-and-metrics)).
 
 Quick setups:
 
@@ -50,6 +50,30 @@ Without any setup the monitor starts from `Config.from_env`:
 | `CQL_SLOW_QUERY_MS=200` | slow query threshold in milliseconds |
 
 Presets are available as `CQL::Performance.development_config`, `test_config`, `production_config` and `minimal_config`. Install your own with `CQL::Performance.monitor = CQL::Performance::Monitor.new(config)`.
+
+## Log SQL
+
+With SQL logging on, the monitor logs each statement to the `cql.performance.monitor` source: at info, at warn once it takes `profiling.slow_query_threshold` or longer, and at error from `profiling.very_slow_threshold`. A statement that raises is logged at error as `Query failed: <message>` followed by its SQL.
+
+Bound parameter values are left out of these lines, since they often hold personal data or secrets. To log them, opt in:
+
+```crystal
+CQL::Performance.enable_sql_logging
+CQL::Performance.configure do |config|
+  config.logging.include_params = true  # adds "Parameters: [...]", and "Params: [...]" to a failure
+  config.logging.max_param_length = 20  # characters kept of each value
+end
+```
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `logging.include_params` | false | log the bound values of each statement and of a failed one |
+| `logging.max_param_length` | 50 | characters kept of each logged value (`...` marks the cut) |
+| `logging.max_sql_length` | 500 | characters kept of the SQL in a statement's line |
+| `logging.colorize` | true | ANSI colors; `enable_sql_logging(colorize:)` sets it |
+| `logging.pretty_format` | true | break the SQL over lines at its clauses; `enable_sql_logging(pretty:)` sets it |
+
+`include_params` covers the bound values only. Values written into the SQL text itself, and the exception message of a failed statement, are logged as they are.
 
 ## Read the Profile
 
@@ -147,7 +171,7 @@ CQL::Performance.metrics_summary
 #     "total_issues" => ..., "uptime_seconds" => ...}
 ```
 
-`CQL::Performance.metrics` returns a `PerformanceMetrics` with the full breakdown (query, N+1, cache, system and health metrics, top queries and patterns). It also offers `to_json`, `issues_by_type(:n_plus_one)`, `issues_by_severity(:critical)`, `slowest_queries(limit)` and `most_frequent_queries(limit)`.
+`CQL::Performance.metrics` returns a `PerformanceMetrics` with the full breakdown (query, N+1, cache, system and health metrics, top queries and patterns). It also offers `to_json`, `issues_by_type(:n_plus_one)`, `issues_by_severity(:critical)`, `slowest_queries(limit)` and `most_frequent_queries(limit)`. The slow queries in `to_json` (and `CQL::Performance.export_metrics_as_json`) have no `params` key unless `config.logging.include_params` is on; `slowest_queries(limit)` still returns each `QueryData` with its `params`. In the query lists, `avg_time` and `total_time` are in milliseconds.
 
 ## Generate a Report
 

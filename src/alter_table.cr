@@ -56,6 +56,7 @@ module CQL
       new_column.table = @table
       @table.columns[name] = new_column
       @actions << Expression::AddColumn.new(new_column)
+      @table.columns_changed!
     end
 
     # Drops a column from the table.
@@ -75,6 +76,7 @@ module CQL
 
       @table.columns.delete(column)
       @actions << Expression::DropColumn.new(col.name.to_s)
+      @table.columns_changed!
     end
 
     # Renames a column in the table.
@@ -94,6 +96,7 @@ module CQL
       column.name = new_name
       @table.columns.delete(old_name)
       @table.columns[new_name] = column
+      @table.columns_changed!
     end
 
     # Changes the type of a column in the table.
@@ -110,6 +113,7 @@ module CQL
       new_column.table = @table
       @actions << Expression::ChangeColumn.new(new_column, type)
       @table.columns[name] = new_column
+      @table.columns_changed!
     end
 
     # Renames the table.

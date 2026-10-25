@@ -18,6 +18,13 @@ describe "CockroachDB adapter" do
     cockroach.sql_type(Slice(UInt8)).should eq("BYTEA")
   end
 
+  it "returns inserted rows, as PostgreSQL does and SQLite and MySQL do not" do
+    cockroach.dialect.supports_returning?.should be_true
+    CQL::Adapter::Postgres.dialect.supports_returning?.should be_true
+    CQL::Adapter::SQLite.dialect.supports_returning?.should be_false
+    CQL::Adapter::MySql.dialect.supports_returning?.should be_false
+  end
+
   it "allows 32767 bound parameters, the most every driver accepts" do
     cockroach.dialect.max_bind_params.should eq(32767)
   end

@@ -384,7 +384,7 @@ module CQL::ActiveRecord::Relations
         CQL::Delete
           .new(Target.schema)
           .from(Target.table)
-          .where({:id => id, @key => @id})
+          .where({:id => bound_id(id), @key => bound_id(@id)})
           .commit
           .rows_affected > 0
       end
@@ -403,7 +403,7 @@ module CQL::ActiveRecord::Relations
         CQL::Delete
           .new(Target.schema)
           .from(Target.table)
-          .where({@key => @id})
+          .where({@key => bound_id(@id)})
           .commit
           .rows_affected
       end
@@ -423,7 +423,7 @@ module CQL::ActiveRecord::Relations
           .new(Target.schema)
           .table(Target.table)
           .set({@key => nil})
-          .where({@key => @id})
+          .where({@key => bound_id(@id)})
           .commit
           .rows_affected
       end
@@ -453,7 +453,7 @@ module CQL::ActiveRecord::Relations
     def ids=(ids : Array(Pk))
       safe_db_operation do
         CQL::ActiveRecord::IdChunks.each(ids, Target.adapter.dialect.max_bind_params - 1) do |chunk|
-          CQL::Update.new(Target.schema).table(Target.table).set({@key => @id}).where(id: chunk).commit
+          CQL::Update.new(Target.schema).table(Target.table).set({@key => bound_id(@id)}).where(id: chunk).commit
         end
         reload
       end
@@ -676,11 +676,16 @@ module CQL::ActiveRecord::Relations
 
     # Scopes the base query to the parent record; the caller's query is never mutated.
     protected def scope_to_parent(query : CQL::Query) : CQL::Query
-      query.clone.where({@key => @id})
+      query.clone.where({@key => bound_id(@id)})
     end
 
     private def query_builder(query : CQL::Query) : CQL::ActiveRecord::Queryable::QueryBuilder(Target)
       CQL::ActiveRecord::Queryable::QueryBuilder(Target).new(query, Target)
+    end
+
+    # *id* as a bound value (UUIDs as strings)
+    private def bound_id(id) : DB::Any
+      CQL::ActiveRecord::IdChunks.bound(id)
     end
 
     private def query_copy : CQL::Query

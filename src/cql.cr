@@ -37,6 +37,8 @@ require "./configure"
 
 module CQL
   # :nodoc:
+  # The same type as `Time`, so the type maps below have no entry of their own for it; `Table#date`
+  # declares its column `DATE` through `DateColumn`.
   alias Date = Time
 
   # Represents a database primary key column type.
@@ -68,7 +70,6 @@ module CQL
     String       => "VARCHAR",
     Bool         => "BOOLEAN",
     Time         => "TIMESTAMP",
-    Date         => "DATE",
     Time::Span   => "INTERVAL",
     Slice(UInt8) => "BYTEA",
     JSON::Any    => "JSONB",
@@ -90,7 +91,6 @@ module CQL
       String       => "TEXT",
       Bool         => "BOOLEAN",
       Time         => "TIMESTAMP",
-      Date         => "DATE",
       Time::Span   => "INTERVAL",
       Slice(UInt8) => "BLOB",
       JSON::Any    => "TEXT",
@@ -104,8 +104,7 @@ module CQL
       Float64      => "DOUBLE",
       String       => "VARCHAR(255)",
       Bool         => "TINYINT(1)",
-      Time         => "DATETIME",
-      Date         => "DATE",
+      Time         => "DATETIME(3)",
       Time::Span   => "TIME",
       Slice(UInt8) => "BLOB",
       JSON::Any    => "JSON",

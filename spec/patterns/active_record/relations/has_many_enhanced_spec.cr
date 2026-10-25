@@ -17,6 +17,93 @@ def has_many_isolation_selects(& : ->) : Array(String)
   statements
 end
 
+# Owners of the `users` rows, one per `dependent:` strategy (TestUser covers :destroy); create the
+# rows with TestUser and load them through these models.
+class DeleteAllPostsOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :users
+
+  property email : String
+
+  has_many :posts, Post, foreign_key: :user_id, dependent: :delete_all
+end
+
+class NullifyPostsOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :users
+
+  property email : String
+
+  has_many :posts, Post, foreign_key: :user_id, dependent: :nullify
+end
+
+class RestrictPostsOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :users
+
+  property email : String
+
+  has_many :posts, Post, foreign_key: :user_id, dependent: :restrict_with_error
+end
+
+# Declares a destroying association before a restricting one over the same posts.
+class DestroyThenRestrictPostsOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :users
+
+  property email : String
+
+  has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
+  has_many :kept_posts, Post, foreign_key: :user_id, dependent: :restrict_with_error
+end
+
+# A post whose before_destroy halts its delete while it is titled "Keep".
+class GuardedPost
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :posts
+
+  property title : String
+  property body : String
+  property user_id : Int32?
+
+  before_destroy :deletable?
+
+  def initialize(@title, @body, @user_id = nil)
+  end
+
+  def deletable?
+    title != "Keep"
+  end
+end
+
+class GuardedPostsOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :users
+
+  property email : String
+
+  has_many :posts, GuardedPost, foreign_key: :user_id, dependent: :destroy
+end
+
+# A struct model, so delete! and the strategies run on a value type.
+struct StructPostsOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :users
+
+  property email : String
+
+  has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
+end
+
+class UndeclaredPostsOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :users
+
+  property email : String
+
+  has_many :posts, Post, foreign_key: :user_id
+end
+
 describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
   before_each do
     UserDB.users.create!
@@ -81,22 +168,153 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
       post1.user_id.should be_nil
       post2.user_id.should be_nil
     end
+  end
 
-    it "restricts deletion when dependent: :restrict_with_error" do
-      # This would require a test model with restrict_with_error dependency
-      user = TestUser.new(
-        name: "John Doe",
-        email: "john@example.com",
-        age: 30,
-        password: "password123",
-        password_confirmation: "password123"
-      )
-      user.create!
+  describe "dependent strategies when the parent is deleted" do
+    it "destroys the posts with dependent: :destroy, even when they were never loaded" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post_ids = (1..2).map { |i| user.posts.create(title: "Post #{i}", body: "Content").id! }
 
-      user.posts.create(title: "Post 1", body: "Content 1")
+      TestUser.find!(user.id!).delete!.should be_true
 
-      # For now, we'll test that the posts exist
-      user.posts.size.should eq(1)
+      post_ids.each { |id| Post.find?(id).should be_nil }
+    end
+
+    it "destroys posts created after the collection was loaded" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      user.posts.size.should eq(0)
+      post = Post.new("Late post", "Content", user.id!)
+      post.create!
+
+      user.delete!.should be_true
+
+      Post.find?(post.id!).should be_nil
+    end
+
+    it "deletes the posts with dependent: :delete_all" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post_ids = (1..2).map { |i| user.posts.create(title: "Post #{i}", body: "Content").id! }
+
+      DeleteAllPostsOwner.find!(user.id!).delete!.should be_true
+
+      post_ids.each { |id| Post.find?(id).should be_nil }
+      TestUser.find?(user.id!).should be_nil
+    end
+
+    it "keeps the posts and clears their foreign key with dependent: :nullify" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post = user.posts.create(title: "Post 1", body: "Content")
+
+      NullifyPostsOwner.find!(user.id!).delete!.should be_true
+
+      post.reload!.user_id.should be_nil
+      TestUser.find?(user.id!).should be_nil
+    end
+
+    it "raises and deletes nothing with dependent: :restrict_with_error while posts exist" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post = user.posts.create(title: "Post 1", body: "Content")
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError, "Cannot delete record because dependent posts exist") do
+        RestrictPostsOwner.find!(user.id!).delete!
+      end
+
+      TestUser.find?(user.id!).should_not be_nil
+      post.reload!.user_id.should eq(user.id)
+    end
+
+    it "deletes a parent without posts with dependent: :restrict_with_error" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+
+      RestrictPostsOwner.find!(user.id!).delete!.should be_true
+
+      TestUser.find?(user.id!).should be_nil
+    end
+
+    it "checks restrictions before any other strategy runs" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post = user.posts.create(title: "Post 1", body: "Content")
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError) do
+        DestroyThenRestrictPostsOwner.find!(user.id!).delete!
+      end
+
+      Post.find?(post.id!).should_not be_nil
+      TestUser.find?(user.id!).should_not be_nil
+    end
+
+    it "rolls back every deleted post when another post's delete is halted" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      deletable = user.posts.create(title: "Delete me", body: "Content")
+      kept = user.posts.create(title: "Keep", body: "Content")
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError, "Cannot delete record because dependent posts could not be deleted") do
+        GuardedPostsOwner.find!(user.id!).delete!
+      end
+
+      Post.find?(deletable.id!).should_not be_nil
+      Post.find?(kept.id!).should_not be_nil
+      TestUser.find?(user.id!).should_not be_nil
+    end
+
+    it "deletes nothing through delete_all when one of the parents is restricted" do
+      free = has_many_isolation_user("Free User", "free@example.com")
+      restricted = has_many_isolation_user("Restricted User", "restricted@example.com")
+      restricted.posts.create(title: "Post 1", body: "Content")
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError) do
+        RestrictPostsOwner.query.delete_all
+      end
+
+      TestUser.find?(free.id!).should_not be_nil
+      TestUser.find?(restricted.id!).should_not be_nil
+    end
+
+    it "applies the strategy on a struct model" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post = user.posts.create(title: "Post 1", body: "Content")
+      owner = StructPostsOwner.find!(user.id!)
+
+      owner.delete!.should be_true
+
+      owner.destroyed?.should be_true
+      Post.find?(post.id!).should be_nil
+      TestUser.find?(user.id!).should be_nil
+    end
+
+    it "leaves the posts alone when dependent: is not declared" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post = user.posts.create(title: "Post 1", body: "Content")
+
+      UndeclaredPostsOwner.find!(user.id!).delete!.should be_true
+
+      post.reload!.user_id.should eq(user.id)
+    end
+
+    it "applies the strategy through delete_all on a query" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      other = has_many_isolation_user("Jane Doe", "jane@example.com")
+      post = user.posts.create(title: "Mine", body: "Content")
+      other_post = other.posts.create(title: "Theirs", body: "Content")
+
+      NullifyPostsOwner.where(id: user.id!).delete_all.should eq(1)
+
+      post.reload!.user_id.should be_nil
+      other_post.reload!.user_id.should eq(other.id)
+    end
+
+    it "runs inside the caller's open transaction" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post = user.posts.create(title: "Post 1", body: "Content")
+
+      UserDB.transaction do |tx|
+        TestUser.find!(user.id!).delete!.should be_true
+        Post.find?(post.id!).should be_nil
+        tx.rollback
+      end
+
+      TestUser.find?(user.id!).should_not be_nil
+      Post.find?(post.id!).should_not be_nil
     end
   end
 
@@ -483,6 +701,13 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
       statements.first.should contain("LIMIT ?")
       statements.first.should_not contain("COUNT(")
       statements.first.scan("user_id = ?").size.should eq(1)
+    end
+
+    it "counts the posts with posts_count without loading them" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      2.times { |i| user.posts.create(title: "Post #{i}", body: "Content") }
+
+      TestUser.find!(user.id!).posts_count.should eq(2)
     end
 
     it "answers posts_any? from memory when the collection is loaded" do

@@ -15,7 +15,8 @@ module CQL::ActiveRecord::Relations
     # - **param** : name (Symbol) - The name of the association
     # - **param** : type (Class) - The target model class
     # - **param** : foreign_key (Symbol) - The foreign key column in the target table (optional)
-    # - **param** : dependent (Symbol) - Dependency handling (:destroy, :delete_all, :nullify, :restrict_with_error)
+    # - **param** : dependent (Symbol) - What `delete!` does with the associated records (:destroy, :delete_all,
+    #   :nullify, :restrict_with_error); without it, deleting the parent leaves them alone and `clear` nullifies
     # - **param** : inverse_of (Symbol) - The inverse association name (optional)
     # - **param** : scope (Proc) - Additional scope for the association (optional)
     #
@@ -28,7 +29,7 @@ module CQL::ActiveRecord::Relations
     #   has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
     # end
     # ```
-    macro has_many(name, type, foreign_key = nil, dependent = :nullify, inverse_of = nil, scope = nil)
+    macro has_many(name, type, foreign_key = nil, dependent = nil, inverse_of = nil, scope = nil)
       {% valid_dependents = %w[destroy delete_all nullify restrict_with_error] %}
       {% unless name.is_a?(SymbolLiteral) %}
         {{ raise "CQL has_many error in #{@type}: association name must be a symbol literal, for example `has_many :posts, Post`." }}
@@ -36,8 +37,15 @@ module CQL::ActiveRecord::Relations
       {% unless foreign_key == nil || foreign_key.is_a?(SymbolLiteral) %}
         {{ raise "CQL has_many error in #{@type}: foreign_key must be a symbol literal, for example `has_many :posts, Post, foreign_key: :user_id`." }}
       {% end %}
-      {% unless dependent.is_a?(SymbolLiteral) && valid_dependents.includes?(dependent.id.stringify) %}
+      {% unless dependent == nil || (dependent.is_a?(SymbolLiteral) && valid_dependents.includes?(dependent.id.stringify)) %}
         {{ raise "CQL has_many error in #{@type}: unsupported dependent option `#{dependent}`. Supported options: #{valid_dependents.join(", ")}." }}
+      {% end %}
+      {% strategy = dependent || :nullify %}
+
+      {% if dependent == :restrict_with_error %}
+        restrict_delete_by {{name}}
+      {% elsif dependent %}
+        apply_on_delete {{name}}
       {% end %}
 
       # Determine foreign key name if not provided
@@ -92,9 +100,9 @@ module CQL::ActiveRecord::Relations
         @{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
           key: {{fk}},
           id: parent_id,
-          cascade: ({{dependent}} == :destroy || {{dependent}} == :delete_all),
+          cascade: ({{strategy}} == :destroy || {{strategy}} == :delete_all),
           query: scoped_query,
-          dependent: {{dependent}},
+          dependent: {{strategy}},
           auto_load: false
         )
       end
@@ -125,8 +133,8 @@ module CQL::ActiveRecord::Relations
         @{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
           key: {{fk}},
           id: parent_id,
-          cascade: ({{dependent}} == :destroy || {{dependent}} == :delete_all),
-          dependent: {{dependent}},
+          cascade: ({{strategy}} == :destroy || {{strategy}} == :delete_all),
+          dependent: {{strategy}},
           auto_load: false
         )
         @{{name.id}}.not_nil!._inject_preloaded(records)
@@ -160,30 +168,21 @@ module CQL::ActiveRecord::Relations
         end
       end
 
-      # Handle dependent associations when parent is destroyed
-      def handle_{{name.id}}_dependency
-        return unless @{{name.id}} # Only process if association was accessed
-
+      # Applies the `dependent:` strategy to the associated records in the database, loaded or not;
+      # `delete!` calls it when `dependent:` is declared
+      def handle_{{name.id}}_dependency : Nil
+        clear_{{name.id}}_cache
         collection = {{name.id}}
 
-        case {{dependent}}
-        when :destroy
-          # Call destroy on each record (triggers callbacks)
-          collection.each do |record|
-            safe_db_operation { record.delete! }
-          end
-        when :delete_all
-          # Delete all records without callbacks (more efficient)
-          safe_db_operation { collection.delete_all }
-        when :nullify
-          # Set foreign key to nil
-          safe_db_operation { collection.nullify_all }
-        when :restrict_with_error
-          # Prevent deletion if associated records exist
-          unless collection.empty?
-            raise RelationError.new("Cannot delete record because dependent {{name.id}} exist")
-          end
-        end
+        {% if strategy == :destroy %}
+          collection.each { |record| destroy_dependent(record, {{name}}) }
+        {% elsif strategy == :delete_all %}
+          collection.delete_all
+        {% elsif strategy == :nullify %}
+          collection.nullify_all
+        {% else %}
+          raise RelationError.new("Cannot delete record because dependent {{name.id}} exist") unless collection.empty?
+        {% end %}
       end
 
       # Count associated records without loading them
@@ -193,7 +192,7 @@ module CQL::ActiveRecord::Relations
         parent_id = safe_id(self, Pk)
 
         safe_db_operation do
-          build_query({{type.id}}).where({ {{fk}} => parent_id }).count
+          build_query({{type.id}}).where({ {{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) }).count.get(Int64?) || 0_i64
         end
       end
 
@@ -231,13 +230,6 @@ module CQL::ActiveRecord::Relations
       def find_{{name.id}}_by(**attributes) : {{type.id}}?
         {{name.id}}.find_by(**attributes)
       end
-    end
-
-    # Class method to handle all association dependencies during destruction
-    # This will be called from the model's destroy method
-    def handle_association_dependencies
-      # This method will be extended by models with associations
-      # Each has_many association will add its own dependency handler
     end
   end
 end

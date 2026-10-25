@@ -20,6 +20,12 @@ module Expression
       Int16::MAX.to_i32
     end
 
+    # Whether INSERT can return the stored row (`INSERT ... RETURNING`), so it need not be read
+    # back with a second statement.
+    def supports_returning? : Bool
+      false
+    end
+
     # Dumps only the DB structure (no data) to a string
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String

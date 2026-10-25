@@ -106,7 +106,7 @@ Compile-time checks cannot see the database. For that, set `CQL_VALIDATE_SCHEMA_
 ## Other Places Data Is Protected
 
 - The native PostgreSQL driver keeps bound values and passwords out of its error messages and telemetry. `CQL::Telemetry.capture_params` is off by default, so `event.params` is `nil` unless you opt in (see [Telemetry](../how-to/performance/telemetry.md)).
-- The [query profiler](../how-to/performance/query-profiler.md) prints parameters in its SQL log lines when SQL logging is enabled (`logging.max_param_length` truncates them). Leave SQL logging off where parameters may hold secrets.
+- The [SQL log](../how-to/performance/query-profiler.md#log-sql) leaves bound values out of its lines, including the error line of a failed statement, unless `logging.include_params` is on (then `logging.max_param_length` truncates each value). Keep it off where parameters may hold secrets. The profiler still keeps the parameters of recorded queries in memory, and the metrics JSON (`CQL::Performance.metrics.to_json`) includes them only when `logging.include_params` is on.
 
 ## What CQL Does Not Do
 

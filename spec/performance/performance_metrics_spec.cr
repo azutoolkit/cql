@@ -431,12 +431,18 @@ describe "CQL::Performance::PerformanceMetrics" do
 
         hash = query_data.to_h
         hash["sql"].should eq("SELECT * FROM users WHERE id = ?")
-        hash["params"].should be_a(JSON::Any)
+        hash.has_key?("params").should be_false
         hash["execution_time_ms"].should eq(150.0)
         hash["timestamp"].should be_a(JSON::Any)
         hash["rows_affected"].should eq(1_i64)
         hash["error"].should eq("")
         hash["normalized_sql"].should be_a(JSON::Any)
+      end
+
+      it "includes params when include_params is true" do
+        query_data = CQL::Performance::QueryData.new("SELECT * FROM users WHERE id = ?", [1.as(DB::Any)], 150.milliseconds)
+
+        query_data.to_h(include_params: true)["params"].to_json.should eq("[1]")
       end
     end
 
@@ -514,6 +520,39 @@ describe "CQL::Performance::PerformanceMetrics" do
       obj = "test_string"
       result = CQL::Performance::PerformanceMetrics.to_json_any(obj)
       result.should be_a(JSON::Any)
+    end
+
+    it "keeps values that are already JSON::Any" do
+      hash = {"ms" => JSON::Any.new(1.5), "params" => JSON::Any.new([JSON::Any.new("a")]), "none" => JSON::Any.new(nil)}
+      CQL::Performance::PerformanceMetrics.to_json_any(hash).to_json.should eq(%({"ms":1.5,"params":["a"],"none":null}))
+    end
+
+    it "converts named tuples to objects" do
+      tuple = {sql: "SELECT ?", count: 2_i64, avg_time: 1.5.milliseconds}
+      CQL::Performance::PerformanceMetrics.to_json_any(tuple).to_json.should eq(%({"sql":"SELECT ?","count":2,"avg_time":1.5}))
+    end
+  end
+
+  describe "#to_json" do
+    it "exports query entries, patterns and issues with their JSON types" do
+      profiler = CQL::Performance::QueryProfiler.new
+      profiler.record_query("SELECT * FROM users WHERE id = ?", [1.as(DB::Any)], 1.hour, 3_i64)
+      detector = CQL::Performance::NPlusOneDetector.new
+      detector.record_query("SELECT * FROM users")
+      2.times { detector.record_query("SELECT * FROM posts WHERE user_id = ?") }
+      json = JSON.parse(CQL::Performance::PerformanceMetrics.from_components(profiler: profiler, detector: detector).to_json)
+
+      slowest = json["top_queries"]["slowest_queries"][0]
+      slowest["execution_time_ms"].as_f.should eq(3_600_000.0)
+      slowest["rows_affected"].as_i64.should eq(3)
+      json["top_queries"]["most_frequent_queries"][0]["count"].as_i64.should eq(1)
+      json["top_queries"]["most_expensive_queries"][0]["total_time"].as_f.should eq(3_600_000.0)
+      json["patterns"]["query_patterns"][0]["avg_time"].as_f.should eq(3_600_000.0)
+      json["patterns"]["n_plus_one_patterns"][0]["repetition_count"].as_i64.should eq(2)
+
+      issues = json["issues"].as_a
+      issues.should_not be_empty
+      issues.each(&.["details"].as_h.should_not(be_empty))
     end
   end
 end

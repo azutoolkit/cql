@@ -17,7 +17,7 @@ has_many :posts, Post, :user_id                        # third argument is the f
 has_many :posts, Post, foreign_key: :author_id, dependent: :destroy
 ```
 
-`dependent` accepts `:nullify` (the default), `:destroy`, `:delete_all` and `:restrict_with_error`. It is applied by the collection's `clear` and by `handle_posts_dependency`; deleting the parent row with `user.delete!` does not trigger it on its own (see [Cascade Delete](#cascade-delete-with-foreign-keys)).
+`dependent` accepts `:destroy`, `:delete_all`, `:nullify` and `:restrict_with_error`. When you declare it, deleting the parent applies it (see [When the Parent Is Deleted](#when-the-parent-is-deleted)). The collection's `clear` follows it too, and nullifies when it is not declared.
 
 ## Compile-Time Safety
 
@@ -202,7 +202,30 @@ user.posts.all.each(&.delete!)
 user.posts.delete_all
 ```
 
-`user.posts.clear` follows the association's `dependent` option (`:nullify` by default, which sets `user_id` to NULL; it needs a nullable column).
+`user.posts.clear` follows the association's `dependent` option (`:nullify` when none is declared, which sets `user_id` to NULL; it needs a nullable column).
+
+## When the Parent Is Deleted
+
+Declare `dependent:` to choose what `user.delete!` does with the user's posts:
+
+```crystal
+has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
+```
+
+| `dependent:` | Effect on the posts when the user is deleted |
+|---|---|
+| `:destroy` | Loads each post and calls its `delete!`, so its callbacks and its own `dependent:` associations run; a post whose `before_destroy` halts raises `RelationError` and nothing is deleted |
+| `:delete_all` | One `DELETE ... WHERE user_id = ?`, without callbacks |
+| `:nullify` | One `UPDATE ... SET user_id = NULL`; the column must be nullable |
+| `:restrict_with_error` | Raises `CQL::ActiveRecord::Relations::BaseRelation::RelationError` while the user has posts |
+| not declared | Nothing; the database's foreign key decides (see below) |
+
+The strategy reads the posts from the database, so it covers posts that were never loaded or were added after `user.posts` was loaded.
+
+- **Order.** `:restrict_with_error` associations are checked first, before the `before_destroy` callbacks and before anything is deleted. The other strategies run after the callbacks, in declaration order, and the user's row is deleted last.
+- **Transaction.** The strategies and the user's DELETE run in one transaction. If you already have one open, they run in a savepoint inside it, so a rollback restores everything, and an error in a strategy leaves both the posts and the user unchanged.
+- **Soft deletes.** A [soft-deletable](../models/soft-delete.md) parent applies the strategies on `delete!` as well as `force_delete!`.
+- **Bulk deletes.** `User.where(...).delete_all` deletes record by record, in one transaction, when the model declares any `dependent:` association, so it is slower than the bulk path. The class-level `User.delete!(id)`, `User.delete_by!` and `User.delete_all` write SQL directly and skip the strategies, except on a soft-deletable model, where `delete!(id)` and `delete_by!` soft delete each record through its `delete!` and apply them.
 
 ## Cascade Delete with Foreign Keys
 
@@ -215,7 +238,7 @@ schema.table :posts do
 end
 ```
 
-Now when a user row is deleted, the database deletes their posts. The `dependent:` option on `has_many` is not run by `user.delete!`, so rely on the foreign key (or delete the children yourself) when removing parents.
+Now when a user row is deleted, the database deletes their posts. This also covers the class-level deletes (`User.delete!(id)`, `User.delete_by!`, `User.delete_all`), which skip `dependent:`. Leave `dependent:` undeclared if the foreign key should do the work alone.
 
 ## Check for Related Records
 

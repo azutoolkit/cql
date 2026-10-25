@@ -210,6 +210,10 @@ module Expression
       columns.first
     end
 
+    def supports_returning? : Bool
+      true
+    end
+
     def format_returning(columns : Array(String)) : String
       return "" if columns.empty?
       " RETURNING #{columns.join(", ")}"

@@ -13,7 +13,8 @@ module CQL::ActiveRecord::Relations
     # - **param** : name (Symbol) - Association name
     # - **param** : kind (Class) - Associated model class
     # - **param** : foreign_key (Symbol) - Foreign key in the associated model (optional)
-    # - **param** : dependent (Symbol) - What to do with associated record when parent is deleted (:destroy, :delete, :nullify)
+    # - **param** : dependent (Symbol) - What to do with the associated record (:destroy, :delete, :nullify): when it is
+    #   replaced or deleted through the association (default :destroy), and, only when declared, when the parent is deleted
     # - **param** : cache (Bool) - Whether to cache the associated record
     #
     # **Example**
@@ -23,7 +24,17 @@ module CQL::ActiveRecord::Relations
     #   has_one :profile, Profile, foreign_key: :user_id, dependent: :destroy
     # end
     # ```
-    macro has_one(name, kind, foreign_key = nil, dependent = :destroy, cache = true)
+    macro has_one(name, kind, foreign_key = nil, dependent = nil, cache = true)
+      {% valid_dependents = %w[destroy delete nullify] %}
+      {% unless dependent == nil || (dependent.is_a?(SymbolLiteral) && valid_dependents.includes?(dependent.id.stringify)) %}
+        {{ raise "CQL has_one error in #{@type}: unsupported dependent option `#{dependent}`. Supported options: #{valid_dependents.join(", ")}." }}
+      {% end %}
+      {% strategy = dependent || :destroy %}
+
+      {% if dependent %}
+        apply_on_delete {{name}}
+      {% end %}
+
       # Determine foreign key name if not provided (a symbol literal or the default, as an identifier)
       {% fk = (foreign_key || "#{@type.name.underscore.id}_id").id %}
 
@@ -51,12 +62,12 @@ module CQL::ActiveRecord::Relations
         {% end %}
 
         # Ensure we have a valid ID
-        return nil if @id.nil?
+        return nil if id.nil?
 
         parent_id = safe_id(self, Pk)
 
         result = safe_db_operation do
-          {{kind.id}}.find_by({{fk}}: parent_id)
+          {{kind.id}}.find_by({{fk}}: CQL::ActiveRecord::IdChunks.bound(parent_id))
         end
 
         {% if cache %}
@@ -80,7 +91,7 @@ module CQL::ActiveRecord::Relations
         else
           # Don't require the record to be persisted when setting association
           # ensure_persisted(record)
-          parent_id = safe_id(self, typeof(@id))
+          parent_id = safe_id(self, Pk)
 
           # Clear any existing association first
           existing = {{name.id}}
@@ -133,7 +144,7 @@ module CQL::ActiveRecord::Relations
 
       # Build a new associated record without saving
       def build_{{name.id}}(**attributes) : {{kind.id}}
-        parent_id = safe_id(self, typeof(@id))
+        parent_id = safe_id(self, Pk)
 
         safe_db_operation do
           record = {{kind.id}}.new(**attributes)
@@ -147,7 +158,7 @@ module CQL::ActiveRecord::Relations
         # Clear existing association first
         existing = {{name.id}}
         if existing
-          case {{dependent}}
+          case {{strategy}}
           when :destroy
             safe_db_operation { existing.delete! }
           when :delete
@@ -185,7 +196,7 @@ module CQL::ActiveRecord::Relations
         current_record = {{name.id}}
         return false if current_record.nil?
 
-        result = case {{dependent}}
+        result = case {{strategy}}
         when :destroy
           safe_db_operation do
             current_record.delete!
@@ -202,7 +213,7 @@ module CQL::ActiveRecord::Relations
             true
           end
         else
-          raise ArgumentError.new("Invalid dependent option: {{dependent}}")
+          raise ArgumentError.new("Invalid dependent option: {{strategy}}")
         end
 
         {% if cache %}
@@ -249,22 +260,25 @@ module CQL::ActiveRecord::Relations
         end
       {% end %}
 
-      # Handle dependent associations when parent is destroyed
-      def handle_{{name.id}}_dependency
+      # Applies the `dependent:` strategy to the associated record in the database, ignoring the
+      # cache; `delete!` calls it when `dependent:` is declared
+      def handle_{{name.id}}_dependency : Nil
+        {% if cache %}
+          @_{{name.id}}_loaded = false
+        {% end %}
         current_record = {{name.id}}
         return unless current_record
 
-        case {{dependent}}
-        when :destroy
-          safe_db_operation { current_record.delete! }
-        when :delete
+        {% if strategy == :destroy %}
+          destroy_dependent(current_record, {{name}})
+        {% elsif strategy == :delete %}
           safe_db_operation { {{kind.id}}.delete!(current_record.id!) }
-        when :nullify
+        {% else %}
           safe_db_operation do
             current_record.{{fk}} = nil
             current_record.save!
           end
-        end
+        {% end %}
       end
     end
   end

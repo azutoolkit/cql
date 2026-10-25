@@ -74,11 +74,17 @@ module CQL
         @records = [] of Target
       end
 
-      # Joins the join table and scopes it to the parent; the caller's query is never mutated.
+      # Scopes to the targets the parent's join rows list, with a subquery rather than a join so the
+      # join table's columns (its `id` above all) never reach the targets; the caller's query is
+      # never mutated.
       protected def scope_to_parent(query : CQL::Query) : CQL::Query
-        query.clone
-          .join(Through.table) { Target.table_column(:id).eq(Through.table_column(@target_key)) }
-          .where { Through.table_column(@key).eq(@id) }
+        condition = associated_targets
+        query.clone.where { condition }
+      end
+
+      # The target table's declared primary key column, `:id` when none is declared.
+      private def target_primary_key : Symbol
+        Target.schema.tables[Target.table].primary_key.try(&.name) || :id
       end
 
       # Adds an existing record to the association.
@@ -92,7 +98,7 @@ module CQL
 
         # Create join table record to establish association
         safe_db_operation do
-          Through.find_or_create_by({@key => @id, @target_key => target_id})
+          Through.find_or_create_by({@key => bound_id(@id), @target_key => bound_id(target_id)})
         end
 
         # Add to internal array only if already loaded and not already present
@@ -128,7 +134,7 @@ module CQL
 
         # Create the association in the join table
         safe_db_operation do
-          Through.find_or_create_by({@key => @id, @target_key => target_id})
+          Through.find_or_create_by({@key => bound_id(@id), @target_key => bound_id(target_id)})
         end
 
         # Add to internal array only if already loaded and not already present
@@ -162,7 +168,7 @@ module CQL
           CQL::Delete
             .new(Through.schema)
             .from(@through_table)
-            .where({@key => @id, @target_key => id})
+            .where({@key => bound_id(@id), @target_key => bound_id(id)})
             .commit
             .rows_affected
         end
@@ -221,7 +227,7 @@ module CQL
       def clear_with_destroy
         if @dependent == :destroy
           # Get target records before clearing associations
-          target_records = @loaded ? @records.dup : all
+          target_records = all.dup
 
           # Clear join table associations
           clear_join_records
@@ -258,11 +264,14 @@ module CQL
         self
       end
 
-      # Deletes the target rows without callbacks: one DELETE per chunk of ids, or one soft delete
-      # per record for soft-deletable targets.
+      # Deletes the target rows with one DELETE per chunk of ids, without callbacks. Soft-deletable
+      # targets go through `Target.where(...).delete_all` instead: their default scope leaves those
+      # already soft deleted alone, and the others run their destroy callbacks if they declare any.
       private def delete_targets(target_ids : Array(Pk)) : Nil
         if Target.responds_to?(:acts_as_paranoid?)
-          target_ids.each { |id| safe_db_operation { Target.delete!(id) } }
+          CQL::ActiveRecord::IdChunks.each(target_ids, Target.adapter.dialect.max_bind_params - 1) do |chunk|
+            safe_db_operation { Target.where(id: chunk).delete_all }
+          end
         else
           safe_db_operation { Target.delete_ids(target_ids) }
         end
@@ -270,17 +279,33 @@ module CQL
 
       # Clear only the join table records (preserve target records)
       def clear_join_records
-        safe_db_operation do
+        delete_all
+        self
+      end
+
+      # Unlinks every associated record by deleting this parent's join rows.
+      # The records themselves stay, since they may belong to other parents;
+      # `clear` with `dependent: :delete_all` or `:destroy` removes them too.
+      # - **return** : Int64 - Number of join rows deleted
+      def delete_all : Int64
+        rows_affected = safe_db_operation do
           CQL::Delete
             .new(Through.schema)
             .from(@through_table)
-            .where({@key => @id})
+            .where({@key => bound_id(@id)})
             .commit
+            .rows_affected
         end
 
-        # Clear internal state since associations are gone
         @records.clear if @loaded
-        self
+        rows_affected
+      end
+
+      # The link lives in the join table, so nullifying it deletes the join rows
+      # (same as `delete_all`).
+      # - **return** : Int64 - Number of join rows deleted
+      def nullify_all : Int64
+        delete_all
       end
 
       # Build a new target record but don't save it or create association
@@ -307,7 +332,7 @@ module CQL
             result = CQL::Query
               .new(Through.schema)
               .from(@through_table)
-              .where({@key => @id, @target_key => record_id})
+              .where({@key => bound_id(@id), @target_key => bound_id(record_id)})
               .limit(1)
               .first(Through)
             !result.nil?
@@ -325,7 +350,7 @@ module CQL
         # Create new associations
         if ids.any?
           safe_db_operation do
-            values = ids.map { |id| {@key => @id, @target_key => id} }
+            values = ids.map { |id| {@key => bound_id(@id), @target_key => bound_id(id)} }
             CQL::Insert
               .new(Through.schema)
               .into(@through_table)
@@ -347,7 +372,7 @@ module CQL
             through_records = CQL::Query
               .new(Through.schema)
               .from(@through_table)
-              .where({@key => @id})
+              .where({@key => bound_id(@id)})
               .all(Through)
 
             through_records.compact_map do |record|
@@ -388,9 +413,15 @@ module CQL
       # Going through `Target.where` keeps the target's default scope (soft deletes) and returns
       # each target once.
       private def target_matches(attributes : NamedTuple) : CQL::ActiveRecord::Queryable::QueryBuilder(Target)
-        associated_ids = CQL::Query.new(Through.schema).from(@through_table).select(@target_key).where({@key => @id})
         targets = attributes.empty? ? Target.query : Target.where(**attributes)
-        targets.where { Target.table_column(:id).in(associated_ids) }
+        condition = associated_targets
+        targets.where { condition }
+      end
+
+      # `<target pk> IN (SELECT <target_key> FROM <through> WHERE <key> = ?)`: the parent's targets.
+      private def associated_targets
+        associated_ids = CQL::Query.new(Through.schema).from(@through_table).select(@target_key).where({@key => bound_id(@id)})
+        Target.table_column(target_primary_key).in(associated_ids)
       end
     end
   end

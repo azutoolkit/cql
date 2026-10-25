@@ -62,7 +62,9 @@ User.delete!(user_id)
 User.delete_by!(email: "spam@example.com")
 ```
 
-This loads the matching records and soft deletes each one, so `before_destroy`/`after_destroy` callbacks run.
+This loads the matching records and soft deletes each one, in one transaction, so `before_destroy`/`after_destroy`
+callbacks and the `dependent:` strategies of the associations run. `User.delete!(user_id)` soft deletes through the
+instance `delete!` too.
 
 ### Delete All Records
 
@@ -70,8 +72,18 @@ This loads the matching records and soft deletes each one, so `before_destroy`/`
 User.delete_all   # Soft deletes all active users and returns how many
 ```
 
-Without `before_destroy`/`after_destroy` callbacks this sets `deleted_at` in bulk (one SELECT of the ids, then one
-UPDATE per chunk of the database's bind limit). With destroy callbacks it soft deletes record by record so they run.
+Without `before_destroy`/`after_destroy` callbacks or `dependent:` associations this sets `deleted_at` in bulk (one
+SELECT of the ids, then one UPDATE per chunk of the database's bind limit). Otherwise it soft deletes record by record,
+in one transaction, so they run.
+
+### Associations
+
+`delete!` applies the `dependent:` strategy of the record's associations, as a hard delete does (see
+[When the Parent Is Deleted](../relationships/has-many.md#when-the-parent-is-deleted)): a `restrict_with_error`
+association with records raises before `deleted_at` is set, and the other strategies run in the same transaction as the
+UPDATE. `force_delete!` applies them too. `restore!` does not undo them: posts nullified or hard-deleted with the user
+stay that way, so prefer `dependent: :destroy` towards soft-deletable children, which are soft deleted with the parent.
+has_many's `:delete_all` hard deletes the children even when they are soft-deletable.
 
 ## Restore Records
 
@@ -167,7 +179,7 @@ end
 
 ## Cascade Soft Deletes
 
-Soft delete related records when a parent is deleted:
+Soft delete related records when a parent is deleted by declaring `dependent: :destroy` towards a soft-deletable model:
 
 ```crystal
 struct Post
@@ -176,16 +188,13 @@ struct Post
 
   db_context MyDB, :posts
 
-  has_many :comments, Comment, foreign_key: :post_id
-
-  after_destroy :soft_delete_comments
-
-  private def soft_delete_comments
-    comments.all.each(&.delete!)
-    true
-  end
+  # Comment includes SoftDeletable too, so each comment's delete! sets its deleted_at
+  has_many :comments, Comment, foreign_key: :post_id, dependent: :destroy
 end
 ```
+
+`post.delete!` soft deletes the comments and then the post, in one transaction. `post.restore!` restores only the post;
+restore the comments yourself.
 
 ## Verify It Works
 

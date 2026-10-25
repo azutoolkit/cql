@@ -20,7 +20,8 @@ module CQL::ActiveRecord::Relations
     # - **param** : join_through (Symbol | Class) - The join table model or table name
     # - **param** : foreign_key (Symbol) - Foreign key for this model in join table (optional)
     # - **param** : association_foreign_key (Symbol) - Foreign key for target model in join table (optional)
-    # - **param** : dependent (Symbol) - Dependency handling (:destroy, :delete_all, :nullify)
+    # - **param** : dependent (Symbol) - What happens to the targets when the owner is deleted or the association
+    #   cleared (:destroy, :delete_all, :nullify); the join rows are always removed
     # - **param** : validate (Bool) - Whether to validate associated records
     # - **param** : autosave (Bool) - Whether to automatically save associated records
     #
@@ -51,6 +52,13 @@ module CQL::ActiveRecord::Relations
     # end
     # ```
     macro many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = :nullify, validate = true, autosave = false)
+      {% valid_dependents = %w[destroy delete_all nullify] %}
+      {% unless dependent.is_a?(SymbolLiteral) && valid_dependents.includes?(dependent.id.stringify) %}
+        {{ raise "CQL many_to_many error in #{@type}: unsupported dependent option `#{dependent}`. Supported options: #{valid_dependents.join(", ")}." }}
+      {% end %}
+
+      apply_on_delete {{name}}
+
       # Determine foreign key names if not provided
       {% if foreign_key %}
         {% fk = foreign_key.id %}
@@ -111,23 +119,19 @@ module CQL::ActiveRecord::Relations
         @_{{name.id}} = nil
       end
 
-      # Handle dependent associations when parent is destroyed
-      def handle_{{name.id}}_dependency
-        return unless @_{{name.id}} # Only process if association was accessed
-
+      # Removes the owner's join rows and applies the `dependent:` strategy to the targets in the
+      # database, loaded or not; `delete!` calls it
+      def handle_{{name.id}}_dependency : Nil
+        clear_{{name.id}}_cache
         collection = {{name.id}}
 
-        case {{dependent}}
-        when :destroy
-          # Destroy join records and optionally target records
+        {% if dependent == :destroy %}
           collection.clear_with_destroy
-        when :delete_all
-          # Delete join records and optionally target records
+        {% elsif dependent == :delete_all %}
           collection.clear_with_delete
-        when :nullify
-          # This doesn't make sense for many-to-many, so we delete join records
+        {% else %}
           collection.clear_join_records
-        end
+        {% end %}
       end
 
       # Count associated records without loading them
@@ -140,7 +144,7 @@ module CQL::ActiveRecord::Relations
            CQL::Query
              .new({{join_class}}.schema)
              .from({{join_class}}.table)
-             .where({ :{{fk}} => parent_id })
+             .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
              .count
              .get(Int64?) || 0_i64
          end
@@ -157,7 +161,7 @@ module CQL::ActiveRecord::Relations
             result = CQL::Query
               .new({{join_class}}.schema)
               .from({{join_class}}.table)
-              .where({ :{{fk}} => parent_id })
+              .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
               .limit(1)
               .first({{join_class}})
             !result.nil?
@@ -179,7 +183,7 @@ module CQL::ActiveRecord::Relations
             result = CQL::Query
               .new({{join_class}}.schema)
               .from({{join_class}}.table)
-              .where({ :{{fk}} => parent_id, :{{target_fk}} => target_id })
+              .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id), :{{target_fk}} => CQL::ActiveRecord::IdChunks.bound(target_id) })
               .limit(1)
               .first({{join_class}})
             !result.nil?
@@ -199,7 +203,7 @@ module CQL::ActiveRecord::Relations
            records = CQL::Query
              .new({{join_class}}.schema)
              .from({{join_class}}.table)
-             .where({ :{{fk}} => parent_id })
+             .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
              .all({{join_class}})
 
            records.compact_map do |record|

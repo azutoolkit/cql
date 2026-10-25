@@ -17,6 +17,17 @@ UuidTestDB = CQL::Schema.define(
     primary :id, Int64, auto_increment: true
     text :session_id, null: true
   end
+
+  table :uuid_tags do
+    primary :id, Int64, auto_increment: true
+    text :name
+  end
+
+  table :uuid_session_tags do
+    primary :id, Int64, auto_increment: true
+    text :session_id
+    bigint :uuid_tag_id
+  end
 end
 
 # belongs_to a UUID-keyed model, so its generated preload must bind UUIDs as strings.
@@ -47,6 +58,122 @@ class UuidSession
 
   def initialize(@token : String, @user_id : Int64)
   end
+end
+
+# An event read back with its UUID foreign key, which SQLite stores as TEXT. Models cannot write a
+# UUID column other than the primary key yet, so the specs insert these rows directly.
+class UuidSessionNote
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: UuidTestDB, table: :uuid_session_events
+
+  @[DB::Field(converter: CQL::UUIDConverter)]
+  property session_id : UUID
+end
+
+# UUID-keyed owners of the `uuid_sessions` rows, one per `dependent:` strategy; create the rows
+# with UuidSession and load them through these models.
+class NoteDestroyingSession
+  include CQL::ActiveRecord::Model(UUID)
+
+  db_context schema: UuidTestDB, table: :uuid_sessions
+
+  property token : String = ""
+
+  has_many :notes, UuidSessionNote, foreign_key: :session_id, dependent: :destroy
+end
+
+class NoteDeletingSession
+  include CQL::ActiveRecord::Model(UUID)
+
+  db_context schema: UuidTestDB, table: :uuid_sessions
+
+  property token : String = ""
+
+  has_many :notes, UuidSessionNote, foreign_key: :session_id, dependent: :delete_all
+end
+
+class UuidTag
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: UuidTestDB, table: :uuid_tags
+
+  property name : String = ""
+end
+
+class UuidSessionTag
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: UuidTestDB, table: :uuid_session_tags
+end
+
+# UUID-keyed owners of tags through `uuid_session_tags`: the default strategy and :destroy.
+class TaggedSession
+  include CQL::ActiveRecord::Model(UUID)
+
+  db_context schema: UuidTestDB, table: :uuid_sessions
+
+  property token : String = ""
+
+  many_to_many :tags, UuidTag, join_through: UuidSessionTag, foreign_key: :session_id, association_foreign_key: :uuid_tag_id
+end
+
+class TagDestroyingSession
+  include CQL::ActiveRecord::Model(UUID)
+
+  db_context schema: UuidTestDB, table: :uuid_sessions
+
+  property token : String = ""
+
+  many_to_many :tags, UuidTag, join_through: UuidSessionTag, foreign_key: :session_id,
+    association_foreign_key: :uuid_tag_id, dependent: :destroy
+end
+
+def uuid_session_with_tag : {UuidSession, UuidTag}
+  session = UuidSession.create!(token: "tagged", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+  tag = UuidTag.create!(name: "crystal")
+  UuidTestDB.insert.into(:uuid_session_tags).values(session_id: session.id!.to_s, uuid_tag_id: tag.id!).commit
+  {session, tag}
+end
+
+class NoteNullifyingSession
+  include CQL::ActiveRecord::Model(UUID)
+
+  db_context schema: UuidTestDB, table: :uuid_sessions
+
+  property token : String = ""
+
+  has_many :notes, UuidSessionNote, foreign_key: :session_id, dependent: :nullify
+end
+
+class NoteRestrictedSession
+  include CQL::ActiveRecord::Model(UUID)
+
+  db_context schema: UuidTestDB, table: :uuid_sessions
+
+  property token : String = ""
+
+  has_many :notes, UuidSessionNote, foreign_key: :session_id, dependent: :restrict_with_error
+end
+
+class NoteOwningSession
+  include CQL::ActiveRecord::Model(UUID)
+
+  db_context schema: UuidTestDB, table: :uuid_sessions
+
+  property token : String = ""
+
+  has_one :note, UuidSessionNote, foreign_key: :session_id, dependent: :destroy
+end
+
+def uuid_session_with_note : {UuidSession, Int64}
+  session = UuidSession.create!(token: "owner", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+  inserted = UuidTestDB.insert.into(:uuid_session_events).values(session_id: session.id!.to_s).commit
+  {session, inserted.last_insert_id}
+end
+
+def uuid_session_note_count(session : UuidSession)
+  UuidSessionEvent.where(session_id: session.id!.to_s).count
 end
 
 describe "UUID Primary Key Support" do
@@ -256,6 +383,88 @@ describe "UUID Primary Key Support" do
       expect_raises(ArgumentError, /never matches a generated id/) do
         UuidSession.upsert_all([{token: "t", user_id: 1_i64}], on_conflict: :id)
       end
+    end
+  end
+
+  describe "dependent strategies on a UUID-keyed parent" do
+    before_each do
+      UuidTestDB.uuid_session_events.drop! rescue nil
+      UuidTestDB.uuid_tags.drop! rescue nil
+      UuidTestDB.uuid_session_tags.drop! rescue nil
+      UuidTestDB.uuid_session_events.create!
+      UuidTestDB.uuid_tags.create!
+      UuidTestDB.uuid_session_tags.create!
+    end
+
+    after_each do
+      UuidTestDB.uuid_session_tags.drop!
+      UuidTestDB.uuid_tags.drop!
+      UuidTestDB.uuid_session_events.drop!
+    end
+
+    it "destroys the has_many records with dependent: :destroy" do
+      session, note_id = uuid_session_with_note
+      owner = NoteDestroyingSession.find!(session.id!)
+      owner.notes_count.should eq(1)
+
+      owner.delete!.should be_true
+
+      UuidSessionNote.find?(note_id).should be_nil
+    end
+
+    it "deletes the has_many rows with dependent: :delete_all" do
+      session, note_id = uuid_session_with_note
+
+      NoteDeletingSession.find!(session.id!).delete!.should be_true
+
+      UuidSessionEvent.where(id: note_id).count.should eq(0)
+    end
+
+    it "removes the many_to_many join rows and keeps the tags by default" do
+      session, tag = uuid_session_with_tag
+
+      TaggedSession.find!(session.id!).delete!.should be_true
+
+      UuidSessionTag.count.should eq(0)
+      UuidTag.find?(tag.id!).should_not be_nil
+    end
+
+    it "destroys the many_to_many tags with dependent: :destroy" do
+      session, tag = uuid_session_with_tag
+
+      TagDestroyingSession.find!(session.id!).delete!.should be_true
+
+      UuidSessionTag.count.should eq(0)
+      UuidTag.find?(tag.id!).should be_nil
+    end
+
+    it "clears the foreign key with dependent: :nullify" do
+      session, note_id = uuid_session_with_note
+
+      NoteNullifyingSession.find!(session.id!).delete!.should be_true
+
+      uuid_session_note_count(session).should eq(0)
+      UuidSessionEvent.where(id: note_id).count.should eq(1)
+    end
+
+    it "raises and deletes nothing with dependent: :restrict_with_error" do
+      session, _note_id = uuid_session_with_note
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError) do
+        NoteRestrictedSession.find!(session.id!).delete!
+      end
+
+      UuidSession.find!(session.id!).token.should eq("owner")
+      uuid_session_note_count(session).should eq(1)
+    end
+
+    it "destroys the has_one record with dependent: :destroy" do
+      session, note_id = uuid_session_with_note
+
+      NoteOwningSession.find!(session.id!).delete!.should be_true
+
+      UuidSessionNote.find?(note_id).should be_nil
+      UuidSession.find(session.id!).should be_nil
     end
   end
 
