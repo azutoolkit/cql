@@ -33,7 +33,7 @@ Destroy callbacks run from the instance method `delete!` (and the soft-delete `d
 
 ### When Callbacks Run
 
-Callbacks run through `save`, `save!` and the instance `delete!`. The shortcuts `create!`, `update!`, `touch` and the class-level `delete!`, `delete_by!`, `delete_all` and `update_all` write to the database directly and skip callbacks. `delete_all` on a query (`User.where(...).delete_all`), and the class-level `delete_all` of a soft-deletable model, run the destroy callbacks of each record when the model declares any, and otherwise delete in bulk.
+Callbacks run through `save`, `save!` and the instance `delete!`. The shortcuts `create!`, `update!`, `touch` and the class-level `delete!`, `delete_by!`, `delete_all` and `update_all` write to the database directly and skip callbacks. `delete_all` on a query (`User.where(...).delete_all`), and the class-level `delete_all` of a soft-deletable model, run the destroy callbacks of each record, in one transaction, when the model declares any (or declares `dependent:` associations), and otherwise delete in bulk.
 
 ## Basic Usage
 

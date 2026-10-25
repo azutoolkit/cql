@@ -53,6 +53,38 @@ describe "CQL compile-time safety" do
     error.should contain("unsupported dependent option `:explode`")
   end
 
+  it "raises a clear error for unsupported has_one dependent options" do
+    success, _output, error = Snippets.compile <<-CRYSTAL
+      require "./src/cql"
+
+      class BrokenHasOne
+        include CQL::ActiveRecord::Model(Int32)
+
+        has_one :profile, MissingProfile, dependent: :delete_all
+      end
+      CRYSTAL
+
+    success.should be_false
+    error.should contain("CQL has_one error")
+    error.should contain("unsupported dependent option `:delete_all`")
+  end
+
+  it "raises a clear error for unsupported many_to_many dependent options" do
+    success, _output, error = Snippets.compile <<-CRYSTAL
+      require "./src/cql"
+
+      class BrokenManyToMany
+        include CQL::ActiveRecord::Model(Int32)
+
+        many_to_many :tags, MissingTag, join_through: :missing_tags, dependent: :restrict_with_error
+      end
+      CRYSTAL
+
+    success.should be_false
+    error.should contain("CQL many_to_many error")
+    error.should contain("unsupported dependent option `:restrict_with_error`")
+  end
+
   it "raises a clear error when belongs_to foreign key type does not match target primary key type" do
     success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"

@@ -70,6 +70,17 @@ def many_to_many_isolation_selects(& : ->) : Array(String)
   statements
 end
 
+# A movies owner that deletes its actors' rows without callbacks.
+class ActorDeletingMovie
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :movies
+
+  property title : String
+
+  many_to_many :actors, Actor, join_through: MoviesActor, foreign_key: :movie_id,
+    association_foreign_key: :actor_id, dependent: :delete_all
+end
+
 describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
   before_each do
     UserDB.actors.drop! rescue nil
@@ -192,6 +203,53 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
       # Verify join records are deleted
       MoviesActor.count.should eq(0)
       movie.actors.size.should eq(0)
+    end
+  end
+
+  describe "dependent strategies when the parent is deleted" do
+    it "removes the join rows and keeps the movies when an actor is deleted" do
+      movie = Movie.new("The Matrix", 1999)
+      movie.create!
+      actor = Actor.new("Keanu Reeves", 58)
+      actor.create!
+      other_actor = Actor.new("Carrie-Anne Moss", 55)
+      other_actor.create!
+      movie.actors << actor
+      movie.actors << other_actor
+
+      Actor.find!(actor.id!).delete!.should be_true
+
+      MoviesActor.where(actor_id: actor.id!).count.should eq(0)
+      MoviesActor.where(actor_id: other_actor.id!).count.should eq(1)
+      Movie.find?(movie.id!).should_not be_nil
+    end
+
+    it "removes the join rows and the actors with dependent: :destroy when a movie is deleted" do
+      movie = Movie.new("The Matrix", 1999)
+      movie.create!
+      actor = Actor.new("Keanu Reeves", 58)
+      actor.create!
+      movie.actors << actor
+
+      Movie.find!(movie.id!).delete!.should be_true
+
+      MoviesActor.count.should eq(0)
+      Actor.find?(actor.id!).should be_nil
+      Movie.find?(movie.id!).should be_nil
+    end
+
+    it "removes the join rows and the actors' rows with dependent: :delete_all when a movie is deleted" do
+      movie = Movie.new("The Matrix", 1999)
+      movie.create!
+      actor = Actor.new("Keanu Reeves", 58)
+      actor.create!
+      movie.actors << actor
+
+      ActorDeletingMovie.find!(movie.id!).delete!.should be_true
+
+      MoviesActor.count.should eq(0)
+      Actor.find?(actor.id!).should be_nil
+      Movie.find?(movie.id!).should be_nil
     end
   end
 
