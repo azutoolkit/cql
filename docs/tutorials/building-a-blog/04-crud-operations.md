@@ -311,7 +311,7 @@ user = User.find(1)
 user.try(&.delete!)
 ```
 
-The cascade comes from the `ON DELETE CASCADE` foreign keys, so the database performs it. (The `dependent:` option of `has_many` is not what removes the rows here.) PostgreSQL and MySQL always enforce foreign keys; SQLite only does when the connection asks for it, which is why Part 1 put `?foreign_keys=1` on the database URL.
+The cascade comes from the `ON DELETE CASCADE` foreign keys, so the database performs it. (These models do not declare `dependent:` on `has_many`, so CQL itself does not touch the rows.) PostgreSQL and MySQL always enforce foreign keys; SQLite only does when the connection asks for it, which is why Part 1 put `?foreign_keys=1` on the database URL.
 
 ## Aggregations
 

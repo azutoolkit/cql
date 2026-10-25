@@ -20,7 +20,9 @@ module CQL::ActiveRecord::Relations
     # - **param** : join_through (Symbol | Class) - The join table model or table name
     # - **param** : foreign_key (Symbol) - Foreign key for this model in join table (optional)
     # - **param** : association_foreign_key (Symbol) - Foreign key for target model in join table (optional)
-    # - **param** : dependent (Symbol) - Dependency handling (:destroy, :delete_all, :nullify)
+    # - **param** : dependent (Symbol) - What `delete!` does with the associated records (:destroy, :delete_all,
+    #   :nullify). Without it, deleting the parent leaves the join rows alone and `clear` removes only join rows.
+    #   :destroy and :delete_all remove target records even when other parents still link to them.
     # - **param** : validate (Bool) - Whether to validate associated records
     # - **param** : autosave (Bool) - Whether to automatically save associated records
     #
@@ -50,7 +52,7 @@ module CQL::ActiveRecord::Relations
     #   property actor_id : Int64
     # end
     # ```
-    macro many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = :nullify, validate = true, autosave = false)
+    macro many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = nil, validate = true, autosave = false)
       # Determine foreign key names if not provided
       {% if foreign_key %}
         {% fk = foreign_key.id %}
@@ -65,6 +67,11 @@ module CQL::ActiveRecord::Relations
 
       # Determine join table class
       {% join_class = join_through.is_a?(Path) ? join_through : join_through.camelcase.id %}
+      {% strategy = dependent || :nullify %}
+
+      {% if dependent %}
+        destroy_dependent :handle_{{name.id}}_dependency
+      {% end %}
 
       # Instance variable for memoizing the collection
       @[DB::Field(ignore: true)]
@@ -88,9 +95,9 @@ module CQL::ActiveRecord::Relations
           key: :{{fk}},
           id: parent_id,
           target_key: :{{target_fk}},
-          cascade: ({{dependent}} == :destroy || {{dependent}} == :delete_all),
+          cascade: ({{strategy}} == :destroy || {{strategy}} == :delete_all),
           query: base_query,
-          dependent: {{dependent}},
+          dependent: {{strategy}},
           validate: {{validate}},
           autosave: {{autosave}}
         )
@@ -115,11 +122,9 @@ module CQL::ActiveRecord::Relations
 
       # Handle dependent associations when parent is destroyed
       def handle_{{name.id}}_dependency
-        return unless @_{{name.id}} # Only process if association was accessed
+        collection = reload_{{name.id}}
 
-        collection = {{name.id}}
-
-        case {{dependent}}
+        case {{strategy}}
         when :destroy
           # Destroy join records and optionally target records
           collection.clear_with_destroy
@@ -130,6 +135,7 @@ module CQL::ActiveRecord::Relations
           # This doesn't make sense for many-to-many, so we delete join records
           collection.clear_join_records
         end
+        nil
       end
 
       # Count associated records without loading them

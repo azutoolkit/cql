@@ -275,8 +275,9 @@ When updating an existing record:
 
 When deleting with `record.delete!`:
 1. `before_destroy`
-2. (database DELETE)
-3. `after_destroy`
+2. associations' `dependent:` handlers (see [Deleting the Parent](../../how-to/relationships/has-many.md#deleting-the-parent))
+3. (database DELETE)
+4. `after_destroy`
 
 ## Complete Example
 

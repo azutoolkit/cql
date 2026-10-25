@@ -110,7 +110,7 @@ user.posts.create(title: "Hi")    # sets user_id for you
 post.user                         # => User? (optional: true by default)
 ```
 
-`has_many` also takes `foreign_key:` and `dependent:` (`:nullify`, `:destroy`, `:delete_all`, `:restrict_with_error`); `many_to_many :tags, Tag, join_through: PostTag` uses a join model.
+`has_many` also takes `foreign_key:` and `dependent:` (`:nullify`, `:destroy`, `:delete_all`, `:restrict_with_error`), which `user.delete!` applies to the posts; without `dependent:` they are left alone. `many_to_many :tags, Tag, join_through: PostTag` uses a join model.
 
 Relationship declarations are compile-time checked. `belongs_to` and `has_many` raise CQL-specific compile errors when foreign-key and primary-key types do not match:
 

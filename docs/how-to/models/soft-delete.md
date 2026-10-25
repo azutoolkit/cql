@@ -133,6 +133,8 @@ User.force_delete_by!(email: "spam@example.com")  # By attributes
 User.force_delete_all        # Permanently delete all records
 ```
 
+`user.force_delete!` runs the associations' `dependent:` handlers (see [Deleting the Parent](../relationships/has-many.md#deleting-the-parent)); a soft `user.delete!` leaves associated records alone, so `restore!` brings the record back with them.
+
 ## Add Index for Performance
 
 Every query adds `WHERE deleted_at IS NULL`, so add an index on the `deleted_at` column:

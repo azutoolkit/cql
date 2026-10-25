@@ -122,8 +122,9 @@ module CQL
         def force_delete! : Bool
           return false if id.nil?
 
-          # Run before destroy callbacks
+          # Run before destroy callbacks, then the associations' dependent handlers
           return false unless run_callbacks(:before_destroy)
+          return false unless run_callbacks(:destroy_dependents)
 
           # Actually delete the record from the database
           result = {{@type.id}}.force_delete!(id!)

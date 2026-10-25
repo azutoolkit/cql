@@ -102,7 +102,7 @@ struct Tag
 end
 ```
 
-The macro signature is `many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = :nullify, validate = true, autosave = false)`. Two naming conventions matter:
+The macro signature is `many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = nil, validate = true, autosave = false)`. With `dependent:` declared, `post.delete!` removes the post's join rows, and `:destroy` (with callbacks) or `:delete_all` (without) also removes the tags; `:nullify` removes only the join rows. `:destroy` and `:delete_all` remove a tag even when other posts still link to it, so use `:nullify` for shared targets. Without it, `post.delete!` leaves the join rows alone. See [Deleting the Parent](has-many.md#deleting-the-parent) for the ordering and soft-delete rules. Two naming conventions matter:
 
 - The association name must match the target table name (`:tags` for the `tags` table), because the generated join is built from it.
 - `join_through` is the join model class (or its snake_case name as a symbol, like `:movies_actor` for `MoviesActor`), and its table name must be the underscored class name (`PostTag` -> `post_tag`).
@@ -178,7 +178,7 @@ post.tags.exists?(name: "Crystal")        # => Bool
 post.remove_tag(tag)    # or post.tags.delete(tag)
 ```
 
-This deletes the join row. What happens to the tag itself depends on `dependent:`: `:nullify` (the default) leaves it alone, `:destroy` and `:delete_all` also remove the tag.
+This deletes the join row. What happens to the tag itself depends on `dependent:`: `:nullify` (or no `dependent:`) leaves it alone, `:destroy` and `:delete_all` also remove the tag.
 
 ### Remove All Tags from Post
 

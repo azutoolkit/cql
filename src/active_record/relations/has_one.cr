@@ -13,7 +13,8 @@ module CQL::ActiveRecord::Relations
     # - **param** : name (Symbol) - Association name
     # - **param** : kind (Class) - Associated model class
     # - **param** : foreign_key (Symbol) - Foreign key in the associated model (optional)
-    # - **param** : dependent (Symbol) - What to do with associated record when parent is deleted (:destroy, :delete, :nullify)
+    # - **param** : dependent (Symbol) - What `delete!` does with the associated record (:destroy, :delete, :nullify).
+    #   Without it, deleting the parent leaves the record alone; `create_` and `delete_` destroy it.
     # - **param** : cache (Bool) - Whether to cache the associated record
     #
     # **Example**
@@ -23,9 +24,14 @@ module CQL::ActiveRecord::Relations
     #   has_one :profile, Profile, foreign_key: :user_id, dependent: :destroy
     # end
     # ```
-    macro has_one(name, kind, foreign_key = nil, dependent = :destroy, cache = true)
+    macro has_one(name, kind, foreign_key = nil, dependent = nil, cache = true)
       # Determine foreign key name if not provided (a symbol literal or the default, as an identifier)
       {% fk = (foreign_key || "#{@type.name.underscore.id}_id").id %}
+      {% strategy = dependent || :destroy %}
+
+      {% if dependent %}
+        destroy_dependent :handle_{{name.id}}_dependency
+      {% end %}
 
       module ::CQL::ActiveRecord::AssociationRegistry::{{@type.name.gsub(/::/, "__").id}}__has_one__{{name.id}}
         KIND = :has_one
@@ -119,7 +125,7 @@ module CQL::ActiveRecord::Relations
         # Clear existing association first
         existing = {{name.id}}
         if existing
-          case {{dependent}}
+          case {{strategy}}
           when :destroy
             safe_db_operation { existing.delete! }
           when :delete
@@ -157,7 +163,7 @@ module CQL::ActiveRecord::Relations
         current_record = {{name.id}}
         return false if current_record.nil?
 
-        result = case {{dependent}}
+        result = case {{strategy}}
         when :destroy
           safe_db_operation do
             current_record.delete!
@@ -174,7 +180,7 @@ module CQL::ActiveRecord::Relations
             true
           end
         else
-          raise ArgumentError.new("Invalid dependent option: {{dependent}}")
+          raise ArgumentError.new("Invalid dependent option: {{strategy}}")
         end
 
         {% if cache %}
@@ -223,10 +229,10 @@ module CQL::ActiveRecord::Relations
 
       # Handle dependent associations when parent is destroyed
       def handle_{{name.id}}_dependency
-        current_record = {{name.id}}
+        current_record = {% if cache %}reload_{{name.id}}{% else %}{{name.id}}{% end %}
         return unless current_record
 
-        case {{dependent}}
+        case {{strategy}}
         when :destroy
           safe_db_operation { current_record.delete! }
         when :delete
@@ -237,6 +243,7 @@ module CQL::ActiveRecord::Relations
             current_record.save!
           end
         end
+        nil
       end
     end
   end

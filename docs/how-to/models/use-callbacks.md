@@ -93,8 +93,9 @@ When updating an existing record:
 When deleting with `record.delete!`:
 
 1. `before_destroy`
-2. DELETE from database
-3. `after_destroy` (only if a row was deleted)
+2. associations' `dependent:` handlers (see [Deleting the Parent](../relationships/has-many.md#deleting-the-parent))
+3. DELETE from database
+4. `after_destroy` (only if a row was deleted)
 
 ## Halting the Chain
 

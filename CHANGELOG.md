@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `dependent:` on `has_many`, `has_one` and `many_to_many` now takes effect when the parent is deleted. `delete!` (and `SoftDeletable#force_delete!`) runs each declared association's handler once, after the `before_destroy` callbacks; `:restrict_with_error` checks run first. A soft `delete!` leaves dependents alone. Previously the generated `handle_<name>_dependency` methods were never called, and they did nothing unless the association had already been loaded.
+- **Behavior change:** `delete!` leaves associations declared without `dependent:` alone; the `dependent` macro default is now `nil`. Their `clear`, `create_<name>`, `delete_<name>` and `handle_<name>_dependency` keep the previous fallbacks (`:nullify`, or `:destroy` for `has_one`). Models that declare `dependent:` now change their associated records on delete, which needs the associated tables to exist.
 - `CQL.build_schema` now compiles and runs: the table-definition block runs against the new schema (it previously failed with `undefined method 'table' for top-level`), and the SQL logging setup calls `CQL::Performance.enable_sql_logging` (the development default used a method that did not exist).
 - `CQL.build_schema` opens the database through `config.full_db_url`, so `pool.*`, `ssl.*`, SQLite/MySQL/PostgreSQL settings and `adapter_options` now reach the connection. URL parameters still win.
 - The native PostgreSQL driver accepts and ignores the `auth_methods` URL option that `CQL.configure` adds for the `pg` shard, instead of sending it to the server as a startup parameter (which PostgreSQL rejects). This matters now that `CQL.build_schema` opens through `config.full_db_url`.

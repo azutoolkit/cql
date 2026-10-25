@@ -3,10 +3,12 @@ require "./spec_helper"
 describe CQL::ActiveRecord::Callbacks do
   before_each do
     UserDB.users.create!
+    UserDB.posts.create!
     CallbackTracker.clear
   end
 
   after_each do
+    UserDB.posts.drop!
     UserDB.users.drop!
   end
 

@@ -48,7 +48,7 @@ has_one :profile, Profile, :user_id             # third argument is the foreign 
 has_one :profile, Profile, :user_id, dependent: :nullify, cache: false
 ```
 
-`dependent` accepts `:destroy` (the default), `:delete` and `:nullify` (the foreign key property must be nilable for `:nullify`). It decides what happens to an existing profile when you call `create_profile` or `delete_profile`. With `cache: true` (the default) the record is cached on the instance after the first access.
+`dependent` accepts `:destroy`, `:delete` and `:nullify` (the foreign key property must be nilable for `:nullify`). It decides what `user.delete!` does with the profile, and what happens to an existing profile when you call `create_profile` or `delete_profile`. Without `dependent:`, `user.delete!` leaves the profile alone, and `create_profile` and `delete_profile` destroy it. Only hard deletes run it; see [Deleting the Parent](has-many.md#deleting-the-parent) for the ordering and soft-delete rules. With `cache: true` (the default) the record is cached on the instance after the first access.
 
 ## Define the Relationship
 
@@ -153,7 +153,7 @@ user.update_profile(bio: "Updated bio")   # raises AssociationNotFound when ther
 user = User.find!(1)
 user.profile.try(&.delete!)
 
-# or follow the `dependent` option (destroy, delete or nullify)
+# or follow the `dependent` option (destroy, delete or nullify; destroy without one)
 user.delete_profile   # => Bool
 user.clear_profile    # nullifies the foreign key, returns Bool
 ```
