@@ -129,6 +129,52 @@ describe "CQL::Telemetry transactions" do
     events.should be_empty
   end
 
+  it "delivers Begin then Commit with one id to an async subscriber once flushed" do
+    queued = [] of CQL::Telemetry::TransactionEvent
+    fibers = [] of Fiber
+    CQL::Telemetry.subscribe_transactions("queued", async: true) { |event| queued << event; fibers << Fiber.current }
+
+    schema.transaction { |_tx| }
+    CQL::Telemetry.flush(1.second).should be_true
+
+    queued.map(&.state).should eq([CQL::Telemetry::TransactionState::Begin, CQL::Telemetry::TransactionState::Commit])
+    queued.map(&.id).uniq!.size.should eq(1)
+    fibers.none?(&.same?(Fiber.current)).should be_true
+  end
+
+  it "delivers through the mode a name was last registered in, never both" do
+    spec_fiber = Fiber.current
+    calls = [] of Symbol
+    mode = -> { Fiber.current.same?(spec_fiber) ? :sync : :async }
+    CQL::Telemetry.subscribe_transactions("mode") { |_event| calls << mode.call }
+    CQL::Telemetry.subscribe_transactions("mode", async: true) { |_event| calls << mode.call }
+    schema.transaction { |_tx| }
+    CQL::Telemetry.flush(1.second).should be_true
+    calls.should eq([:async, :async])
+
+    calls.clear
+    CQL::Telemetry.subscribe_transactions("mode") { |_event| calls << mode.call }
+    schema.transaction { |_tx| }
+    CQL::Telemetry.flush(1.second).should be_true
+    calls.should eq([:sync, :sync])
+  end
+
+  it "reports an async transaction subscriber as subscribed until it is unsubscribed or reset!" do
+    queued = [] of CQL::Telemetry::TransactionEvent
+    CQL::Telemetry.subscribe_transactions("queued", async: true) { |event| queued << event }
+    CQL::Telemetry.subscribed?("queued").should be_true
+
+    CQL::Telemetry.unsubscribe_transactions("queued")
+    CQL::Telemetry.subscribed?("queued").should be_false
+    CQL::Telemetry.subscribe_transactions("queued", async: true) { |event| queued << event }
+    CQL::Telemetry.reset!
+    CQL::Telemetry.subscribed?("queued").should be_false
+
+    schema.transaction { |_tx| }
+    CQL::Telemetry.flush(1.second)
+    queued.should be_empty
+  end
+
   it "does not draw transaction ids without subscribers" do
     CQL::Telemetry.reset!
     before = CQL::Telemetry.next_transaction_id

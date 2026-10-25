@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 
 private def within(span : Time::Span = 2.seconds, file = __FILE__, line = __LINE__, &block : -> T) : T forall T
   done = Channel(T).new(1)
@@ -101,6 +102,29 @@ describe "async telemetry subscribers" do
     event = CQL::Telemetry.query_event(CQL::Adapter::SQLite, :select, "SELECT ?", [blob] of DB::Any, 1.millisecond, nil, nil)
     blob[0] = 9_u8
     event.params.not_nil!.first.should eq(Bytes[1, 2, 3])
+  end
+
+  it "calls an async alert_on_slow block for a statement once flushed" do
+    fibers = [] of Fiber
+    CQL::Telemetry.alert_on_slow(Time::Span.zero, async: true) { |event| seen << event; fibers << Fiber.current }
+    statement.call
+
+    flush.call.should be_true
+    seen.map(&.operation).should eq([:select])
+    fibers.none?(&.same?(Fiber.current)).should be_true
+  end
+
+  it "emits the log_queries line of an async logger only after the consumer reaches it" do
+    Log.capture("cql.telemetry") do |logs|
+      CQL::Telemetry.subscribe("gate", async: true) { |_| gate.receive? }
+      CQL::Telemetry.log_queries(async: true)
+      statement.call
+      logs.empty
+
+      gate.close
+      flush.call.should be_true
+      logs.check(:debug, /\[select\].*FROM users/)
+    end
   end
 
   it "never delivers a queued event to an async subscriber unsubscribed before the consumer reaches it" do

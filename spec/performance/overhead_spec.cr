@@ -40,6 +40,10 @@ describe "instrumentation allocation budget" do
     CQL::Telemetry.async_queue_capacity = 4096
   end
 
+  it "allocates nothing beginning a transaction without transaction subscribers" do
+    bytes_per_call(100_000) { CQL::Telemetry.begin_transaction(CQL::Adapter::SQLite, false) }.should be < 1.0
+  end
+
   it "allocates nothing for a context, around a block or a statement" do
     bytes_per_call(100_000) { CQL::Performance.with_context("req") { } }.should be < 1.0
     CQL::Telemetry.subscribe("overhead") { |_event| }
