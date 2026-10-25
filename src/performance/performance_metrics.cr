@@ -193,12 +193,13 @@ module CQL::Performance
       getter highest_error_queries : Array(NamedTuple(sql: String, errors: Int64, error_rate: Float64))
       getter most_expensive_queries : Array(NamedTuple(sql: String, total_time: Time::Span, count: Int64))
 
-      def initialize(@slowest_queries, @most_frequent_queries, @highest_error_queries, @most_expensive_queries)
+      def initialize(@slowest_queries, @most_frequent_queries, @highest_error_queries, @most_expensive_queries,
+                     @include_params : Bool = false)
       end
 
       def to_h : Hash(String, JSON::Any)
         {
-          "slowest_queries"        => JSON::Any.new(@slowest_queries.map { |query| PerformanceMetrics.to_json_any(query.to_h) }),
+          "slowest_queries"        => JSON::Any.new(@slowest_queries.map { |query| PerformanceMetrics.to_json_any(query.to_h(include_params: @include_params)) }),
           "most_frequent_queries"  => JSON::Any.new(@most_frequent_queries.map { |query| PerformanceMetrics.to_json_any(query) }),
           "highest_error_queries"  => JSON::Any.new(@highest_error_queries.map { |query| PerformanceMetrics.to_json_any(query) }),
           "most_expensive_queries" => JSON::Any.new(@most_expensive_queries.map { |query| PerformanceMetrics.to_json_any(query) }),
@@ -300,7 +301,7 @@ module CQL::Performance
       health_metrics = build_health_metrics(profiler, detector, cache)
 
       # Top queries
-      top_queries = build_top_queries(profiler)
+      top_queries = build_top_queries(profiler, config.try(&.logging.include_params?) || false)
 
       # Patterns
       patterns = build_performance_patterns(profiler, detector)
@@ -590,7 +591,7 @@ module CQL::Performance
       )
     end
 
-    private def self.build_top_queries(profiler : QueryProfilerInterface?) : TopQueries
+    private def self.build_top_queries(profiler : QueryProfilerInterface?, include_params : Bool) : TopQueries
       unless profiler
         return TopQueries.new(
           [] of QueryData,
@@ -625,7 +626,7 @@ module CQL::Performance
         }
       end.sort_by!(&.[:total_time]).reverse!.first(10)
 
-      TopQueries.new(slowest_queries, most_frequent, highest_error_queries, most_expensive)
+      TopQueries.new(slowest_queries, most_frequent, highest_error_queries, most_expensive, include_params)
     end
 
     private def self.build_performance_patterns(profiler : QueryProfilerInterface?, detector : NPlusOneDetectorInterface?) : PerformancePatterns
@@ -718,16 +719,18 @@ module CQL::Performance
 
   # Extension methods for QueryData to support to_h
   struct QueryData
-    def to_h : Hash(String, JSON::Any)
-      {
+    # Bound values often hold personal data, so `params` is only included when asked for.
+    def to_h(include_params : Bool = false) : Hash(String, JSON::Any)
+      hash = {
         "sql"               => JSON::Any.new(@sql),
-        "params"            => PerformanceMetrics.to_json_any(@params),
         "execution_time_ms" => JSON::Any.new(@execution_time.total_milliseconds),
         "timestamp"         => JSON::Any.new(@timestamp.to_rfc3339),
         "rows_affected"     => JSON::Any.new(@rows_affected || 0_i64),
         "error"             => JSON::Any.new(@error || ""),
         "normalized_sql"    => JSON::Any.new(normalized_sql),
       }
+      hash["params"] = PerformanceMetrics.to_json_any(@params) if include_params
+      hash
     end
   end
 

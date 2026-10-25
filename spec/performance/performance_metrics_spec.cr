@@ -431,12 +431,18 @@ describe "CQL::Performance::PerformanceMetrics" do
 
         hash = query_data.to_h
         hash["sql"].should eq("SELECT * FROM users WHERE id = ?")
-        hash["params"].should be_a(JSON::Any)
+        hash.has_key?("params").should be_false
         hash["execution_time_ms"].should eq(150.0)
         hash["timestamp"].should be_a(JSON::Any)
         hash["rows_affected"].should eq(1_i64)
         hash["error"].should eq("")
         hash["normalized_sql"].should be_a(JSON::Any)
+      end
+
+      it "includes params when include_params is true" do
+        query_data = CQL::Performance::QueryData.new("SELECT * FROM users WHERE id = ?", [1.as(DB::Any)], 150.milliseconds)
+
+        query_data.to_h(include_params: true)["params"].to_json.should eq("[1]")
       end
     end
 
