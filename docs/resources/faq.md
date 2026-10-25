@@ -116,13 +116,13 @@ This compares model getter types with the schema table configured by `db_context
 
 ### How do I eager load associations?
 
-For `has_many` and `belongs_to`, use `preload`:
+For `has_many`, `belongs_to` and `has_one`, use `preload`:
 
 ```crystal
 users = User.preload(:posts).all   # 2 queries, user.posts is already loaded
 ```
 
-`preload` also loads `belongs_to` associations (`Post.preload(:user).all`), but ignores `has_one` and `many_to_many`. For those, load related IDs first, then batch load:
+`preload` also loads `belongs_to` and `has_one` associations (`Post.preload(:user).all`), but ignores `many_to_many`. For those, load related IDs first, then batch load:
 
 ```crystal
 posts = Post.where(published: true).all
@@ -171,7 +171,7 @@ DELETE FROM cql_schema_migrations WHERE version = 5;
 
 ### How do I avoid N+1 queries?
 
-Preload `has_many` and `belongs_to` associations, and load other related data in batches:
+Preload `has_many`, `belongs_to` and `has_one` associations, and load other related data in batches:
 
 ```crystal
 # Bad: N+1

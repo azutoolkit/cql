@@ -604,7 +604,7 @@ user.posts.build(title: "New Post", content: "Content").save!
 user.posts.size                         # Number of posts
 user.posts.empty?                       # Existence check
 
-# Eager loading with preload for has_many and belongs_to associations (avoids N+1 queries)
+# Eager loading with preload for has_many, belongs_to and has_one associations (avoids N+1 queries)
 users_with_posts = User.preload(:posts)
                       .where(active: true)
                       .all

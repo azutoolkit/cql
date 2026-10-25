@@ -88,7 +88,7 @@ User.query
 
 # Pagination and loading
 User.page(2, per_page: 20)
-User.preload(:posts).all          # has_many and belongs_to
+User.preload(:posts).all          # has_many, belongs_to, has_one
 User.where(active: true).pluck(:email, as: String)
 
 # Scopes

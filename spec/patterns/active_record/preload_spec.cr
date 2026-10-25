@@ -1,5 +1,34 @@
 require "./spec_helper"
 
+PreloadMismatchDB = CQL::Schema.define(:preload_mismatch_db, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("preload_mismatch.db")) do
+  table :mismatch_owners do
+    primary :id, Int64, auto_increment: true
+    text :name
+  end
+
+  table :mismatch_badges do
+    primary :id, Int64, auto_increment: true
+    integer :mismatch_owner_id, null: true
+  end
+end
+
+# The badge's foreign key is Int32 while the owner's key is Int64.
+class MismatchBadge
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: PreloadMismatchDB, table: :mismatch_badges
+
+  property mismatch_owner_id : Int32?
+end
+
+class MismatchOwner
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: PreloadMismatchDB, table: :mismatch_owners
+
+  property name : String = ""
+
+  has_one :badge, MismatchBadge
+end
+
 private def preload_chunk_user(index : Int32) : TestUser
   TestUser.create!(name: "Chunk User #{index}", email: "chunk#{index}@example.com", age: 30, password: "password123", password_confirmation: "password123")
 end
@@ -155,6 +184,74 @@ describe "Eager Loading / Preload" do
 
       statements.size.should eq(2)
       posts.each { |post| post.user.not_nil!.id.should eq(post.user_id) }
+    end
+  end
+
+  describe "has_one preload" do
+    before_each do
+      UserDB.users.create!
+      UserDB.profiles.create!
+      UserDB.profile_owners.create!
+    end
+
+    after_each do
+      UserDB.profile_owners.drop!
+      UserDB.profiles.drop!
+      UserDB.users.drop!
+    end
+
+    owner = ->(index : Int32) do
+      ProfileOwner.new("Owner #{index}", "owner#{index}@example.com", 30, "password123", "password123").tap(&.create!)
+    end
+
+    it "loads every owner's profile with one extra query" do
+      owners = (1..3).map { |i| owner.call(i) }
+      owners[0].create_profile(bio: "first", avatar_url: "a")
+      owners[1].create_profile(bio: "second", avatar_url: "b")
+
+      loaded = [] of ProfileOwner
+      loading = count_queries { loaded = ProfileOwner.order(id: :asc).preload(:profile).all }
+      reading = count_queries { loaded.map(&.profile.try(&.bio)) }
+
+      loading.size.should eq(2)
+      reading.should be_empty
+      loaded.map(&.profile.try(&.bio)).should eq(["first", "second", nil])
+    end
+
+    it "splits the profile SELECT into chunks of parent ids" do
+      (1..3).each { |i| owner.call(i).create_profile(bio: "bio #{i}", avatar_url: "a") }
+      loaded = ProfileOwner.order(id: :asc).all
+
+      count_queries { ProfileOwner._preload_profile(loaded, chunk_size: 2) }.size.should eq(2)
+      loaded.map(&.profile.not_nil!.bio).should eq(["bio 1", "bio 2", "bio 3"])
+    end
+
+    it "attaches one of several children" do
+      first = owner.call(1)
+      UserProfile.new("one", "a", first.id).save!
+      UserProfile.new("two", "b", first.id).save!
+
+      loaded = ProfileOwner.preload(:profile).all
+
+      ["one", "two"].should contain(loaded.first.profile.not_nil!.bio)
+    end
+
+    it "matches keys whose types differ between owner and target" do
+      PreloadMismatchDB.mismatch_owners.create!
+      PreloadMismatchDB.mismatch_badges.create!
+      parent = MismatchOwner.create!(name: "owner")
+      MismatchBadge.create!(mismatch_owner_id: parent.id!.to_i32)
+
+      MismatchOwner.preload(:badge).all.first.badge.should_not be_nil
+    ensure
+      PreloadMismatchDB.mismatch_badges.drop!
+      PreloadMismatchDB.mismatch_owners.drop!
+    end
+
+    it "raises when the target has no foreign key attribute" do
+      preload_chunk_user(1)
+
+      expect_raises(ArgumentError, /test_user_id/) { TestUser.preload(:profile).all }
     end
   end
 end

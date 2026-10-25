@@ -50,6 +50,8 @@ has_one :profile, Profile, :user_id, dependent: :nullify, cache: false
 
 `dependent` accepts `:destroy` (the default), `:delete` and `:nullify` (the foreign key property must be nilable for `:nullify`). It decides what happens to an existing profile when you call `create_profile` or `delete_profile`. With `cache: true` (the default) the record is cached on the instance after the first access.
 
+`User.preload(:profile).all` loads every user's profile with one extra query (per chunk of the database's bind limit) and caches it, so `user.profile` runs no query. It needs `cache: true`, and it raises `ArgumentError` when the target has no foreign key attribute. As with `user.profile`, a user with several profiles gets an arbitrary one; keep the foreign key unique.
+
 ## Define the Relationship
 
 Add `has_one` to the parent model:
