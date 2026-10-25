@@ -165,7 +165,7 @@ What differs between them comes from the environment defaults, not from your cod
 Notes on the test branch:
 
 - The test environment's default `db` is `sqlite3://:memory:`, which cannot be parsed by `CQL.build_schema`. Assign a file URL as above.
-- The test pool defaults to 1, but `Migrator#up` holds one connection in a transaction while it checks another, so it times out (`DB::PoolTimeout`). `c.pool_size = 2` fixes it.
+- The test pool defaults to 1. `Migrator#up` runs on it, but with `auto_sync` on the schema file dump that follows needs a second connection and raises `CQL::Migrator::Error` ("Schema update failed: Could not check out a connection"). `c.pool_size = 2` or `CQL::MigratorConfig.new(auto_sync: false)` fixes it.
 
 ## Read config in an initializer
 
