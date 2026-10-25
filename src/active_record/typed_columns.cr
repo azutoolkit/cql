@@ -22,6 +22,7 @@ module CQL
               {% owner = @type %}
               {% table = @type.constant(:CQL_TABLE_NAME) %}
               {% pk = @type.constant(:CQL_PRIMARY_KEY_TYPE).stringify %}
+              {% owner_key = @type.constant(:CQL_PRIMARY_KEY_COLUMN) || :id %}
 
               {% associations = [] of Nil %}
               {% for const in CQL::ActiveRecord::AssociationRegistry.constants %}
@@ -116,11 +117,12 @@ module CQL
                 {% for meta in associations %}
                   {% target_table = meta.constant(:TARGET).resolve.constant(:CQL_TABLE_NAME) %}
                   {% fk = meta.constant(:FOREIGN_KEY) %}
+                  {% target_key = meta.constant(:TARGET).resolve.constant(:CQL_PRIMARY_KEY_COLUMN) || :id %}
                   when :{{ meta.constant(:ASSOCIATION).id }}
                     {% if meta.constant(:KIND) == :belongs_to %}
-                      { {{ target_table }}, ->(j : ::Expression::FilterBuilder) { j.{{ target_table.id }}.id.eq(j.{{ table.id }}.{{ fk.id }}) } }
+                      { {{ target_table }}, ->(j : ::Expression::FilterBuilder) { j.{{ target_table.id }}.{{ target_key.id }}.eq(j.{{ table.id }}.{{ fk.id }}) } }
                     {% else %}
-                      { {{ target_table }}, ->(j : ::Expression::FilterBuilder) { j.{{ target_table.id }}.{{ fk.id }}.eq(j.{{ table.id }}.id) } }
+                      { {{ target_table }}, ->(j : ::Expression::FilterBuilder) { j.{{ target_table.id }}.{{ fk.id }}.eq(j.{{ table.id }}.{{ owner_key.id }}) } }
                     {% end %}
                 {% end %}
                 else

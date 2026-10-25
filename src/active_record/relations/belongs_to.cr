@@ -138,7 +138,7 @@ module CQL::ActiveRecord::Relations
           keys = records.compact_map(&.{{foreign_key.id}}).reject(&.==(0))
           found = {} of typeof(keys.first) => {{klass.id}}
           CQL::ActiveRecord::IdChunks.each(keys, chunk_size) do |chunk|
-            {{klass.id}}.where({:id => chunk}).all.each { |target| found[target.id!] = target }
+            {{klass.id}}.query.where_primary_key(chunk).all.each { |target| found[target.id!] = target }
           end
           records.each do |record|
             target = record.{{foreign_key.id}}.try { |key| found[key]? }

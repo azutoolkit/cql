@@ -37,6 +37,7 @@ module CQL
             {% raise "db_context for #{@type}: primary_key must be a Symbol, got #{primary_key}" unless primary_key.is_a?(SymbolLiteral) %}
             CQL_SCHEMA_CONTEXT = {{schema}}
             CQL_TABLE_NAME = {{table}}
+            CQL_PRIMARY_KEY_COLUMN = {{primary_key}}
 
             self.db_context({{schema}}, {{table}})
 

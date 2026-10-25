@@ -49,6 +49,18 @@ LabelKeyDB = CQL::Schema.define(
     integer :shelf_id
     integer :memo_no
   end
+
+  table :stickers do
+    primary :id, Int32
+    text :name
+    integer :label_no
+  end
+
+  table :shelf_notes do
+    primary :note_no, Int32
+    text :name
+    integer :shelf_id, null: true
+  end
 end
 
 class Label
@@ -57,6 +69,36 @@ class Label
   db_context LabelKeyDB, :labels, primary_key: :label_no
 
   property name : String = ""
+
+  has_many :stickers, Sticker, foreign_key: :label_no
+
+  def initialize
+  end
+end
+
+# Belongs to a label through the label's custom key.
+class Sticker
+  include CQL::ActiveRecord::Model(Int32)
+
+  db_context LabelKeyDB, :stickers
+
+  property name : String = ""
+  property label_no : Int32?
+
+  belongs_to :label, Label, foreign_key: :label_no
+
+  def initialize
+  end
+end
+
+# A shelf's note, keyed on note_no.
+class ShelfNote
+  include CQL::ActiveRecord::Model(Int32)
+
+  db_context LabelKeyDB, :shelf_notes, primary_key: :note_no
+
+  property name : String = ""
+  property shelf_id : Int32?
 
   def initialize
   end
@@ -150,6 +192,7 @@ class Shelf
 
   many_to_many :labels, Label, join_through: ShelfLabel, foreign_key: :shelf_id, association_foreign_key: :label_no
   many_to_many :memos, Memo, join_through: ShelfMemo, foreign_key: :shelf_id, association_foreign_key: :memo_no, dependent: :delete_all
+  has_many :notes, ShelfNote, foreign_key: :shelf_id
 
   def initialize
   end
@@ -204,20 +247,20 @@ end
 
 describe "Custom primary key column" do
   before_all do
-    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
       LabelKeyDB.{{table.id}}.create!
     {% end %}
   end
 
   after_all do
-    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
     {% end %}
   end
 
   before_each do
-    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes] %}
       LabelKeyDB.exec("DELETE FROM {{table.id}}")
     {% end %}
   end
@@ -836,6 +879,88 @@ describe "Custom primary key column" do
       deleted_memo_numbers.should eq([7, 8])
       memo_numbers.should eq([7, 8, 9])
       LabelKeyDB.exec_query(&.query_all("SELECT memo_no FROM shelf_memos", as: Int32)).should be_empty
+    end
+  end
+
+  describe "belongs_to and has_many with custom keys" do
+    it "preloads the labels of stickers through label_no without a query per record" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+      LabelKeyDB.exec("INSERT INTO stickers (id, name, label_no) VALUES (1, 'Star', 7), (2, 'Moon', 8), (3, 'Sun', 7)")
+
+      stickers = [] of Sticker
+      loading = count_queries { stickers = Sticker.order(id: :asc).preload(:label).all }
+      reading = count_queries { stickers.map(&.label.try(&.name)) }
+
+      loading.size.should eq(2)
+      reading.should be_empty
+      stickers.map(&.label.try(&.name)).should eq(["Noir", "Blanc", "Noir"])
+    end
+
+    it "removes only the given sticker through delete(id) on a custom-keyed parent" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+      LabelKeyDB.exec("INSERT INTO stickers (id, name, label_no) VALUES (1, 'Star', 7), (2, 'Moon', 7), (3, 'Sun', 8)")
+      label = Label.find!(7)
+
+      label.stickers.delete(1).should be_true
+
+      Sticker.query.ids(as: Int32).sort.should eq([2, 3])
+    end
+
+    it "removes only the given sticker through delete(record)" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+      LabelKeyDB.exec("INSERT INTO stickers (id, name, label_no) VALUES (1, 'Star', 7), (2, 'Moon', 7), (3, 'Sun', 8)")
+      label = Label.find!(7)
+
+      label.stickers.delete(Sticker.find!(2))
+
+      Sticker.query.ids(as: Int32).sort.should eq([1, 3])
+    end
+
+    it "removes only the given note through delete(id) on a custom-keyed target" do
+      LabelKeyDB.exec("INSERT INTO shelf_notes (note_no, name, shelf_id) VALUES (5, 'A', 1), (6, 'B', 1), (7, 'C', 2)")
+      LabelKeyDB.exec("INSERT INTO shelves (id, name) VALUES (1, 'Front'), (2, 'Back')")
+      shelf = Shelf.find!(1)
+      note = ShelfNote.find!(5)
+
+      shelf.notes.delete(note.id!).should be_true
+
+      ShelfNote.query.ids(as: Int32).sort.should eq([6, 7])
+    end
+
+    it "does not remove a note of another shelf through delete(id)" do
+      LabelKeyDB.exec("INSERT INTO shelf_notes (note_no, name, shelf_id) VALUES (5, 'A', 1), (7, 'C', 2)")
+      LabelKeyDB.exec("INSERT INTO shelves (id, name) VALUES (1, 'Front'), (2, 'Back')")
+
+      Shelf.find!(1).notes.delete(7).should be_false
+
+      ShelfNote.query.ids(as: Int32).sort.should eq([5, 7])
+    end
+
+    it "points the notes of ids= at the shelf through the target key" do
+      LabelKeyDB.exec("INSERT INTO shelves (id, name) VALUES (1, 'Front'), (2, 'Back')")
+      LabelKeyDB.exec("INSERT INTO shelf_notes (note_no, name, shelf_id) VALUES (5, 'A', NULL), (6, 'B', NULL), (7, 'C', 2)")
+      shelf = Shelf.find!(1)
+
+      shelf.notes.ids = [5, 6]
+
+      LabelKeyDB.exec_query(&.query_all("SELECT note_no FROM shelf_notes WHERE shelf_id = 1 ORDER BY note_no", as: Int32)).should eq([5, 6])
+      ShelfNote.find!(7).shelf_id.should eq(2)
+    end
+
+    it "joins a belongs_to on the target's custom key" do
+      Sticker.query.joins(:label).query.to_sql.should eq({
+        "SELECT stickers.id, stickers.name, stickers.label_no, labels.label_no, labels.name " \
+        "FROM stickers INNER JOIN labels ON labels.label_no = stickers.label_no",
+        [] of DB::Any,
+      })
+    end
+
+    it "joins a has_many on the parent's custom key" do
+      Label.query.joins(:stickers).query.to_sql.should eq({
+        "SELECT labels.label_no, labels.name, stickers.id, stickers.name, stickers.label_no " \
+        "FROM labels INNER JOIN stickers ON stickers.label_no = labels.label_no",
+        [] of DB::Any,
+      })
     end
   end
 end
