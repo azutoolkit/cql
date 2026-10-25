@@ -30,6 +30,7 @@
 - [Use Callbacks](how-to/models/use-callbacks.md)
 - [Implement Soft Deletes](how-to/models/soft-delete.md)
 - [Add Optimistic Locking](how-to/models/optimistic-locking.md)
+- [Track Changes and Update Only Changed Columns](how-to/models/dirty-tracking.md)
 - [Use Timestamps](how-to/models/timestamps.md)
 - [Use UUID and ULID Primary Keys](how-to/models/uuid-ulid-primary-keys.md)
 

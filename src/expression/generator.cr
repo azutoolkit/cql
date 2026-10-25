@@ -137,18 +137,7 @@ module Expression
           io << " "
           write(q, io)
         else
-          # Store placeholders for values
-          placeholders = [] of String
-
-          # Add all values to params and collect placeholders
-          node.values.each do |row|
-            row.each do |val|
-              placeholders << bind(val)
-            end
-          end
-
-          # Use dialect to format insert values
-          io << @dialect.format_insert_values(node.values, placeholders)
+          write_values(node.values, io)
           node.conflict.try { |conflict| write(conflict, io) }
 
           # Handle returning clause if needed
@@ -173,6 +162,29 @@ module Expression
           column_names = node.back.map(&.accept(self))
           io << @dialect.format_delete_returning(column_names)
         end
+      end
+    end
+
+    # Values are bound row by row, so `$n` numbering runs across the rows.
+    private def write_values(rows : Array(Array(DB::Any)), io : IO) : Nil
+      return if rows.empty?
+      io << " VALUES "
+      rows.each_with_index do |row, row_index|
+        io << ", " if row_index > 0
+        io << '('
+        bind_row(row, io)
+        io << ')'
+      end
+    end
+
+    # Binds a row's values in one step; each placeholder is its value's 1-based position in the
+    # parameters, as `bind` gives it.
+    private def bind_row(row : Array(DB::Any), io : IO) : Nil
+      first = @params.size
+      @params.concat(row)
+      row.each_index do |index|
+        io << ", " if index > 0
+        io << @dialect.placeholder_format(first + index + 1)
       end
     end
 
