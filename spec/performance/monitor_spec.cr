@@ -823,6 +823,27 @@ describe "CQL::Performance::Monitor with CQL::Execution.run" do
     end
   end
 
+  it "leaves the Params section out of a failed statement's log line when include_params is off" do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = true
+    config.logging.include_params = false
+    secret = "secret@example.com"
+
+    Log.capture("*") do |logs|
+      with_global_monitor(CQL::Performance::Monitor.new(config: config)) do
+        expect_raises(SQLite3::Exception, /no such column/) { UserDB.query.from(:users).where("nope = ?", secret).all(as: Int32) }
+      end
+
+      entry = logs.next(:error, /\AQuery failed:/).entry
+      entry.exception.should be_nil
+      message = entry.message
+      message.should_not contain(secret)
+      message.should_not contain("Params:")
+      logs.empty
+    end
+  end
+
   it "returns the result when the monitor fails recording a successful statement" do
     with_global_monitor(raising_monitor.call) { select_names.call.should eq([] of String) }
   end
