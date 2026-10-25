@@ -38,8 +38,11 @@ module CQL
       # ```
       # user.attributes = {name: "Alice", email: "[email protected]"}
       # ```
+      #
+      # The primary key is not assigned: mass assignment must not re-point a record at another row.
+      # Set it with `id=`.
       def attributes(attrs : Hash(Symbol, DB::Any))
-        attrs.each { |key, value| assign_attribute(key, value) }
+        attrs.each { |key, value| assign_attribute(key, value, with_primary_key: false) }
       end
 
       # Set the record's attributes from a hash
@@ -51,8 +54,15 @@ module CQL
       # ```
       # user.attributes(name: "Alice", email: "[email protected]")
       # ```
+      #
+      # Like `attributes(Hash)`, this never assigns the primary key.
       def attributes(**attrs)
-        attrs.each { |key, value| assign_attribute(key, value) }
+        attrs.each { |key, value| assign_attribute(key, value, with_primary_key: false) }
+      end
+
+      # Sets attributes including the primary key, for `from_hash` on trusted data.
+      protected def _assign_attributes_with_primary_key(attrs : Hash(Symbol, DB::Any)) : Nil
+        attrs.each { |key, value| assign_attribute(key, value, with_primary_key: true) }
       end
 
       # Expands to the key an instance variable is read and written under: its `DB::Field` key when
@@ -63,9 +73,10 @@ module CQL
         :{{ db_field && db_field[:key] ? db_field[:key].id : ivar.name }}
       end
 
-      private def assign_attribute(key : Symbol, value) : Nil
+      private def assign_attribute(key : Symbol, value, *, with_primary_key : Bool) : Nil
         {% for ivar in @type.instance_vars %}
-          if key == attribute_key({{ivar.id}})
+          {% primary_key_storage = ivar.name.stringify == "id" || ivar.name.stringify == "_id_storage" %}
+          if key == attribute_key({{ivar.id}}){% if primary_key_storage %} && with_primary_key{% end %}
             {% if ivar.name.stringify == "_id_storage" %}
               # A UUID key is stored as text, so only a well-formed UUID may reach it
               if value.is_a?(String) && (uuid_text = canonical_uuid?(value))

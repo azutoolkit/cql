@@ -139,6 +139,8 @@ Label.query.where_primary_key([7, 8]).all
 
 Everything keyed on the id uses the declared column: `find`, `find?`, `find!`, `ids`, `attributes`, create, update, `save`, `touch`, optimistic locking, delete and soft delete, cursor helpers, `insert_all`/`upsert_all`, and the associations (`belongs_to` preloads, `has_many` `ids=`, typed `joins`, `many_to_many` targets). `find!` errors name the column.
 
+Mass assignment never sets the key: `record.attributes(...)` and `record.update!(attrs)` ignore `id` and the declared key column, so request params cannot re-point a record at another row. Assign it explicitly with `id=`. `Label.from_hash(hash)` ignores the key as well; pass `with_primary_key: true` only for trusted data, since a record built with a key saves as an update of that row.
+
 Hashes and `where` conditions are not rewritten: `Label.where(label_no: 7)` names the column, and `where(id: 7)` would look for a column literally called `id`. Use `where_primary_key(key)` or `where_primary_key(keys)` to filter by the key without naming it. The typed block DSL is different: there `id` is the model's key, so `Label.query.where { id == 7 }`, `order_by(id: :desc)` and `select(:id, :name)` use `labels.label_no`.
 
 ## Excluding Fields from Persistence

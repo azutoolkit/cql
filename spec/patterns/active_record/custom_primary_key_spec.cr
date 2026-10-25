@@ -418,10 +418,8 @@ describe "Custom primary key column" do
       attributes.has_key?(:id).should be_false
     end
 
-    it "assigns id from the declared column" do
-      label = Label.new
-
-      label.attributes({:label_no => 8} of Symbol => DB::Any)
+    it "assigns id from the declared column when building trusted data from a hash" do
+      label = Label.from_hash({:label_no => 8, :name => "Noir"} of Symbol => DB::Any, with_primary_key: true)
 
       label.id.should eq(8)
     end
@@ -877,45 +875,108 @@ describe "Custom primary key column" do
       attributes.has_key?(:_id_storage).should be_false
     end
 
-    it "assigns id from the declared column" do
-      badge = Badge.new
-
-      badge.attributes({:badge_uuid => uuid.to_s} of Symbol => DB::Any)
+    it "assigns id from the declared column when building trusted data from a hash" do
+      badge = Badge.from_hash({:badge_uuid => uuid.to_s} of Symbol => DB::Any, with_primary_key: true)
 
       badge.id.should eq(uuid)
     end
 
-    it "stores an assigned id in canonical form" do
-      badge = Badge.new
-
-      badge.attributes({:badge_uuid => uuid.to_s.upcase} of Symbol => DB::Any)
+    it "stores a hash-built id in canonical form" do
+      badge = Badge.from_hash({:badge_uuid => uuid.to_s.upcase} of Symbol => DB::Any, with_primary_key: true)
 
       badge.attributes[:badge_uuid].should eq(uuid.to_s)
     end
 
-    it "ignores a malformed id" do
-      badge = Badge.new
-      badge.id = uuid
-
-      badge.attributes({:badge_uuid => "not-a-uuid"} of Symbol => DB::Any)
-
-      badge.id.should eq(uuid)
+    it "ignores a malformed id when building trusted data from a hash" do
+      Badge.from_hash({:badge_uuid => "not-a-uuid"} of Symbol => DB::Any, with_primary_key: true).id.should be_nil
     end
 
-    it "assigns id through named arguments" do
-      badge = Badge.new
+    it "assigns id from :id when building trusted data for a model keyed on the default column" do
+      Pass.from_hash({:id => uuid.to_s} of Symbol => DB::Any, with_primary_key: true).id.should eq(uuid)
+    end
+  end
 
-      badge.attributes(badge_uuid: uuid.to_s)
+  describe "mass assignment of the primary key" do
+    it "ignores the key column in #attributes with a hash" do
+      label = Label.from_hash({:label_no => 7, :name => "Noir"} of Symbol => DB::Any, with_primary_key: true)
 
-      badge.id.should eq(uuid)
+      label.attributes({:label_no => 8, :name => "Blanc"} of Symbol => DB::Any)
+
+      label.id.should eq(7)
+      label.name.should eq("Blanc")
     end
 
-    it "assigns id from :id on a model keyed on the default column" do
-      pass = Pass.new
+    it "ignores the key column in #attributes with named arguments" do
+      label = Label.from_hash({:label_no => 7, :name => "Noir"} of Symbol => DB::Any, with_primary_key: true)
 
-      pass.attributes({:id => uuid.to_s} of Symbol => DB::Any)
+      label.attributes(label_no: 8, name: "Blanc")
+
+      label.id.should eq(7)
+    end
+
+    it "ignores :id in #attributes on a model keyed on the default column" do
+      uuid = UUID.new("3e2d1c0b-9a8f-4e7d-8c6b-5a4f3e2d1c0b")
+      pass = Pass.from_hash({:id => uuid.to_s} of Symbol => DB::Any, with_primary_key: true)
+
+      pass.attributes({:id => UUID.random.to_s} of Symbol => DB::Any)
 
       pass.id.should eq(uuid)
+    end
+
+    it "updates the record's own row when #update! is given another key" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+      label = Label.find!(7)
+
+      label.update!({:label_no => 8, :name => "Blanc"} of Symbol => DB::Any)
+
+      label.id.should eq(7)
+      Label.find!(7).name.should eq("Blanc")
+      Label.find!(8).name.should eq("Rouge")
+    end
+
+    it "keeps another row intact when params carrying its id are assigned and saved" do
+      LabelKeyDB.exec("INSERT INTO shelves (id, name) VALUES (1, 'Oak'), (2, 'Pine')")
+      shelf = Shelf.find!(1)
+
+      shelf.attributes({:id => 2, :name => "Birch"} of Symbol => DB::Any)
+      shelf.save
+
+      Shelf.find!(1).name.should eq("Birch")
+      Shelf.find!(2).name.should eq("Pine")
+    end
+
+    it "ignores the key in from_hash by default, so saving inserts a new row" do
+      LabelKeyDB.exec("INSERT INTO shelves (id, name) VALUES (2, 'Pine')")
+
+      shelf = Shelf.from_hash({:id => 2, :name => "Birch"} of Symbol => DB::Any)
+      shelf.id.should be_nil
+      shelf.save
+
+      Shelf.find!(2).name.should eq("Pine")
+      Shelf.count.should eq(2)
+    end
+
+    it "guards #update! with attributes by the optimistic lock" do
+      LabelKeyDB.exec("INSERT INTO tickets (ticket_no, name, version, created_at, updated_at) VALUES (5, 'Bug', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00')")
+      ticket = Ticket.find!(5)
+      LabelKeyDB.exec("UPDATE tickets SET version = 2 WHERE ticket_no = 5")
+
+      expect_raises(CQL::OptimisticLockError) { ticket.update!(name: "Fixed") }
+      Ticket.find!(5).name.should eq("Bug")
+    end
+  end
+
+  describe "touch_all over the bind limit" do
+    it "touches every row with one UPDATE per chunk of keys" do
+      count = Ticket.adapter.dialect.max_bind_params
+      rows = (1..count).map do |key|
+        {:ticket_no => key.as(DB::Any), :name => "T#{key}".as(DB::Any), :version => 1.as(DB::Any)}
+      end
+      Ticket.insert_all(rows)
+
+      updates = count_queries(:update) { Ticket.touch_all((1..count).to_a).should eq(count) }
+
+      updates.size.should eq(2)
     end
   end
 

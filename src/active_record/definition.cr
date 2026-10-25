@@ -112,21 +112,25 @@ module CQL
           new(**fields)
         end
 
-        # Build a new object of type T with the given attributes
+        # Builds a new, unsaved object from a hash of column values. The primary key is ignored, so a
+        # hash from request params cannot make `save` update an existing row; pass
+        # `with_primary_key: true` only for trusted data (a record that is then saved updates that row).
         # - **@param** hash_attrs [Hash(Symbol, DB::Any)] The attributes to use
         # - **@return** [T] The new object
         #
         # **Example** Building a new user object
         #
         # ```
-        # User.from_hash({name: "Alice", email: "alice@example.com"})
+        # User.from_hash({:name => "Alice", :email => "alice@example.com"} of Symbol => DB::Any)
         # ```
-        def self.from_hash(hash_attrs : Hash(Symbol, DB::Any))
-          # Create instance using build method with empty fields and then set attributes
+        def self.from_hash(hash_attrs : Hash(Symbol, DB::Any), *, with_primary_key : Bool = false)
           instance = allocate
           instance.initialize
-          # Use the existing attributes method to set the hash values
-          instance.attributes(hash_attrs) if instance.responds_to?(:attributes)
+          if with_primary_key
+            instance._assign_attributes_with_primary_key(hash_attrs)
+          else
+            instance.attributes(hash_attrs)
+          end
           instance
         end
 
