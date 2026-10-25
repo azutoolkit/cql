@@ -220,8 +220,8 @@ module CQL
       # Clear associations and destroy target records
       def clear_with_destroy
         if @dependent == :destroy
-          # Get target records before clearing associations
-          target_records = @loaded ? @records.dup : all
+          # Copy the targets: clearing the join rows empties @records
+          target_records = all.dup
 
           # Clear join table associations
           clear_join_records

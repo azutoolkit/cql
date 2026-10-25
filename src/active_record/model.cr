@@ -12,6 +12,7 @@ require "./deleteable"
 require "./validations"
 require "./attributes"
 require "./callbacks"
+require "./dependents"
 require "./persistence"
 require "./identifyable"
 require "./relations"
@@ -78,6 +79,7 @@ module CQL
         include CQL::ActiveRecord::Updateable
         include CQL::ActiveRecord::Deleteable
         include CQL::ActiveRecord::Persistence
+        include CQL::ActiveRecord::Dependents
         include CQL::ActiveRecord::Relations
         include CQL::ActiveRecord::Scopes
         include CQL::ActiveRecord::Transactional

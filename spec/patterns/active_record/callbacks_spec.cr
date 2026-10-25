@@ -1,12 +1,15 @@
 require "./spec_helper"
 
 describe CQL::ActiveRecord::Callbacks do
+  # TestUser destroys its posts when deleted, so their table must exist
   before_each do
     UserDB.users.create!
+    UserDB.posts.create!
     CallbackTracker.clear
   end
 
   after_each do
+    UserDB.posts.drop!
     UserDB.users.drop!
   end
 

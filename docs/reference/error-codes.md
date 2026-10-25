@@ -205,6 +205,26 @@ Raised at compile time when a `has_many` declaration is malformed or type-unsafe
 
 **Solution:** Add the target foreign key property and make it match the parent model primary key type.
 
+### CQL has_one error / CQL many_to_many error
+
+Raised at compile time when the `dependent` option is unsupported: `has_one` accepts `:destroy`, `:delete` and
+`:nullify`; `many_to_many` accepts `:destroy`, `:delete_all` and `:nullify`.
+
+**Solution:** Use one of the listed values, or leave `dependent` out.
+
+### RelationError when deleting
+
+`delete!` (and `force_delete!`) raise `CQL::ActiveRecord::Relations::BaseRelation::RelationError` and delete nothing:
+
+- "Cannot delete record because dependent posts exist" when a `has_many ..., dependent: :restrict_with_error`
+  association still has records.
+- "Cannot delete record because dependent posts could not be deleted" when a `has_many` or `has_one` with
+  `dependent: :destroy` calls a child's `delete!` and it returns false: a `before_destroy` callback halted it, or the
+  child's row was already gone.
+
+**Solution:** Delete or reassign the associated records first, fix the halting callback, or choose another `dependent`
+strategy.
+
 ## Configuration Errors
 
 There is no `ConfigurationError` class. Invalid settings raise `ArgumentError`:

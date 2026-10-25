@@ -1,5 +1,67 @@
 require "../spec_helper"
 
+# Owners of the `profile_owners` rows, one per `dependent:` strategy; create the rows with
+# ProfileOwner and load them through these models.
+class DestroyProfileOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :profile_owners
+
+  property email : String
+
+  has_one :profile, UserProfile, foreign_key: :profile_owner_id, dependent: :destroy
+end
+
+class DeleteProfileOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :profile_owners
+
+  property email : String
+
+  has_one :profile, UserProfile, foreign_key: :profile_owner_id, dependent: :delete
+end
+
+class NullifyProfileOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :profile_owners
+
+  property email : String
+
+  has_one :profile, UserProfile, foreign_key: :profile_owner_id, dependent: :nullify
+end
+
+# A profile whose before_destroy always halts its delete.
+class GuardedProfile
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :profiles
+
+  property bio : String
+  property avatar_url : String
+  property profile_owner_id : Int32?
+
+  before_destroy :deletable?
+
+  def deletable?
+    false
+  end
+end
+
+class GuardedProfileOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :profile_owners
+
+  property email : String
+
+  has_one :profile, GuardedProfile, foreign_key: :profile_owner_id, dependent: :destroy
+end
+
+def has_one_owner_with_profile : {ProfileOwner, UserProfile}
+  owner = ProfileOwner.new(name: "John Doe", email: "john@example.com", age: 30, password: "password123", password_confirmation: "password123")
+  owner.create!
+  profile = UserProfile.new(bio: "Software developer", avatar_url: "https://example.com/avatar.jpg", profile_owner_id: owner.id)
+  profile.create!
+  {owner, profile}
+end
+
 describe "CQL::ActiveRecord::Relations::HasOne Enhanced Tests" do
   before_each do
     UserDB.users.create!
@@ -92,6 +154,67 @@ describe "CQL::ActiveRecord::Relations::HasOne Enhanced Tests" do
       expect_raises(DB::NoResultsError) do
         UserProfile.find!(profile_id)
       end
+    end
+  end
+
+  describe "dependent strategies when the parent is deleted" do
+    it "destroys the profile with dependent: :destroy, even when it was never loaded" do
+      owner, profile = has_one_owner_with_profile
+
+      DestroyProfileOwner.find!(owner.id!).delete!.should be_true
+
+      UserProfile.find?(profile.id!).should be_nil
+      ProfileOwner.find?(owner.id!).should be_nil
+    end
+
+    it "deletes the profile with dependent: :delete" do
+      owner, profile = has_one_owner_with_profile
+
+      DeleteProfileOwner.find!(owner.id!).delete!.should be_true
+
+      UserProfile.find?(profile.id!).should be_nil
+      ProfileOwner.find?(owner.id!).should be_nil
+    end
+
+    it "keeps the profile and clears its foreign key with dependent: :nullify" do
+      owner, profile = has_one_owner_with_profile
+
+      NullifyProfileOwner.find!(owner.id!).delete!.should be_true
+
+      profile.reload!.profile_owner_id.should be_nil
+      ProfileOwner.find?(owner.id!).should be_nil
+    end
+
+    it "destroys a profile created after the association was cached as missing" do
+      owner = ProfileOwner.new(name: "John Doe", email: "john@example.com", age: 30, password: "password123", password_confirmation: "password123")
+      owner.create!
+      destroying_owner = DestroyProfileOwner.find!(owner.id!)
+      destroying_owner.profile.should be_nil
+      profile = UserProfile.new(bio: "Late", avatar_url: "https://example.com/late.jpg", profile_owner_id: owner.id)
+      profile.create!
+
+      destroying_owner.delete!.should be_true
+
+      UserProfile.find?(profile.id!).should be_nil
+    end
+
+    it "raises and keeps the owner when the profile's delete is halted" do
+      owner, profile = has_one_owner_with_profile
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError, "Cannot delete record because dependent profile could not be deleted") do
+        GuardedProfileOwner.find!(owner.id!).delete!
+      end
+
+      UserProfile.find?(profile.id!).should_not be_nil
+      ProfileOwner.find?(owner.id!).should_not be_nil
+    end
+
+    it "leaves the profile alone when dependent: is not declared" do
+      owner, profile = has_one_owner_with_profile
+
+      ProfileOwner.find!(owner.id!).delete!.should be_true
+
+      profile.reload!.profile_owner_id.should eq(owner.id)
     end
   end
 

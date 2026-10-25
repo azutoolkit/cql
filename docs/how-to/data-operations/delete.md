@@ -55,11 +55,13 @@ User.where(role: "guest").delete_all
 ```
 
 `delete_all` on a query returns the number of rows deleted. When the model declares no `before_destroy` or
-`after_destroy` callbacks, it reads the matching ids with one SELECT and deletes them with one `DELETE ... WHERE id IN
-(...)` per chunk of the database's bind-parameter limit, without loading records (a soft-deletable model sets
-`deleted_at` with an UPDATE instead). A model with destroy callbacks loads each record and deletes it, so the callbacks
-run. An override of the instance `delete!` alone does not count: declare a destroy callback if that code must run.
-The statements are not wrapped in a transaction; open one if the delete must be all or nothing.
+`after_destroy` callbacks and no `dependent:` associations (or many_to_many), it reads the matching ids with one SELECT
+and deletes them with one `DELETE ... WHERE id IN (...)` per chunk of the database's bind-parameter limit, without
+loading records (a soft-deletable model sets `deleted_at` with an UPDATE instead). These statements are not wrapped in a
+transaction; open one if the delete must be all or nothing. Otherwise it loads each record and calls its `delete!`, all
+in one transaction, so the callbacks and the [association strategies](../relationships/has-many.md#when-the-parent-is-deleted)
+run and an error (such as a `restrict_with_error` association with records) deletes nothing. An override of the instance
+`delete!` alone does not count: declare a destroy callback if that code must run.
 
 ## Soft Delete (if enabled)
 

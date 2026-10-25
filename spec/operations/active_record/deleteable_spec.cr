@@ -1,11 +1,14 @@
 require "../../spec_helper"
 
 describe CQL::ActiveRecord::Deleteable do
+  # TestUser destroys its posts when deleted, so their table must exist
   before_each do
     UserDB.users.create!
+    UserDB.posts.create!
   end
 
   after_each do
+    UserDB.posts.drop!
     UserDB.users.drop!
   end
 

@@ -48,7 +48,7 @@ has_one :profile, Profile, :user_id             # third argument is the foreign 
 has_one :profile, Profile, :user_id, dependent: :nullify, cache: false
 ```
 
-`dependent` accepts `:destroy` (the default), `:delete` and `:nullify` (the foreign key property must be nilable for `:nullify`). It decides what happens to an existing profile when you call `create_profile` or `delete_profile`. With `cache: true` (the default) the record is cached on the instance after the first access.
+`dependent` accepts `:destroy`, `:delete` and `:nullify` (the foreign key property must be nilable for `:nullify`); any other value is a compile-time error. It decides what happens to an existing profile when you call `create_profile` or `delete_profile` (`:destroy` when not declared). When you declare it, deleting the user applies it too (see [When the Parent Is Deleted](#when-the-parent-is-deleted)). With `cache: true` (the default) the record is cached on the instance after the first access.
 
 `User.preload(:profile).all` loads every user's profile with one extra query (per chunk of the database's bind limit) and caches it, so `user.profile` runs no query. It needs `cache: true`, and it raises `ArgumentError` when the target has no foreign key attribute. As with `user.profile`, a user with several profiles gets an arbitrary one; keep the foreign key unique.
 
@@ -159,6 +159,12 @@ user.profile.try(&.delete!)
 user.delete_profile   # => Bool
 user.clear_profile    # nullifies the foreign key, returns Bool
 ```
+
+## When the Parent Is Deleted
+
+With `dependent:` declared, `user.delete!` handles the profile before deleting the user: `:destroy` calls the profile's `delete!` (callbacks run; if one halts it, `RelationError` is raised and nothing is deleted), `:delete` deletes its row without callbacks, and `:nullify` sets its foreign key to NULL and saves it. The profile is read from the database, not from the cache. Without `dependent:`, deleting the user leaves the profile alone (the database's foreign key decides).
+
+This works as it does for has_many: the strategy and the user's DELETE run in one transaction (a savepoint inside an open one), soft deletes apply it as well, and `User.where(...).delete_all` deletes record by record. See [has_many: When the Parent Is Deleted](has-many.md#when-the-parent-is-deleted).
 
 ## Verify It Works
 

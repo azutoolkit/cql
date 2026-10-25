@@ -111,23 +111,25 @@ module CQL
           destroyed
         end
 
-        # Delete the record from the database
+        # Delete the record from the database, applying the `dependent:` strategy of its associations
         # - **@return** [Bool] True if deleted successfully, false otherwise
+        # - **@raise** [CQL::ActiveRecord::Relations::BaseRelation::RelationError] If a
+        #   `restrict_with_error` association has records; nothing is deleted then
         #
         # **Example** Deleting a record
         #
         # ```
-        # user.delete
+        # user.delete!
         # ```
         def delete!
           return false if id.nil?
 
+          check_delete_restrictions
+
           # Run before destroy callbacks
           return false unless run_callbacks(:before_destroy)
 
-          # Delete the record
-          result = {{@type.id}}.delete!(id!)
-          success = result.rows_affected > 0
+          success = delete_with_dependents { {{@type.id}}.delete!(id!).rows_affected > 0 }
 
           # Run after destroy callbacks and clear the ID if successful
           if success
