@@ -1,5 +1,24 @@
 require "./spec_helper"
 
+# Counts the statements it runs, then delegates to the schema.
+private class CountingCountExecutor
+  include CQL::Executor
+
+  getter statements = 0
+
+  def initialize(@schema : CQL::Schema)
+  end
+
+  def adapter : CQL::Adapter
+    @schema.adapter
+  end
+
+  def exec_query(& : DB::Connection -> _)
+    @statements += 1
+    @schema.exec_query { |connection| yield connection }
+  end
+end
+
 describe CQL::ActiveRecord::Queryable::QueryBuilder do
   before_each do
     UserDB.users.create!
@@ -247,6 +266,134 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       result = builder.count
 
       result.should be_a(Int64)
+    end
+
+    describe "with five rows" do
+      before_each do
+        5.times do |i|
+          TestUser.create!(name: "User #{i}", email: "count#{i}@example.com", age: 20 + i, password: "password123", password_confirmation: "password123")
+        end
+      end
+
+      it "counts all rows and filtered rows" do
+        TestUser.query.count.should eq(5)
+        TestUser.query.where(name: "User 1").count.should eq(1)
+        TestUser.query.where { age >= 22 }.count.should eq(3)
+      end
+
+      it "counts all rows without an ORDER BY clause" do
+        count_statements = [] of String
+        CQL::Telemetry.subscribe("query_builder_count") do |event|
+          count_statements << event.sql if event.sql.includes?("COUNT(")
+        end
+
+        begin
+          TestUser.query.order(name: :desc).count.should eq(5)
+        ensure
+          CQL::Telemetry.unsubscribe("query_builder_count")
+        end
+
+        count_statements.size.should eq(1)
+        count_statements.first.should_not contain("ORDER BY")
+      end
+
+      it "returns at most the limit" do
+        TestUser.query.limit(2).count.should eq(2)
+      end
+
+      it "counts the rows remaining after the offset" do
+        TestUser.query.offset(2).limit(5).count.should eq(3)
+      end
+
+      it "returns zero when the offset is past the last row" do
+        TestUser.query.offset(5).limit(5).count.should eq(0)
+      end
+
+      it "counts the rows remaining after an offset without a limit" do
+        TestUser.query.offset(2).count.should eq(3)
+      end
+
+      it "counts only non-NULL values of the given column within the limit" do
+        TestUser.create!(name: nil, email: "nameless@example.com", age: 30, password: "password123", password_confirmation: "password123")
+
+        TestUser.query.limit(10).count(:name).should eq(5)
+      end
+
+      it "orders the window before counting non-NULL values of a column" do
+        TestUser.create!(name: nil, email: "nameless@example.com", age: 19, password: "password123", password_confirmation: "password123")
+
+        TestUser.query.order(:age).limit(2).count(:name).should eq(1)
+      end
+
+      it "counts the groups inside the window" do
+        TestUser.create!(name: "Twin", email: "twin@example.com", age: 20, password: "password123", password_confirmation: "password123")
+
+        TestUser.query.group(:age).limit(2).count.should eq(2)
+        TestUser.query.group(:age).limit(10).count.should eq(5)
+      end
+
+      it "runs a limited count on the pinned executor" do
+        executor = CountingCountExecutor.new(UserDB)
+
+        TestUser.query.using(executor).limit(2).count.should eq(2)
+        executor.statements.should eq(1)
+      end
+    end
+
+    describe "#count_query" do
+      it "binds the where value before LIMIT and OFFSET on PostgreSQL" do
+        query = TestUser.query.where(name: "a").limit(2).offset(1).count_query
+
+        query.to_sql(Expression::Generator.new(CQL::Adapter::Postgres)).should eq({
+          "SELECT COUNT(*) FROM (SELECT users.id FROM users WHERE users.name = $1 LIMIT $2 OFFSET $3) AS counted_rows",
+          ["a", 2, 1],
+        })
+      end
+
+      it "binds the where value before LIMIT and OFFSET on MySQL" do
+        query = TestUser.query.where(name: "a").limit(2).offset(1).count_query
+
+        query.to_sql(Expression::Generator.new(CQL::Adapter::MySql)).should eq({
+          "SELECT COUNT(*) FROM (SELECT users.id FROM users WHERE users.name = ? LIMIT ? OFFSET ?) AS counted_rows",
+          ["a", 2, 1],
+        })
+      end
+
+      it "keeps ORDER BY inside the derived table when counting a column on PostgreSQL" do
+        query = TestUser.query.order(:age).limit(2).count_query(:name)
+
+        query.to_sql(Expression::Generator.new(CQL::Adapter::Postgres)).should eq({
+          "SELECT COUNT(counted_rows.name) FROM (SELECT users.name FROM users ORDER BY users.age ASC LIMIT $1) AS counted_rows",
+          [2],
+        })
+      end
+
+      it "drops ORDER BY from the derived table when counting all rows on PostgreSQL" do
+        query = TestUser.query.order(:age).limit(2).count_query
+
+        query.to_sql(Expression::Generator.new(CQL::Adapter::Postgres)).should eq({
+          "SELECT COUNT(*) FROM (SELECT users.id FROM users LIMIT $1) AS counted_rows",
+          [2],
+        })
+      end
+
+      it "selects the group-by columns inside a grouped limited count on PostgreSQL" do
+        query = TestUser.query.group(:age).limit(2).count_query
+
+        query.to_sql(Expression::Generator.new(CQL::Adapter::Postgres)).should eq({
+          "SELECT COUNT(*) FROM (SELECT users.age FROM users GROUP BY users.age LIMIT $1) AS counted_rows",
+          [2],
+        })
+      end
+
+      it "selects only the primary key inside a joined limited count on MySQL" do
+        query = TestUser.query.join(:posts).limit(2).count_query
+
+        query.to_sql(Expression::Generator.new(CQL::Adapter::MySql)).should eq({
+          "SELECT COUNT(*) FROM (SELECT users.id FROM users INNER JOIN posts ON posts.user_id = users.id LIMIT ?) AS counted_rows",
+          [2],
+        })
+      end
     end
   end
 
