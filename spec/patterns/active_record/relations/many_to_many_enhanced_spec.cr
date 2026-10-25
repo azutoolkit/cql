@@ -420,6 +420,29 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
     end
   end
 
+  describe "single-query lookups" do
+    it "answers exists?, find and find_by with one query each" do
+      movie = Movie.new("Ronin", 1998)
+      movie.create!
+      other = Movie.new("Leon", 1994)
+      other.create!
+      deniro = Actor.new("De Niro", 55).tap(&.create!)
+      reno = Actor.new("Reno", 50).tap(&.create!)
+      movie.actors << deniro
+      other.actors << reno
+      actors = movie.actors
+
+      count_queries { actors.exists?(name: "De Niro").should be_true }.size.should eq(1)
+      count_queries { actors.exists?(name: "Reno").should be_false }.size.should eq(1)
+      count_queries { actors.find(name: "De Niro").map(&.id).should eq([deniro.id]) }.size.should eq(1)
+      count_queries { actors.find_by(name: "Reno").should be_nil }.size.should eq(1)
+      actors.find_by(id: deniro.id!).try(&.name).should eq("De Niro")
+      actors.find(id: reno.id!).should be_empty
+      actors.find.map(&.id).should eq([deniro.id])
+      actors.find_by.try(&.id).should eq(deniro.id)
+    end
+  end
+
   describe "query operations" do
     it "finds associated records with attributes" do
       movie = Movie.new("The Matrix", 1999)
