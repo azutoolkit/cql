@@ -8,12 +8,11 @@ module CQL
             .where({primary_key_column => CQL::ActiveRecord::IdChunks.bound(id)})
         end
 
-        # An update of the rows whose primary key is any of *ids*, which must not be empty
-        # (`IN ()` is invalid SQL).
-        protected def self.update_of(ids : Array(Pk)) : CQL::Update
+        # An update of the rows whose primary key is any of *ids*, already bound (`IdChunks.each`
+        # yields them as `DB::Any`, UUIDs as text); *ids* must not be empty (`IN ()` is invalid SQL).
+        protected def self.update_of(ids : Array(DB::Any)) : CQL::Update
           key = primary_key_expression
-          bound = ids.map { |id| CQL::ActiveRecord::IdChunks.bound(id) }
-          CQL::Update.new(schema).table(table).where { key.in(bound) }
+          CQL::Update.new(schema).table(table).where { key.in(ids) }
         end
 
         # Update a record by ID with given attributes
@@ -166,7 +165,7 @@ module CQL
         # ```
         def update!(**attrs)
           self.attributes(**attrs)
-          {{@type.id}}.update!(self)
+          update!
         end
 
         # Update a record by ID with given attributes
@@ -180,7 +179,7 @@ module CQL
         # ```
         def update!(attrs : Hash(Symbol, DB::Any))
           self.attributes(attrs)
-          {{@type.id}}.update!(self)
+          update!
         end
       end
     end

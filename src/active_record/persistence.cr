@@ -157,10 +157,13 @@ module CQL
             # In production, you may want to validate that these are timestamp columns
           end
 
-          # Update multiple records directly without callbacks using IN clause
-          result = update_of(ids).set(attrs).commit
-
-          result.rows_affected
+          # One UPDATE ... IN per chunk of keys, each statement also binding the touched values. The
+          # chunks are separate statements: wrap the call in a transaction to make it all-or-nothing.
+          touched = 0_i64
+          CQL::ActiveRecord::IdChunks.each(ids, adapter.dialect.max_bind_params - attrs.size) do |chunk|
+            touched += update_of(chunk).set(attrs).commit.rows_affected
+          end
+          touched
         end
 
         # Save the record to the database or update it if it already exists

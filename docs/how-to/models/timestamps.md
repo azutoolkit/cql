@@ -73,6 +73,8 @@ post.touch!                         # same as touch(:updated_at)
 Post.touch_all([1_i64, 2_i64])      # updated_at for many ids
 ```
 
+`touch_all` sends one `UPDATE` per chunk of ids that fits the database's bind-parameter limit, so it takes any number of ids; the chunks are separate statements, so wrap the call in a transaction when it must be all-or-nothing.
+
 `touch` raises `CQL::Error` on an unsaved record or an unknown column.
 
 ## Manual Timestamps with Callbacks
