@@ -318,6 +318,22 @@ describe CQL::Performance::Monitor do
       report.should contain("CQL Performance Report")
     end
 
+    it "reports latency percentiles in the text, JSON, HTML and console formats" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.profiling.enabled = true
+      config.logging.enabled = false
+
+      monitor = CQL::Performance::Monitor.new(config: config)
+      3.times { monitor.profiler.not_nil!.record_query("SELECT 1", [] of DB::Any, 50.milliseconds) }
+
+      monitor.generate_report("text").should match(/^Latency: p50 50\.0ms /m)
+      metrics = JSON.parse(monitor.generate_report("json"))["metrics"]
+      ["p50_ms", "p95_ms", "p99_ms"].each { |key| metrics[key].as_f.should eq(50.0) }
+      monitor.generate_report("html").should contain("p95 Latency")
+      monitor.generate_report("console").should contain("Latency")
+    end
+
     it "falls back to text format for unknown formats" do
       config = CQL::Performance::Config.new
       config.monitoring.enabled = true

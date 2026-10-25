@@ -603,6 +603,28 @@ describe "CQL::Performance::PerformanceMetrics" do
       detector.calls.should eq({"patterns" => 1, "issues" => 1})
     end
 
+    it "surfaces the profiler's latency percentiles in query metrics, to_h and summary" do
+      profiler = CQL::Performance::QueryProfiler.new
+      (1..100).each { |i| profiler.record_query("SELECT 1", [] of DB::Any, i.milliseconds) }
+
+      metrics = CQL::Performance::PerformanceMetrics.from_components(profiler: profiler)
+
+      metrics.query_metrics.latency.should eq(profiler.latency_percentiles)
+      metrics.query_metrics.latency.p95.should be > Time::Span.zero
+      metrics.query_metrics.latency.p95.should be <= 100.milliseconds
+      ["p50_execution_time_ms", "p95_execution_time_ms", "p99_execution_time_ms"].each do |key|
+        metrics.query_metrics.to_h[key].raw.should be_a(Float64)
+      end
+      metrics.summary["p95_query_time_ms"].as(Float64).should be > 0.0
+    end
+
+    it "reports zero latency percentiles without a profiler" do
+      metrics = CQL::Performance::PerformanceMetrics.from_components
+
+      metrics.query_metrics.latency.should eq(CQL::Performance::LatencyPercentiles.zero)
+      metrics.summary["p95_query_time_ms"].should eq(0.0)
+    end
+
     it "keeps zero query metrics without a profiler, unlike an empty one" do
       missing = CQL::Performance::PerformanceMetrics.from_components(error_count: 2)
       missing.query_metrics.error_rate.should eq(0.0)

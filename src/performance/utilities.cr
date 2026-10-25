@@ -8,6 +8,8 @@ require "../compat"
 module CQL::Performance
   # Timing utilities
   module TimingUtils
+    extend self
+
     def measure_execution(&)
       start_time = Time.instant
       result = yield
@@ -155,6 +157,18 @@ module CQL::Performance
     end
   end
 
+  # The p50, p95 and p99 of one set of recorded durations.
+  record LatencyPercentiles, p50 : Time::Span, p95 : Time::Span, p99 : Time::Span do
+    def self.zero : self
+      new(Time::Span.zero, Time::Span.zero, Time::Span.zero)
+    end
+
+    # The three values in milliseconds, keyed `p50_ms`, `p95_ms` and `p99_ms`.
+    def to_ms_h : Hash(String, Float64)
+      {"p50_ms" => p50.total_milliseconds, "p95_ms" => p95.total_milliseconds, "p99_ms" => p99.total_milliseconds}
+    end
+  end
+
   # Statistics tracking
   class StatsTracker
     property total_count : Int64 = 0
@@ -182,6 +196,11 @@ module CQL::Performance
       @mutex.synchronize { unsafe_percentile(q) }
     end
 
+    # p50, p95 and p99 read under one lock, so all three describe the same samples.
+    def percentiles : LatencyPercentiles
+      @mutex.synchronize { unsafe_percentiles }
+    end
+
     def avg_time : Time::Span
       @mutex.synchronize { unsafe_avg_time }
     end
@@ -203,6 +222,7 @@ module CQL::Performance
 
     def to_h : Hash(String, String | Int64 | Float64)
       @mutex.synchronize do
+        latency = unsafe_percentiles
         {
           "total_count"   => @total_count,
           "total_time_ms" => @total_time.total_milliseconds,
@@ -211,15 +231,19 @@ module CQL::Performance
           "max_time_ms"   => @max_time.total_milliseconds,
           "error_count"   => @errors,
           "error_rate"    => unsafe_error_rate,
-          "p50_time_ms"   => unsafe_percentile(0.5).total_milliseconds,
-          "p95_time_ms"   => unsafe_percentile(0.95).total_milliseconds,
-          "p99_time_ms"   => unsafe_percentile(0.99).total_milliseconds,
+          "p50_time_ms"   => latency.p50.total_milliseconds,
+          "p95_time_ms"   => latency.p95.total_milliseconds,
+          "p99_time_ms"   => latency.p99.total_milliseconds,
         } of String => String | Int64 | Float64
       end
     end
 
     private def unsafe_percentile(q : Float64) : Time::Span
       @histogram.percentile(q, @total_count, @min_time, @max_time)
+    end
+
+    private def unsafe_percentiles : LatencyPercentiles
+      LatencyPercentiles.new(unsafe_percentile(0.5), unsafe_percentile(0.95), unsafe_percentile(0.99))
     end
 
     private def unsafe_avg_time : Time::Span

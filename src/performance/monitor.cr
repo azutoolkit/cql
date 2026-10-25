@@ -240,6 +240,7 @@ module CQL::Performance
         errors: @error_count.get,
         issues: all_issues,
         stats: stats,
+        latency: @profiler.try(&.latency_percentiles) || LatencyPercentiles.zero,
         metadata: {
           "environment"        => ENV["CRYSTAL_ENV"]? || "development",
           "monitoring_enabled" => enabled?.to_s,

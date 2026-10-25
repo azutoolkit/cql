@@ -51,10 +51,12 @@ module CQL::Performance
       getter error_rate : Float64 = 0.0
       getter queries_per_second : Float64 = 0.0
       getter slow_query_rate : Float64 = 0.0
+      getter latency : LatencyPercentiles
 
       def initialize(@total_queries, @slow_queries, @very_slow_queries, @error_queries,
                      @total_execution_time, @avg_execution_time, @min_execution_time,
-                     @max_execution_time, @error_rate, @queries_per_second, @slow_query_rate)
+                     @max_execution_time, @error_rate, @queries_per_second, @slow_query_rate,
+                     @latency : LatencyPercentiles = LatencyPercentiles.zero)
       end
 
       def to_h : Hash(String, JSON::Any)
@@ -70,6 +72,9 @@ module CQL::Performance
           "error_rate_percent"      => JSON::Any.new(@error_rate),
           "queries_per_second"      => JSON::Any.new(@queries_per_second),
           "slow_query_rate_percent" => JSON::Any.new(@slow_query_rate),
+          "p50_execution_time_ms"   => JSON::Any.new(@latency.p50.total_milliseconds),
+          "p95_execution_time_ms"   => JSON::Any.new(@latency.p95.total_milliseconds),
+          "p99_execution_time_ms"   => JSON::Any.new(@latency.p99.total_milliseconds),
         }
       end
     end
@@ -294,11 +299,12 @@ module CQL::Performance
       # Each source is read once (each under its own lock), and every section is built from those reads.
       statistics = profiler.try(&.statistics) || QueryStatistics.new
       slowest_queries = profiler.try(&.slowest_queries(1000)) || [] of QueryData
+      latency = profiler.try(&.latency_percentiles) || LatencyPercentiles.zero
       n_plus_one_patterns = detector.try(&.patterns) || [] of NPlusOnePattern
       issues = collect_issues(profiler, detector)
 
       query_metrics = if profiler
-                        build_query_metrics(statistics, slowest_queries, collection_duration, error_count)
+                        build_query_metrics(statistics, slowest_queries, latency, collection_duration, error_count)
                       else
                         empty_query_metrics(error_count)
                       end
@@ -344,6 +350,7 @@ module CQL::Performance
         "slow_queries"        => @query_metrics.slow_queries,
         "error_rate_percent"  => @query_metrics.error_rate,
         "avg_query_time_ms"   => @query_metrics.avg_execution_time.total_milliseconds,
+        "p95_query_time_ms"   => @query_metrics.latency.p95.total_milliseconds,
         "n_plus_one_patterns" => @n_plus_one_metrics.total_patterns.to_i64,
         "health_score"        => @health_metrics.overall_health_score.to_s,
         "total_issues"        => @health_metrics.total_issues.to_i64,
@@ -443,7 +450,8 @@ module CQL::Performance
       )
     end
 
-    private def self.build_query_metrics(stats : QueryStatistics, slowest_queries : Array(QueryData), duration : Time::Span, error_count : Int32) : QueryMetrics
+    private def self.build_query_metrics(stats : QueryStatistics, slowest_queries : Array(QueryData), latency : LatencyPercentiles,
+                                         duration : Time::Span, error_count : Int32) : QueryMetrics
       total_queries = stats.values.sum(&.[:count]).to_i64
       total_time = stats.values.sum(&.[:total_ms]).milliseconds
       avg_time = total_queries > 0 ? total_time / total_queries : Time::Span.zero
@@ -472,7 +480,8 @@ module CQL::Performance
         max_time.milliseconds,
         error_rate,
         queries_per_second,
-        slow_query_rate
+        slow_query_rate,
+        latency
       )
     end
 

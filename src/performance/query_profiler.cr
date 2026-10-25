@@ -106,6 +106,11 @@ module CQL::Performance
       end
     end
 
+    # Latency percentiles over every recorded statement
+    def latency_percentiles : LatencyPercentiles
+      stats.percentiles
+    end
+
     # Get stats trackers for report generation
     def stats_trackers : Hash(String, StatsTracker)
       @mutex.synchronize { @query_stats.dup }

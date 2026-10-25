@@ -400,6 +400,19 @@ describe "CQL::Performance Utilities" do
       percentile_keys.each { |key| tracker.to_h[key].should eq(0.0) }
     end
 
+    it "bundles p50, p95 and p99 as #percentiles, zero when empty" do
+      tracker = CQL::Performance::StatsTracker.new
+      tracker.percentiles.should eq(CQL::Performance::LatencyPercentiles.zero)
+
+      (1..100).each { |i| tracker.record(i.milliseconds) }
+
+      latency = tracker.percentiles
+      latency.p50.should be >= 41.milliseconds
+      latency.p50.should be <= 60.milliseconds
+      latency.p99.should be >= 80.milliseconds
+      latency.p99.should be <= 120.milliseconds
+    end
+
     it "stays within the recorded range for sub-microsecond and multi-minute samples" do
       tracker = CQL::Performance::StatsTracker.new
       tracker.record(200.nanoseconds)

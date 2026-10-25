@@ -168,11 +168,13 @@ CQL::Performance.critical_issues       # => Array(Issue)
 CQL::Performance.high_priority_issues
 CQL::Performance.metrics_summary
 # => {"total_queries" => ..., "slow_queries" => ..., "error_rate_percent" => ...,
-#     "avg_query_time_ms" => ..., "n_plus_one_patterns" => ..., "health_score" => ...,
-#     "total_issues" => ..., "uptime_seconds" => ...}
+#     "avg_query_time_ms" => ..., "p95_query_time_ms" => ..., "n_plus_one_patterns" => ...,
+#     "health_score" => ..., "total_issues" => ..., "uptime_seconds" => ...}
 ```
 
 `CQL::Performance.metrics` returns a `PerformanceMetrics` with the full breakdown (query, N+1, cache, system and health metrics, top queries and patterns). It also offers `to_json`, `issues_by_type(:n_plus_one)`, `issues_by_severity(:critical)`, `slowest_queries(limit)` and `most_frequent_queries(limit)`. The slow queries in `to_json` (and `CQL::Performance.export_metrics_as_json`) have no `params` key unless `config.logging.include_params` is on; `slowest_queries(limit)` still returns each `QueryData` with its `params`. In the query lists, `avg_time` and `total_time` are in milliseconds.
+
+`metrics.query_metrics.latency` is a `LatencyPercentiles` (`p50`, `p95`, `p99`) over every statement the profiler recorded, and `query_metrics.to_h` has them as `p50_execution_time_ms`, `p95_execution_time_ms` and `p99_execution_time_ms`. They come from a fixed-size histogram, so an estimate is within 25% from 4 µs up and never outside the recorded minimum and maximum; recording one costs no allocation.
 
 ## Generate a Report
 
@@ -183,7 +185,7 @@ File.write("tmp/perf.html", CQL::Performance.report("html"))
 File.write("tmp/perf.json", CQL::Performance.report("json"))
 ```
 
-`UnifiedReportGenerator` renders a `PerformanceReport` with one formatter per format: `text`, `json`, `html`, `console` and `logger` (an alias of `console`). An unknown format falls back to `text`.
+`UnifiedReportGenerator` renders a `PerformanceReport` with one formatter per format: `text`, `json`, `html`, `console` and `logger` (an alias of `console`). An unknown format falls back to `text`. Every format shows the overall latency: a `Latency: p50 … / p95 … / p99 …` line in `text` and `console`, a p95 card in `html`, and `p50_ms`, `p95_ms` and `p99_ms` under `metrics` in `json` (`PerformanceReport#latency`, and `"latency"` in its `to_h`). Each per-statement tracker in a report's `stats` adds `p50_time_ms`, `p95_time_ms` and `p99_time_ms`.
 
 ### Add Your Own Format
 
