@@ -52,8 +52,8 @@ module CQL
         def self.transaction(existing_tx : DB::Transaction, &block : DB::Transaction -> _)
           # Call 'transaction' ON THE EXISTING TRANSACTION OBJECT to create a nested transaction/savepoint
           existing_tx.transaction do |nested_db_tx|
-            # Use the schema's overloaded transaction method to manage @active_connection
-            # for the duration of this nested block, passing the new nested_db_tx.
+            # Use the schema's overloaded transaction method to make the savepoint the fiber's
+            # active transaction for the duration of this nested block.
             self.schema.transaction(nested_db_tx) do |tx_for_block|
               # tx_for_block will be nested_db_tx, correctly yielded to the user's block.
               yield tx_for_block
