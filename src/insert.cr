@@ -75,14 +75,37 @@ module CQL
     # insert.into(:users).values(name: "John", age: 30).last_insert_id
     # ```
     def last_insert_id(as type : PrimaryKeyType = Int64)
-      if adapter.postgres_compatible?
-        # Reset to ensure nothing else but the :id is returned
-        @back = Array(Expression::Column).new
-        query, params = back(:id).to_sql
-        CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one(query, args: params, as: type) }
-      else
-        commit.last_insert_id
-      end
+      return commit.last_insert_id unless adapter.dialect.supports_returning?
+      back(:id).get!(type)
+    end
+
+    # Inserts and reads the row returned by the RETURNING clause (`back`) as *kind*, nil when
+    # nothing was inserted (`on_conflict(...).do_nothing`).
+    # - **@raise** [CQL::DialectError] Before inserting, when the dialect does not `supports_returning?`
+    # - **@raise** [ArgumentError] Before inserting, when no `back` columns are set
+    #
+    # ```
+    # insert.into(:users).values(name: "John").back(:id, :name).get({Int64, String})
+    # ```
+    def get(as kind)
+      require_returning!
+      query, params = to_sql
+      CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one?(query, args: params, as: kind) }
+    rescue ex
+      Log.error { "Insert failed: #{ex.message}" }
+      raise ex
+    end
+
+    def get!(as kind)
+      result = get(kind)
+      raise DB::NoResultsError.new("The insert returned no row") if result.nil?
+      result
+    end
+
+    private def require_returning! : Nil
+      raise ArgumentError.new("Insert#get needs the columns to return; call `back` first") if @back.empty?
+      return if adapter.dialect.supports_returning?
+      raise CQL::DialectError.new(adapter.to_s, "INSERT ... RETURNING", "Insert with `commit` and read the row back with a SELECT.")
     end
 
     private def adapter

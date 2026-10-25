@@ -128,7 +128,8 @@ lock_version                              # Int32 `version` column for optimisti
 | `Float64` | DOUBLE PRECISION | DOUBLE PRECISION | DOUBLE | DOUBLE |
 | `String` | VARCHAR | VARCHAR | VARCHAR(255) | TEXT |
 | `Bool` | BOOLEAN | BOOLEAN | TINYINT(1) | BOOLEAN |
-| `Time` | TIMESTAMP | TIMESTAMP | DATETIME | TIMESTAMP |
+| `Time` (`timestamp`, `timestamps`) | TIMESTAMP | TIMESTAMP | DATETIME(3) | TIMESTAMP |
+| `Time` (`date`) | DATE | DATE | DATE | DATE |
 | `Time::Span` | INTERVAL | INTERVAL | TIME | INTERVAL |
 | `Slice(UInt8)` | BYTEA | BYTEA | BLOB | BLOB |
 | `JSON::Any` | JSONB | JSONB | JSON | TEXT |
