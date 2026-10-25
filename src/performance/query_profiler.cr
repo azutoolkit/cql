@@ -53,20 +53,19 @@ module CQL::Performance
                      normalized_sql : String? = nil) : Void
       return unless @enabled
 
-      query = QueryData.new(sql, params, execution_time, rows_affected, error, normalized_sql)
+      slow = execution_time > @config.slow_query_threshold
+      failed = !error.nil?
+      normalized = normalized_sql || SQLUtils.normalize_sql(sql)
+      query = QueryData.new(sql, params, execution_time, rows_affected, error, normalized) if slow || @config.log_all_queries?
 
       @mutex.synchronize do
-        # Record in memory if needed
-        if @config.log_all_queries? || query.slow?(@config.slow_query_threshold)
-          @queries << query
-          cleanup_old_queries if @queries.size > @config.max_recorded_queries
-        end
+        @stats.record(execution_time, failed)
+        track_stats(normalized, execution_time, failed)
+        next unless query
 
-        # Track statistics
-        track_stats(query)
-
-        # Track slow queries
-        if query.slow?(@config.slow_query_threshold)
+        @queries << query
+        cleanup_old_queries if @queries.size > @config.max_recorded_queries
+        if slow
           @slow_queries << query
           @slow_queries_sorted = nil
           cleanup_slow_queries if @slow_queries.size > MAX_SLOW_QUERIES
@@ -74,9 +73,7 @@ module CQL::Performance
       end
 
       # Log outside mutex to avoid holding lock during I/O
-      if query.slow?(@config.slow_query_threshold) && @config.log_slow_queries?
-        log_slow_query(query)
-      end
+      log_slow_query(query) if query && slow && @config.log_slow_queries?
     end
 
     # Get query statistics
@@ -174,10 +171,9 @@ module CQL::Performance
       end
     end
 
-    private def track_stats(query : QueryData)
-      normalized = query.normalized_sql
-      tracker = @query_stats[normalized] ||= StatsTracker.new
-      tracker.record(query.execution_time, !query.error.nil?)
+    private def track_stats(normalized_sql : String, execution_time : Time::Span, failed : Bool)
+      tracker = @query_stats[normalized_sql] ||= StatsTracker.new
+      tracker.record(execution_time, failed)
     end
 
     private def cleanup_old_queries

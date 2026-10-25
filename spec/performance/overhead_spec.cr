@@ -44,3 +44,19 @@ describe "instrumentation allocation budget" do
     end
   end
 end
+
+describe "performance recording allocation budget" do
+  it "allocates nothing recording a fast query in the profiler" do
+    profiler = CQL::Performance::QueryProfiler.new
+    params = [] of DB::Any
+    bytes = bytes_per_call(100_000) { profiler.record_query("SELECT 1", params, 1.millisecond, nil, nil, normalized_sql: "SELECT ?") }
+
+    bytes.should be < 1.0
+  end
+
+  it "allocates nothing recording a duration in a stats tracker" do
+    tracker = CQL::Performance::StatsTracker.new
+
+    bytes_per_call(100_000) { tracker.record(1.millisecond) }.should be < 1.0
+  end
+end

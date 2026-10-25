@@ -116,8 +116,8 @@ module CQL::Performance
       @mutex.synchronize do
         @total_count += 1
         @total_time += duration
-        @min_time = [@min_time, duration].min
-        @max_time = [@max_time, duration].max
+        @min_time = Math.min(@min_time, duration)
+        @max_time = Math.max(@max_time, duration)
         @errors += 1 if error
       end
     end

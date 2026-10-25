@@ -270,6 +270,23 @@ describe CQL::Performance::QueryProfiler do
     end
   end
 
+  describe "#healthy?" do
+    it "is false once failed queries exceed the 5% error threshold" do
+      profiler = CQL::Performance::QueryProfiler.new
+      9.times { profiler.record_query("SELECT 1", [] of DB::Any, 1.millisecond) }
+      profiler.record_query("SELECT 1", [] of DB::Any, 1.millisecond, error: "boom")
+
+      profiler.healthy?.should be_false
+    end
+
+    it "is true when every recorded query succeeds" do
+      profiler = CQL::Performance::QueryProfiler.new
+      100.times { profiler.record_query("SELECT 1", [] of DB::Any, 1.millisecond) }
+
+      profiler.healthy?.should be_true
+    end
+  end
+
   describe "#statistics" do
     it "returns correct aggregated statistics" do
       config = CQL::Performance::Config::Profiling.new
