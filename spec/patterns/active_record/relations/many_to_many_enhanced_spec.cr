@@ -20,7 +20,7 @@ end
 
 class NumberedLabel
   include CQL::ActiveRecord::Model(Int32)
-  db_context schema: LabelNoPkDB, table: :labels
+  db_context schema: LabelNoPkDB, table: :labels, primary_key: :label_no
 
   property name : String = ""
 

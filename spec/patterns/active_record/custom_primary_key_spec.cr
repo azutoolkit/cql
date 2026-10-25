@@ -32,6 +32,23 @@ LabelKeyDB = CQL::Schema.define(
     text :name
     timestamp :deleted_at, null: true
   end
+
+  table :shelves do
+    primary :id, Int32
+    text :name
+  end
+
+  table :shelf_labels do
+    primary :id, Int32
+    integer :shelf_id
+    integer :label_no
+  end
+
+  table :shelf_memos do
+    primary :id, Int32
+    integer :shelf_id
+    integer :memo_no
+  end
 end
 
 class Label
@@ -99,6 +116,45 @@ class Memo
   end
 end
 
+class ShelfLabel
+  include CQL::ActiveRecord::Model(Int32)
+
+  db_context LabelKeyDB, :shelf_labels
+
+  property shelf_id : Int32?
+  property label_no : Int32?
+
+  def initialize
+  end
+end
+
+class ShelfMemo
+  include CQL::ActiveRecord::Model(Int32)
+
+  db_context LabelKeyDB, :shelf_memos
+
+  property shelf_id : Int32?
+  property memo_no : Int32?
+
+  def initialize
+  end
+end
+
+# Owns labels, whose key is label_no, through a join table.
+class Shelf
+  include CQL::ActiveRecord::Model(Int32)
+
+  db_context LabelKeyDB, :shelves
+
+  property name : String = ""
+
+  many_to_many :labels, Label, join_through: ShelfLabel, foreign_key: :shelf_id, association_foreign_key: :label_no
+  many_to_many :memos, Memo, join_through: ShelfMemo, foreign_key: :shelf_id, association_foreign_key: :memo_no, dependent: :delete_all
+
+  def initialize
+  end
+end
+
 private def insert_badge(uuid : UUID)
   LabelKeyDB.exec_query(&.exec("INSERT INTO badges (badge_uuid, name) VALUES (?, 'Gold')", uuid.to_s))
 end
@@ -148,20 +204,20 @@ end
 
 describe "Custom primary key column" do
   before_all do
-    {% for table in %w[labels badges passes tickets memos] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
       LabelKeyDB.{{table.id}}.create!
     {% end %}
   end
 
   after_all do
-    {% for table in %w[labels badges passes tickets memos] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
     {% end %}
   end
 
   before_each do
-    {% for table in %w[labels badges passes tickets memos] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos] %}
       LabelKeyDB.exec("DELETE FROM {{table.id}}")
     {% end %}
   end
@@ -678,6 +734,108 @@ describe "Custom primary key column" do
       pass.attributes({:id => uuid.to_s} of Symbol => DB::Any)
 
       pass.id.should eq(uuid)
+    end
+  end
+
+  describe "many_to_many with a custom target key" do
+    it "lists the labels of the shelf with their own keys" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc'), (9, 'Gris')")
+      shelf = Shelf.create!(name: "Front")
+      other = Shelf.create!(name: "Back")
+
+      shelf.labels << Label.find!(7)
+      shelf.labels << Label.find!(8)
+      other.labels << Label.find!(9)
+
+      shelf.reload_labels.to_a.compact_map(&.id).sort!.should eq([7, 8])
+      shelf.labels.to_a.map(&.name).sort!.should eq(["Blanc", "Noir"])
+      other.reload_labels.to_a.map(&.id).should eq([9])
+    end
+
+    it "keys the labels by label_no, not by the join row ids" do
+      LabelKeyDB.exec("INSERT INTO shelf_labels (id, shelf_id, label_no) VALUES (1, 1, 50), (2, 2, 51), (3, 1, 52)")
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (1, 'Join one'), (2, 'Join two'), (3, 'Join three'), (50, 'Noir'), (52, 'Blanc')")
+      LabelKeyDB.exec("INSERT INTO shelves (id, name) VALUES (1, 'Front')")
+
+      Shelf.find!(1).labels.to_a.compact_map(&.id).sort!.should eq([50, 52])
+    end
+
+    it "associates a label created through the collection" do
+      shelf = Shelf.create!(name: "Front")
+
+      built = Label.new
+      built.name = "Noir"
+
+      label = shelf.labels.create(built)
+
+      label.id.should_not be_nil
+      shelf.reload_labels.to_a.map(&.id).should eq([label.id])
+      Label.find!(label.id!).name.should eq("Noir")
+    end
+
+    it "finds the labels of the shelf with attributes" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+      shelf = Shelf.create!(name: "Front")
+      other = Shelf.create!(name: "Back")
+      shelf.labels << Label.find!(7)
+      other.labels << Label.find!(8)
+
+      shelf.labels.find(name: "Noir").map(&.id).should eq([7])
+      shelf.labels.find(name: "Blanc").should be_empty
+    end
+
+    it "finds one label of the shelf through find_by" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+      shelf = Shelf.create!(name: "Front")
+      shelf.labels << Label.find!(7)
+
+      shelf.labels.find_by(name: "Noir").try(&.id).should eq(7)
+      shelf.labels.find_by(name: "Blanc").should be_nil
+    end
+
+    it "checks whether a label with attributes belongs to the shelf" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+      shelf = Shelf.create!(name: "Front")
+      shelf.labels << Label.find!(7)
+
+      shelf.labels.exists?(name: "Noir").should be_true
+      shelf.labels.exists?(name: "Blanc").should be_false
+    end
+
+    it "lists the label_no values through ids" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc'), (9, 'Gris')")
+      shelf = Shelf.create!(name: "Front")
+      shelf.labels << Label.find!(8)
+      shelf.labels << Label.find!(7)
+
+      shelf.labels.ids.sort!.should eq([7, 8])
+      shelf.labels_ids.sort!.should eq([7, 8])
+    end
+
+    it "removes only the join row when a label is deleted from the collection" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+      shelf = Shelf.create!(name: "Front")
+      shelf.labels << Label.find!(7)
+      shelf.labels << Label.find!(8)
+
+      shelf.labels.delete(Label.find!(7)).try(&.id).should eq(7)
+
+      LabelKeyDB.exec_query(&.query_all("SELECT label_no FROM shelf_labels", as: Int32)).should eq([8])
+      Label.find?(7).should_not be_nil
+      shelf.reload_labels.to_a.map(&.id).should eq([8])
+    end
+
+    it "soft deletes the linked memos, and removes the join rows, when the collection is cleared" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name) VALUES (7, 'Note'), (8, 'Draft'), (9, 'Memo')")
+      shelf = Shelf.create!(name: "Front")
+      shelf.memos << Memo.find!(7)
+      shelf.memos << Memo.find!(8)
+
+      shelf.memos.clear
+
+      deleted_memo_numbers.should eq([7, 8])
+      memo_numbers.should eq([7, 8, 9])
+      LabelKeyDB.exec_query(&.query_all("SELECT memo_no FROM shelf_memos", as: Int32)).should be_empty
     end
   end
 end

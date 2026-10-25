@@ -82,11 +82,6 @@ module CQL
         query.clone.where { condition }
       end
 
-      # The target table's declared primary key column, `:id` when none is declared.
-      private def target_primary_key : Symbol
-        Target.schema.tables[Target.table].primary_key.try(&.name) || :id
-      end
-
       # Adds an existing record to the association.
       # Creates the association in the join table.
       # Raises an error if the target record is not persisted.
@@ -265,12 +260,13 @@ module CQL
       end
 
       # Deletes the target rows with one DELETE per chunk of ids, without callbacks. Soft-deletable
-      # targets go through `Target.where(...).delete_all` instead: their default scope leaves those
-      # already soft deleted alone, and the others run their destroy callbacks if they declare any.
+      # targets go through `Target.query.where_primary_key(...).delete_all` instead: their default
+      # scope leaves those already soft deleted alone, and the others run their destroy callbacks if
+      # they declare any.
       private def delete_targets(target_ids : Array(Pk)) : Nil
         if Target.responds_to?(:acts_as_paranoid?)
           CQL::ActiveRecord::IdChunks.each(target_ids, Target.adapter.dialect.max_bind_params - 1) do |chunk|
-            safe_db_operation { Target.where(id: chunk).delete_all }
+            safe_db_operation { Target.query.where_primary_key(chunk).delete_all }
           end
         else
           safe_db_operation { Target.delete_ids(target_ids) }
@@ -421,7 +417,7 @@ module CQL
       # `<target pk> IN (SELECT <target_key> FROM <through> WHERE <key> = ?)`: the parent's targets.
       private def associated_targets
         associated_ids = CQL::Query.new(Through.schema).from(@through_table).select(@target_key).where({@key => bound_id(@id)})
-        Target.table_column(target_primary_key).in(associated_ids)
+        Target.table_column(Target.primary_key_column).in(associated_ids)
       end
     end
   end
