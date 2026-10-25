@@ -1,4 +1,5 @@
 require "./executable"
+require "./prepared_select"
 require "./compound_query"
 require "./derived_table"
 require "./window_builder"

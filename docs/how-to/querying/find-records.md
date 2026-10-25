@@ -15,6 +15,8 @@ end
 
 `find?` is an alias of `find`.
 
+`find` renders its `SELECT … WHERE id = ? LIMIT ?` once per model and reuses it, binding only the id, so repeated lookups skip query building. A model that overrides `self.query` (for example to add a tenant filter that changes per call), and any subclass of a model, gets its statement rendered on every call instead, so the override is always applied. The same goes for an array of ids. SoftDeletable's built-in `deleted_at IS NULL` filter is reused like the plain query.
+
 ## Find by ID (raise if not found)
 
 ```crystal
