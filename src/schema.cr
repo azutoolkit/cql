@@ -451,20 +451,23 @@ module CQL
     # ```
     def alter(table_name : Symbol, &)
       raise Error.new("Table '#{table_name}' not found") unless tables[table_name]?
+      require_transactional_ddl!
 
       alter_table = AlterTable.new(tables[table_name], self)
       with alter_table yield
       sql_statements = alter_table.to_sql(new_generator)
 
-      exec_query do |conn|
-        conn.transaction do |tx|
-          cnn = tx.connection
-          sql_statements.split(";\n").each do |sql|
-            next if sql.empty?
-            cnn.exec(sql)
-          end
+      transaction do |tx|
+        sql_statements.split(";\n").each do |sql|
+          next if sql.empty?
+          tx.connection.exec(sql)
         end
       end
+    end
+
+    private def require_transactional_ddl! : Nil
+      return if active_transaction.nil? || dialect.supports_transactional_ddl?
+      raise DialectError.new(dialect.display_name, "schema changes inside a transaction", "Run the alter outside the transaction.")
     end
 
     macro method_missing(call)

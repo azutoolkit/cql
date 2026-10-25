@@ -8,6 +8,12 @@ module Expression
       "CockroachDB"
     end
 
+    # Schema changes in an explicit transaction are not atomic (recent versions also commit the
+    # transaction first, through `autocommit_before_ddl`).
+    def supports_transactional_ddl? : Bool
+      false
+    end
+
     # pg_dump does not work against CockroachDB.
     def structure_dump(uri : URI) : String
       raise CQL::DialectError.new("CockroachDB", "pg_dump-style structure dumps", "Run `SHOW CREATE ALL TABLES` instead.")

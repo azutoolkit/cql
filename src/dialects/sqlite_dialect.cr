@@ -214,6 +214,10 @@ module Expression
       "SQLite"
     end
 
+    def supports_transactional_ddl? : Bool
+      true
+    end
+
     def format_json_text(column : String, path_placeholder : String) : String
       "CAST(json_extract(#{column}, #{path_placeholder}) AS TEXT)"
     end
