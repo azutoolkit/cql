@@ -44,16 +44,6 @@ module CQL
           @@schema.not_nil!
         end
 
-        # Return the table for the model
-        # - **@return** [Symbol] The table
-        # **Example** Fetching the table
-        # ```
-        # User.table
-        # ```
-        def self.table
-          @@table.not_nil!
-        end
-
         def self.table_columns
           schema.tables[table].columns
         end
@@ -106,8 +96,29 @@ module CQL
 
         {% verbatim do %}
           macro finished
+            {% unless table = @type.constant(:CQL_TABLE_NAME) %}
+              {% singular = @type.name(generic_args: false).split("::").last.underscore %}
+              {% table = if singular =~ /[^aeiou]y$/
+                           singular[0..-2] + "ies"
+                         elsif singular =~ /(s|x|z|ch|sh)$/
+                           singular + "es"
+                         else
+                           singular + "s"
+                         end.id.symbolize %}
+            {% end %}
+
+            # Return the table for the model: the `db_context` table, else the
+            # pluralized, underscored type name (`OrderItem` => `:order_items`)
+            # - **@return** [Symbol] The table
+            # **Example** Fetching the table
+            # ```
+            # User.table
+            # ```
+            def self.table
+              @@table || {{table}}
+            end
+
             {% if schema = @type.constant(:CQL_SCHEMA_CONTEXT) %}
-              {% table = @type.constant(:CQL_TABLE_NAME) %}
               {% getter_types = {} of String => String %}
               {% for method in @type.methods %}
                 {% if method.args.empty? && !method.name.ends_with?("=") && method.return_type %}
