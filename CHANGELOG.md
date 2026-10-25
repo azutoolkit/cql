@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `config.sql_logging` is now unset until you assign it: unset follows the environment (on in `development` unless `CQL_NO_SQL_LOG` is set, evaluated when queried), and `config.sql_logging = false` turns it off in development.
 - `config.pool_size=` updates `config.pool.size` and keeps `pool.initial_size` and `pool.max_idle_size` from exceeding it.
 - `config.sql_logging_async` is unused and kept only for compatibility.
+- Indexes declared on a table (`index [...]`, `add_index`, or `index: true` on a column) are now created: `table.create!` and `schema.build` run one `CREATE INDEX IF NOT EXISTS` per index after `CREATE TABLE` (plain `CREATE INDEX` on MySQL, which has no `IF NOT EXISTS` for indexes). Previously they were only kept in memory. `index`/`add_index` accept an optional `name:`, and index names longer than 63 characters raise `ArgumentError`.
+- **MySQL:** because of that, calling `table.create!` or `schema.build` again on a table with declared indexes (including `index: true` columns) now raises a duplicate key name error, and `schema.build` stops at the first failing statement. Call them once per database, or create indexes with `create_index` in a migration.
+- The default index name is now `idx_<table>_<columns>` (e.g. `idx_users_name_email`) instead of `idx_` plus the first four characters of each column, so indexes on same-named columns of different tables no longer collide.
+- The migrator's `schema_migrations` table no longer declares a separate index on `version`; its `UNIQUE` constraint already indexes it.
 - Because `CQL.build_schema` now applies `full_db_url`, SQLite connections opened through it use the configured defaults (`journal_mode=wal`, `synchronous=normal`, `foreign_keys=1`, `busy_timeout=5000`); set `config.sqlite.*` to change them.
 
 ### Documentation

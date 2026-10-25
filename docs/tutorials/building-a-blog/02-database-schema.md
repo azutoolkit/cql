@@ -143,7 +143,7 @@ Key points:
 - Foreign keys establish relationships with users and categories
 - `on_delete: :cascade` deletes posts when the author is deleted
 - `on_delete: :set_null` keeps posts when a category is deleted (just nullifies the reference)
-- Indexes on foreign keys improve query performance. Create them with `create_index` inside `schema.alter` after the table exists; an `index [...]` line inside the `table` block is not turned into a `CREATE INDEX` statement
+- Indexes on foreign keys improve query performance. Here they are added with `create_index` inside `schema.alter`; an `index [...]` line inside the `table` block works too, and `create!` creates it right after the table
 - Index on `published` helps filter posts efficiently
 
 ## Step 4: Create Comments Migration

@@ -88,7 +88,7 @@ column :score, Int32, default: 0
 | `null` | Bool | Allow NULL values (default: false) |
 | `default` | T | Default value |
 | `unique` | Bool | Add unique constraint |
-| `index` | Bool | Records an index on the column in memory; `create!` does not emit it, use `create_index` |
+| `index` | Bool | Index the column; `create!` creates it after the table (see [index](#index)) |
 | `size` | Int32 | Column size (for VARCHAR) |
 | `as` | String | Alias used when selecting the column |
 
@@ -153,7 +153,15 @@ Both columns are timestamps with current timestamp as default.
 
 ### index
 
-`index [:cols], unique: bool` inside a table block builds a `CQL::Index` object for the table, but `create!` does not emit `CREATE INDEX` for it. Create indexes in a migration with `create_index` instead.
+`index [:cols], unique: bool, name: "idx_name"` inside a table block declares an index. `create!` and `schema.build` create it after the table with `CREATE INDEX IF NOT EXISTS` (plain `CREATE INDEX` on MySQL, which has no `IF NOT EXISTS` for indexes). `unique` defaults to `false`; without `name`, the index is named `idx_<table>_<columns>`.
+
+```crystal
+schema.table :users do
+  column :name, String
+  column :email, String
+  index [:name, :email], unique: true # idx_users_name_email
+end
+```
 
 ### create_index / drop_index
 

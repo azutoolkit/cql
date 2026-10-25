@@ -11,7 +11,7 @@ Improve query performance with indexing, eager loading, and query optimization t
 
 Indexes dramatically speed up queries on frequently searched columns.
 
-Indexes are created with `create_index` inside `schema.alter`; `table.create!` does not emit `CREATE INDEX` (see [Create Indexes](../migrations/indexes.md)).
+Declare indexes in the table block with `index [...]` or `index: true`, and `table.create!` creates them after the table. For an existing table, use `create_index` inside `schema.alter`, as below (see [Create Indexes](../migrations/indexes.md)).
 
 ### Single Column Index
 

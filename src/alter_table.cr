@@ -214,9 +214,7 @@ module CQL
     # create_index(:index_users_on_email, [:email], unique: true)
     # ```
     def create_index(name : Symbol, columns : Array(Symbol), unique : Bool = false)
-      index = @table.add_index(columns, unique)
-      index.name = name.to_s
-      @actions << Expression::CreateIndex.new(index)
+      @actions << Expression::CreateIndex.new(Index.new(@table, columns, unique, name.to_s))
     end
 
     # Drops an index from the table.

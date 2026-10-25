@@ -16,6 +16,8 @@ module CQL
   # end
   # ```
   class Index
+    MAX_NAME_LENGTH = 63
+
     getter columns : Array(Symbol)
     getter? unique : Bool
     getter table : Table
@@ -38,17 +40,16 @@ module CQL
     def initialize(@table : Table, @columns : Array(Symbol), @unique : Bool = false, @name : String? = nil)
     end
 
-    # Generate the index name
-    # - **@return** : String
-    # - **@raise** : Nil
+    # The index name: the explicit name, or `idx_<table>_<columns>`.
+    # Index names are schema-wide in SQLite and PostgreSQL, so the default includes the table.
     #
     # **Example**
     #
     # ```
-    # index_name = index.index_name
+    # CQL::Index.new(users, [:name, :email]).index_name # => "idx_users_name_email"
     # ```
-    def index_name
-      @name || "idx_#{columns.map { |column| column.to_s[0..3] }.join("_")}"
+    def index_name : String
+      @name || "idx_#{table.table_name}_#{columns.join("_")}"
     end
   end
 end
