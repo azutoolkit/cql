@@ -214,7 +214,7 @@ User.only_deleted.all
 
 ```crystal
 include CQL::ActiveRecord::OptimisticLocking
-optimistic_locking version_column: :version   # version property type must match the model's primary key type
+optimistic_locking version_column: :version   # version property is an Int32 (the lock_version column), whatever the primary key type
 
 begin
   user.update!
