@@ -61,6 +61,12 @@ LabelKeyDB = CQL::Schema.define(
     text :name
     integer :shelf_id, null: true
   end
+
+  table :crates do
+    primary :crate_no, Int32
+    text :sku, unique: true
+    text :name
+  end
 end
 
 class Label
@@ -86,6 +92,19 @@ class Sticker
   property label_no : Int32?
 
   belongs_to :label, Label, foreign_key: :label_no
+
+  def initialize
+  end
+end
+
+# Carries a unique column besides its custom key, so upserts can conflict on something other than the key.
+class Crate
+  include CQL::ActiveRecord::Model(Int32)
+
+  db_context LabelKeyDB, :crates, primary_key: :crate_no
+
+  property sku : String = ""
+  property name : String = ""
 
   def initialize
   end
@@ -210,6 +229,25 @@ private def memo_numbers
   LabelKeyDB.exec_query(&.query_all("SELECT memo_no FROM memos ORDER BY memo_no", as: Int32))
 end
 
+private alias KeyRow = Hash(Symbol, DB::Any)
+
+# INSERT statements (SQL) the block executed, in order.
+private def key_insert_statements(& : ->) : Array(String)
+  statements = [] of String
+  subscription = "custom_primary_key_inserts_#{Random::Secure.hex(4)}"
+  CQL::Telemetry.subscribe(subscription) { |event| statements << event.sql if event.operation == :insert }
+  begin
+    yield
+  ensure
+    CQL::Telemetry.unsubscribe(subscription)
+  end
+  statements
+end
+
+private def stored_label_names : Array({Int32, String})
+  LabelKeyDB.exec_query(&.query_all("SELECT label_no, name FROM labels ORDER BY label_no", as: {Int32, String}))
+end
+
 # Lends no connection: lets a PostgreSQL-adapter schema exist, and generate SQL, without a server.
 private class OfflineSource < CQL::ConnectionSource
   def using_connection(& : DB::Connection -> _)
@@ -247,20 +285,20 @@ end
 
 describe "Custom primary key column" do
   before_all do
-    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes crates] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
       LabelKeyDB.{{table.id}}.create!
     {% end %}
   end
 
   after_all do
-    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes crates] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
     {% end %}
   end
 
   before_each do
-    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes] %}
+    {% for table in %w[labels badges passes tickets memos shelves shelf_labels shelf_memos stickers shelf_notes crates] %}
       LabelKeyDB.exec("DELETE FROM {{table.id}}")
     {% end %}
   end
@@ -961,6 +999,140 @@ describe "Custom primary key column" do
         "FROM labels INNER JOIN stickers ON stickers.label_no = labels.label_no",
         [] of DB::Any,
       })
+    end
+  end
+
+  describe "pagination and bulk insert with custom keys" do
+    describe "cursor pagination" do
+      before_each do
+        LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (5, 'Five'), (6, 'Six'), (7, 'Seven'), (8, 'Eight')")
+      end
+
+      it "returns the labels after a cursor in key order" do
+        Label.after_cursor(6, limit: 10).map(&.id).should eq([7, 8])
+      end
+
+      it "limits the labels after a cursor" do
+        Label.after_cursor(5, limit: 2).map(&.id).should eq([6, 7])
+      end
+
+      it "returns the labels before a cursor in ascending key order" do
+        Label.before_cursor(7, limit: 10).map(&.id).should eq([5, 6])
+      end
+
+      it "keeps the labels nearest the cursor when limiting before it" do
+        Label.before_cursor(8, limit: 2).map(&.id).should eq([6, 7])
+      end
+    end
+
+    describe ".insert_all" do
+      it "generates a UUID for each badge row into the declared column" do
+        Badge.insert_all([{name: "Gold"}, {name: "Silver"}]).should eq(2)
+
+        ids = LabelKeyDB.exec_query(&.query_all("SELECT badge_uuid FROM badges", as: String))
+        ids.size.should eq(2)
+        ids.uniq.size.should eq(2)
+        ids.each { |id| Badge.find(UUID.new(id)).should_not be_nil }
+        Badge.query.all.map(&.name).sort!.should eq(["Gold", "Silver"])
+      end
+
+      it "keeps the badge ids given by the rows" do
+        uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+
+        Badge.insert_all([KeyRow{:badge_uuid => uuid.to_s.as(DB::Any), :name => "Gold".as(DB::Any)}, KeyRow{:name => "Silver".as(DB::Any)}])
+
+        Badge.find!(uuid).name.should eq("Gold")
+        Badge.query.all.size.should eq(2)
+      end
+
+      it "lets the database assign label_no to rows that leave it out" do
+        Label.insert_all([{name: "Noir"}, {name: "Blanc"}]).should eq(2)
+
+        labels = Label.order(name: :asc).all
+        labels.map(&.name).should eq(["Blanc", "Noir"])
+        labels.map(&.id).should_not contain(nil)
+        labels.map(&.id).uniq!.size.should eq(2)
+      end
+
+      it "lets the database assign label_no to rows that set it to nil" do
+        rows = [KeyRow{:label_no => nil, :name => "Noir".as(DB::Any)}, KeyRow{:label_no => nil, :name => "Blanc".as(DB::Any)}]
+
+        Label.insert_all(rows).should eq(2)
+
+        labels = Label.order(name: :asc).all
+        labels.map(&.name).should eq(["Blanc", "Noir"])
+        labels.map(&.id).should_not contain(nil)
+        labels.map(&.id).uniq!.size.should eq(2)
+      end
+
+      it "keeps the label_no given by a row" do
+        Label.insert_all([KeyRow{:label_no => 42, :name => "Noir".as(DB::Any)}])
+
+        Label.find!(42).name.should eq("Noir")
+      end
+    end
+
+    describe ".upsert_all" do
+      it "updates the label with the same label_no and creates no duplicate" do
+        LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+
+        Label.upsert_all([KeyRow{:label_no => 7, :name => "Blanc".as(DB::Any)}], on_conflict: :label_no)
+
+        stored_label_names.should eq([{7, "Blanc"}, {8, "Rouge"}])
+      end
+
+      it "inserts a label whose label_no is new" do
+        LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+        Label.upsert_all([KeyRow{:label_no => 7, :name => "Blanc".as(DB::Any)}, KeyRow{:label_no => 9, :name => "Gris".as(DB::Any)}], on_conflict: :label_no)
+
+        stored_label_names.should eq([{7, "Blanc"}, {9, "Gris"}])
+      end
+
+      it "leaves the key column out of the update when conflicting on the key" do
+        LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+        statements = key_insert_statements do
+          Label.upsert_all([KeyRow{:label_no => 7, :name => "Blanc".as(DB::Any)}], on_conflict: :label_no)
+        end
+
+        statements.size.should eq(1)
+        update_clause = statements.first.split("DO UPDATE").last
+        update_clause.should contain("name")
+        update_clause.should_not contain("label_no")
+      end
+
+      it "never overwrites the key of an existing row when conflicting on another column" do
+        LabelKeyDB.exec("INSERT INTO crates (crate_no, sku, name) VALUES (3, 'a1', 'Apples')")
+
+        Crate.upsert_all([KeyRow{:crate_no => 99, :sku => "a1".as(DB::Any), :name => "Pears".as(DB::Any)}], on_conflict: :sku)
+
+        crate = Crate.find_by!(sku: "a1")
+        crate.id.should eq(3)
+        crate.name.should eq("Pears")
+        Crate.find?(99).should be_nil
+      end
+
+      it "raises ArgumentError before any statement when conflicting on a generated UUID key" do
+        statements = key_insert_statements do
+          expect_raises(ArgumentError, /badge_uuid.*generated id/) do
+            Badge.upsert_all([{name: "Gold"}, {name: "Silver"}], on_conflict: :badge_uuid)
+          end
+        end
+
+        statements.should be_empty
+        Badge.query.all.should be_empty
+      end
+
+      it "upserts UUID-keyed rows that all give their key" do
+        uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+        insert_badge(uuid)
+
+        Badge.upsert_all([KeyRow{:badge_uuid => uuid.to_s.as(DB::Any), :name => "Silver".as(DB::Any)}], on_conflict: :badge_uuid)
+
+        Badge.query.all.size.should eq(1)
+        Badge.find!(uuid).name.should eq("Silver")
+      end
     end
   end
 end

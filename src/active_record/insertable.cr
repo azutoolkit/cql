@@ -61,7 +61,7 @@ module CQL
 
         # Like `insert_all`, but a row whose *on_conflict* columns match an existing row updates it:
         # the *update* columns take the incoming values (by default every inserted column except
-        # the conflict columns, `id` and `created_at`; `[] of Symbol` leaves the row as it is).
+        # the conflict columns, the primary key and `created_at`; `[] of Symbol` leaves the row as it is).
         # Returns the rows affected as the database reports them (MySQL counts a changed row twice and
         # an unchanged one as zero).
         #
@@ -85,7 +85,7 @@ module CQL
           {% else %}
             generate_id = nil
           {% end %}
-          CQL::ActiveRecord::BulkInsert.new({{@type.id}}.schema, {{@type.id}}.table, rows, generate_id, conflict)
+          CQL::ActiveRecord::BulkInsert.new({{@type.id}}.schema, {{@type.id}}.table, rows, generate_id, conflict, primary_key_column)
         end
 
         # Create a new record with given attributes
