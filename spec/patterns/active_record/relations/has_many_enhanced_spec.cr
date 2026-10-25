@@ -464,6 +464,111 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
     end
   end
 
+  describe "existence checks read at most one row" do
+    it "answers posts_any? with one LIMIT select scoped to the parent and no COUNT" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      other = has_many_isolation_user("Jane Doe", "jane@example.com")
+      3.times { |i| other.posts.create(title: "Theirs #{i}", body: "Content") }
+
+      statements = count_queries { user.posts_any?.should be_false }
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT ?")
+      statements.first.should_not contain("COUNT(")
+      statements.first.scan("user_id = ?").size.should eq(1)
+
+      3.times { |i| user.posts.create(title: "Mine #{i}", body: "Content") }
+
+      statements = count_queries { user.posts_any?.should be_true }
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT ?")
+      statements.first.should_not contain("COUNT(")
+      statements.first.scan("user_id = ?").size.should eq(1)
+    end
+
+    it "answers posts_any? from memory when the collection is loaded" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      user.posts.create(title: "Post 1", body: "Content")
+      user.posts.reload
+
+      count_queries { user.posts_any?.should be_true }.should be_empty
+    end
+
+    it "answers exists? with one LIMIT select scoped to the parent and the condition, without COUNT" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      other = has_many_isolation_user("Jane Doe", "jane@example.com")
+      user.posts.create(title: "x", body: "Content")
+      user.posts.create(title: "y", body: "Content")
+      other.posts.create(title: "z", body: "Content")
+      posts = user.posts
+
+      statements = count_queries { posts.exists?(title: "x").should be_true }
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT ?")
+      statements.first.should_not contain("COUNT(")
+      statements.first.scan("user_id = ?").size.should eq(1)
+      statements.first.scan("title = ?").size.should eq(1)
+
+      statements = count_queries { posts.exists?(title: "missing").should be_false }
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT ?")
+    end
+
+    it "does not match another parent's records in exists?" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      other = has_many_isolation_user("Jane Doe", "jane@example.com")
+      other.posts.create(title: "x", body: "Content")
+
+      statements = count_queries { user.posts.exists?(title: "x").should be_false }
+      statements.size.should eq(1)
+      statements.first.scan("user_id = ?").size.should eq(1)
+
+      posts = user.posts
+      posts.reload
+      posts.exists?(title: "x").should be_false
+    end
+
+    it "answers exists? without arguments as not empty?" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      user.posts.exists?.should be_false
+
+      user.posts.create(title: "Post 1", body: "Content")
+      user.posts.exists?.should be_true
+    end
+
+    it "keeps exists? correct on a loaded collection" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      user.posts.create(title: "x", body: "Content")
+      posts = user.posts
+      posts.reload
+
+      posts.exists?(title: "x").should be_true
+      posts.exists?(title: "missing").should be_false
+    end
+
+    it "answers empty? on an unloaded collection with one LIMIT select and stays unloaded" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      3.times { |i| user.posts.create(title: "Post #{i}", body: "Content") }
+      posts = user.posts
+
+      statements = count_queries { posts.empty?.should be_false }
+
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT ?")
+      statements.first.should_not contain("COUNT(")
+      statements.first.scan("user_id = ?").size.should eq(1)
+      posts.loaded?.should be_false
+    end
+
+    it "answers empty? from memory when the collection is loaded" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      user.posts.create(title: "Post 1", body: "Content")
+      posts = user.posts
+      posts.reload
+
+      count_queries { posts.empty?.should be_false }.should be_empty
+    end
+  end
+
   describe "batch operations" do
     it "creates multiple records in batch" do
       user = TestUser.new(

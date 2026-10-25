@@ -195,25 +195,18 @@ module CQL::ActiveRecord::Relations
     # => true
     # ```
     def empty?
-      load_records unless @loaded
-      @records.empty?
+      return @records.empty? if @loaded
+
+      safe_db_operation { !query_builder(query_copy).exists? }
     end
 
     # Checks if any records exist with the given attributes
     # - **param** : attributes (NamedTuple)
     # - **return** : Bool
     def exists?(**attributes)
-      safe_db_operation do
-        # Get IDs of associated records
-        associated_ids = ids
-        return false if associated_ids.empty?
+      return !empty? if attributes.empty?
 
-        # Check if any associated records match the given attributes
-        results = Target.where(**attributes)
-          .where(id: associated_ids)
-          .all
-        !results.empty?
-      end
+      safe_db_operation { query_builder(query_copy).exists?(**attributes) }
     end
 
     # Returns the first record in the collection
@@ -689,6 +682,10 @@ module CQL::ActiveRecord::Relations
     # Scopes the base query to the parent record; the caller's query is never mutated.
     protected def scope_to_parent(query : CQL::Query) : CQL::Query
       query.clone.where({@key => @id})
+    end
+
+    private def query_builder(query : CQL::Query) : CQL::ActiveRecord::Queryable::QueryBuilder(Target)
+      CQL::ActiveRecord::Queryable::QueryBuilder(Target).new(query, Target)
     end
 
     private def query_copy : CQL::Query

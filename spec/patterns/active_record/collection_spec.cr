@@ -219,7 +219,7 @@ describe CQL::ActiveRecord::Relations::Collection do
         auto_load: false
       )
 
-      exists = collection.exists?(name: "Test User")
+      exists = collection.exists?(title: "Test Post")
       exists.should be_a(Bool)
     end
   end

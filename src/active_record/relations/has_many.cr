@@ -201,14 +201,7 @@ module CQL::ActiveRecord::Relations
 
       # Check if any associated records exist without loading them
       def {{name.id}}_any? : Bool
-        return !@{{name.id}}.not_nil!.empty? if @{{name.id}} && @{{name.id}}.not_nil!.loaded?
-
-        parent_id = safe_id(self, Pk)
-
-        safe_db_operation do
-          count_result = build_query({{type.id}}).where({ {{fk}} => parent_id }).count.get(Int64?)
-          (count_result || 0_i64) > 0_i64
-        end
+        !{{name.id}}.empty?
       end
 
       # Create associated records in batch

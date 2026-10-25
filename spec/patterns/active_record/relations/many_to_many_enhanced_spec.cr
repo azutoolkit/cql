@@ -381,6 +381,25 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
       movie.actors_include?(actor1).should be_true
       movie.actors_include?(actor2).should be_false
     end
+
+    it "answers empty? on an unloaded collection with one LIMIT select through the join table" do
+      movie = Movie.new("The Matrix", 1999)
+      movie.create!
+      other_movie = Movie.new("Speed", 1994)
+      other_movie.create!
+      actor = Actor.new("Keanu Reeves", 58)
+      actor.create!
+      MoviesActor.new(other_movie.id!, actor.id!).create!
+
+      statements = many_to_many_isolation_selects { movie.actors.empty?.should be_true }
+      statements.size.should eq(1)
+      statements.first.should contain("movies_actor")
+      statements.first.should contain("LIMIT ?")
+      statements.first.should_not contain("COUNT(")
+
+      MoviesActor.new(movie.id!, actor.id!).create!
+      movie.actors.empty?.should be_false
+    end
   end
 
   describe "query operations" do
