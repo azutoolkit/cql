@@ -48,7 +48,7 @@ module CQL
           changed = record.changed_columns
           record.stamp_deferred_update(changed)
           unless changed.empty?
-            CQL::Update.new({{@type.id}}.schema).table({{@type.id}}.table).set(changed).where(id: record.id!).commit
+            update_of(record.id!).set(changed).commit
           end
           record.clear_changes!
           record
@@ -109,10 +109,10 @@ module CQL
         result
       end
 
-      # The changed columns and their new values, as an UPDATE sets them (never the id).
+      # The changed columns and their new values, as an UPDATE sets them (never the primary key).
       def changed_columns : Hash(Symbol, DB::Any)
         changes.each_with_object({} of Symbol => DB::Any) do |(name, (_, value)), columns|
-          columns[name] = value unless name == :id
+          columns[name] = value unless name == self.class.primary_key_column
         end
       end
 

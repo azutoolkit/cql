@@ -69,6 +69,19 @@ LabelKeyDB = CQL::Schema.define(
   end
 end
 
+# A dirty-tracked model on the same custom-keyed table
+class TrackedLabel
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::DirtyTracking
+
+  db_context LabelKeyDB, :labels, primary_key: :label_no
+
+  property name : String = ""
+
+  def initialize
+  end
+end
+
 class Label
   include CQL::ActiveRecord::Model(Int32)
 
@@ -345,6 +358,19 @@ describe "Custom primary key column" do
       )
     end
 
+    it "fetches the new key with RETURNING the declared column on PostgreSQL" do
+      statements = [] of String
+      CQL::Telemetry.subscribe("custom_primary_key_returning") { |event| statements << event.sql }
+      begin
+        # The offline source raises once the statement is sent; the SQL is what matters here
+        LabelKeyPostgresDB.insert.into(:labels).values(name: "Noir").last_insert_id(as: Int32) rescue nil
+      ensure
+        CQL::Telemetry.unsubscribe("custom_primary_key_returning")
+      end
+
+      statements.should eq(["INSERT INTO labels (name) VALUES ($1) RETURNING labels.label_no"])
+    end
+
     it "returns id on PostgreSQL for a table keyed on id" do
       insert = LabelKeyPostgresDB.insert.into(:tags).values(name: "Noir")
 
@@ -531,6 +557,35 @@ describe "Custom primary key column" do
   end
 
   describe "updating a record" do
+    it "saves only the changed columns of a dirty-tracked record through its key" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+      label = TrackedLabel.find!(7)
+
+      label.name = "Blanc"
+      label.save
+
+      Label.find!(7).name.should eq("Blanc")
+      Label.find!(8).name.should eq("Rouge")
+    end
+
+    it "leaves the key column out of a dirty-tracked record's SET" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+      label = TrackedLabel.new
+      label.id = 7
+      label.name = "Blanc"
+
+      updates = [] of String
+      CQL::Telemetry.subscribe("custom_primary_key_tracked") { |event| updates << event.sql if event.operation == :update }
+      begin
+        label.save
+      ensure
+        CQL::Telemetry.unsubscribe("custom_primary_key_tracked")
+      end
+
+      updates.should eq(["UPDATE labels SET name = ? WHERE labels.label_no = ?"])
+      Label.find!(7).name.should eq("Blanc")
+    end
+
     stale = Time.utc(2020, 1, 1)
 
     it "updates the row of a key through .update! with named arguments" do
