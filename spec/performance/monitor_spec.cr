@@ -630,3 +630,69 @@ describe "CQL::Performance.enable_sql_logging" do
     end
   end
 end
+
+describe "CQL::Performance::Monitor SQL logging of bound values" do
+  secret = "secret@example.com"
+  sql = "SELECT * FROM users WHERE email = ?"
+
+  # Every statement counts as slow, so its log line is a warning.
+  build_monitor = ->(include_params : Bool) do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = true
+    config.logging.colorize = false
+    config.logging.pretty_format = false
+    config.logging.include_params = include_params
+    config.profiling.slow_query_threshold = Time::Span.zero
+    CQL::Performance::Monitor.new(config: config)
+  end
+
+  it "leaves bound values out of a slow statement's log line when include_params is off" do
+    monitor = build_monitor.call(false)
+
+    Log.capture("*") do |logs|
+      monitor.track(sql, [secret] of DB::Any) { 1 }
+
+      logs.check(:warn, /SQL \(.*\)\n  SELECT/).entry.message.should_not contain(secret)
+    end
+  end
+
+  it "leaves bound values out of a failed statement's log line when include_params is off" do
+    monitor = build_monitor.call(false)
+
+    Log.capture("*") do |logs|
+      expect_raises(RuntimeError, "boom") do
+        monitor.track(sql, [secret] of DB::Any) { raise RuntimeError.new("boom") }
+      end
+
+      message = logs.check(:error, /Query failed: boom/).entry.message
+      message.should_not contain(secret)
+      message.should_not contain("Params:")
+    end
+  end
+
+  it "logs bound values once include_params is turned on" do
+    monitor = build_monitor.call(false)
+    monitor.configure(&.logging.include_params=(true))
+
+    Log.capture("*") do |logs|
+      monitor.track(sql, [secret] of DB::Any) { 1 }
+
+      logs.check(:warn, /Parameters: \[secret@example\.com\]/)
+    end
+  end
+
+  it "truncates a failed statement's bound values at max_param_length" do
+    monitor = build_monitor.call(true)
+    monitor.configure(&.logging.max_param_length=(10))
+    long_value = "a" * 50
+
+    Log.capture("*") do |logs|
+      expect_raises(RuntimeError, "boom") do
+        monitor.track(sql, [long_value] of DB::Any) { raise RuntimeError.new("boom") }
+      end
+
+      logs.check(:error, /Params: \[a{10}\.\.\.\]/).entry.message.should_not contain(long_value)
+    end
+  end
+end

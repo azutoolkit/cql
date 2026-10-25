@@ -171,7 +171,7 @@ module CQL::Performance
       record_execution(sql, params, Time::Span.zero, nil, ex.message)
 
       # Log error if configured
-      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
+      Log.error { failure_message(ex, sql, params) } if @config.logging.enabled?
 
       raise ex
     end
@@ -204,6 +204,12 @@ module CQL::Performance
       else
         Log.info { output }
       end
+    end
+
+    private def failure_message(ex : Exception, sql : String, params : Array(DB::Any)) : String
+      message = "Query failed: #{ex.message}\nSQL: #{sql}"
+      formatted_params = @sql_formatter.loggable_params(params)
+      formatted_params ? "#{message}\nParams: #{formatted_params}" : message
     end
 
     private def extract_rows_affected(result) : Int64?
@@ -255,7 +261,8 @@ module CQL::Performance
         colorize_enabled: @config.logging.colorize?,
         pretty_format: @config.logging.pretty_format?,
         max_sql_length: @config.logging.max_sql_length,
-        max_param_length: @config.logging.max_param_length
+        max_param_length: @config.logging.max_param_length,
+        include_params: @config.logging.include_params?
       )
     end
 
@@ -276,7 +283,8 @@ module CQL::Performance
         colorize: @config.logging.colorize?,
         pretty: @config.logging.pretty_format?,
         max_sql: @config.logging.max_sql_length,
-        max_param: @config.logging.max_param_length
+        max_param: @config.logging.max_param_length,
+        include_params: @config.logging.include_params?
       )
 
       # Recreate components if needed

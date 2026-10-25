@@ -25,9 +25,11 @@ module CQL::Performance
     @pretty_format : Bool
     @max_sql_length : Int32
     @max_param_length : Int32
+    @include_params : Bool
 
     def initialize(@colorize_enabled : Bool = true, @pretty_format : Bool = true,
-                   @max_sql_length : Int32 = 500, @max_param_length : Int32 = 50)
+                   @max_sql_length : Int32 = 500, @max_param_length : Int32 = 50,
+                   @include_params : Bool = false)
       # Respect NO_COLOR environment variable
       @colorize_enabled = false if ENV["NO_COLOR"]?
     end
@@ -58,7 +60,7 @@ module CQL::Performance
       return "[]" if params.empty?
 
       formatted = params.map do |param|
-        str = param.to_s
+        str = param.to_s.inspect_unquoted
         str.size > @max_param_length ? "#{str[0...@max_param_length]}..." : str
       end
 
@@ -71,13 +73,21 @@ module CQL::Performance
       end
     end
 
+    # The bound values as they may appear in a log line, or nil when they are
+    # hidden (`include_params` off) or there are none.
+    def loggable_params(params : Array(DB::Any)) : String?
+      format_params(params) if @include_params && !params.empty?
+    end
+
     # Configure formatter
     def configure(colorize : Bool? = nil, pretty : Bool? = nil,
-                  max_sql : Int32? = nil, max_param : Int32? = nil)
+                  max_sql : Int32? = nil, max_param : Int32? = nil,
+                  include_params : Bool? = nil)
       @colorize_enabled = colorize unless colorize.nil?
       @pretty_format = pretty unless pretty.nil?
       @max_sql_length = max_sql unless max_sql.nil?
       @max_param_length = max_param unless max_param.nil?
+      @include_params = include_params unless include_params.nil?
     end
 
     private def pretty_format_sql(sql : String) : String
@@ -211,10 +221,8 @@ module CQL::Performance
         lines << "  #{line}" unless line.strip.empty?
       end
 
-      # Parameters
-      unless params.empty?
-        params_line = "📊 Parameters: #{format_params(params)}"
-        lines << (@colorize_enabled ? params_line : params_line)
+      if formatted_params = loggable_params(params)
+        lines << "📊 Parameters: #{formatted_params}"
       end
 
       lines.join("\n")
