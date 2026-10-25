@@ -19,6 +19,11 @@ module Expression
       @@cached_strings["sqlite_placeholder"]
     end
 
+    # SQLITE_MAX_VARIABLE_NUMBER's default before SQLite 3.32 (32766 since), so older builds work too.
+    def max_bind_params : Int32
+      999
+    end
+
     def structure_dump(uri : URI) : String
       ""
     end

@@ -248,10 +248,7 @@ module CQL
           # Clear join table associations
           clear_join_records
 
-          # Delete target records without callbacks
-          target_ids.each do |id|
-            safe_db_operation { Target.delete!(id) }
-          end
+          delete_targets(target_ids)
         else
           clear_join_records
         end
@@ -259,6 +256,16 @@ module CQL
         # Clear internal state since associations are gone
         @records.clear if @loaded
         self
+      end
+
+      # Deletes the target rows without callbacks: one DELETE per chunk of ids, or one soft delete
+      # per record for soft-deletable targets.
+      private def delete_targets(target_ids : Array(Pk)) : Nil
+        if Target.responds_to?(:acts_as_paranoid?)
+          target_ids.each { |id| safe_db_operation { Target.delete!(id) } }
+        else
+          safe_db_operation { Target.delete_ids(target_ids) }
+        end
       end
 
       # Clear only the join table records (preserve target records)
@@ -285,28 +292,9 @@ module CQL
         end
       end
 
-      # Override exists? to check via join table
       def exists?(**attributes) : Bool
-        safe_db_operation do
-          # Get IDs from join table
-          through_records = CQL::Query
-            .new(Through.schema)
-            .from(@through_table)
-            .where({@key => @id})
-            .all(Through)
-
-          target_ids = through_records.compact_map do |record|
-            record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
-          end.compact
-
-          return false if target_ids.empty?
-
-          # Check if any target records with the given attributes exist in the associated IDs
-          results = Target.where(**attributes)
-            .where(id: target_ids)
-            .all
-          !results.empty?
-        end
+        return !empty? if attributes.empty?
+        safe_db_operation { target_matches(attributes).exists? }
       end
 
       # Check if the collection includes a specific record
@@ -385,54 +373,24 @@ module CQL
       # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
       # - **return** : Array(Target)
       def find(**attributes)
-        safe_db_operation do
-          # Get IDs from join table
-          through_records = CQL::Query
-            .new(Through.schema)
-            .from(@through_table)
-            .where({@key => @id})
-            .all(Through)
-
-          target_ids = through_records.compact_map do |record|
-            record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
-          end.compact
-
-          return [] of Target if target_ids.empty?
-
-          # Query target records with the given attributes and IDs
-          Target.where(**attributes)
-            .where(id: target_ids)
-            .all
-        end
+        safe_db_operation { target_matches(attributes).all }
       end
 
       # Override find_by to properly handle many-to-many relationships via join table
       # - **param** : attributes (NamedTuple | Hash(Symbol, DB::Any))
       # - **return** : Target?
       def find_by(**attributes)
-        safe_db_operation do
-          # Get IDs from join table
-          through_records = CQL::Query
-            .new(Through.schema)
-            .from(@through_table)
-            .where({@key => @id})
-            .all(Through)
+        safe_db_operation { target_matches(attributes).first }
+      end
 
-          target_ids = through_records.compact_map do |record|
-            record.attributes[@target_key]?.as(Pk?) if record.attributes[@target_key]?
-          end.compact
-
-          return if target_ids.empty?
-
-          # Query target records with the given attributes and IDs
-          begin
-            Target.where(**attributes)
-              .where(id: target_ids)
-              .first
-          rescue DB::NoResultsError
-            nil
-          end
-        end
+      # The associated targets with *attributes* in one statement:
+      # `WHERE <attributes> AND id IN (SELECT <target_key> FROM <through> WHERE <key> = ?)`.
+      # Going through `Target.where` keeps the target's default scope (soft deletes) and returns
+      # each target once.
+      private def target_matches(attributes : NamedTuple) : CQL::ActiveRecord::Queryable::QueryBuilder(Target)
+        associated_ids = CQL::Query.new(Through.schema).from(@through_table).select(@target_key).where({@key => @id})
+        targets = attributes.empty? ? Target.query : Target.where(**attributes)
+        targets.where { Target.table_column(:id).in(associated_ids) }
       end
     end
   end

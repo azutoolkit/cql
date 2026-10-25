@@ -188,6 +188,60 @@ describe "ULID Primary Key Support" do
     end
   end
 
+  describe "batching" do
+    it "iterates every row exactly once with find_each and a string primary key" do
+      created = (1..7).map do |i|
+        UlidEvent.create!(event_type: "batch.#{i}", payload: "{}", created_at: Time.utc, updated_at: Time.utc).id!
+      end
+
+      yielded = [] of String
+      UlidEvent.query.find_each(batch_size: 3) { |event| yielded << event.id! }
+
+      yielded.should eq(created.sort)
+    end
+
+    it "yields batches of [3, 3, 1] with find_in_batches and a string primary key" do
+      7.times do |i|
+        UlidEvent.create!(event_type: "batch.#{i}", payload: "{}", created_at: Time.utc, updated_at: Time.utc)
+      end
+
+      sizes = [] of Int32
+      UlidEvent.query.find_in_batches(batch_size: 3) { |batch| sizes << batch.size }
+
+      sizes.should eq([3, 3, 1])
+    end
+
+    it "pages by string primary key without OFFSET" do
+      7.times do |i|
+        UlidEvent.create!(event_type: "batch.#{i}", payload: "{}", created_at: Time.utc, updated_at: Time.utc)
+      end
+
+      statements = count_queries do
+        UlidEvent.query.find_each(batch_size: 3) { |_| }
+      end
+
+      statements.size.should eq(3)
+      statements.each(&.should_not(match(/OFFSET/i)))
+    end
+  end
+
+  describe ".insert_all" do
+    it "generates a ULID for each row with a missing or nil id" do
+      rows = [
+        {:id => nil.as(DB::Any), :event_type => "bulk".as(DB::Any), :payload => "a".as(DB::Any)},
+        {:id => nil.as(DB::Any), :event_type => "bulk".as(DB::Any), :payload => "b".as(DB::Any)},
+      ]
+
+      UlidEvent.insert_all(rows).should eq(2)
+      UlidEvent.insert_all([{event_type: "bulk", payload: "c"}]).should eq(1)
+
+      ids = UlidEvent.where(event_type: "bulk").all.map(&.id!)
+      ids.size.should eq(3)
+      ids.uniq.size.should eq(3)
+      ids.each(&.should(match(/^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$/)))
+    end
+  end
+
   describe "ULID format validation" do
     it "generates valid ULID format (Crockford Base32)" do
       event = UlidEvent.create!(

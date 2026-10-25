@@ -19,6 +19,30 @@ private class CountingCountExecutor
   end
 end
 
+private class LastSoftDeletableUser
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context schema: SoftDeletableDB, table: :users
+
+  property name : String
+  property email : String
+  property age : Int32 = 0
+
+  def initialize(@name, @email, @age = 0)
+  end
+end
+
+private def create_last_user(name : String, age : Int32)
+  TestUser.create!(name: name, email: "#{name.downcase}@example.com", age: age, password: "password123", password_confirmation: "password123")
+end
+
+private def create_last_users
+  create_last_user("Bravo", 30)
+  create_last_user("Alpha", 40)
+  create_last_user("Charlie", 30)
+end
+
 describe CQL::ActiveRecord::Queryable::QueryBuilder do
   before_each do
     UserDB.users.create!
@@ -504,6 +528,162 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
   end
 
+  describe "#last without loading every row" do
+    it "returns the highest-id record with a single LIMIT ... DESC select from the model" do
+      create_last_users
+      newest = TestUser.query.order(:id).all.last
+
+      result = nil
+      statements = count_queries { result = TestUser.last }
+
+      result.try(&.id).should eq(newest.id)
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT")
+      statements.first.should contain("DESC")
+    end
+
+    it "returns the highest-id record with a single LIMIT ... DESC select from the builder" do
+      create_last_users
+      newest = TestUser.query.order(:id).all.last
+
+      result = nil
+      statements = count_queries { result = TestUser.query.last }
+
+      result.try(&.id).should eq(newest.id)
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT")
+      statements.first.should contain("DESC")
+    end
+
+    it "reverses a custom order and keeps the old result" do
+      create_last_users
+
+      result = nil
+      statements = count_queries { result = TestUser.query.order(name: :asc).last }
+
+      result.try(&.name).should eq("Charlie")
+      statements.size.should eq(1)
+      statements.first.should match(/ORDER BY\s+"?(\w+"?\.)?"?name"?\s+DESC/i)
+      statements.first.should contain("LIMIT ?")
+    end
+
+    it "reverses a multi-column order column by column" do
+      create_last_users
+
+      result = nil
+      statements = count_queries { result = TestUser.query.order(age: :asc, name: :desc).last }
+
+      result.try(&.name).should eq("Alpha")
+      statements.size.should eq(1)
+      statements.first.should match(/age"?\s+DESC,\s*"?(\w+"?\.)?"?name"?\s+ASC/i)
+      statements.first.should contain("LIMIT ?")
+    end
+
+    it "keeps the old semantics when the query has a limit" do
+      create_last_users
+
+      TestUser.query.order(:id).limit(2).last.try(&.name).should eq("Alpha")
+    end
+
+    it "keeps the old semantics when the query has an offset or distinct" do
+      create_last_users
+
+      TestUser.query.order(:id).offset(1).last.try(&.name).should eq("Charlie")
+      TestUser.query.order(:id).distinct.last.try(&.name).should eq("Charlie")
+    end
+
+    it "returns nil for an empty table" do
+      TestUser.last.should be_nil
+      TestUser.query.last.should be_nil
+    end
+
+    it "returns the last row of a partial select with a single LIMIT 1 select" do
+      create_last_users
+      newest = TestUser.query.order(:id).all.last
+
+      result = nil
+      statements = count_queries { result = TestUser.query.select(:id, :name).last }
+
+      result.try(&.id).should eq(newest.id)
+      result.try(&.name).should eq("Charlie")
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT ?")
+      statements.first.should contain("DESC")
+    end
+
+    it "breaks ties on the order by the primary key, so the later insert is last" do
+      create_last_user("Bravo", 30)
+      create_last_user("Delta", 30)
+
+      result = nil
+      statements = count_queries { result = TestUser.query.order(age: :asc).last }
+
+      result.try(&.name).should eq("Delta")
+      statements.first.should match(/age"?\s+DESC,\s*"?(\w+"?\.)?"?id"?\s+DESC/i)
+    end
+
+    it "orders a join without a select by the table-qualified primary key" do
+      UserDB.posts.create!
+      [create_last_user("Author", 30), create_last_user("Newest", 40)].each do |user|
+        Post.create!(title: "Post", body: "Body", user_id: user.id)
+      end
+
+      result = nil
+      statements = count_queries { result = TestUser.query.join(:posts).last }
+
+      result.try(&.name).should eq("Newest")
+      statements.size.should eq(1)
+      statements.first.should contain("ORDER BY users.id DESC LIMIT ?")
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "keeps the soft-delete filter and skips a soft-deleted newest row" do
+      SoftDeletableDB.users.create!
+      kept = LastSoftDeletableUser.new("Kept", "kept@example.com")
+      kept.create!
+      LastSoftDeletableUser.new("Deleted", "deleted@example.com").tap(&.create!).delete!
+
+      result = nil
+      statements = count_queries { result = LastSoftDeletableUser.last }
+
+      result.try(&.id).should eq(kept.id)
+      statements.first.should contain("deleted_at IS NULL")
+    ensure
+      SoftDeletableDB.users.drop!
+    end
+
+    it "returns the last row from last! on both builders and raises when empty" do
+      expect_raises(Exception, "No records found") { TestUser.query.last! }
+      expect_raises(Exception, "No records found") { TestUser.query.select(:id, :name).last! }
+
+      create_last_users
+
+      TestUser.query.last!.name.should eq("Charlie")
+      TestUser.query.select(:id, :name).last!.name.should eq("Charlie")
+    end
+
+    it "loads every row when the query is grouped" do
+      create_last_users
+
+      result = nil
+      statements = count_queries { result = TestUser.query.select(:age).group(:age).order(:age).last }
+
+      result.try(&.age).should eq(40)
+      statements.first.should_not contain("LIMIT")
+    end
+
+    it "loads every row when the query selects an aggregate" do
+      create_last_users
+
+      result = nil
+      statements = count_queries { result = TestUser.query.select(max: :age).last(as: Int32) }
+
+      result.should eq(40)
+      statements.first.should_not contain("ORDER BY")
+    end
+  end
+
   describe "#last!" do
     it "executes the query and returns the last result, raises if not found" do
       TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123", password_confirmation: "password123")
@@ -550,6 +730,29 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
       count.should eq(2)
     end
+
+    it "yields models in query order and stops at a break" do
+      %w[Ada Bo Cy].each_with_index { |name, i| create_last_user(name, 20 + i) }
+
+      names = [] of String
+      TestUser.query.order(age: :asc).each do |user|
+        names << user.name.not_nil!
+        break if names.size == 2
+      end
+
+      names.should eq(%w[Ada Bo])
+      UserDB.pool_stats.in_flight.should eq(0)
+      TestUser.query.order(age: :asc).all.map(&.name).should eq(%w[Ada Bo Cy])
+    end
+
+    it "releases the connection when the block raises" do
+      create_last_user("Ada", 20)
+
+      expect_raises(Exception, "boom") { TestUser.query.each { |_| raise "boom" } }
+
+      UserDB.pool_stats.in_flight.should eq(0)
+      TestUser.count.should eq(1)
+    end
   end
 
   describe "#exists?" do
@@ -587,6 +790,145 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder.empty?.should be_false
+    end
+  end
+
+  describe "existence checks without counting" do
+    it "answers exists? and any? with one LIMIT select and no COUNT" do
+      create_last_user("Alpha", 30)
+
+      results = [] of Bool
+      statements = count_queries do
+        results << TestUser.query.where(name: "Alpha").exists?
+        results << TestUser.query.where(name: "Alpha").any?
+        results << TestUser.query.exists?(name: "Alpha")
+        results << TestUser.exists?(name: "Alpha")
+        results << TestUser.exists?
+      end
+
+      results.should eq([true] * 5)
+      statements.size.should eq(5)
+      statements.each do |sql|
+        sql.should contain("LIMIT ?")
+        sql.should_not contain("COUNT(")
+      end
+    end
+
+    it "returns false with the same SQL shape when nothing matches" do
+      results = [] of Bool
+      statements = count_queries do
+        results << TestUser.query.where(name: "Nobody").exists?
+        results << TestUser.query.where(name: "Nobody").any?
+        results << TestUser.exists?(name: "Nobody")
+        results << TestUser.exists?
+      end
+
+      results.should eq([false] * 4)
+      statements.size.should eq(4)
+      statements.each do |sql|
+        sql.should contain("LIMIT ?")
+        sql.should_not contain("COUNT(")
+      end
+    end
+
+    it "reflects whether a row exists past the offset" do
+      create_last_users
+
+      results = [] of Bool
+      statements = count_queries do
+        results << TestUser.query.order(:id).offset(2).exists?
+        results << TestUser.query.order(:id).offset(3).exists?
+      end
+
+      results.should eq([true, false])
+      statements.each do |sql|
+        sql.should contain("LIMIT ?")
+        sql.should_not contain("COUNT(")
+      end
+    end
+
+    it "makes many? false for zero or one row and true for two or more with one LIMIT select" do
+      outcomes = [] of Bool
+      statements = [] of String
+
+      statements.concat count_queries { outcomes << TestUser.query.many? }
+      create_last_user("Alpha", 30)
+      statements.concat count_queries { outcomes << TestUser.query.many? }
+      create_last_user("Bravo", 30)
+      statements.concat count_queries { outcomes << TestUser.query.many? }
+      create_last_user("Charlie", 30)
+      statements.concat count_queries { outcomes << TestUser.query.where(age: 30).many? }
+      statements.concat count_queries { outcomes << TestUser.many? }
+
+      outcomes.should eq([false, false, true, true, true])
+      statements.size.should eq(5)
+      statements.each do |sql|
+        sql.should contain("LIMIT ?")
+        sql.should_not contain("COUNT(")
+      end
+    end
+
+    it "respects the query's own limit and offset" do
+      create_last_users
+
+      TestUser.query.limit(0).exists?.should be_false
+      TestUser.query.limit(1).many?.should be_false
+      TestUser.query.limit(5).offset(2).exists?.should be_true
+      TestUser.query.limit(5).offset(2).many?.should be_false
+    end
+
+    it "counts groups, not rows, for a grouped query" do
+      create_last_user("Bravo", 30)
+      create_last_user("Charlie", 30)
+
+      TestUser.query.group(:age).exists?.should be_true
+      TestUser.query.group(:age).many?.should be_false
+
+      create_last_user("Alpha", 40)
+
+      TestUser.query.group(:age).many?.should be_true
+      TestUser.query.where(name: "Nobody").group(:age).exists?.should be_false
+    end
+
+    it "checks a distinct query" do
+      TestUser.query.distinct.exists?.should be_false
+      create_last_user("Alpha", 30)
+      TestUser.query.distinct.exists?.should be_true
+    end
+
+    it "selects the table-qualified primary key for a join" do
+      UserDB.posts.create!
+      author = create_last_user("Author", 30)
+      create_last_user("Silent", 40)
+
+      TestUser.query.join(:posts).exists?.should be_false
+      Post.create!(title: "Post", body: "Body", user_id: author.id)
+
+      result = false
+      statements = count_queries { result = TestUser.query.join(:posts).exists? }
+
+      result.should be_true
+      statements.size.should eq(1)
+      statements.first.should contain("SELECT users.id FROM users INNER JOIN posts")
+      statements.first.should contain("LIMIT ?")
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "ignores soft-deleted rows in Model.exists?" do
+      SoftDeletableDB.users.create!
+      LastSoftDeletableUser.new("Deleted", "deleted@example.com").tap(&.create!).delete!
+
+      LastSoftDeletableUser.exists?.should be_false
+      LastSoftDeletableUser.exists?(name: "Deleted").should be_false
+
+      LastSoftDeletableUser.new("Kept", "kept@example.com").create!
+
+      LastSoftDeletableUser.exists?.should be_true
+      LastSoftDeletableUser.exists?(name: "Kept").should be_true
+      LastSoftDeletableUser.exists?(name: "Deleted").should be_false
+    ensure
+      SoftDeletableDB.users.drop!
     end
   end
 
@@ -726,6 +1068,164 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
   end
 
+  describe "keyset batching" do
+    it "yields every row exactly once in id order from #find_each" do
+      ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      TestUser.query.find_each(batch_size: 3) { |user| yielded << user.id!.to_i64 }
+
+      yielded.should eq(ids)
+    end
+
+    it "yields batches of [3, 3, 1] from #find_in_batches" do
+      7.times { |i| create_last_user("User#{i}", 20 + i) }
+
+      sizes = [] of Int32
+      TestUser.query.find_in_batches(batch_size: 3) { |batch| sizes << batch.size }
+
+      sizes.should eq([3, 3, 1])
+    end
+
+    it "pages by primary key without OFFSET, one SELECT per batch" do
+      7.times { |i| create_last_user("User#{i}", 20 + i) }
+
+      statements = count_queries do
+        TestUser.query.find_each(batch_size: 3) { |_| }
+      end
+
+      statements.size.should eq(3)
+      statements[1..].each do |sql|
+        sql.should match(/\bid\s*>\s*\?/i)
+        sql.should match(/ORDER BY\s+\S*\bid\b\S*\s+ASC/i)
+        sql.should match(/LIMIT\s+\?/i)
+      end
+      statements.each(&.should_not(match(/OFFSET/i)))
+    end
+
+    it "confirms the end with one empty fetch" do
+      6.times { |i| create_last_user("User#{i}", 20 + i) }
+
+      statements = count_queries do
+        TestUser.query.find_in_batches(batch_size: 3) { |_| }
+      end
+
+      # two full batches, then one empty fetch to confirm the end
+      statements.size.should eq(3)
+    end
+
+    it "skips a not-yet-visited row deleted mid-iteration" do
+      ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      TestUser.query.find_each(batch_size: 3) do |user|
+        TestUser.find!(ids[4].to_i32).delete! if yielded.empty?
+        yielded << user.id!.to_i64
+      end
+
+      yielded.should eq(ids - [ids[4]])
+    end
+
+    it "does not skip rows when an already-visited row is deleted mid-iteration" do
+      ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      TestUser.query.find_each(batch_size: 3) do |user|
+        TestUser.find!(ids[0].to_i32).delete! if user.id!.to_i64 == ids[2]
+        yielded << user.id!.to_i64
+      end
+
+      yielded.should eq(ids)
+    end
+
+    it "only yields rows matching the where scope" do
+      ages = [30, 40, 30, 30, 40, 30, 30]
+      matching = ages.map_with_index { |age, i| {create_last_user("User#{i}", age).id!.to_i64, age} }
+        .select { |_, age| age == 30 }.map(&.first)
+
+      yielded = [] of Int64
+      TestUser.query.where(age: 30).find_each(batch_size: 2) { |user| yielded << user.id!.to_i64 }
+
+      yielded.should eq(matching)
+    end
+
+    it "visits every row exactly once when the query has its own ORDER BY" do
+      names = %w[Delta Alpha Echo Bravo Foxtrot Charlie Golf]
+      names.each_with_index { |name, i| create_last_user(name, 20 + i) }
+
+      yielded = [] of String
+      TestUser.query.order(name: :desc).find_each(batch_size: 3) { |user| yielded << user.name.to_s }
+
+      yielded.should eq(names.sort.reverse!)
+    end
+
+    it "ignores the query's offset, yielding every row exactly once" do
+      ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      TestUser.query.offset(2).find_each(batch_size: 2) { |user| yielded << user.id!.to_i64 }
+
+      yielded.should eq(ids)
+    end
+
+    it "yields a parent with several joined children once" do
+      UserDB.posts.create!
+      author = create_last_user("Author", 30)
+      reader = create_last_user("Reader", 40)
+      3.times { Post.create!(title: "Post", body: "Body", user_id: author.id) }
+      Post.create!(title: "Post", body: "Body", user_id: reader.id)
+
+      [1, 2].each do |batch_size|
+        yielded = [] of Int64
+        TestUser.query.join(:posts).find_each(batch_size: batch_size) { |user| yielded << user.id!.to_i64 }
+
+        yielded.should eq([author.id!.to_i64, reader.id!.to_i64])
+      end
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "breaks ties in the query's ORDER BY by primary key, visiting every row exactly once" do
+      ids = [30, 20, 30, 20, 30, 20, 30].map_with_index { |age, i| create_last_user("User#{i}", age).id!.to_i64 }
+
+      yielded = [] of Int64
+      statements = count_queries do
+        TestUser.query.order(age: :asc).find_each(batch_size: 2) { |user| yielded << user.id!.to_i64 }
+      end
+
+      yielded.sort.should eq(ids)
+      yielded.uniq.size.should eq(ids.size)
+      statements.each(&.should(match(/ORDER BY\s+\S*age\S*\s+ASC,\s*\S*\bid\b\S*\s+ASC/i)))
+    end
+
+    it "pages a shaped query by OFFSET" do
+      ids = (1..5).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      statements = count_queries do
+        TestUser.query.distinct.find_each(batch_size: 2) { |user| yielded << user.id!.to_i64 }
+      end
+
+      yielded.should eq(ids)
+      statements[1..].each(&.should(match(/OFFSET/i)))
+    end
+
+    it "raises ArgumentError for a zero batch_size" do
+      expect_raises(ArgumentError) { TestUser.query.find_each(batch_size: 0) { |_| } }
+    end
+
+    it "keeps an OR condition scoped on every page" do
+      ages = [20, 30, 40, 50, 60, 70]
+      matching = ages.map { |age| {create_last_user("User#{age}", age).id!.to_i64, age} }
+        .select { |_, age| age < 25 || age > 55 }.map(&.first)
+
+      yielded = [] of Int64
+      TestUser.query.where { (age < 25) | (age > 55) }.find_each(batch_size: 1) { |user| yielded << user.id!.to_i64 }
+
+      yielded.should eq(matching)
+    end
+  end
+
   describe "#pluck" do
     it "extracts column values from all matching records" do
       TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
@@ -861,6 +1361,90 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
       deleted_count.should be_a(Int64)
       deleted_count.should eq(2)
+    end
+
+    it "runs each record's destroy callbacks when the model declares them" do
+      create_last_user("Ada", 30)
+      create_last_user("Linus", 40)
+      CallbackTracker.clear
+
+      TestUser.where(age: 30).delete_all.should eq(1)
+
+      CallbackTracker.order.count("before_destroy").should eq(1)
+      CallbackTracker.order.count("after_destroy").should eq(1)
+      TestUser.all.map(&.name).should eq(["Linus"])
+    end
+
+    it "deletes by id in one SELECT and one DELETE when the model has no destroy callbacks" do
+      UserDB.posts.create!
+      3.times { |i| Post.create!(title: "Gone #{i}", body: "gone") }
+      kept = Post.create!(title: "Kept", body: "kept")
+
+      deleted = 0_i64
+      selects = [] of String
+      deletes = count_queries(:delete) { selects = count_queries { deleted = Post.where(body: "gone").delete_all } }
+
+      deleted.should eq(3)
+      selects.size.should eq(1)
+      deletes.size.should eq(1)
+      Post.all.map(&.id!).should eq([kept.id!])
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "splits the DELETE into chunks within the bind limit" do
+      UserDB.posts.create!
+      count = Post.adapter.dialect.max_bind_params
+      Post.insert_all((1..count).map { |i| {title: "P#{i}", body: "bulk"} })
+
+      deleted = 0_i64
+      deletes = count_queries(:delete) { deleted = Post.where(body: "bulk").delete_all }
+
+      deleted.should eq(count)
+      deletes.size.should eq(2)
+      Post.count.should eq(0)
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "deletes only the rows a limit and order select" do
+      UserDB.posts.create!
+      %w[c a b].each { |title| Post.create!(title: title, body: "b") }
+
+      Post.order(title: :asc).limit(2).delete_all.should eq(2)
+
+      Post.all.map(&.title).should eq(["c"])
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "runs no DELETE when nothing matches" do
+      UserDB.posts.create!
+      Post.create!(title: "Kept", body: "kept")
+
+      count_queries(:delete) { Post.where(body: "none").delete_all.should eq(0) }.should be_empty
+      Post.count.should eq(1)
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "deletes only the rows a join condition selects" do
+      UserDB.posts.create!
+      ada = create_last_user("Ada", 30)
+      bob = create_last_user("Bob", 40)
+      2.times { |i| Post.create!(title: "Ada #{i}", body: "b", user_id: ada.id!) }
+      Post.create!(title: "Bob", body: "b", user_id: bob.id!)
+
+      Post.query.joins(:user) { user.name == "Ada" }.delete_all.should eq(2)
+
+      Post.all.map(&.title).should eq(["Bob"])
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "reports which models declare destroy callbacks" do
+      TestUser.destroy_callbacks?.should be_true
+      Post.destroy_callbacks?.should be_false
     end
   end
 

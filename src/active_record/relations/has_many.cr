@@ -133,24 +133,22 @@ module CQL::ActiveRecord::Relations
       end
 
       # Class method to preload this association for a collection of parent records.
-      # Executes a single query to fetch all related records and distributes them.
+      # Fetches the related records with one query per *chunk_size* parent ids (the dialect's
+      # bind-parameter limit by default) and distributes them.
       # - **param** : records (Array(self)) - The parent records
-      # - **param** : parent_ids (Array) - The parent IDs
+      # - **param** : chunk_size (Int32) - The most parent ids bound by one query
       # - **return** : Nil
-      def self._preload_{{name.id}}(records : Array(self), parent_ids : Array) : Nil
-        return if records.empty? || parent_ids.empty?
+      def self._preload_{{name.id}}(records : Array(self), chunk_size : Int32 = {{type.id}}.adapter.dialect.max_bind_params - 1) : Nil
+        parent_ids = records.compact_map(&.id)
+        return if parent_ids.empty?
 
-        # Fetch all related records in one query
-        related_records = {{type.id}}.where({ {{fk}} => parent_ids }).all
-
-        # Group related records by foreign key
         grouped = {} of Pk => Array({{type.id}})
-        related_records.each do |record|
-          fk_value = record.{{fk.id}}
-          next if fk_value.nil?
-          key = fk_value.as(Pk)
-          grouped[key] ||= [] of {{type.id}}
-          grouped[key] << record
+        CQL::ActiveRecord::IdChunks.each(parent_ids, chunk_size) do |ids|
+          {{type.id}}.where({ {{fk}} => ids }).all.each do |record|
+            fk_value = record.{{fk.id}}
+            next if fk_value.nil?
+            (grouped[fk_value.as(Pk)] ||= [] of {{type.id}}) << record
+          end
         end
 
         # Inject preloaded records into each parent
@@ -201,14 +199,7 @@ module CQL::ActiveRecord::Relations
 
       # Check if any associated records exist without loading them
       def {{name.id}}_any? : Bool
-        return !@{{name.id}}.not_nil!.empty? if @{{name.id}} && @{{name.id}}.not_nil!.loaded?
-
-        parent_id = safe_id(self, Pk)
-
-        safe_db_operation do
-          count_result = build_query({{type.id}}).where({ {{fk}} => parent_id }).count.get(Int64?)
-          (count_result || 0_i64) > 0_i64
-        end
+        !{{name.id}}.empty?
       end
 
       # Create associated records in batch

@@ -235,6 +235,7 @@ module CQL
 
     # Inserts many rows, updating *update* columns (default: every other column; an
     # empty list means do nothing) of rows that already exist for *conflict*.
+    # `Model.upsert_all` passes its own default, which also keeps `id` and `created_at`.
     def upsert(rows : Array(Hash(Symbol, DB::Any)), conflict : Array(Symbol), update : Array(Symbol)? = nil) : self
       values(rows)
       conflict_target(conflict)

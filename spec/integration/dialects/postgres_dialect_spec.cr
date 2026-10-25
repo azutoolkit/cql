@@ -27,6 +27,12 @@ module Expression
       end
     end
 
+    describe "#max_bind_params" do
+      it "allows 32767 bound parameters, the most every driver accepts" do
+        CQL::Adapter::Postgres.dialect.max_bind_params.should eq(32767)
+      end
+    end
+
     describe "#structure_dump" do
       it "uses pg_dump for structure dumps" do
         dialect = PostgresDialect.new

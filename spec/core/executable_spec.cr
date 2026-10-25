@@ -1,5 +1,12 @@
 require "../spec_helper"
 
+private struct NameAndAge
+  include DB::Serializable
+
+  getter name : String
+  getter age : Int32
+end
+
 describe CQL::Executable do
   before_each do
     UserDB.users.create!
@@ -43,6 +50,36 @@ describe CQL::Executable do
     users.call.each(as: String) { |name| names << name }
 
     names.should eq(%w[ada grace linus])
+  end
+
+  describe "#each with a yielding block" do
+    it "yields structs and honors the query's order" do
+      rows = [] of NameAndAge
+      UserDB.query.from(:users).select(:name, :age).order(age: :desc).each(as: NameAndAge) { |row| rows << row }
+
+      rows.map { |row| {row.name, row.age} }.should eq([{"linus", 22}, {"grace", 21}, {"ada", 20}])
+    end
+
+    it "stops at a break and releases the connection" do
+      seen = [] of String
+      users.call.each(as: String) do |name|
+        seen << name
+        break if seen.size == 2
+      end
+
+      seen.should eq(%w[ada grace])
+      UserDB.pool_stats.in_flight.should eq(0)
+      users.call.all(as: String).should eq(%w[ada grace linus])
+    end
+
+    it "propagates an exception from the block and releases the connection" do
+      expect_raises(Exception, "boom") do
+        users.call.each(as: String) { |_| raise "boom" }
+      end
+
+      UserDB.pool_stats.in_flight.should eq(0)
+      users.call.all(as: String).should eq(%w[ada grace linus])
+    end
   end
 
   it "bang variants return values" do
