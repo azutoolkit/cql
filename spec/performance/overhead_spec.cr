@@ -46,6 +46,18 @@ describe "instrumentation allocation budget" do
 end
 
 describe "performance recording allocation budget" do
+  it "allocates nothing per repeated statement with the production monitor" do
+    with_global_monitor(CQL::Performance::Monitor.new(CQL::Performance.production_config)) do
+      bytes_per_statement.should be < 1.0
+    end
+  end
+
+  it "allocates nothing recording a repeated query in the N+1 detector" do
+    detector = CQL::Performance::NPlusOneDetector.new
+    sql = "SELECT * FROM posts WHERE user_id = 1"
+    bytes_per_call(100_000) { detector.record_query(sql, normalized_sql: "SELECT * FROM posts WHERE user_id = ?") }.should be < 1.0
+  end
+
   it "allocates nothing recording a fast query in the profiler" do
     profiler = CQL::Performance::QueryProfiler.new
     params = [] of DB::Any
