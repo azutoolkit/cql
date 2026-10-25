@@ -11,7 +11,7 @@ module CQL
         # An update of the rows whose primary key is any of *ids*, which must not be empty
         # (`IN ()` is invalid SQL).
         protected def self.update_of(ids : Array(Pk)) : CQL::Update
-          key = ::Expression::Column.new(cql_column(primary_key_column))
+          key = primary_key_expression
           bound = ids.map { |id| CQL::ActiveRecord::IdChunks.bound(id) }
           CQL::Update.new(schema).table(table).where { key.in(bound) }
         end

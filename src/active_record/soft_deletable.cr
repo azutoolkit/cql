@@ -98,12 +98,7 @@ module CQL
           timestamp = Time.utc
 
           # Update the record in the database
-          where_attrs = Hash(Symbol, DB::Any).new
-          {% if Pk == UUID %}
-            where_attrs[:id] = id!.to_s.as(DB::Any)
-          {% else %}
-            where_attrs[:id] = id!.as(DB::Any)
-          {% end %}
+          where_attrs = {self.class.primary_key_column => CQL::ActiveRecord::IdChunks.bound(id!)}
 
           update_attrs = Hash(Symbol, DB::Any).new
           update_attrs[:deleted_at] = timestamp.as(DB::Any)
@@ -148,12 +143,7 @@ module CQL
           @deleted_at = nil
 
           # Update the record in the database
-          where_attrs = Hash(Symbol, DB::Any).new
-          {% if Pk == UUID %}
-            where_attrs[:id] = id!.to_s.as(DB::Any)
-          {% else %}
-            where_attrs[:id] = id!.as(DB::Any)
-          {% end %}
+          where_attrs = {self.class.primary_key_column => CQL::ActiveRecord::IdChunks.bound(id!)}
 
           update_attrs = Hash(Symbol, DB::Any).new
           update_attrs[:deleted_at] = nil.as(DB::Any)
@@ -187,19 +177,7 @@ module CQL
 
         # Force delete a record by ID (permanent delete)
         def self.force_delete!(id : Pk)
-          {% if Pk == UUID %}
-            CQL::Delete
-              .new({{@type.id}}.schema)
-              .from({{@type.id}}.table)
-              .where(id: id.to_s)
-              .commit
-          {% else %}
-            CQL::Delete
-              .new({{@type.id}}.schema)
-              .from({{@type.id}}.table)
-              .where(id: id)
-              .commit
-          {% end %}
+          delete_of(id).commit
         end
 
         # Soft delete records matching specific fields, record by record in one transaction
@@ -230,7 +208,8 @@ module CQL
         end
 
         private def self.set_deleted_at(ids : Array(DB::Any), value : Time?) : Int64
-          CQL::Update.new(schema).table(table).set({:deleted_at => value.as(DB::Any)}).where(id: ids).commit.rows_affected
+          key = primary_key_expression
+          CQL::Update.new(schema).table(table).set({:deleted_at => value.as(DB::Any)}).where { key.in(ids) }.commit.rows_affected
         end
 
         # Soft deletes every active record and returns how many, in bulk unless the model

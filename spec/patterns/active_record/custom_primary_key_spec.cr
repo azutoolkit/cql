@@ -26,6 +26,12 @@ LabelKeyDB = CQL::Schema.define(
     lock_version :version
     timestamps
   end
+
+  table :memos do
+    primary :memo_no, Int32
+    text :name
+    timestamp :deleted_at, null: true
+  end
 end
 
 class Label
@@ -80,8 +86,29 @@ class Ticket
   optimistic_locking version_column: :version
 end
 
+# A soft-deletable model on a custom key.
+class Memo
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context LabelKeyDB, :memos, primary_key: :memo_no
+
+  property name : String = ""
+
+  def initialize
+  end
+end
+
 private def insert_badge(uuid : UUID)
   LabelKeyDB.exec_query(&.exec("INSERT INTO badges (badge_uuid, name) VALUES (?, 'Gold')", uuid.to_s))
+end
+
+private def deleted_memo_numbers
+  LabelKeyDB.exec_query(&.query_all("SELECT memo_no FROM memos WHERE deleted_at IS NOT NULL ORDER BY memo_no", as: Int32))
+end
+
+private def memo_numbers
+  LabelKeyDB.exec_query(&.query_all("SELECT memo_no FROM memos ORDER BY memo_no", as: Int32))
 end
 
 # Lends no connection: lets a PostgreSQL-adapter schema exist, and generate SQL, without a server.
@@ -121,20 +148,20 @@ end
 
 describe "Custom primary key column" do
   before_all do
-    {% for table in %w[labels badges passes tickets] %}
+    {% for table in %w[labels badges passes tickets memos] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
       LabelKeyDB.{{table.id}}.create!
     {% end %}
   end
 
   after_all do
-    {% for table in %w[labels badges passes tickets] %}
+    {% for table in %w[labels badges passes tickets memos] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
     {% end %}
   end
 
   before_each do
-    {% for table in %w[labels badges passes tickets] %}
+    {% for table in %w[labels badges passes tickets memos] %}
       LabelKeyDB.exec("DELETE FROM {{table.id}}")
     {% end %}
   end
@@ -458,6 +485,134 @@ describe "Custom primary key column" do
 
     it "touches no rows for an empty list of keys" do
       Ticket.touch_all([] of Int32).should eq(0)
+    end
+  end
+
+  describe "deleting a record" do
+    uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+
+    it "deletes the row of a key through .delete!" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+
+      Label.delete!(7)
+
+      Label.find?(7).should be_nil
+      Label.find!(8).name.should eq("Rouge")
+    end
+
+    it "deletes the row of a found record through #delete!" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+      label = Label.find!(7)
+
+      label.delete!.should be_true
+
+      label.destroyed?.should be_true
+      Label.find?(7).should be_nil
+      Label.find!(8).name.should eq("Rouge")
+    end
+
+    it "deletes the rows of several keys through .delete_ids" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge'), (9, 'Gris')")
+
+      Label.delete_ids([7, 8]).should eq(2)
+
+      Label.query.ids(as: Int32).should eq([9])
+    end
+
+    it "deletes the row of a UUID key" do
+      other = UUID.new("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d")
+      insert_badge(uuid)
+      insert_badge(other)
+
+      Badge.delete!(uuid)
+
+      Badge.find?(uuid).should be_nil
+      Badge.find?(other).should_not be_nil
+    end
+
+    it "soft deletes the row of a found record and hides it from .find?" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name) VALUES (7, 'Note'), (8, 'Draft')")
+      memo = Memo.find!(7)
+
+      memo.delete!.should be_true
+
+      deleted_memo_numbers.should eq([7])
+      Memo.find?(7).should be_nil
+      Memo.find?(8).should_not be_nil
+    end
+
+    it "soft deletes the row of a key through .delete!" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name) VALUES (7, 'Note'), (8, 'Draft')")
+
+      Memo.delete!(7).should be_true
+
+      deleted_memo_numbers.should eq([7])
+      Memo.find?(7).should be_nil
+    end
+
+    it "restores a soft-deleted record through #restore!" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name) VALUES (7, 'Note'), (8, 'Draft')")
+      memo = Memo.find!(7)
+      memo.delete!
+
+      memo.restore!.should be_true
+
+      deleted_memo_numbers.should be_empty
+      Memo.find?(7).should_not be_nil
+    end
+
+    it "restores the soft-deleted row of a key through .restore!" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name, deleted_at) VALUES (7, 'Note', '2020-01-01 00:00:00'), (8, 'Draft', '2020-01-01 00:00:00')")
+
+      Memo.restore!(7).should be_true
+
+      deleted_memo_numbers.should eq([8])
+      Memo.find?(7).should_not be_nil
+    end
+
+    it "removes the row of a key through .force_delete!" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name) VALUES (7, 'Note'), (8, 'Draft')")
+
+      Memo.force_delete!(7)
+
+      memo_numbers.should eq([8])
+    end
+
+    it "removes the row of a found record through #force_delete!" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name) VALUES (7, 'Note'), (8, 'Draft')")
+
+      Memo.find!(7).force_delete!.should be_true
+
+      memo_numbers.should eq([8])
+    end
+
+    it "soft deletes the rows of several keys through .delete_ids" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name) VALUES (7, 'Note'), (8, 'Draft'), (9, 'Memo')")
+
+      Memo.delete_ids([7, 8]).should eq(2)
+
+      deleted_memo_numbers.should eq([7, 8])
+      memo_numbers.should eq([7, 8, 9])
+    end
+
+    it "restores only the soft-deleted rows through .restore_all" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name, deleted_at) VALUES (7, 'Note', '2020-01-01 00:00:00'), (8, 'Draft', NULL)")
+
+      Memo.restore_all.should eq(1)
+
+      deleted_memo_numbers.should be_empty
+      memo_numbers.should eq([7, 8])
+    end
+
+    it "deletes the rows of several UUID keys through .delete_ids" do
+      kept = UUID.new("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d")
+      removed = [UUID.new("1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e"), UUID.new("2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f")]
+      ([kept] + removed).each { |badge_uuid| insert_badge(badge_uuid) }
+
+      Badge.delete_ids(removed).should eq(2)
+
+      Badge.find?(kept).should_not be_nil
+      removed.each { |badge_uuid| Badge.find?(badge_uuid).should be_nil }
     end
   end
 

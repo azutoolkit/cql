@@ -27,6 +27,11 @@ module CQL
           :id
         end
 
+        # The primary key column as an expression, for conditions a where-hash cannot express (`IN`).
+        protected def self.primary_key_expression : ::Expression::Column
+          ::Expression::Column.new(cql_column(primary_key_column))
+        end
+
         {% verbatim do %}
           macro db_context(schema, table, primary_key = :id)
             {% raise "db_context for #{@type}: primary_key must be a Symbol, got #{primary_key}" unless primary_key.is_a?(SymbolLiteral) %}
