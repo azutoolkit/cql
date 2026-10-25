@@ -119,9 +119,6 @@ module Expression
 
   # Handles Data Manipulation Language (DML) formatting specifics.
   module DmlDialect
-    # Formats the VALUES clause for an INSERT statement.
-    abstract def format_insert_values(values : Array(Array(DB::Any)), placeholders : Array(String)) : String
-
     # Formats the RETURNING clause for general statements (often INSERT).
     abstract def format_returning(columns : Array(String)) : String
 
