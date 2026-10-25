@@ -202,7 +202,7 @@ end
       end
 
       it "returns a soft-deletable record from RETURNING, even one created deleted" do
-        deleted_at = Time.utc.at_beginning_of_day
+        deleted_at = Time.utc.at_beginning_of_second
         selects = count_queries do
           CreateBangPostgresSoftRow.create!(name: "ada").status.should eq("draft")
           CreateBangPostgresSoftRow.create!(name: "bob", deleted_at: deleted_at).deleted_at.should eq(deleted_at)

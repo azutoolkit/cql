@@ -100,4 +100,17 @@ module CQL
       @table.not_nil!.schema.adapter.sql_type(Type)
     end
   end
+
+  # A date-only column (`Table#date`). `CQL::Date` is `Time`, so the type alone cannot tell it from
+  # a timestamp; this column declares itself `DATE` on every adapter. `AlterTable#add_column` and
+  # `change_column` take a Crystal type, so `Date` there declares a timestamp.
+  class DateColumn(Type) < Column(Type)
+    def copy_to(table : Table) : BaseColumn
+      DateColumn(Type).new(@name, nil, @null).tap(&.table=(table))
+    end
+
+    def type
+      "DATE"
+    end
+  end
 end

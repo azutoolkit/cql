@@ -74,6 +74,22 @@ describe CQL::SchemaDump do
     end
   end
 
+  it "dumps DATE columns as date and TIMESTAMP columns as timestamp" do
+    uri = spec_sqlite_uri("schema_dump_dates.db")
+    DB.open(uri) do |db|
+      db.exec("DROP TABLE IF EXISTS dated_rows")
+      db.exec("CREATE TABLE dated_rows (id INTEGER PRIMARY KEY, born_on DATE NOT NULL, seen_at TIMESTAMP NOT NULL)")
+    end
+    dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+
+    content = dumper.generate_schema_content(:DatesDB, :dates_db)
+
+    content.should contain("date :born_on")
+    content.should contain("timestamp :seen_at")
+  ensure
+    dumper.try(&.close)
+  end
+
   describe "error handling" do
     it "raises error for invalid database connection" do
       expect_raises(CQL::SchemaDump::Error, "Failed to connect to database") do
