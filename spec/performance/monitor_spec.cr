@@ -682,7 +682,7 @@ describe "CQL::Performance::Monitor SQL logging of bound values" do
   secret = "secret@example.com"
   sql = "SELECT * FROM users WHERE email = ?"
 
-  # Every statement counts as slow, so its log line is a warning.
+  # Statements count as slow unless an example raises the threshold, so their log line is a warning.
   build_monitor = ->(include_params : Bool) do
     config = CQL::Performance::Config.new
     config.monitoring.enabled = true
@@ -701,6 +701,17 @@ describe "CQL::Performance::Monitor SQL logging of bound values" do
       monitor.track(sql, [secret] of DB::Any) { 1 }
 
       logs.check(:warn, /SQL \(.*\)\n  SELECT/).entry.message.should_not contain(secret)
+    end
+  end
+
+  it "leaves bound values out of a fast statement's log line when include_params is off" do
+    monitor = build_monitor.call(false)
+    monitor.configure(&.profiling.slow_query_threshold=(1.hour))
+
+    Log.capture("*") do |logs|
+      monitor.track(sql, [secret] of DB::Any) { 1 }
+
+      logs.check(:info, /SQL \(.*\)\n  SELECT/).entry.message.should_not contain(secret)
     end
   end
 
