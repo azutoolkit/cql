@@ -30,6 +30,8 @@ module CQL::ActiveRecord::Relations
     include Enumerable(Target)
     include BaseRelation
 
+    @base_query : CQL::Query?
+    @scoped_query : CQL::Query?
     @records : Array(Target) = [] of Target
     @target_table : Symbol
     @loaded : Bool = false
@@ -39,7 +41,7 @@ module CQL::ActiveRecord::Relations
     # - **param** : key (Symbol) - The foreign key in the target table (e.g., :user_id)
     # - **param** : id (Pk) - The id value for the parent record
     # - **param** : cascade (Bool) - Whether to delete associated records when parent is deleted (deprecated, use dependent)
-    # - **param** : query (CQL::Query) - Base query object for the relationship
+    # - **param** : query (CQL::Query) - Base query; the collection scopes it to the parent and operations run on clones of it
     # - **param** : auto_load (Bool) - Whether to automatically load associated records
     # - **param** : dependent (Symbol) - Dependency handling strategy
     # - **return** : Collection(Target, Pk)
@@ -55,12 +57,12 @@ module CQL::ActiveRecord::Relations
     # )
     # ```
     def initialize(
-      @key : Symbol,                             # foreign key (e.g., user_id)
-      @id : Pk,                                  # parent id value
-      @cascade : Bool = false,                   # delete associated records (deprecated)
-      @query : CQL::Query = build_query(Target), # query object
-      auto_load : Bool = false,                  # automatically load records
-      @dependent : Symbol = :nullify,            # dependency strategy
+      @key : Symbol,                         # foreign key (e.g., user_id)
+      @id : Pk,                              # parent id value
+      @cascade : Bool = false,               # delete associated records (deprecated)
+      query @base_query : CQL::Query? = nil, # base query; scoped to the parent on first use
+      auto_load : Bool = false,              # automatically load records
+      @dependent : Symbol = :nullify,        # dependency strategy
     )
       @target_table = Target.table
       @records = [] of Target
@@ -125,7 +127,7 @@ module CQL::ActiveRecord::Relations
     # ```
     def reload
       @records = safe_db_operation do
-        @query.where({@key => @id}).all(Target)
+        query_copy.all(Target)
       end
       @loaded = true
       @records
@@ -266,7 +268,7 @@ module CQL::ActiveRecord::Relations
       return @records.size.to_i64 if @loaded
 
       safe_db_operation do
-        @query.where({@key => @id}).count.get(Int64?) || 0_i64
+        query_copy.count.get(Int64?) || 0_i64
       end
     end
 
@@ -282,7 +284,7 @@ module CQL::ActiveRecord::Relations
     # ```
     def find(**attributes)
       safe_db_operation do
-        @query.where({@key => @id}).where(**attributes).all(Target)
+        query_copy.where(**attributes).all(Target)
       end
     end
 
@@ -291,7 +293,7 @@ module CQL::ActiveRecord::Relations
     # - **return** : Target?
     def find_by(**attributes)
       safe_db_operation do
-        @query.where({@key => @id}).where(**attributes).first(Target)
+        query_copy.where(**attributes).first(Target)
       rescue DB::NoResultsError
         nil
       end
@@ -480,26 +482,26 @@ module CQL::ActiveRecord::Relations
     # => [#<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello", @published=true>]
     # ```
     def where(**conditions)
-      @query.where({@key => @id}).where(**conditions)
+      query_copy.where(**conditions)
     end
 
     # A raw SQL fragment with bound `?` / `:name` values, scoped to this association.
     def where(__sql sql : String, *positional, **named)
-      @query.where({@key => @id}).where(sql, *positional, **named)
+      query_copy.where(sql, *positional, **named)
     end
 
     # Apply a limit to the query
     # - **param** : limit_count (Int32)
     # - **return** : CQL::Query
     def limit(limit_count : Int32)
-      @query.where({@key => @id}).limit(limit_count)
+      query_copy.limit(limit_count)
     end
 
     # Apply an offset to the query
     # - **param** : offset_count (Int32)
     # - **return** : CQL::Query
     def offset(offset_count : Int32)
-      @query.where({@key => @id}).offset(offset_count)
+      query_copy.offset(offset_count)
     end
 
     # Order the query results
@@ -507,7 +509,7 @@ module CQL::ActiveRecord::Relations
     # - **param** : direction (Symbol) - :asc or :desc
     # - **return** : CQL::Query
     def order(**order_by)
-      @query.where({@key => @id}).order(**order_by)
+      query_copy.order(**order_by)
     end
 
     # Clears all associated records from the parent record
@@ -682,6 +684,15 @@ module CQL::ActiveRecord::Relations
       end
 
       @records
+    end
+
+    # Scopes the base query to the parent record; the caller's query is never mutated.
+    protected def scope_to_parent(query : CQL::Query) : CQL::Query
+      query.clone.where({@key => @id})
+    end
+
+    private def query_copy : CQL::Query
+      (@scoped_query ||= scope_to_parent(@base_query || build_query(Target))).clone
     end
   end
 end

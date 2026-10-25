@@ -1,10 +1,10 @@
 # Benchmarks
 
-Two scripts measure the native PostgreSQL driver (`CQL::Postgres`) against a real server. Neither one ships with results: numbers depend on your hardware, network, server settings and Crystal build, so run them in the environment you care about.
+Two scripts measure the native PostgreSQL driver (`CQL::Postgres`) against a real server, and one measures query building and ActiveRecord operations on SQLite without a server. None ships with results: numbers depend on your hardware, network, server settings and Crystal build, so run them in the environment you care about.
 
-Both read the server from `DATABASE_URL`, create their own scratch table, and should be run with `--release` for meaningful timings. Run them from the repository root.
+The PostgreSQL scripts read the server from `DATABASE_URL` and create their own scratch table. All of them should be run with `--release` for meaningful timings, from the repository root.
 
-## Requirements
+## Requirements (PostgreSQL scripts)
 
 - Crystal and the repository's dependencies (`shards install --ignore-crystal-version`). `pg_wire_bench.cr` also compiles the `pg` shard, which is a development dependency in `shard.yml`.
 - A PostgreSQL server you can write to. Use a disposable database: the scripts drop and create tables.
@@ -63,6 +63,23 @@ Workloads: six mixed scalars in one statement, single `int8`, `timestamptz` and 
 | `BENCH_ONLY` | none | run only workloads whose name contains this text |
 
 Parameter encoding is part of what is timed. It creates and drops the unlogged table `cql_binary_bench_items`.
+
+## `sqlite_bench.cr`
+
+Measures query building and SQL generation (`to_sql`, no round trip), then ActiveRecord operations against a real in-memory SQLite database. It needs no server and no `DATABASE_URL`: it creates and seeds its own `ar_users`, `ar_posts` and `ar_events` tables (10,000 users with 3 posts each) in a single-connection `sqlite3::memory:` pool, with indexes on `ar_posts.user_id` and `ar_users.age`.
+
+```bash
+crystal run --release benchmarks/sqlite_bench.cr
+BENCH_ONLY=join crystal run --release benchmarks/sqlite_bench.cr   # one workload
+```
+
+Query-building workloads: a `where` by id, a ten-condition `where`, a join with order and limit, and a 500-row multi-row insert. ActiveRecord workloads (prefixed `ar:`): `find` by id, `where.order.first`, loading 100 rows with `limit(100).all`, `last`, `exists?`, `find_each` over 10,000 rows, has_many children (one parent through the association, and 100 parents through the association versus `preload`), `create!` of one record, `update!` of one record, and 1,000 `create!` calls per iteration. `last` currently loads every row and `exists?` runs a `COUNT`, so those two measure today's implementation, not the ideal query. Writes go to `ar_events` (inserts) or one user row (update) and run after the reads. Each one is reported by `Benchmark.ips` as iterations per second, time per iteration and bytes allocated per iteration.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BENCH_ONLY` | none | run only workloads whose name contains this text |
+
+Building the query is part of what is timed (and, for `ar:` workloads, execution and row hydration); the insert's row hashes are built once beforehand. Seeding runs on every invocation, even with `BENCH_ONLY`. It runs with the library's default configuration, so the numbers reflect what an application gets out of the box. `BENCH_ONLY` ignores case, and a filter that matches nothing exits with an error.
 
 ## Related
 

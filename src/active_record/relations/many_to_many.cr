@@ -77,11 +77,9 @@ module CQL::ActiveRecord::Relations
 
         parent_id = safe_id(self, Pk)
 
-        # Build a query with proper JOIN to only fetch associated records
+        # Build base query; the collection scopes it through the join table
         base_query = safe_db_operation do
           build_query({{klass.id}})
-            .join({{join_class}}.table) { |j| j.{{name.id}}.id.eq(j.{{join_class.stringify.underscore.id}}.{{target_fk}}) }
-            .where { {{join_class}}.table_column(:{{fk}}).eq(parent_id) }
         end
 
         @_{{name.id}} = CQL::ActiveRecord::Relations::ManyCollection({{klass.id}}, {{join_class}}, Pk).new(
