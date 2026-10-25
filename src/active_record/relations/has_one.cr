@@ -62,12 +62,12 @@ module CQL::ActiveRecord::Relations
         {% end %}
 
         # Ensure we have a valid ID
-        return nil if @id.nil?
+        return nil if id.nil?
 
         parent_id = safe_id(self, Pk)
 
         result = safe_db_operation do
-          {{kind.id}}.find_by({{fk}}: parent_id)
+          {{kind.id}}.find_by({{fk}}: CQL::ActiveRecord::IdChunks.bound(parent_id))
         end
 
         {% if cache %}
@@ -91,7 +91,7 @@ module CQL::ActiveRecord::Relations
         else
           # Don't require the record to be persisted when setting association
           # ensure_persisted(record)
-          parent_id = safe_id(self, typeof(@id))
+          parent_id = safe_id(self, Pk)
 
           # Clear any existing association first
           existing = {{name.id}}
@@ -144,7 +144,7 @@ module CQL::ActiveRecord::Relations
 
       # Build a new associated record without saving
       def build_{{name.id}}(**attributes) : {{kind.id}}
-        parent_id = safe_id(self, typeof(@id))
+        parent_id = safe_id(self, Pk)
 
         safe_db_operation do
           record = {{kind.id}}.new(**attributes)

@@ -207,6 +207,23 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
   end
 
   describe "dependent strategies when the parent is deleted" do
+    it "loads the targets with their own ids, not the join rows' ids, and destroys only those" do
+      other = Movie.new("Other", 2000)
+      other.create!
+      actors = %w[First Second Third].map { |name| Actor.new(name, 40).tap(&.create!) }
+      actors.each { |actor| other.actors << actor }
+      movie = Movie.new("The Matrix", 1999)
+      movie.create!
+      movie.actors << actors.first
+
+      Movie.find!(movie.id!).actors.all.map(&.id).should eq([actors.first.id])
+
+      Movie.find!(movie.id!).delete!.should be_true
+
+      Actor.find?(actors.first.id!).should be_nil
+      actors[1..].each { |actor| Actor.find?(actor.id!).should_not be_nil }
+    end
+
     it "removes the join rows and keeps the movies when an actor is deleted" do
       movie = Movie.new("The Matrix", 1999)
       movie.create!
@@ -875,31 +892,30 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
       actors.count.should eq(1)
     end
 
-    it "numbers the join table parent predicate before the caller's conditions on Postgres" do
+    it "numbers the join table subquery's parent predicate before the caller's conditions on Postgres" do
       actors = CQL::ActiveRecord::Relations::ManyCollection(Actor, MoviesActor, Int32).new(
         key: :movie_id, id: 7, target_key: :actor_id
       )
 
       actors.where(name: "Keanu Reeves").to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
         .should eq({
-          "SELECT actors.id, actors.name, actors.age, actors.created_at, actors.updated_at, " \
-          "movies_actor.id, movies_actor.movie_id, movies_actor.actor_id, movies_actor.created_at, movies_actor.updated_at " \
-          "FROM actors INNER JOIN movies_actor ON actors.id = movies_actor.actor_id " \
-          "WHERE (movies_actor.movie_id = $1) AND (actors.name = $2)",
+          "SELECT actors.id, actors.name, actors.age, actors.created_at, actors.updated_at FROM actors " \
+          "WHERE (actors.id IN (SELECT movies_actor.actor_id FROM movies_actor WHERE movies_actor.movie_id = $1)) " \
+          "AND (actors.name = $2)",
           [7, "Keanu Reeves"] of DB::Any,
         })
     end
 
-    it "joins on the target table's declared primary key" do
+    it "matches the join rows on the target table's declared primary key" do
       labels = CQL::ActiveRecord::Relations::ManyCollection(NumberedLabel, MovieLabel, Int32).new(
         key: :movie_id, id: 7, target_key: :label_no
       )
 
       labels.where(name: "Noir").to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
         .should eq({
-          "SELECT labels.label_no, labels.name, movie_labels.id, movie_labels.movie_id, movie_labels.label_no " \
-          "FROM labels INNER JOIN movie_labels ON labels.label_no = movie_labels.label_no " \
-          "WHERE (movie_labels.movie_id = $1) AND (labels.name = $2)",
+          "SELECT labels.label_no, labels.name FROM labels " \
+          "WHERE (labels.label_no IN (SELECT movie_labels.label_no FROM movie_labels WHERE movie_labels.movie_id = $1)) " \
+          "AND (labels.name = $2)",
           [7, "Noir"] of DB::Any,
         })
     end
