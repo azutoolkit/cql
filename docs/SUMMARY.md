@@ -106,6 +106,7 @@
 - [Monitor Performance](how-to/performance/monitoring.md)
 - [Telemetry](how-to/performance/telemetry.md)
 - [Profile Queries and Detect N+1](how-to/performance/query-profiler.md)
+- [Benchmark CQL](how-to/performance/benchmark.md)
 
 ### Testing
 
@@ -147,6 +148,7 @@
   - [Repository Pattern](explanation/design-patterns/repository.md)
 - [Typed Query DSL: Before and After](explanation/dsl-before-after.md)
 - [Safety Guardrails](explanation/safety-guardrails.md)
+- [How CQL Keeps Queries Fast](explanation/performance-design.md)
 
 ## Resources
 

@@ -84,6 +84,7 @@
 - [Avoid N+1 Queries](performance/n-plus-one.md)
 - [Monitor Performance](performance/monitoring.md)
 - [Profile Queries and Detect N+1](performance/query-profiler.md)
+- [Benchmark CQL](performance/benchmark.md)
 
 ## Testing
 
