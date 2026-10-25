@@ -73,7 +73,7 @@ end
 | `logging.colorize` | true | ANSI colors; `enable_sql_logging(colorize:)` sets it |
 | `logging.pretty_format` | true | break the SQL over lines at its clauses; `enable_sql_logging(pretty:)` sets it |
 
-`include_params` covers the bound values only. Values written into the SQL text itself, and the exception message of a failed statement, are logged as they are.
+`include_params` covers the bound values and a failed statement's driver error message. Drivers print the offending value inside quotes without escaping the quotes it holds, so one span, from the earliest to the latest quote of either kind, is replaced by `'?'` / `"?"` (`Duplicate entry 'x' for key 'y'` is logged, and kept in the metrics JSON, as `Duplicate entry '?'`); when a kind of quote occurs only once, everything from it to the end of the message is replaced (`can't connect` becomes `can'?`). Text outside quotes is not redacted: encoding errors that print the value's bytes, and messages raised by the database itself (`RAISE EXCEPTION`, `SIGNAL`, `RAISE(ABORT)`). Values written into the SQL text itself are logged as they are. The `include_params` value in force when a failed query is recorded decides its stored and exported error text.
 
 ## Read the Profile
 

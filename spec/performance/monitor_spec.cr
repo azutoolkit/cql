@@ -925,6 +925,30 @@ describe "CQL::Performance::Monitor SQL logging of bound values" do
     end
   end
 
+  describe "a driver error message that quotes a bound value" do
+    failure = ->(monitor : CQL::Performance::Monitor) do
+      error = Exception.new("Duplicate entry '#{secret}' for key 'users.email'")
+      event = CQL::Telemetry::QueryEvent.new(sql, 1, nil, 1.millisecond, error, CQL::Adapter::SQLite, :insert, nil, nil)
+      message = ""
+      Log.capture("*") do |logs|
+        monitor.record(event, [secret] of DB::Any)
+        message = logs.check(:error, /\AQuery failed:/).entry.message
+      end
+      message
+    end
+
+    it "is redacted in the failed statement's log line when include_params is off" do
+      message = failure.call(build_monitor.call(false))
+
+      message.should contain("Duplicate entry '?'")
+      message.should_not contain(secret)
+    end
+
+    it "is logged verbatim when include_params is on" do
+      failure.call(build_monitor.call(true)).should contain("Duplicate entry '#{secret}'")
+    end
+  end
+
   it "logs bound values once include_params is turned on" do
     monitor = build_monitor.call(false)
     monitor.configure(&.logging.include_params=(true))
@@ -971,6 +995,31 @@ describe "CQL::Performance::Monitor metrics export of bound values" do
     slowest.size.should eq(1)
     slowest.first.as_h.has_key?("params").should be_false
     json.should_not contain(secret)
+  end
+
+  describe "a failed slow query whose driver message quotes a bound value" do
+    export_failure = ->(include_params : Bool) do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.logging.include_params = include_params
+      config.profiling.slow_query_threshold = 0.seconds
+      monitor = CQL::Performance::Monitor.new(config: config, profiler: CQL::Performance::QueryProfiler.new(config.profiling))
+      error = Exception.new("Duplicate entry '#{secret}' for key 'users.email'")
+      event = CQL::Telemetry::QueryEvent.new("INSERT INTO users (email) VALUES (?)", 1, nil, 1.millisecond, error, CQL::Adapter::SQLite, :insert, nil, nil)
+      monitor.record(event, [secret] of DB::Any)
+      monitor.metrics.to_json
+    end
+
+    it "is redacted in the metrics JSON when include_params is off" do
+      json = export_failure.call(false)
+
+      JSON.parse(json)["top_queries"]["slowest_queries"][0]["error"].should eq("Duplicate entry '?'")
+      json.should_not contain(secret)
+    end
+
+    it "is exported verbatim when include_params is on" do
+      JSON.parse(export_failure.call(true))["top_queries"]["slowest_queries"][0]["error"].should eq("Duplicate entry '#{secret}' for key 'users.email'")
+    end
   end
 
   it "exports a slow query's params in the metrics JSON when include_params is on" do
