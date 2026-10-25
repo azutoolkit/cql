@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `config.profiling.max_tracked_statements` (default 1000) caps how many distinct statement shapes the query profiler keeps statistics for.
 - `CQL::Telemetry::QueryEvent#pool_wait` reports how long a statement waited for a pooled connection (about zero on a pinned or transaction connection, and until the failure when no connection could be obtained); it is part of `duration`, and `QueryEvent.new` takes it as an optional last argument.
 - `preload` loads `has_one` associations (`User.preload(:profile).all`) with one query per chunk of parent ids. Associations declared with `cache: false` are not preloaded, and preloading a `has_one` whose target has no foreign key attribute raises `ArgumentError`. A parent with several children gets an arbitrary one, as with the lazy reader.
 - `preload` loads `belongs_to` associations (`Post.preload(:user).all`): one query per chunk of distinct foreign keys instead of one lookup per record when the association is read. Associations declared with `cache: false` are not preloaded. Records that share a target share one preloaded instance.
@@ -17,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The query profiler tracks at most `profiling.max_tracked_statements` distinct statement shapes (default 1000); later shapes are aggregated under `"(other)"`, so statistics no longer grow without bound.
 - `NPlusOneDetector#record_query` allocates nothing in steady state (about 426 B per call before): the recent-query window is a fixed ring with per-query counts, so with the production preset a monitored statement allocates no more than an unmonitored one. Detection results are unchanged. `ignore_patterns` now folds only ASCII whitespace and case (it used Unicode `strip`/`upcase`), and a negative `detection_window` raises when the detector is built instead of on its first query.
 - `QueryProfiler#record_query` allocates nothing for a fast query (two arrays per query before) and builds no `QueryData` (about 140 ns to 50 ns), and `QueryProfiler#healthy?` reflects recorded failures (it was always true). With the production preset a monitored statement allocates 160 B less; the rest of the monitor's cost is the N+1 detector.
 - `CQL::Performance.with_context` (and `query.with_performance_context`) and `CQL::Telemetry.with_context` share one per-fiber context: concurrent requests no longer overwrite each other's context in SQL log lines, events emitted inside `Performance.with_context` carry it as `QueryEvent#context`, and tagging a statement takes no global lock (an observed statement goes from about 88 to 77 ns of instrumentation, `with_context` from 43 to 9 ns, and parallel workers no longer serialize on it). `CQL::Telemetry.current_context` returns the current fiber's context.

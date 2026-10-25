@@ -340,6 +340,10 @@ describe CQL::Performance::Config::Profiling do
     profiling.log_all_queries?.should be_false
   end
 
+  it "bounds tracked statements to 1000 by default" do
+    CQL::Performance::Config::Profiling.new.max_tracked_statements.should eq(1000)
+  end
+
   it "lowers thresholds in test environment" do
     ENV["CRYSTAL_ENV"] = "test"
     profiling = CQL::Performance::Config::Profiling.new

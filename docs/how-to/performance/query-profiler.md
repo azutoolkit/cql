@@ -103,6 +103,7 @@ end
 | `profiling.log_slow_queries` | true | log slow queries as warnings |
 | `profiling.log_all_queries` | false | keep every query, not only slow ones, in the recorded list |
 | `profiling.max_recorded_queries` | 10,000 (100 in test) | cap on the recorded list |
+| `profiling.max_tracked_statements` | 1000 | distinct statement shapes tracked in the statistics; later shapes are aggregated under `"(other)"` |
 
 Statistics are kept for all queries. The slow query list holds up to 1000 entries.
 

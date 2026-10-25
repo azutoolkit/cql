@@ -40,6 +40,7 @@ module CQL::Performance
     @mutex : CQL::Compat::Mutex = CQL::Compat::Mutex.new
 
     MAX_SLOW_QUERIES = 1000
+    OTHER_STATEMENTS = "(other)"
 
     def initialize(@config : Config::Profiling = Config::Profiling.new)
       super()
@@ -172,8 +173,13 @@ module CQL::Performance
     end
 
     private def track_stats(normalized_sql : String, execution_time : Time::Span, failed : Bool)
-      tracker = @query_stats[normalized_sql] ||= StatsTracker.new
+      tracker = @query_stats[normalized_sql]? || tracker_for_new_shape(normalized_sql)
       tracker.record(execution_time, failed)
+    end
+
+    private def tracker_for_new_shape(normalized_sql : String) : StatsTracker
+      key = @query_stats.size < @config.max_tracked_statements ? normalized_sql : OTHER_STATEMENTS
+      @query_stats[key] ||= StatsTracker.new
     end
 
     private def cleanup_old_queries
