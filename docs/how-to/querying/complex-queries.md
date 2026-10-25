@@ -178,8 +178,8 @@ This issues one count query per user. For large tables, use a joined `GROUP BY` 
 Join through a declared association and filter on the joined table with a typed block:
 
 ```crystal
-User.joins(:posts) { posts.published == true }.all
-User.left_joins(:profile).where { age > 18 }.all
+User.query.joins(:posts) { posts.published == true }.all
+User.query.left_joins(:profile).where { age > 18 }.all
 ```
 
 ## Raw SQL (when needed)

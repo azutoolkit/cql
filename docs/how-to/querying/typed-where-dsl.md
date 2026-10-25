@@ -13,6 +13,7 @@ class Author
   property age : Int32
   property status : String
   property score : Float64?
+  property created_at : Time?
 
   has_one :profile, Profile, foreign_key: :author_id
   has_many :books, Book, foreign_key: :author_id

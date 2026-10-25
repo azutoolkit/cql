@@ -2,7 +2,7 @@
 
 This guide shows you how to use CQL's built-in performance monitor: the query profiler, the N+1 detector, health metrics and reports.
 
-It lives in `CQL::Performance`. Every statement CQL runs (selects, inserts, updates, deletes and `Schema#exec`) is passed to `CQL::Performance.track`, so once monitoring is enabled you get data without wrapping your queries. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
+It lives in `CQL::Performance`. Every select, insert, update and delete CQL runs is passed to `CQL::Performance.track` (`Schema#exec` DDL and `explain` reach telemetry but not the monitor), so once monitoring is enabled you get data without wrapping your queries. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
 
 ## Turn It On
 

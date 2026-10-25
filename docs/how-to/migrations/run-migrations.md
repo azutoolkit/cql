@@ -28,7 +28,7 @@ migrator.up
 puts "Migrations complete"
 ```
 
-All pending migrations run inside one transaction, in version order, and are recorded as they succeed. `migrator.up(2)` runs at most the first 2 migrations in version order (already-applied ones count towards the 2). `up` prints a table of applied migrations when it finishes.
+Pending migrations run in version order, and each is recorded once it succeeds. The migrator opens a transaction, but each migration's statements (and its recorded version) run on another pooled connection and commit on their own: a failing migration does not undo the ones before it, and a pool of size 1 deadlocks. `migrator.up(2)` runs at most the first 2 migrations in version order (already-applied ones count towards the 2). `up` prints a table of applied migrations when it finishes.
 
 ## Check Migration Status
 

@@ -147,7 +147,7 @@ Validation: `mode` must be one of `disable`, `allow`, `prefer`, `require`, `veri
 
 These cache settings are inert (nothing in `src/` reads them): `memory`, `memory_stats`, `auto_clear`, `fragments` (only echoed by `cache_stats`), `auto_cleanup`, `cleanup_interval`, `batch_ops`, `middleware`, `request_id_header`.
 
-An environment other than `development`, `test` or `production` keeps the plain defaults (cache off).
+An unset `CRYSTAL_ENV` counts as `development` here, so `cache.on` is `true`. An environment other than `development`, `test` or `production` keeps the plain defaults (cache off).
 
 Cache helpers on `CQL`: `cache_on(enabled = true)`, `cache_on?`, `cache_stats`, `cache_summary`, `reset_cache!`, `memory_cache`, `fragment_cache`. See [Query caching](../how-to/caching/query-cache.md).
 

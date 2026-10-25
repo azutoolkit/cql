@@ -30,7 +30,7 @@ else
   puts "Failed to create user" # a callback halted the save
 end
 
-# Method 2: save! (raises CQL::RecordNotSaved or CQL::RecordInvalid instead of returning false)
+# Method 2: save! (raises CQL::RecordNotSaved when a callback halts the save, and CQL::ActiveRecord::Validations::ValidationError for an invalid record)
 user = User.new(username: "bob", email: "bob@example.com")
 user.save!
 puts "User created" if user.persisted?
@@ -43,7 +43,7 @@ user = User.create!(
 )
 ```
 
-`create!` writes exactly the columns you pass and lets the database fill in defaults; it does not go through your `initialize`, so anything `initialize` computes (like the category slug) must be passed explicitly or created with `new` + `save`.
+`create!` writes exactly the columns you pass and lets the database fill in defaults; it does not go through your `initialize`, so anything `initialize` computes (like the category slug) must be passed explicitly or created with `new` + `save`. It also runs no validations or callbacks.
 
 ### Creating with Relationships
 
@@ -192,7 +192,7 @@ Inside these blocks, bare names such as `user` or `views_count` are the model's 
 ### Pagination
 
 ```crystal
-# Built-in helper (oldest first, no filter)
+# Built-in helper (no filter and no ORDER BY, so the database picks the row order)
 first_page = Post.page(1, 10)
 
 # Filtered and ordered pagination

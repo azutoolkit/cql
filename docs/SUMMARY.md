@@ -89,6 +89,7 @@
 
 - [Native PostgreSQL Driver](how-to/postgres-native/README.md)
 - [Use AsyncEngine and Its Connection Pool](how-to/postgres-native/async-engine.md)
+- [Run a Schema on the AsyncEngine's Pool](how-to/postgres-native/schema-on-engine.md)
 - [Stream Large Results and Pipeline Statements](how-to/postgres-native/streaming-and-pipelining.md)
 - [Bulk Load with COPY and Send Binary Parameters](how-to/postgres-native/copy-and-binary-params.md)
 - [Configure TLS, Poolers, Timeouts and Transactions](how-to/postgres-native/tls-and-poolers.md)
@@ -106,6 +107,7 @@
 - [Monitor Performance](how-to/performance/monitoring.md)
 - [Telemetry](how-to/performance/telemetry.md)
 - [Profile Queries and Detect N+1](how-to/performance/query-profiler.md)
+- [Benchmark CQL](how-to/performance/benchmark.md)
 
 ### Testing
 
@@ -147,6 +149,7 @@
   - [Repository Pattern](explanation/design-patterns/repository.md)
 - [Typed Query DSL: Before and After](explanation/dsl-before-after.md)
 - [Safety Guardrails](explanation/safety-guardrails.md)
+- [How CQL Keeps Queries Fast](explanation/performance-design.md)
 
 ## Resources
 
