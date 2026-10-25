@@ -386,7 +386,7 @@ describe CQL::Performance::Config::Logging do
     logging.enabled?.should be_false
     logging.colorize?.should be_true
     logging.pretty_format?.should be_true
-    logging.include_params?.should be_true
+    logging.include_params?.should be_false
     logging.include_time?.should be_true
     logging.include_rows?.should be_true
     logging.max_sql_length.should eq(500)

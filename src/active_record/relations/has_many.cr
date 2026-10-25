@@ -192,7 +192,7 @@ module CQL::ActiveRecord::Relations
         parent_id = safe_id(self, Pk)
 
         safe_db_operation do
-          build_query({{type.id}}).where({ {{fk}} => parent_id }).count
+          build_query({{type.id}}).where({ {{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) }).count.get(Int64?) || 0_i64
         end
       end
 

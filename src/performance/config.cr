@@ -57,7 +57,7 @@ module CQL::Performance
       property? enabled : Bool = false
       property? colorize : Bool = true
       property? pretty_format : Bool = true
-      property? include_params : Bool = true
+      property? include_params : Bool = false
       property? include_time : Bool = true
       property? include_rows : Bool = true
       property max_sql_length : Int32 = 500

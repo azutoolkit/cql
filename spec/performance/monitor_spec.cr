@@ -677,3 +677,109 @@ describe "CQL::Performance.enable_sql_logging" do
     end
   end
 end
+
+describe "CQL::Performance::Monitor SQL logging of bound values" do
+  secret = "secret@example.com"
+  sql = "SELECT * FROM users WHERE email = ?"
+
+  # Statements count as slow unless an example raises the threshold, so their log line is a warning.
+  build_monitor = ->(include_params : Bool) do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = true
+    config.logging.colorize = false
+    config.logging.pretty_format = false
+    config.logging.include_params = include_params
+    config.profiling.slow_query_threshold = Time::Span.zero
+    CQL::Performance::Monitor.new(config: config)
+  end
+
+  it "leaves bound values out of a slow statement's log line when include_params is off" do
+    monitor = build_monitor.call(false)
+
+    Log.capture("*") do |logs|
+      monitor.track(sql, [secret] of DB::Any) { 1 }
+
+      logs.check(:warn, /SQL \(.*\)\n  SELECT/).entry.message.should_not contain(secret)
+    end
+  end
+
+  it "leaves bound values out of a fast statement's log line when include_params is off" do
+    monitor = build_monitor.call(false)
+    monitor.configure(&.profiling.slow_query_threshold=(1.hour))
+
+    Log.capture("*") do |logs|
+      monitor.track(sql, [secret] of DB::Any) { 1 }
+
+      logs.check(:info, /SQL \(.*\)\n  SELECT/).entry.message.should_not contain(secret)
+    end
+  end
+
+  it "leaves bound values out of a failed statement's log line when include_params is off" do
+    monitor = build_monitor.call(false)
+
+    Log.capture("*") do |logs|
+      expect_raises(RuntimeError, "boom") do
+        monitor.track(sql, [secret] of DB::Any) { raise RuntimeError.new("boom") }
+      end
+
+      message = logs.check(:error, /Query failed: boom/).entry.message
+      message.should_not contain(secret)
+      message.should_not contain("Params:")
+    end
+  end
+
+  it "logs bound values once include_params is turned on" do
+    monitor = build_monitor.call(false)
+    monitor.configure(&.logging.include_params=(true))
+
+    Log.capture("*") do |logs|
+      monitor.track(sql, [secret] of DB::Any) { 1 }
+
+      logs.check(:warn, /Parameters: \[secret@example\.com\]/)
+    end
+  end
+
+  it "truncates a failed statement's bound values at max_param_length" do
+    monitor = build_monitor.call(true)
+    monitor.configure(&.logging.max_param_length=(10))
+    long_value = "a" * 50
+
+    Log.capture("*") do |logs|
+      expect_raises(RuntimeError, "boom") do
+        monitor.track(sql, [long_value] of DB::Any) { raise RuntimeError.new("boom") }
+      end
+
+      logs.check(:error, /Params: \[a{10}\.\.\.\]/).entry.message.should_not contain(long_value)
+    end
+  end
+end
+
+describe "CQL::Performance::Monitor metrics export of bound values" do
+  secret = "secret@example.com"
+
+  # The profiler already holds one slow query that bound *secret*.
+  build_monitor = ->(include_params : Bool) do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.include_params = include_params
+    profiler = CQL::Performance::QueryProfiler.new(config.profiling)
+    profiler.record_query("SELECT * FROM users WHERE email = ?", [secret] of DB::Any, 1.hour)
+    CQL::Performance::Monitor.new(config: config, profiler: profiler)
+  end
+
+  it "leaves a slow query's params out of the metrics JSON when include_params is off" do
+    json = build_monitor.call(false).metrics.to_json
+
+    slowest = JSON.parse(json)["top_queries"]["slowest_queries"].as_a
+    slowest.size.should eq(1)
+    slowest.first.as_h.has_key?("params").should be_false
+    json.should_not contain(secret)
+  end
+
+  it "exports a slow query's params in the metrics JSON when include_params is on" do
+    json = build_monitor.call(true).metrics.to_json
+
+    JSON.parse(json)["top_queries"]["slowest_queries"][0]["params"].should eq(JSON.parse(%(["#{secret}"])))
+  end
+end
