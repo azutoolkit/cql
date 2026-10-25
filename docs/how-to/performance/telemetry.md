@@ -15,6 +15,8 @@ CQL::Telemetry.log_queries                       # one debug log line per statem
 An event carries `sql`, `operation` (`:select`, `:insert`, `:update`, `:delete`, `:ddl`,
 `:explain`), `duration`, `pool_wait`, `param_count`, `adapter`, `error`, `rows_affected`, `context`, `params` (only with `capture_params`) and `success?`.
 
+Subscribers run inline, before the statement returns. `subscribe(name, async: true)` runs one on a background fiber through a bounded queue (`Telemetry.async_queue_capacity`, default 4096): a full queue drops events (`Telemetry.dropped_events`) rather than blocking, and `Telemetry.flush(timeout)` waits for delivery. On one thread this takes the work out of query latency, not out of CPU; with several threads a hand-off to a parked consumer costs a scheduler wake (microseconds).
+
 ## Parameters are redacted by default
 
 `event.params` is `nil` unless you opt in with `CQL::Telemetry.capture_params = true`; the count is

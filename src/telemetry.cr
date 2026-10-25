@@ -105,7 +105,11 @@ module CQL
     alias Subscriber = QueryEvent ->
     alias TransactionSubscriber = TransactionEvent ->
 
+    private DEFAULT_ASYNC_QUEUE_CAPACITY = 4096
+
     @@subscribers = {} of String => Subscriber
+    @@async_subscribers = {} of String => Subscriber
+    @@async_queue : EventQueue(QueryEvent)? = nil
     @@transaction_subscribers = {} of String => TransactionSubscriber
     @@transaction_ids = Atomic(Int64).new(0)
     @@mutex = CQL::Compat::Mutex.new
@@ -128,13 +132,44 @@ module CQL
       @@tracer = value
     end
 
-    # Registers (or replaces) the subscriber called *name*.
-    def self.subscribe(name : String, &block : QueryEvent ->) : Nil
-      @@mutex.synchronize { @@subscribers = @@subscribers.merge({name => block}) }
+    # Events the async queue holds before it drops new ones; a change applies to the next queue created.
+    class_property async_queue_capacity : Int32 = DEFAULT_ASYNC_QUEUE_CAPACITY
+
+    # Registers (or replaces) the subscriber called *name*, by default called inline after each statement.
+    #
+    # An *async* subscriber runs on one background fiber after the statement returns, fed by a bounded
+    # queue that drops events when full (`dropped_events`). On a single Crystal thread this moves its work
+    # out of the query's latency, not out of the CPU; under multi-threading a push to a parked consumer
+    # can cost a scheduler wake.
+    def self.subscribe(name : String, async : Bool = false, &block : QueryEvent ->) : Nil
+      @@mutex.synchronize do
+        if async
+          @@async_queue ||= EventQueue(QueryEvent).new(@@async_queue_capacity) { |event| notify(@@async_subscribers, event) }
+          @@async_subscribers = @@async_subscribers.merge({name => block})
+          @@subscribers = @@subscribers.reject(name)
+        else
+          @@subscribers = @@subscribers.merge({name => block})
+          @@async_subscribers = @@async_subscribers.reject(name)
+        end
+      end
     end
 
     def self.unsubscribe(name : String) : Nil
-      @@mutex.synchronize { @@subscribers = @@subscribers.reject(name) }
+      @@mutex.synchronize do
+        @@subscribers = @@subscribers.reject(name)
+        @@async_subscribers = @@async_subscribers.reject(name)
+      end
+    end
+
+    # Waits until async subscribers have handled every event published before it; false on timeout, true without a queue.
+    def self.flush(timeout : Time::Span? = nil) : Bool
+      queue = @@async_queue
+      queue.nil? || queue.flush(timeout)
+    end
+
+    # Events the async queue dropped because it was full.
+    def self.dropped_events : Int64
+      @@async_queue.try(&.dropped) || 0_i64
     end
 
     # Registers (or replaces) the transaction subscriber called *name*.
@@ -148,7 +183,7 @@ module CQL
 
     # Whether a query or transaction subscriber is registered under *name*.
     def self.subscribed?(name : String) : Bool
-      @@subscribers.has_key?(name) || @@transaction_subscribers.has_key?(name)
+      @@subscribers.has_key?(name) || @@async_subscribers.has_key?(name) || @@transaction_subscribers.has_key?(name)
     end
 
     # Process-wide, strictly increasing transaction id.
@@ -208,7 +243,11 @@ module CQL
     def self.reset! : Nil
       @@mutex.synchronize do
         @@subscribers = {} of String => Subscriber
+        @@async_subscribers = {} of String => Subscriber
         @@transaction_subscribers = {} of String => TransactionSubscriber
+        @@async_queue.try &.close
+        @@async_queue = nil
+        @@async_queue_capacity = DEFAULT_ASYNC_QUEUE_CAPACITY
       end
       @@capture_params = false
       @@tracer = nil
@@ -232,7 +271,7 @@ module CQL
 
     # :nodoc:
     def self.observing? : Bool
-      !@@subscribers.empty?
+      !@@subscribers.empty? || !@@async_subscribers.empty?
     end
 
     # :nodoc:
@@ -269,6 +308,8 @@ module CQL
     # :nodoc:
     def self.publish(event : QueryEvent) : Nil
       notify(@@subscribers, event)
+      queue = @@async_queue
+      queue.push(event) if queue && !@@async_subscribers.empty?
     end
 
     private def self.notify(subscribers, event) : Nil

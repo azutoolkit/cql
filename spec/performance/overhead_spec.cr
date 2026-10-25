@@ -28,6 +28,18 @@ describe "instrumentation allocation budget" do
     end
   end
 
+  it "allocates nothing per statement with one async subscriber" do
+    # Room for every measured event, so the enqueue path is measured and not only the drop path.
+    CQL::Telemetry.async_queue_capacity = 150_000
+    CQL::Telemetry.subscribe("overhead", async: true) { |_event| }
+    with_global_monitor(CQL::Performance::Monitor.new(CQL::Performance.minimal_config)) do
+      bytes_per_statement.should be < 1.0
+    end
+  ensure
+    CQL::Telemetry.reset!
+    CQL::Telemetry.async_queue_capacity = 4096
+  end
+
   it "allocates nothing for a context, around a block or a statement" do
     bytes_per_call(100_000) { CQL::Performance.with_context("req") { } }.should be < 1.0
     CQL::Telemetry.subscribe("overhead") { |_event| }
