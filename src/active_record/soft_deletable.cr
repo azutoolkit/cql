@@ -49,6 +49,7 @@ module CQL
         end
 
         # Override the base query method to automatically exclude soft-deleted records
+        @[CQL::ActiveRecord::StaticQuery]
         def self.query
           if acts_as_paranoid?
             previous_def.where { {{@type.id}}.table_column(:deleted_at).null}

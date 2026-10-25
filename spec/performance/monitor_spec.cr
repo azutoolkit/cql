@@ -1,7 +1,54 @@
 require "../spec_helper"
 require "log/spec"
 
+private class CountingFormatter < CQL::Performance::SQLFormatter
+  getter calls = 0
+
+  def format(sql : String, params : Array(DB::Any) = [] of DB::Any,
+             execution_time : Time::Span? = nil, rows_affected : Int64? = nil,
+             context : String? = nil) : String
+    @calls += 1
+    super
+  end
+end
+
 describe CQL::Performance::Monitor do
+  describe "query logging" do
+    it "formats a query only when its log level is emitted" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.logging.enabled = true
+      formatter = CountingFormatter.new(colorize_enabled: false)
+      monitor = CQL::Performance::Monitor.new(config: config, sql_formatter: formatter)
+
+      Log.capture("*", level: :warn) { monitor.track("SELECT 1") { 1 } }
+      formatter.calls.should eq(0)
+
+      Log.capture("*", level: :info) { monitor.track("SELECT 1") { 1 } }
+      formatter.calls.should eq(1)
+    end
+
+    it "logs slow queries at warn and very slow ones at error" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.logging.enabled = true
+      config.profiling.slow_query_threshold = 0.seconds
+      config.profiling.very_slow_threshold = 1.hour
+      slow = CQL::Performance::Monitor.new(config: config, sql_formatter: CQL::Performance::SQLFormatter.new(colorize_enabled: false))
+      Log.capture("*") do |logs|
+        slow.track("SELECT 2") { 2 }
+        logs.check(:warn, /SELECT 2/)
+      end
+
+      config.profiling.very_slow_threshold = 0.seconds
+      very_slow = CQL::Performance::Monitor.new(config: config, sql_formatter: CQL::Performance::SQLFormatter.new(colorize_enabled: false))
+      Log.capture("*") do |logs|
+        very_slow.track("SELECT 3") { 3 }
+        logs.check(:error, /SELECT 3/)
+      end
+    end
+  end
+
   describe "#initialize" do
     it "creates a monitor with default config" do
       config = CQL::Performance::Config.new

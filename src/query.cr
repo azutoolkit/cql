@@ -1,4 +1,5 @@
 require "./executable"
+require "./prepared_select"
 require "./compound_query"
 require "./derived_table"
 require "./window_builder"
@@ -64,27 +65,47 @@ module CQL
     include Executable
     include SetOperations
 
+    # A clause collection most queries never use: allocated on first access through its getter,
+    # so `new` and `clone` pay nothing for it. `name?` tells whether it holds anything without
+    # allocating.
+    macro lazy_collection(name, type)
+      @{{name.id}} : {{type}}? = nil
+
+      def {{name.id}} : {{type}}
+        @{{name.id}} ||= {{type}}.new
+      end
+
+      def {{name.id}}? : Bool
+        !!@{{name.id}}.try { |collection| !collection.empty? }
+      end
+
+      # A copy for building an AST node, which needs a collection even when empty.
+      private def {{name.id}}_snapshot : {{type}}
+        @{{name.id}}.try(&.dup) || {{type}}.new
+      end
+    end
+
     getter columns : Array(CQL::BaseColumn) = [] of CQL::BaseColumn
     getter schema : Schema
     # Ensure alias is String
     alias QueryTableInfo = {table: CQL::Table, alias: String}
     getter query_tables : Hash(String, QueryTableInfo) = {} of String => QueryTableInfo # Key is alias (String)
     property where : Expression::Where? = nil
-    getter group_by : Array(CQL::BaseColumn) = [] of CQL::BaseColumn
+    lazy_collection group_by, Array(CQL::BaseColumn)
     property having : Expression::Having? = nil
-    getter order_by : Hash(CQL::BaseColumn, Expression::OrderDirection) = {} of CQL::BaseColumn => Expression::OrderDirection
-    getter joins : Array(Expression::Join) = [] of Expression::Join
+    lazy_collection order_by, Hash(CQL::BaseColumn, Expression::OrderDirection)
+    lazy_collection joins, Array(Expression::Join)
     property limit : Int32? = nil
     property offset : Int32? = nil
     property? distinct : Bool = false
-    getter select_expressions : Array(Expression::SelectExpression) = [] of Expression::SelectExpression
+    lazy_collection select_expressions, Array(Expression::SelectExpression)
     # Store column aliases: column => alias
-    getter column_aliases : Hash(CQL::BaseColumn, String) = {} of CQL::BaseColumn => String
+    lazy_collection column_aliases, Hash(CQL::BaseColumn, String)
     # CTEs declared on this query, and the tables they expose by name.
-    getter ctes : Array(Expression::Cte) = [] of Expression::Cte
-    getter derived_tables : Hash(Symbol, CQL::Table) = {} of Symbol => CQL::Table
+    lazy_collection ctes, Array(Expression::Cte)
+    lazy_collection derived_tables, Hash(Symbol, CQL::Table)
     property? recursive : Bool = false
-    getter distinct_on : Array(Expression::BaseColumn) = [] of Expression::BaseColumn
+    lazy_collection distinct_on, Array(Expression::BaseColumn)
     property row_lock : Expression::RowLock? = nil
 
     # Initializes the `Query` object with the provided schema.
@@ -108,27 +129,36 @@ module CQL
       @columns.each { |col| new_query.columns << col }
       @query_tables.each { |key, value| new_query.query_tables[key] = value }
       new_query.where = @where
-      @group_by.each { |col| new_query.group_by << col }
       new_query.having = @having
-      @order_by.each { |key, value| new_query.order_by[key] = value }
-      @joins.each { |join| new_query.joins << join }
       new_query.limit = @limit
       new_query.offset = @offset
       new_query.distinct = @distinct
-      @select_expressions.each { |aggr| new_query.select_expressions << aggr }
-      @column_aliases.each { |key, value| new_query.column_aliases[key] = value }
-      @ctes.each { |cte| new_query.ctes << cte }
-      @derived_tables.each { |name, table| new_query.derived_tables[name] = table }
       new_query.recursive = recursive?
-      @distinct_on.each { |column| new_query.distinct_on << column }
       new_query.row_lock = @row_lock
       new_query.executor = @executor
-      new_query
+      new_query.copy_lazy_collections(self)
     end
 
-    # The first row mapped to *kind* (the query itself is left untouched).
+    protected def copy_lazy_collections(other : Query) : self
+      @group_by = copied(other.@group_by)
+      @order_by = copied(other.@order_by)
+      @joins = copied(other.@joins)
+      @select_expressions = copied(other.@select_expressions)
+      @column_aliases = copied(other.@column_aliases)
+      @ctes = copied(other.@ctes)
+      @derived_tables = copied(other.@derived_tables)
+      @distinct_on = copied(other.@distinct_on)
+      self
+    end
+
+    private def copied(collection : T?) : T? forall T
+      collection.dup unless collection.nil? || collection.empty?
+    end
+
+    # The first row mapped to *kind*, rendered with `LIMIT 1` instead of on a clone.
     def first(as kind)
-      clone.limit(1).get(kind)
+      sql, params = render(build(limit: 1))
+      PreparedSelect.new(@schema, sql, params).using(executor).get(kind)
     end
 
     def first!(as kind)
@@ -167,7 +197,7 @@ module CQL
         if [:count, :sum, :avg, :min, :max].includes?(key) && value.is_a?(Symbol)
           # Aggregates handle alias lookup internally now via build_aggr_expression
           # Use original Symbol key here for aggregate type
-          @select_expressions << build_aggr_expression(key, value) # Pass Symbol for aggr type
+          select_expressions << build_aggr_expression(key, value) # Pass Symbol for aggr type
         else
           # key is the alias (String or Symbol -> converted to String)
           table_alias_str = alias_or_aggr_str
@@ -203,18 +233,18 @@ module CQL
     def select(**fields)
       fields.each do |key, value|
         if [:count, :sum, :avg, :min, :max].includes?(key) && value.is_a?(Symbol)
-          @select_expressions << build_aggr_expression(key, value)
+          select_expressions << build_aggr_expression(key, value)
         else
           if value.is_a?(Array(Symbol))
             value.each do |name|
               column = find_column(name, key.to_s)
               @columns << column
-              @column_aliases[column] = key.to_s
+              column_aliases[column] = key.to_s
             end
           else
             column = find_column(key)
             @columns << column
-            @column_aliases[column] = value.to_s
+            column_aliases[column] = value.to_s
           end
         end
       end
@@ -260,7 +290,7 @@ module CQL
     def from(*tbls_or_aliases : Symbol | Hash(Symbol, Symbol))
       @query_tables.clear # FROM clause resets tables
       @columns.clear      # Also clear selected columns when FROM changes
-      @joins.clear        # Clear joins as well
+      @joins = nil
       tbls_or_aliases.each do |item|
         # parse_table_or_alias handles Symbol/Hash, returns {Symbol, Symbol?}
         table_name_sym, table_alias_sym = parse_table_or_alias(item)
@@ -282,7 +312,7 @@ module CQL
       statement = source.build
       @query_tables.clear
       @columns.clear
-      @joins.clear
+      @joins = nil
       table = CQL::DerivedTable.new(@schema, alias_name, statement, inline: true)
       @query_tables[alias_name.to_s] = {table: table, alias: alias_name.to_s}
       self
@@ -306,7 +336,7 @@ module CQL
                partition_by : (Symbol | Array(Symbol))? = nil,
                order_by : (Symbol | Array(Symbol) | Hash(Symbol, Symbol) | NamedTuple)? = nil,
                rows : Tuple(Int32 | Symbol, Int32 | Symbol)? = nil, range : Tuple(Int32 | Symbol, Int32 | Symbol)? = nil) : self
-      @select_expressions << CQL::WindowBuilder.new(self).build(function, column, name, offset, buckets, partition_by, order_by, rows, range)
+      select_expressions << CQL::WindowBuilder.new(self).build(function, column, name, offset, buckets, partition_by, order_by, rows, range)
       self
     end
 
@@ -335,7 +365,7 @@ module CQL
 
     # A fresh query that can reference this query's CTEs, for subqueries and CTE bodies.
     def nested : Query
-      Query.new(@schema).tap { |query| @derived_tables.each { |name, table| query.derived_tables[name] = table } }
+      Query.new(@schema).tap { |query| @derived_tables.try &.each { |name, table| query.derived_tables[name] = table } }
     end
 
     # Declares `WITH RECURSIVE name AS (anchor UNION [ALL] step)`. The block receives
@@ -356,7 +386,7 @@ module CQL
     def from(**tables_with_aliases)
       @query_tables.clear # FROM clause resets tables
       @columns.clear      # Also clear selected columns when FROM changes
-      @joins.clear        # Clear joins as well
+      @joins = nil
 
       # Iterate over the NamedTuple {table_name: alias_name}
       tables_with_aliases.each do |table_name_sym, table_alias_sym|
@@ -602,7 +632,7 @@ module CQL
     def order(*fields : Symbol | String)
       fields.each do |k|
         column = find_column(k) # Handles String like "alias.column" or Symbol
-        @order_by[column] = Expression::OrderDirection::ASC
+        order_by[column] = Expression::OrderDirection::ASC
       end
       self
     end
@@ -615,7 +645,7 @@ module CQL
       fields.each do |k, v|
         column = find_column(k) # Handles String like "alias.column" or Symbol
         direction = v.is_a?(Symbol) ? Expression::OrderDirection.parse(v.to_s) : Expression::OrderDirection::ASC
-        @order_by[column] = direction
+        order_by[column] = direction
       end
       self
     end
@@ -695,8 +725,7 @@ module CQL
     # PostgreSQL / CockroachDB: keep the first row of each group of equal *columns*
     # (the order is decided by `order`). Other dialects raise when SQL is generated.
     def distinct_on(*columns : Symbol) : self
-      @distinct_on.clear
-      columns.each { |name| @distinct_on << column_expression(name) }
+      @distinct_on = columns.map { |name| column_expression(name).as(Expression::BaseColumn) }.to_a
       self
     end
 
@@ -721,7 +750,7 @@ module CQL
     # => "SELECT * FROM users ORDER BY age"
     # ```
     def reorder(*fields : Symbol | String)
-      @order_by.clear
+      @order_by = nil
       order(*fields)
     end
 
@@ -729,7 +758,7 @@ module CQL
     # - **@param** fields [Hash] The fields and directions to order by
     # - **@return** [Query] The query object
     def reorder(**fields)
-      @order_by.clear
+      @order_by = nil
       order(**fields)
     end
 
@@ -743,8 +772,10 @@ module CQL
     # => "SELECT * FROM users ORDER BY name DESC"
     # ```
     def reverse_order
-      @order_by.each do |column, direction|
-        @order_by[column] = direction == Expression::OrderDirection::ASC ? Expression::OrderDirection::DESC : Expression::OrderDirection::ASC
+      @order_by.try do |order|
+        order.each do |column, direction|
+          order[column] = direction == Expression::OrderDirection::ASC ? Expression::OrderDirection::DESC : Expression::OrderDirection::ASC
+        end
       end
       self
     end
@@ -782,7 +813,7 @@ module CQL
         when :where
           @where = nil
         when :order
-          @order_by.clear
+          @order_by = nil
         when :limit
           @limit = nil
         when :offset
@@ -790,11 +821,11 @@ module CQL
         when :select
           @columns.clear
         when :group
-          @group_by.clear
+          @group_by = nil
         when :having
           @having = nil
         when :joins
-          @joins.clear
+          @joins = nil
         when :distinct
           @distinct = false
         end
@@ -830,6 +861,7 @@ module CQL
     # ameba/enable Metrics/CyclomaticComplexity
 
     # Builds the final query expression.
+    # - **@param** limit [Int32?] Overrides the query's limit for this build (the query is unchanged)
     # - **@return** [Expression::Query] The query expression
     #
     # **Example**
@@ -838,7 +870,7 @@ module CQL
     # query.build
     # => #<Expression::Query:0x00007f8b1b0b3b00>
     # ```
-    def build : Expression::Query
+    def build(limit : Int32? = @limit) : Expression::Query
       select_cols, aggr_exprs = build_select # Returns Expression::Column with String aliases
 
       Expression::Query.new(
@@ -848,13 +880,13 @@ module CQL
         build_group_by, # Returns Expression::GroupBy with Expression::Column(String alias)
         @having,        # Uses aliased expressions internally (String alias)
         build_order_by, # Returns Expression::OrderBy with Expression::Column(String alias)
-        @joins.dup,     # Join expressions contain String aliases
-        build_limit,
+        joins_snapshot,
+        build_limit(limit),
         distinct?,
         aggr_exprs, # Aggregate expressions contain String aliases
-        @ctes.dup,
+        ctes_snapshot,
         recursive?,
-        @distinct_on.dup,
+        distinct_on_snapshot,
         @row_lock
       )
     end
@@ -872,7 +904,7 @@ module CQL
     def count(column : Symbol = :*, as as_name : Symbol? = nil, distinct : Bool = false)
       CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
       raise ArgumentError.new("COUNT(DISTINCT *) is not valid; name a column") if distinct && column == :*
-      @select_expressions << if column == :*
+      select_expressions << if column == :*
         first_table_alias = @query_tables.first_key? # Use String key
         raise "Cannot COUNT(*) without a FROM clause" unless first_table_alias
         table_info = @query_tables[first_table_alias]
@@ -904,7 +936,7 @@ module CQL
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @select_expressions << Expression::Max.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+      select_expressions << Expression::Max.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -923,7 +955,7 @@ module CQL
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @select_expressions << Expression::Min.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+      select_expressions << Expression::Min.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -942,7 +974,7 @@ module CQL
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @select_expressions << Expression::Sum.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+      select_expressions << Expression::Sum.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -961,7 +993,7 @@ module CQL
       base_col = find_column(column)
       col_alias = find_alias_for_table(base_col.table.not_nil!) # Returns String
       # Pass String alias
-      @select_expressions << Expression::Avg.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
+      select_expressions << Expression::Avg.new(Expression::Column.new(base_col, alias_name: col_alias), as_name)
       self
     end
 
@@ -970,7 +1002,7 @@ module CQL
     private def build_from
       # FROM clause uses String aliases from @query_tables
       from_table_aliases = @query_tables.keys.reject do |table_alias_str|
-        @joins.any? { |j| j.table.alias_name == table_alias_str }
+        @joins.try &.any? { |j| j.table.alias_name == table_alias_str }
       end
       from_tables_info = from_table_aliases.map { |alias_str| @query_tables[alias_str] }
       # Create Expression::Table with String alias
@@ -1162,8 +1194,9 @@ module CQL
     end
 
     private def build_group_by
-      return if @group_by.empty?
-      group_cols = @group_by.map do |base_col|
+      group_by = @group_by
+      return if group_by.nil? || group_by.empty?
+      group_cols = group_by.map do |base_col|
         # find_alias_for_table returns String alias
         col_alias_str = find_alias_for_table(base_col.table.not_nil!)
         # Create Expression::Column with String alias
@@ -1173,8 +1206,9 @@ module CQL
     end
 
     private def build_order_by
-      return if @order_by.empty?
-      order_exprs = @order_by.map do |base_col, direction|
+      order = @order_by
+      return if order.nil? || order.empty?
+      order_exprs = order.map do |base_col, direction|
         # find_alias_for_table returns String alias
         col_alias_str = find_alias_for_table(base_col.table.not_nil!)
         # Create Expression::Column with String alias
@@ -1183,59 +1217,36 @@ module CQL
       Expression::OrderBy.new(order_exprs)
     end
 
-    private def build_limit
-      Expression::Limit.new(@limit, @offset) if @limit || @offset
+    private def build_limit(limit : Int32?)
+      Expression::Limit.new(limit, @offset) if limit || @offset
     end
 
     private def build_select
-      selected_columns = [] of Expression::Column
-      aggregate_expressions = [] of Expression::SelectExpression
+      aggregate_expressions = select_expressions_snapshot
+      select_everything = @columns.empty? && aggregate_expressions.empty?
+      {select_everything ? implicit_select_columns : explicit_select_columns, aggregate_expressions}
+    end
 
-      @select_expressions.each do |aggr_node|
-        # Aggregate nodes should already contain Expression::Column with String alias
-        aggregate_expressions << aggr_node
-      end
-
-      if @columns.empty? && aggregate_expressions.empty?
-        if @query_tables.empty?
-          return {[] of Expression::Column, [] of Expression::SelectExpression}
-        end
-        # Implicit SELECT * using String aliases
-        @query_tables.each do |table_alias_str, info|
-          pk = info[:table].primary_key
-          if pk && !selected_columns.any? { |col| col.alias_name == table_alias_str && col.column.name == pk.name }
-            # Pass String alias
-            selected_columns << Expression::Column.new(pk, alias_name: table_alias_str)
-          end
-          info[:table].columns.each_value do |base_col|
-            next if pk && base_col.name == pk.name
-            unless selected_columns.any? { |col| col.alias_name == table_alias_str && col.column.name == base_col.name }
-              # Pass String alias
-              selected_columns << Expression::Column.new(base_col, alias_name: table_alias_str)
-            end
-          end
-        end
-      else
-        # Explicit SELECT
-        selected_columns = @columns.map do |base_col|
-          # Check if this column has a custom alias
-          if @column_aliases.has_key?(base_col)
-            # Use the custom column alias
-            Expression::Column.new(base_col, alias_name: @column_aliases[base_col])
-          else
-            # Use the table alias
-            col_alias_str = find_alias_for_table(base_col.table.not_nil!)
-            Expression::Column.new(base_col, alias_name: col_alias_str)
-          end
+    # Every column of every table in the query, each table's primary key first.
+    private def implicit_select_columns : Array(Expression::Column)
+      selected = [] of Expression::Column
+      @query_tables.each do |table_alias, info|
+        table = info[:table]
+        pk = table.primary_key
+        selected << Expression::Column.new(pk, alias_name: table_alias) if pk
+        table.columns.each_value do |column|
+          selected << Expression::Column.new(column, alias_name: table_alias) unless pk && column.name == pk.name
         end
       end
+      selected
+    end
 
-      selected_columns.uniq! do |col_expr|
-        # Use String alias for uniqueness check
-        "#{col_expr.alias_name}.#{col_expr.column.name}"
+    # The selected columns under their custom or table alias, each once.
+    private def explicit_select_columns : Array(Expression::Column)
+      selected = @columns.map do |column|
+        Expression::Column.new(column, alias_name: @column_aliases.try(&.[column]?) || find_alias_for_table(column.table.not_nil!))
       end
-
-      {selected_columns, aggregate_expressions}
+      selected.uniq! { |column| {column.alias_name, column.column.name} }
     end
 
     private def from_source(table : CQL::Table, alias_name : String) : Expression::Table
@@ -1248,13 +1259,13 @@ module CQL
 
     private def declare(name : Symbol, statement : Expression::Statement, table : CQL::Table? = nil) : Nil
       CQL::Identifier.validate!(name.to_s, "CTE name")
-      raise ArgumentError.new("CTE #{name} is already declared") if @derived_tables.has_key?(name)
-      @derived_tables[name] = table || CQL::DerivedTable.new(@schema, name, statement)
-      @ctes << Expression::Cte.new(name.to_s, statement)
+      raise ArgumentError.new("CTE #{name} is already declared") if @derived_tables.try &.has_key?(name)
+      derived_tables[name] = table || CQL::DerivedTable.new(@schema, name, statement)
+      ctes << Expression::Cte.new(name.to_s, statement)
     end
 
     private def find_schema_table(name : Symbol) : CQL::Table
-      table = @derived_tables[name]? || @schema.tables[name]?
+      table = @derived_tables.try(&.[name]?) || @schema.tables[name]?
       raise ArgumentError.new("Table '#{name}' not found in schema") unless table
       table
     end
@@ -1486,7 +1497,7 @@ module CQL
     private def add_join_expression(table : CQL::Table, alias_name_str : String, type : Expression::JoinType, condition : Expression::Condition)
       # Create Expression::Table with String alias
       join_table_expr = Expression::Table.new(table, alias_name_str)
-      @joins << Expression::Join.new(type, join_table_expr, condition)
+      joins << Expression::Join.new(type, join_table_expr, condition)
       # Store with String alias key
       @query_tables[alias_name_str] = {table: table, alias: alias_name_str} unless @query_tables.has_key?(alias_name_str)
     end

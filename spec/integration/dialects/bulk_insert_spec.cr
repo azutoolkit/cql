@@ -43,6 +43,24 @@ describe "Bulk INSERT generation" do
     end
   end
 
+  it "rejects a later row with an extra or a different column" do
+    first = {:name => "Ada", :email => "ada@example.com"} of Symbol => DB::Any
+    extra = {:name => "Grace", :email => "g@example.com", :id => 2} of Symbol => DB::Any
+    swapped = {:name => "Grace", :id => 2} of Symbol => DB::Any
+
+    expect_raises(ArgumentError, /same columns/) { Northwind.insert.into(:users).values([first, extra]) }
+    expect_raises(ArgumentError, /same columns/) { Northwind.insert.into(:users).values([first, swapped]) }
+  end
+
+  it "keeps no partial values from a rejected later row" do
+    insert = Northwind.insert.into(:users).values(name: "Ada", email: "ada@example.com")
+
+    expect_raises(ArgumentError) { insert.values(name: "Bad", id: 9) }
+    _, params = insert.values(name: "Grace", email: "g@example.com").to_sql
+
+    params.should eq(["Ada", "ada@example.com", "Grace", "g@example.com"] of DB::Any)
+  end
+
   it "stays usable after a row with an unknown column is rejected" do
     insert = Northwind.insert.into(:users)
 

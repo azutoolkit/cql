@@ -50,8 +50,28 @@ module CQL::Performance
     # already its own replacement and needs no alternative.
     NORMALIZABLE_TOKEN = /\$\d+|\b\d+\b|'.+?'|\s+/
 
+    NORMALIZED_CACHE_LIMIT = 512
+
+    @@normalized = {} of String => String
+    @@normalized_lock = CQL::Compat::Mutex.new
+
+    # Queries repeat the same SQL text (values are bound), so each text is normalized once; at
+    # most `NORMALIZED_CACHE_LIMIT` are kept, the oldest inserted dropped first.
     def self.normalize_sql(sql : String) : String
-      sql.gsub(NORMALIZABLE_TOKEN) { |token| normalized_token(token) }.strip
+      if cached = @@normalized_lock.synchronize { @@normalized[sql]? }
+        return cached
+      end
+      normalized = sql.gsub(NORMALIZABLE_TOKEN) { |token| normalized_token(token) }.strip
+      @@normalized_lock.synchronize do
+        @@normalized[sql]? || begin
+          @@normalized.shift if @@normalized.size >= NORMALIZED_CACHE_LIMIT
+          @@normalized[sql] = normalized
+        end
+      end
+    end
+
+    def self.normalized_cache_size : Int32
+      @@normalized_lock.synchronize { @@normalized.size }
     end
 
     private def self.normalized_token(token : String) : String

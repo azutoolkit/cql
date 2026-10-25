@@ -1,3 +1,4 @@
+require "../compat"
 require "./base_expression"
 require "./condition_builder"
 
@@ -23,9 +24,34 @@ module Expression
       # Tokens that matter: quoted runs and comments (skipped), `??`, `?`, `::` and `:name`.
       TOKEN = /'(?:[^']++|'')*+'?|"(?:[^"]++|"")*+"?|`(?:[^`]++|``)*+`?|--[^\n]*|\/\*.*?(?:\*\/|\z)|\?\??|::|:[a-zA-Z_]\w*/m
 
+      CACHE_LIMIT = 512
+
+      @@cache = {} of String => Template
+      @@cache_lock = CQL::Compat::Mutex.new
+
       getter fragments : Array(String)
       # One entry per placeholder: nil for `?`, the name for `:name`.
       getter slots = [] of String?
+
+      # The parsed template for *sql*. Fragments are literals, so the same few strings repeat on
+      # every call; parsed templates are kept and shared, the oldest inserted dropped past
+      # `CACHE_LIMIT`.
+      def self.for(sql : String) : Template
+        if cached = @@cache_lock.synchronize { @@cache[sql]? }
+          return cached
+        end
+        template = new(sql)
+        @@cache_lock.synchronize do
+          @@cache[sql]? || begin
+            @@cache.shift if @@cache.size >= CACHE_LIMIT
+            @@cache[sql] = template
+          end
+        end
+      end
+
+      def self.cached_count : Int32
+        @@cache_lock.synchronize { @@cache.size }
+      end
 
       def initialize(sql : String)
         raise ArgumentError.new("A SQL fragment cannot contain a NUL byte") if sql.includes?(MARKER)
@@ -59,7 +85,7 @@ module Expression
     end
 
     def self.build(sql : String, positional : Tuple = Tuple.new, named : NamedTuple = NamedTuple.new) : Raw
-      template = Template.new(sql)
+      template = Template.for(sql)
       values = [] of Value
       positional.each { |value| values << to_value(value) }
       keyed = {} of String => Value

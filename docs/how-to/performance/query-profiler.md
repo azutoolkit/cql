@@ -14,7 +14,7 @@ CQL::Performance.enable_monitoring
 CQL::Performance.enable_sql_logging                # SQL is logged by the monitor, so this enables it too
 ```
 
-The environment can enable it as well: `CQL_MONITORING_ENABLED=true`, or `CRYSTAL_ENV`/`CQL_ENV=development` (see the table below). `CQL.build_schema` calls `enable_sql_logging` when `sql_logging` is on, which is the default in development and when `CRYSTAL_ENV` is unset. Enabling is one-way: `monitor_performance = false` and `CQL.reset_config!` do not switch off a monitor that is already on; use `CQL::Performance.disable!` for that.
+The environment can enable it as well: `CQL_MONITORING_ENABLED=true`, or `CRYSTAL_ENV`/`CQL_ENV=development` (see the table below). `CQL.build_schema` calls `enable_sql_logging` when `sql_logging` is on, which is the default when `CRYSTAL_ENV=development` (not when it is unset). Enabling is one-way: `monitor_performance = false` and `CQL.reset_config!` do not switch off a monitor that is already on; use `CQL::Performance.disable!` for that.
 
 Health checks and dashboards that read `CQL::Performance.metrics` only see data once monitoring is on, so enable it explicitly in production if you rely on them. The profiler keeps slow queries, including their bound parameters, in memory.
 

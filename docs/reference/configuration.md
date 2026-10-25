@@ -32,7 +32,7 @@ Settings marked **inert** are accepted and validated but nothing in `src/` reads
 | Setting | Type | Default | Notes |
 |---------|------|---------|-------|
 | `db` | `String` | `"sqlite3://./db/development.db"` | Database URL. The scheme selects the adapter: `postgres://`, `postgresql://`, `cockroachdb://`, `mysql://`, `sqlite3://`. Not read from `DATABASE_URL`; assign it yourself: `c.db = ENV["DATABASE_URL"]`. Cannot be empty. |
-| `env` | `String` | `ENV["CRYSTAL_ENV"]?` or `"development"` | Read once when the config is built. Assigning it later does **not** re-apply the environment defaults (see [Environment strategies](#environment-strategies)). |
+| `env` | `String` | `ENV["CRYSTAL_ENV"]?` or `"development"` | Read once when the config is built. Assigning it later does **not** re-apply the environment defaults (see [Environment strategies](#environment-strategies)). An unset `CRYSTAL_ENV` gives the development strategy but does not turn on SQL logging. |
 | `adapter_options` | `Hash(String, String)` | `{}` | Extra URL parameters appended to the connection URL. |
 | `logger` | `Log` | `Log.for("CQL::<Env>")` | The logger the migrator, schema and table classes capture at load time. |
 | `log_level` | `Log::Severity` | per environment | Applied to `logger` whenever the config calls `effective_logger` (migrator and SQL-logging setup). |
@@ -44,7 +44,7 @@ Settings marked **inert** are accepted and validated but nothing in `src/` reads
 | `auto_sync` | `Bool` | `true` | Passed to the migrator: rewrite the schema file on construction, `up` and `down`. Also gates the auto-fix in `build_migrator` and `CQL.verify_schema(auto_fix: true)`. |
 | `bootstrap` | `Bool` | `false` | `CQL.build_migrator` dumps the schema file from the live database right after building the migrator. |
 | `verify_schema` | `Bool` | `false` | `CQL.build_migrator` checks the schema file against the database (ignored when `bootstrap` is on) and logs a warning on mismatch; with `auto_sync` it rewrites the file. |
-| `sql_logging` | `Bool` | unset: on in `development` unless `CQL_NO_SQL_LOG` is set, off otherwise | `CQL.build_schema` calls `CQL::Performance.enable_sql_logging` when true, which also enables the performance monitor. Assigning `true` or `false` overrides the environment default. |
+| `sql_logging` | `Bool` | unset: on when the environment is named `development` (`CRYSTAL_ENV=development` or `c.env = "development"`) unless `CQL_NO_SQL_LOG` is set, off otherwise, including when `CRYSTAL_ENV` is unset | `CQL.build_schema` calls `CQL::Performance.enable_sql_logging` when true, which also enables the performance monitor. Assigning `true` or `false` overrides the environment default. |
 | `sql_logging_colorize` | `Bool` | `true` | Passed to `enable_sql_logging(colorize:)`. |
 | `pool_size` | `Int32` | `10`, then per environment | Writing it also writes `pool.size`. Must be positive. |
 | `timezone` | `Symbol` | `:utc` | **Inert.** Validated (`:utc` or `:local`), never read. |
@@ -155,7 +155,7 @@ Cache helpers on `CQL`: `cache_on(enabled = true)`, `cache_on?`, `cache_stats`, 
 
 `Config.new` reads `CRYSTAL_ENV`, picks a strategy, applies it once, and re-syncs `pool.size` from `pool_size`. `CQL.configure` then runs your block on top, so your assignments win.
 
-- An unset `CRYSTAL_ENV` means `development`. Any other unknown name (for example `staging`) also falls back to the development strategy. Only the exact strings `production`, `test` and `development` are recognised.
+- An unset `CRYSTAL_ENV` means `development` (pool sizes and other strategy defaults), except that SQL logging stays off until development is named. Any other unknown name (for example `staging`) also falls back to the development strategy. Only the exact strings `production`, `test` and `development` are recognised.
 - The strategy is applied at construction. `c.env = "production"` inside the block changes `env` (an unset `sql_logging` follows the new `env`) but does not re-apply the production defaults. Set `CRYSTAL_ENV` before the first use of `CQL.config`, or call `CQL.reset_config!` after changing it.
 
 | Setting | development | test | production |
@@ -175,7 +175,7 @@ Cache helpers on `CQL`: `cache_on(enabled = true)`, `cache_on?`, `cache_stats`, 
 | `bootstrap` | `false` | `false` | `false` |
 | `auto_load` | `true` | `false` | `false` |
 | `log_level` | `Debug` | `Error` | `Info` |
-| `sql_logging` | `true` unless `CQL_NO_SQL_LOG` | `false` | `false` |
+| `sql_logging` | `true` when development is named, unless `CQL_NO_SQL_LOG` | `false` | `false` |
 
 Warning: `URI.parse("sqlite3://:memory:")` raises, so `CQL.build_schema` fails with the test strategy's default `db`. Assign a file URL in test (`c.db = "sqlite3://./db/test.db"`).
 

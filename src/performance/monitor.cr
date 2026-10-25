@@ -189,21 +189,24 @@ module CQL::Performance
       detector.try(&.record_query(sql, normalized_sql: normalized_sql))
     end
 
+    # Logs at a level chosen by duration; the message is formatted only if that level is emitted.
     private def log_query(sql : String, params : Array(DB::Any),
                           execution_time : Time::Span, rows_affected : Int64?)
-      output = @sql_formatter.format(sql, params, execution_time, rows_affected, @context)
-
-      # Determine log level based on execution time
       case categorize_duration(execution_time,
         @config.profiling.slow_query_threshold,
         @config.profiling.very_slow_threshold)
       when :very_slow
-        Log.error { output }
+        Log.error { format_query(sql, params, execution_time, rows_affected) }
       when :slow
-        Log.warn { output }
+        Log.warn { format_query(sql, params, execution_time, rows_affected) }
       else
-        Log.info { output }
+        Log.info { format_query(sql, params, execution_time, rows_affected) }
       end
+    end
+
+    private def format_query(sql : String, params : Array(DB::Any),
+                             execution_time : Time::Span, rows_affected : Int64?) : String
+      @sql_formatter.format(sql, params, execution_time, rows_affected, @context)
     end
 
     private def failure_message(ex : Exception, sql : String, params : Array(DB::Any)) : String
