@@ -19,6 +19,13 @@ LabelKeyDB = CQL::Schema.define(
     primary :id, String, auto_increment: false
     text :name
   end
+
+  table :tickets do
+    primary :ticket_no, Int32
+    text :name
+    lock_version :version
+    timestamps
+  end
 end
 
 class Label
@@ -53,6 +60,24 @@ class Pass
 
   def initialize
   end
+end
+
+# A model on a custom key that touches timestamps and locks optimistically.
+class Ticket
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::OptimisticLocking
+
+  db_context LabelKeyDB, :tickets, primary_key: :ticket_no
+
+  property name : String = ""
+  property version : Int32 = 1
+  property created_at : Time = Time.utc
+  property updated_at : Time = Time.utc
+
+  def initialize
+  end
+
+  optimistic_locking version_column: :version
 end
 
 private def insert_badge(uuid : UUID)
@@ -96,20 +121,20 @@ end
 
 describe "Custom primary key column" do
   before_all do
-    {% for table in %w[labels badges passes] %}
+    {% for table in %w[labels badges passes tickets] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
       LabelKeyDB.{{table.id}}.create!
     {% end %}
   end
 
   after_all do
-    {% for table in %w[labels badges passes] %}
+    {% for table in %w[labels badges passes tickets] %}
       LabelKeyDB.{{table.id}}.drop! rescue nil
     {% end %}
   end
 
   before_each do
-    {% for table in %w[labels badges passes] %}
+    {% for table in %w[labels badges passes tickets] %}
       LabelKeyDB.exec("DELETE FROM {{table.id}}")
     {% end %}
   end
@@ -292,6 +317,147 @@ describe "Custom primary key column" do
 
       Badge.query.where_primary_key(uuid).to_sql_with_params[1].should eq([uuid.to_s])
       Badge.query.where_primary_key([uuid]).all.map(&.id).should eq([uuid])
+    end
+  end
+
+  describe "updating a record" do
+    stale = Time.utc(2020, 1, 1)
+
+    it "updates the row of a key through .update! with named arguments" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+
+      Label.update!(7, name: "Blanc")
+
+      Label.find!(7).name.should eq("Blanc")
+      Label.find!(8).name.should eq("Rouge")
+    end
+
+    it "updates the row of a key through .update! with a hash" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+
+      Label.update!(7, {:name => "Blanc"} of Symbol => DB::Any)
+
+      Label.find!(7).name.should eq("Blanc")
+      Label.find!(8).name.should eq("Rouge")
+    end
+
+    it "persists an attribute change through #save" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+      label = Label.find!(7)
+
+      label.name = "Blanc"
+      label.save.should be_true
+
+      Label.find!(7).name.should eq("Blanc")
+      Label.find!(8).name.should eq("Rouge")
+    end
+
+    it "persists an attribute change through #update!" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Rouge')")
+      label = Label.find!(7)
+
+      label.update!(name: "Gris")
+
+      Label.find!(7).name.should eq("Gris")
+      Label.find!(8).name.should eq("Rouge")
+    end
+
+    it "updates the row of a UUID key" do
+      uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+      insert_badge(uuid)
+      insert_badge(UUID.new("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"))
+
+      Badge.update!(Badge.find!(uuid).id!, name: "Silver")
+
+      Badge.find!(uuid).name.should eq("Silver")
+      Badge.query.where_primary_key(UUID.new("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d")).first!.name.should eq("Gold")
+    end
+
+    it "touches the updated_at of the record's row" do
+      LabelKeyDB.exec("INSERT INTO tickets (ticket_no, name, version, created_at, updated_at) VALUES (5, 'Bug', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00')")
+      ticket = Ticket.find!(5)
+
+      ticket.touch.should be_true
+
+      Ticket.find!(5).updated_at.should be > stale
+    end
+
+    it "touches the updated_at of the rows of several keys" do
+      LabelKeyDB.exec("INSERT INTO tickets (ticket_no, name, version, created_at, updated_at) VALUES (5, 'Bug', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00'), (6, 'Crash', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00'), (7, 'Typo', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00')")
+
+      Ticket.touch_all([5, 6]).should eq(2)
+
+      Ticket.find!(5).updated_at.should be > stale
+      Ticket.find!(6).updated_at.should be > stale
+      Ticket.find!(7).updated_at.should eq(stale)
+    end
+
+    it "bumps the lock version of the row through a locked update" do
+      LabelKeyDB.exec("INSERT INTO tickets (ticket_no, name, version, created_at, updated_at) VALUES (5, 'Bug', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00'), (6, 'Crash', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00')")
+      ticket = Ticket.find!(5)
+
+      ticket.name = "Fixed"
+      ticket.update!
+
+      ticket.version.should eq(2)
+      Ticket.find!(5).name.should eq("Fixed")
+      Ticket.find!(5).version.should eq(2)
+      Ticket.find!(6).name.should eq("Crash")
+      Ticket.find!(6).version.should eq(1)
+    end
+
+    it "rejects a locked update from a stale record" do
+      LabelKeyDB.exec("INSERT INTO tickets (ticket_no, name, version, created_at, updated_at) VALUES (5, 'Bug', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00')")
+      ticket = Ticket.find!(5)
+      LabelKeyDB.exec("UPDATE tickets SET version = 2 WHERE ticket_no = 5")
+
+      ticket.name = "Fixed"
+
+      expect_raises(CQL::OptimisticLockError) { ticket.update! }
+      Ticket.find!(5).name.should eq("Bug")
+    end
+
+    it "leaves the key column out of a locked update's SET and assigns the version once" do
+      LabelKeyDB.exec("INSERT INTO tickets (ticket_no, name, version, created_at, updated_at) VALUES (5, 'Bug', 1, '2020-01-01 00:00:00', '2020-01-01 00:00:00')")
+      ticket = Ticket.find!(5)
+      ticket.name = "Fixed"
+
+      updates = [] of String
+      CQL::Telemetry.subscribe("custom_primary_key_updates") { |event| updates << event.sql if event.operation == :update }
+      begin
+        ticket.update!
+      ensure
+        CQL::Telemetry.unsubscribe("custom_primary_key_updates")
+      end
+
+      updates.size.should eq(1)
+      set_clause = updates.first.split("WHERE").first
+      set_clause.should_not contain("ticket_no")
+      set_clause.scan("version =").size.should eq(1)
+    end
+
+    it "never writes the key through update_by" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+      Label.update_by({:name => "Noir"} of Symbol => DB::Any, {:name => "Blanc", :label_no => 99} of Symbol => DB::Any)
+
+      Label.find!(7).name.should eq("Blanc")
+      Label.find?(99).should be_nil
+    end
+
+    it "persists an attribute change of a UUID-keyed record through #save" do
+      uuid = UUID.new("9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f")
+      insert_badge(uuid)
+      badge = Badge.find!(uuid)
+
+      badge.name = "Silver"
+      badge.save
+
+      Badge.find!(uuid).name.should eq("Silver")
+    end
+
+    it "touches no rows for an empty list of keys" do
+      Ticket.touch_all([] of Int32).should eq(0)
     end
   end
 
