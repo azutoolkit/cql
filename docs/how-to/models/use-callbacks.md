@@ -90,6 +90,9 @@ When updating an existing record:
 7. `after_update`
 8. `after_save`
 
+Validations run once per save, before `before_save`, so values a `before_save`, `before_create` or `before_update`
+callback sets are not validated. Set derived values in `before_validation` if they must pass validation.
+
 When deleting with `record.delete!`:
 
 1. `before_destroy`

@@ -217,8 +217,8 @@ module CQL
           success = if !persisted?
             # Create path
             return false unless run_callbacks(:before_create)
-            result = create!
-            # Note: id is already set by create! on the instance, no need to reassign
+            # Already validated above; the instance create! would validate again
+            result = {{@type.id}}.create!(self)
             create_success = !result.nil?
             run_callbacks(:after_create) if create_success
             create_success
