@@ -21,6 +21,11 @@ InferredContextDB = CQL::Schema.define(:inferred_context, adapter: CQL::Adapter:
     primary :id, Int64
     column :name, String
   end
+
+  table :custom_widgets do
+    primary :id, Int64
+    column :name, String
+  end
 end
 
 InferredMirrorDB = CQL::Schema.define(:inferred_mirror, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("inferred_mirror.db")) do
@@ -127,6 +132,28 @@ end
 
 struct InferredTwin
   include CQL::ActiveRecord::Model(Int64)
+
+  property id : Int64?
+  property name : String
+
+  def initialize(@name : String); end
+end
+
+struct InferredCustomWidget
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context table: :custom_widgets
+
+  property id : Int64?
+  property name : String
+
+  def initialize(@name : String); end
+end
+
+struct InferredSprocket
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: InferredMirrorDB
 
   property id : Int64?
   property name : String
@@ -268,6 +295,18 @@ describe "Model without db_context" do
     it "joins a has_many association on the inferred table names" do
       InferredCategory.query.joins(:gadgets).query.to_sql.first
         .should contain("INNER JOIN inferred_gadgets ON inferred_gadgets.inferred_category_id = inferred_categories.id")
+    end
+  end
+
+  describe "partial db_context" do
+    it "keeps the given table and infers the schema that declares it" do
+      InferredCustomWidget.table.should eq(:custom_widgets)
+      InferredCustomWidget.schema.should eq(InferredContextDB)
+    end
+
+    it "keeps the given schema and infers the table from the type name" do
+      InferredSprocket.schema.should eq(InferredMirrorDB)
+      InferredSprocket.table.should eq(:inferred_sprockets)
     end
   end
 end

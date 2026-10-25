@@ -5,9 +5,10 @@ module CQL
         @@schema : CQL::Schema? = nil
         @@table : Symbol? = nil
 
-        # Define the schema and table for the model
-        # - **@param** schema [CQL::Schema] The schema to use
-        # - **@param** table [Symbol] The table to use
+        # Define the schema and/or table for the model. With the `db_context` macro the one
+        # left out is inferred; a runtime call leaves it at its current value.
+        # - **@param** schema [CQL::Schema?] The schema to use
+        # - **@param** table [Symbol?] The table to use
         # - **@return** [Nil]
         #
         # **Example** Defining the schema and table
@@ -18,17 +19,28 @@ module CQL
         #   db_context AcmeDB, :users
         # end
         # ```
-        def self.db_context(schema : CQL::Schema, table : Symbol)
-          @@schema = schema
-          @@table = table
+        #
+        # **Example** Defining only one of them
+        #
+        # ```
+        # db_context table: :people # schema: the one declaring `:people`
+        # db_context schema: AcmeDB # table: `:users`, from the type name
+        # ```
+        def self.db_context(schema : CQL::Schema? = nil, table : Symbol? = nil)
+          @@schema = schema if schema
+          @@table = table if table
         end
 
         {% verbatim do %}
-          macro db_context(schema, table)
-            CQL_SCHEMA_CONTEXT = {{schema}}
-            CQL_TABLE_NAME = {{table}}
+          macro db_context(schema = nil, table = nil)
+            {% if schema %}
+              CQL_SCHEMA_CONTEXT = {{schema}}
+            {% end %}
+            {% if table %}
+              CQL_TABLE_NAME = {{table}}
+            {% end %}
 
-            self.db_context({{schema}}, {{table}})
+            self.db_context(schema: {{schema}}, table: {{table}})
           end
         {% end %}
 
@@ -106,11 +118,10 @@ module CQL
               @@table || {{table}}
             end
 
-            {% table_name = table.id %}
-
             # Schema constants initialize lazily, so a model without `db_context`
             # finds its schema at compile time: the one `CQL::Schema.define` block,
             # in its enclosing namespaces or at the top level, that declares its table.
+            {% table_name = table.id %}
             {% unless schema = @type.constant(:CQL_SCHEMA_CONTEXT) %}
               {% namespaces = @type.name(generic_args: false).split("::")[0...-1] %}
               {% declaring_schemas = [] of StringLiteral %}
@@ -129,6 +140,14 @@ module CQL
                 {% end %}
               {% end %}
               {% schema = declaring_schemas.size == 1 ? declaring_schemas.first : nil %}
+              {% unless schema %}
+                {% model = @type.name %}
+                {% message = if declaring_schemas.empty?
+                               "CQL schema mapping error in #{model}: no `CQL::Schema.define` block declares table `#{table_name}`. Declare the table in a schema, or add `db_context MySchema, :#{table_name}` to #{model}."
+                             else
+                               "CQL schema mapping error in #{model}: schemas #{declaring_schemas.map { |schema_path| "`#{schema_path.id}`" }.join(", ").id} all declare table `#{table_name}`. Add `db_context <one of them>, :#{table_name}` to #{model} to pick one."
+                             end %}
+              {% end %}
             {% end %}
 
             # Return the schema for the model: the `db_context` schema, else the
@@ -144,12 +163,6 @@ module CQL
               {% if schema %}
                 @@schema || {{schema.id}}
               {% else %}
-                {% model = @type.name %}
-                {% message = if declaring_schemas.empty?
-                               "CQL schema mapping error in #{model}: no `CQL::Schema.define` block declares table `#{table_name}`. Declare the table in a schema, or add `db_context MySchema, :#{table_name}` to #{model}."
-                             else
-                               "CQL schema mapping error in #{model}: schemas #{declaring_schemas.map { |name| "`#{name.id}`" }.join(", ").id} all declare table `#{table_name}`. Add `db_context <one of them>, :#{table_name}` to #{model} to pick one."
-                             end %}
                 @@schema || raise CQL::ActiveRecord::SchemaMappingError.new({{message}})
               {% end %}
             end
