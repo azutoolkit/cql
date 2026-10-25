@@ -48,17 +48,31 @@ module CQL
     end
   end
 
-  # The one place a statement is actually executed: performance tracking and
-  # telemetry (events, tracing) happen here for every kind of statement.
+  # The one place a statement is actually executed: it is timed once, and that
+  # measurement feeds telemetry (events, tracing) and the performance monitor.
   module Execution
     def self.run(executor : Executor, sql : String, params : Array(DB::Any), operation : Symbol, track : Bool = true, &)
-      Telemetry.observe(executor.adapter, operation, sql, params) do
-        if track
-          CQL::Performance.track(sql, params) { executor.exec_query { |connection| yield connection } }
-        else
-          executor.exec_query { |connection| yield connection }
-        end
+      monitor = CQL::Performance.monitor if track
+      monitor = nil unless monitor.try &.enabled?
+      unless Telemetry.observing? || monitor
+        return Telemetry.in_span(operation, sql) { executor.exec_query { |connection| yield connection } }
       end
+
+      started = Time.instant
+      begin
+        result = Telemetry.in_span(operation, sql) { executor.exec_query { |connection| yield connection } }
+      rescue ex
+        report(executor.adapter, operation, sql, params, started, ex, nil, monitor)
+        raise ex
+      end
+      report(executor.adapter, operation, sql, params, started, nil, result, monitor)
+      result
+    end
+
+    private def self.report(adapter, operation, sql, params, started, error, result, monitor) : Nil
+      event = Telemetry.query_event(adapter, operation, sql, params, Time.instant - started, error, result)
+      Telemetry.publish(event)
+      monitor.try &.record(event, params)
     end
   end
 end

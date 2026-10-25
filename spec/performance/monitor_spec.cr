@@ -677,3 +677,87 @@ describe "CQL::Performance.enable_sql_logging" do
     end
   end
 end
+
+describe "CQL::Performance::Monitor with CQL::Execution.run" do
+  events = [] of CQL::Telemetry::QueryEvent
+
+  profiling_monitor = -> do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.profiling.enabled = true
+    config.detection.enabled = false
+    config.logging.enabled = false
+    CQL::Performance::Monitor.new(config: config)
+  end
+
+  statement_count = ->(monitor : CQL::Performance::Monitor) { monitor.profiler.not_nil!.statistics.values.sum(&.[:count]) }
+  total_ms = ->(monitor : CQL::Performance::Monitor) { monitor.profiler.not_nil!.statistics.values.sum(&.[:total_ms]) }
+  select_names = -> { UserDB.query.from(:users).select(:name).where(name: "ada").all(as: String) }
+
+  before_each do
+    CQL::Telemetry.reset!
+    UserDB.users.create!
+    events.clear
+    CQL::Telemetry.subscribe("spec") { |event| events << event }
+  end
+
+  after_each do
+    CQL::Telemetry.reset!
+    UserDB.users.drop!
+  end
+
+  it "records the exact duration the telemetry event reports for one statement" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) { select_names.call }
+
+    events.size.should eq(1)
+    statement_count.call(monitor).should eq(1)
+    total_ms.call(monitor).should eq(events.first.duration.total_milliseconds)
+  end
+
+  it "keeps recording after Telemetry.reset! drops the subscribers" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) do
+      select_names.call
+      statement_count.call(monitor).should eq(1)
+      CQL::Telemetry.reset!
+      select_names.call
+    end
+
+    statement_count.call(monitor).should eq(2)
+  end
+
+  it "records a failed statement with a measured duration and counts the error" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) do
+      expect_raises(SQLite3::Exception, /no such column/) { UserDB.query.from(:users).where("nope = ?", 1).all(as: Int32) }
+    end
+
+    trackers = monitor.profiler.not_nil!.stats_trackers.values
+    trackers.size.should eq(1)
+    trackers.first.total_time.should be > Time::Span.zero
+    trackers.first.errors.should eq(1)
+    monitor.error_count.should eq(1)
+  end
+
+  it "does not record an explain" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) { UserDB.query.from(:users).where(name: "ada").explain }
+
+    events.map(&.operation).should eq([:explain])
+    monitor.profiler.not_nil!.statistics.should be_empty
+  end
+
+  it "does not record DDL run through Schema#exec" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) { UserDB.exec("SELECT 1") }
+
+    events.map(&.operation).should eq([:ddl])
+    monitor.profiler.not_nil!.statistics.should be_empty
+  end
+end

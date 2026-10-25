@@ -209,20 +209,26 @@ module CQL
     # Runs the block as one observed statement: inside the tracer's span, then
     # reports the event to the subscribers.
     def self.observe(adapter : Adapter, operation : Symbol, sql : String, params : Array(DB::Any), & : -> T) : T forall T
-      return in_span(operation, sql) { yield } if @@subscribers.empty?
+      return in_span(operation, sql) { yield } unless observing?
 
       started = Time.instant
       begin
         result = in_span(operation, sql) { yield }
       rescue ex
-        emit(adapter, operation, sql, params, Time.instant - started, ex, nil)
+        publish(query_event(adapter, operation, sql, params, Time.instant - started, ex, nil))
         raise ex
       end
-      emit(adapter, operation, sql, params, Time.instant - started, nil, rows_affected(result))
+      publish(query_event(adapter, operation, sql, params, Time.instant - started, nil, result))
       result
     end
 
-    private def self.in_span(operation : Symbol, sql : String, & : -> T) : T forall T
+    # :nodoc:
+    def self.observing? : Bool
+      !@@subscribers.empty?
+    end
+
+    # :nodoc:
+    def self.in_span(operation : Symbol, sql : String, & : -> T) : T forall T
       if tracer = @@tracer
         result = uninitialized T
         completed = false
@@ -246,9 +252,15 @@ module CQL
       result.is_a?(DB::ExecResult) ? result.rows_affected : nil
     end
 
-    private def self.emit(adapter, operation, sql, params, duration, error, rows) : Nil
+    # :nodoc:
+    def self.query_event(adapter : Adapter, operation : Symbol, sql : String, params : Array(DB::Any),
+                         duration : Time::Span, error : Exception?, result) : QueryEvent
       context = @@mutex.synchronize { @@contexts[Fiber.current]? }
-      event = QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows, context)
+      QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows_affected(result), context)
+    end
+
+    # :nodoc:
+    def self.publish(event : QueryEvent) : Nil
       notify(@@subscribers, event)
     end
 

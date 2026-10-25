@@ -46,7 +46,20 @@ module CQL::Performance
     def monitor_query(sql : String, params : Array(DB::Any) = [] of DB::Any, &)
       return yield unless enabled?
 
-      measure_and_record(sql, params) { yield }
+      started = Time.instant
+      begin
+        result = yield
+      rescue ex
+        record_statement(sql, params, Time.instant - started, nil, ex)
+        raise ex
+      end
+      record_statement(sql, params, Time.instant - started, (result.rows_affected if result.is_a?(DB::ExecResult)), nil)
+      result
+    end
+
+    # Records a statement `CQL::Execution.run` has already timed.
+    def record(event : CQL::Telemetry::QueryEvent, params : Array(DB::Any)) : Nil
+      record_statement(event.sql, params, event.duration, event.rows_affected, event.error)
     end
 
     # API - just wrap the query
@@ -149,31 +162,16 @@ module CQL::Performance
       reconfigure_components
     end
 
-    private def measure_and_record(sql : String, params : Array(DB::Any), &)
-      # Execute and measure
-      result, execution_time = measure_execution { yield }
-
-      # Extract metadata
-      rows_affected = extract_rows_affected(result)
-
-      # Record in components
-      record_execution(sql, params, execution_time, rows_affected)
-
-      # Log if configured
-      log_query(sql, params, execution_time, rows_affected) if @config.logging.enabled?
-
-      result
-    rescue ex
-      # Track error count
-      @error_count.add(1)
-
-      # Record error in profiler
-      record_execution(sql, params, Time::Span.zero, nil, ex.message)
-
-      # Log error if configured
-      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
-
-      raise ex
+    private def record_statement(sql : String, params : Array(DB::Any), duration : Time::Span,
+                                 rows_affected : Int64?, error : Exception?) : Nil
+      if error
+        @error_count.add(1)
+        record_execution(sql, params, duration, nil, error.message)
+        Log.error { "Query failed: #{error.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
+      else
+        record_execution(sql, params, duration, rows_affected)
+        log_query(sql, params, duration, rows_affected) if @config.logging.enabled?
+      end
     end
 
     private def record_execution(sql : String, params : Array(DB::Any),
@@ -207,13 +205,6 @@ module CQL::Performance
     private def format_query(sql : String, params : Array(DB::Any),
                              execution_time : Time::Span, rows_affected : Int64?) : String
       @sql_formatter.format(sql, params, execution_time, rows_affected, @context)
-    end
-
-    private def extract_rows_affected(result) : Int64?
-      return unless result.responds_to?(:rows_affected)
-      result.rows_affected.to_i64
-    rescue
-      nil
     end
 
     private def build_performance_report : PerformanceReport
