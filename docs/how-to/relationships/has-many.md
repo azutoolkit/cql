@@ -183,6 +183,19 @@ user.posts.count  # => 3
 
 The parent must be saved first; `user.posts` raises `CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord` otherwise.
 
+### Insert Many Related Rows at Once
+
+`insert_<name>_all` inserts rows of column values with `Model.insert_all` (multi-row INSERTs, in chunks under the bind-parameter limit), sets the foreign key on every row to the parent's id, and returns how many rows were inserted:
+
+```crystal
+user.insert_posts_all([
+  {title: "First Post", body: "Hello world"},
+  {title: "Second Post", body: "Another post"},
+]) # => 2
+```
+
+It sends one statement per chunk instead of one per post, but like `insert_all` it runs no validations or callbacks and returns no records; use `user.posts.create` or `create_posts` when those matter. The foreign key (`foreign_key:`, `user_id` here) is set on every row, replacing any value a row gives, and an association's `scope:` is not applied: rows are inserted as given, so a scoped association only returns those that match its scope. Rows may be hashes or named tuples, and `batch_size:` caps the rows per statement as in `insert_all` (the foreign key counts toward the bind-parameter limit). The parent must be saved first.
+
 ## Delete Related Records
 
 ### Delete Specific Posts

@@ -32,6 +32,7 @@ require "./repository"
 require "./schema_dump"
 require "./active_record/model"
 require "./active_record/soft_deletable"
+require "./active_record/dirty_tracking"
 require "./performance"
 require "./configure"
 

@@ -51,6 +51,7 @@ module CQL
     # Column names (in order) established by the first row; later rows are
     # aligned to this order and must provide exactly the same columns.
     @column_index : Hash(Symbol, Int32) = {} of Symbol => Int32
+    @column_names : Array(Symbol) = [] of Symbol
     @back : Array(Expression::Column) = Array(Expression::Column).new
     @query : Query? = nil
     # Upsert: the conflict target, then what to do about it (nil = not chosen yet).
@@ -365,21 +366,27 @@ module CQL
       columns.each_with_index do |column, index|
         @columns << column
         @column_index[column.column.name] = index
+        @column_names << column.column.name
       end
       @values << row
     end
 
-    # Later rows must name the same columns, in any order; values are placed by column position.
+    # Later rows must name the same columns, in any order; values are placed by column position
+    # (a row that lists them in the first row's order needs no index lookup).
     private def add_row(fields)
       row = Array(DB::Any).new(@column_index.size, nil)
       count = 0
       fields.each do |field, value|
-        index = @column_index[field]? || raise_column_mismatch(fields)
-        row[index] = db_value(value)
+        row[column_position(field, count, fields)] = db_value(value)
         count += 1
       end
       raise_column_mismatch(fields) unless count == @column_index.size
       @values << row
+    end
+
+    private def column_position(field : Symbol, count : Int32, fields) : Int32
+      return count if @column_names[count]? == field
+      @column_index[field]? || raise_column_mismatch(fields)
     end
 
     private def db_value(value) : DB::Any
