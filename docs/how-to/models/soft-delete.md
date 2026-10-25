@@ -76,6 +76,10 @@ Without `before_destroy`/`after_destroy` callbacks or `dependent:` associations 
 SELECT of the ids, then one UPDATE per chunk of the database's bind limit). Otherwise it soft deletes record by record,
 in one transaction, so they run.
 
+Rows that are already soft deleted are left alone, also through `with_deleted.delete_all`, `User.delete_ids` and
+`user.delete!` (which returns false without running callbacks when the instance is already marked deleted): they keep
+their first `deleted_at` and are not counted. A parent's `dependent: :destroy` treats such children as already deleted.
+
 ### Associations
 
 `delete!` applies the `dependent:` strategy of the record's associations, as a hard delete does (see

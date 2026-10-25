@@ -30,6 +30,7 @@ LabelKeyDB = CQL::Schema.define(
   table :memos do
     primary :memo_no, Int32
     text :name
+    integer :shelf_id, null: true
     timestamp :deleted_at, null: true
   end
 
@@ -185,6 +186,7 @@ class Memo
   db_context LabelKeyDB, :memos, primary_key: :memo_no
 
   property name : String = ""
+  property shelf_id : Int32?
 
   def initialize
   end
@@ -224,6 +226,7 @@ class Shelf
 
   many_to_many :labels, Label, join_through: ShelfLabel, foreign_key: :shelf_id, association_foreign_key: :label_no
   many_to_many :memos, Memo, join_through: ShelfMemo, foreign_key: :shelf_id, association_foreign_key: :memo_no, dependent: :delete_all
+  has_many :pinned_memos, Memo, foreign_key: :shelf_id, dependent: :destroy
   has_many :notes, ShelfNote, foreign_key: :shelf_id
 
   def initialize
@@ -831,6 +834,26 @@ describe "Custom primary key column" do
       memo_numbers.should eq([7, 8, 9])
     end
 
+    it "leaves already soft-deleted rows alone in a soft .delete_ids" do
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name, deleted_at) VALUES (7, 'Note', '2020-01-01 00:00:00'), (8, 'Draft', NULL)")
+
+      Memo.delete_ids([7, 8]).should eq(1)
+
+      deleted_memo_numbers.should eq([7, 8])
+      LabelKeyDB.exec_query(&.query_one("SELECT deleted_at FROM memos WHERE memo_no = 7", as: String)).should start_with("2020-01-01")
+    end
+
+    it "deletes a parent whose dependent: :destroy children include an already soft-deleted one" do
+      LabelKeyDB.exec("INSERT INTO shelves (id, name) VALUES (1, 'Oak')")
+      LabelKeyDB.exec("INSERT INTO memos (memo_no, name, shelf_id, deleted_at) VALUES (7, 'Old', 1, '2020-01-01 00:00:00'), (8, 'New', 1, NULL)")
+
+      Shelf.find!(1).delete!.should be_true
+
+      Shelf.find?(1).should be_nil
+      deleted_memo_numbers.should eq([7, 8])
+      LabelKeyDB.exec_query(&.query_one("SELECT deleted_at FROM memos WHERE memo_no = 7", as: String)).should start_with("2020-01-01")
+    end
+
     it "restores only the soft-deleted rows through .restore_all" do
       LabelKeyDB.exec("INSERT INTO memos (memo_no, name, deleted_at) VALUES (7, 'Note', '2020-01-01 00:00:00'), (8, 'Draft', NULL)")
 
@@ -1308,10 +1331,19 @@ describe "Custom primary key column" do
         primary :tag_uuid, String, auto_increment: false
         integer :id
       end
+
+      table :avatars do
+        primary :id, Int32
+        blob :image, null: true
+      end
     end
 
     validate = ->(table : Symbol, key : Symbol, getters : Hash(String, String), schema : CQL::Schema) do
       CQL::ActiveRecord::SchemaValidator.validate_model!("Model", schema, table, getters, primary_key: key)
+    end
+
+    it "accepts a Bytes getter on a blob column" do
+      validate.call(:avatars, :id, {"id" => "Int32 | ::Nil", "image" => "Bytes | ::Nil"}, keyless)
     end
 
     it "does not check a plain id column against the key getter on a table keyed on another column" do

@@ -27,6 +27,7 @@ CQL validates `has_many` declarations during compilation:
 - The `foreign_key` option must be a symbol literal when provided.
 - The `dependent` option must be one of `:destroy`, `:delete_all`, `:nullify`, or `:restrict_with_error`.
 - If the target model is available during compilation, the target foreign key type must match the parent model primary key type.
+- The foreign key must not be the target's primary key (`id`, or the column named by `db_context ..., primary_key:`): shared-primary-key associations are not supported.
 
 Example:
 

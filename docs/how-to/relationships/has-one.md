@@ -50,6 +50,8 @@ has_one :profile, Profile, :user_id, dependent: :nullify, cache: false
 
 `dependent` accepts `:destroy`, `:delete` and `:nullify`; any other value is a compile-time error. It decides what happens to an existing profile when you call `create_profile` or `delete_profile` (`:destroy` when not declared). When you declare it, deleting the user applies it too (see [When the Parent Is Deleted](#when-the-parent-is-deleted)). With `cache: true` (the default) the record is cached on the instance after the first access.
 
+The foreign key must be a column of its own on the target. A foreign key that is also the target's primary key (a shared primary key, e.g. `profiles.user_id` as the key) is a compile-time error: declare `belongs_to` from the target instead.
+
 `User.preload(:profile).all` loads every user's profile with one extra query (per chunk of the database's bind limit) and caches it, so `user.profile` runs no query. It needs `cache: true`, and it raises `ArgumentError` when the target has no foreign key attribute. As with `user.profile`, a user with several profiles gets an arbitrary one; keep the foreign key unique.
 
 ## Define the Relationship

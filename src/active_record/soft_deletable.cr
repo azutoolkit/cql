@@ -86,9 +86,10 @@ module CQL
         end
 
         # Override delete! to perform soft delete; the `dependent:` strategies of the associations
-        # still apply, and `restore!` does not undo them
+        # still apply, and `restore!` does not undo them. An already soft deleted record is left as it
+        # is (false, no callbacks), so it keeps its first `deleted_at`.
         def delete! : Bool
-          return false if id.nil?
+          return false if id.nil? || deleted?
 
           check_delete_restrictions
 
@@ -207,9 +208,15 @@ module CQL
           set_deleted_at(ids, Time.utc)
         end
 
+        # Soft deleting only stamps rows not already deleted, so their first `deleted_at` stands and
+        # the count is of rows this call deleted.
         private def self.set_deleted_at(ids : Array(DB::Any), value : Time?) : Int64
-          key = primary_key_expression
-          CQL::Update.new(schema).table(table).set({:deleted_at => value.as(DB::Any)}).where { key.in(ids) }.commit.rows_affected
+          keys = primary_key_expression.in(ids)
+          deleted_at = ::Expression::Column.new(cql_column(:deleted_at))
+          rows = value ? keys & deleted_at.null : keys
+          CQL::Update.new(schema).table(table).set({:deleted_at => value.as(DB::Any)})
+            .where { rows }
+            .commit.rows_affected
         end
 
         # Soft deletes every active record and returns how many, in bulk unless the model
