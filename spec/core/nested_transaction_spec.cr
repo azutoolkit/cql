@@ -33,10 +33,15 @@ describe "CQL::Schema#transaction nesting" do
   committed_columns = -> do
     DB.open("sqlite3://#{db_file}", &.query_all("SELECT name FROM pragma_table_info('nested_alters')", as: String))
   end
+  # Reads through a separate connection, so it sees only committed schema changes.
+  committed_probe_tables = -> do
+    DB.open("sqlite3://#{db_file}", &.query_all("SELECT name FROM sqlite_master WHERE name = 'ddl_tx_probe'", as: String))
+  end
 
   before_each do
     schema.build
     schema.exec("DELETE FROM nested_rows")
+    schema.exec("DROP TABLE IF EXISTS ddl_tx_probe")
   end
 
   after_all do
@@ -340,5 +345,31 @@ describe "CQL::Schema#transaction nesting" do
     mysql_schema.alter(:nested_alters) { add_column :mysql_outside_transaction, String }
 
     committed_columns.call.should contain "mysql_outside_transaction"
+  end
+
+  it "rolls back DDL run in a ddl_transaction when the block raises" do
+    expect_raises(Exception, "boom") do
+      schema.ddl_transaction do
+        schema.exec("CREATE TABLE ddl_tx_probe (id INTEGER)")
+        raise "boom"
+      end
+    end
+
+    committed_probe_tables.call.should be_empty
+  end
+
+  it "runs a ddl_transaction block bare outside a transaction on a dialect whose DDL commits implicitly" do
+    events = [] of CQL::Telemetry::TransactionEvent
+    CQL::Telemetry.subscribe_transactions("ddl_transaction_spec") { |event| events << event }
+    ran = false
+
+    begin
+      mysql_schema.ddl_transaction { ran = true }
+    ensure
+      CQL::Telemetry.unsubscribe_transactions("ddl_transaction_spec")
+    end
+
+    ran.should be_true
+    events.should be_empty
   end
 end

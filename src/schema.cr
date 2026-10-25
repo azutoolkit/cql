@@ -451,23 +451,32 @@ module CQL
     # ```
     def alter(table_name : Symbol, &)
       raise Error.new("Table '#{table_name}' not found") unless tables[table_name]?
-      require_transactional_ddl!
 
-      alter_table = AlterTable.new(tables[table_name], self)
-      with alter_table yield
-      sql_statements = alter_table.to_sql(new_generator)
+      ddl_transaction do
+        alter_table = AlterTable.new(tables[table_name], self)
+        with alter_table yield
+        sql_statements = alter_table.to_sql(new_generator)
 
-      transaction do |tx|
-        sql_statements.split(";\n").each do |sql|
-          next if sql.empty?
-          tx.connection.exec(sql)
+        with_connection do |connection|
+          sql_statements.split(";\n").each do |sql|
+            next if sql.empty?
+            connection.exec(sql)
+          end
         end
       end
     end
 
+    # Runs schema changes atomically where DDL is transactional (a SAVEPOINT inside an open
+    # transaction); where DDL commits implicitly, runs them bare and refuses inside an open transaction.
+    def ddl_transaction(&)
+      require_transactional_ddl!
+      return yield unless dialect.supports_transactional_ddl?
+      transaction { yield }
+    end
+
     # Raises where DDL commits implicitly, because running it inside an open transaction would
     # silently commit the caller's pending work.
-    def require_transactional_ddl! : Nil
+    private def require_transactional_ddl! : Nil
       return if active_transaction.nil? || dialect.supports_transactional_ddl?
       raise DialectError.new(dialect.display_name, "schema changes inside a transaction", "Run it outside the transaction.")
     end

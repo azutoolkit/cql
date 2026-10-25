@@ -48,9 +48,13 @@ class TxNonTransactionalDdlSchema < CQL::Schema
   end
 end
 
+private def tx_schema(uri : String, schema_class : CQL::Schema.class = CQL::Schema)
+  schema_class.new(:migration_tx, uri, CQL::Adapter::SQLite)
+end
+
 private def with_migrator(uri : String, *migrations : CQL::BaseMigration.class, schema_class : CQL::Schema.class = CQL::Schema, &)
   original = CQL::Migrator.migrations
-  migrator = CQL::Migrator.new(schema_class.new(:migration_tx, uri, CQL::Adapter::SQLite), CQL::MigratorConfig.new(auto_sync: false))
+  migrator = CQL::Migrator.new(tx_schema(uri, schema_class), CQL::MigratorConfig.new(auto_sync: false))
   begin
     CQL::Migrator.migrations = [*migrations] of CQL::BaseMigration.class
     yield migrator
@@ -115,6 +119,23 @@ describe "CQL::Migrator#up transaction" do
     committed_versions.call.should be_empty
   end
 
+  it "refuses to create the migrations table inside a caller's transaction without transactional DDL" do
+    schema = tx_schema(uri, TxNonTransactionalDdlSchema)
+    statements = [] of String
+    CQL::Telemetry.subscribe("migration_tx_spec") { |event| statements << event.sql }
+
+    begin
+      expect_raises(CQL::DialectError, "MySQL") do
+        schema.transaction { CQL::Migrator.new(schema, CQL::MigratorConfig.new(auto_sync: false)) }
+      end
+    ensure
+      CQL::Telemetry.unsubscribe("migration_tx_spec")
+      schema.close
+    end
+
+    statements.select(&.includes?("CREATE")).should be_empty
+  end
+
   it "runs every migration and its record on the single pooled connection" do
     pool_of_one = "#{uri}?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05"
 
@@ -125,5 +146,21 @@ describe "CQL::Migrator#up transaction" do
     end
 
     committed_tables.call.should eq(["tx_migration_a", "tx_migration_c"])
+  end
+
+  it "creates the migrations table and runs migrations inside a caller's transaction on the single pooled connection" do
+    pool_of_one = "#{uri}?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05"
+    original = CQL::Migrator.migrations
+    schema = tx_schema(pool_of_one)
+
+    begin
+      CQL::Migrator.migrations = [TxMigrationCreateA] of CQL::BaseMigration.class
+      schema.transaction { CQL::Migrator.new(schema, CQL::MigratorConfig.new(auto_sync: false)).up }
+    ensure
+      CQL::Migrator.migrations = original
+      schema.close
+    end
+
+    committed_tables.call.should eq(["tx_migration_a"])
   end
 end
