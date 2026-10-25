@@ -134,7 +134,7 @@ rows.first.age  # nil, because it was not selected
 
 ## The metadata behind it
 
-For every model with a `db_context`, CQL generates:
+For every model, CQL generates:
 
 - `Author::Columns`: one typed accessor per scalar getter, and one per association returning the target model's `Columns`.
 - `Author.cql_columns`: the `Columns` proxy for the model's table (what the `where` block runs on).
