@@ -10,12 +10,20 @@ private def within(span : Time::Span = 1.second, file = __FILE__, line = __LINE_
   end
 end
 
-private def stuck_queue(capacity = 8) : CQL::Telemetry::EventQueue(Int32)
+private def stuck_queue_of(first : T, capacity = 8) : CQL::Telemetry::EventQueue(T) forall T
   entered = Channel(Nil).new
-  queue = CQL::Telemetry::EventQueue(Int32).new(capacity) { |_| entered.send(nil); Channel(Nil).new.receive }
-  queue.push(1)
+  queue = CQL::Telemetry::EventQueue(T).new(capacity) { |_| entered.send(nil); Channel(Nil).new.receive }
+  queue.push(first)
   entered.receive
   queue
+end
+
+private def stuck_queue(capacity = 8) : CQL::Telemetry::EventQueue(Int32)
+  stuck_queue_of(1, capacity)
+end
+
+private def query_event : CQL::Telemetry::QueryEvent
+  CQL::Telemetry::QueryEvent.new("SELECT 1", 0, nil, 1.millisecond, nil, CQL::Adapter::SQLite, :select, nil, nil)
 end
 
 describe CQL::Telemetry::EventQueue do
@@ -67,8 +75,9 @@ describe CQL::Telemetry::EventQueue do
   end
 
   it "skips buffered events once closed, and neither a pending flush nor a push waits on them" do
-    entered, gate, flushed, seen = Channel(Nil).new(3), Channel(Nil).new(3), Channel(Nil).new, [] of Int32
-    queue = CQL::Telemetry::EventQueue(Int32).new(8) { |event| entered.send(nil); gate.receive; seen << event }
+    entered, gate, handled, flushed = Channel(Nil).new(3), Channel(Nil).new(3), Channel(Nil).new(3), Channel(Nil).new
+    seen = [] of Int32
+    queue = CQL::Telemetry::EventQueue(Int32).new(8) { |event| entered.send(nil); gate.receive; seen << event; handled.send(nil) }
     {1, 2, 3}.each { |event| queue.push(event) }
     spawn { queue.flush; flushed.send(nil) }
     entered.receive
@@ -77,6 +86,65 @@ describe CQL::Telemetry::EventQueue do
     within { flushed.receive }
     within { queue.flush }.should be_false
     queue.push(4).should be_false
+    within { handled.receive }
     seen.should eq([1])
+  end
+
+  it "accepts or drops every push, and the handler sees exactly the accepted events" do
+    gate, entered, seen = Channel(Nil).new(64), Channel(Nil).new(64), [] of Int32
+    queue = CQL::Telemetry::EventQueue(Int32).new(4) { |event| entered.send(nil); gate.receive; seen << event }
+    queue.push(0)
+    entered.receive
+    accepted = (1..10).select { |event| queue.push(event) }
+    (accepted.size + queue.dropped).should eq(10)
+    accepted.size.should be <= 4
+    10.times { gate.send(nil) }
+    within { queue.flush }.should be_true
+    seen.should eq([0] + accepted)
+  end
+
+  it "keeps timed-out flush markers from taking event slots" do
+    queue = stuck_queue(4)
+    3.times { queue.flush(5.milliseconds).should be_false }
+    (1..4).count { |event| queue.push(event) }.should eq(4)
+    queue.dropped.should eq(0)
+  end
+
+  it "refuses a flush past the pending cap at once, and takes flushes again once the handler moves on" do
+    entered, gate = Channel(Nil).new, Channel(Nil).new(1)
+    queue = CQL::Telemetry::EventQueue(Int32).new(8) { |_| entered.send(nil); gate.receive }
+    queue.push(1)
+    entered.receive
+    CQL::Telemetry::EventQueue::MAX_PENDING_FLUSHES.times { queue.flush(1.millisecond).should be_false }
+    within { queue.flush }.should be_false
+    gate.send(nil)
+    within { until queue.flush(20.milliseconds); end }
+  end
+
+  {0, -1, Int32::MAX}.each do |capacity|
+    it "rejects a capacity of #{capacity}" do
+      expect_raises(ArgumentError) { CQL::Telemetry::EventQueue(Int32).new(capacity) { |_| } }
+    end
+  end
+
+  describe "allocation budget" do
+    it "allocates nothing pushing with room" do
+      event, queue = query_event, CQL::Telemetry::EventQueue(CQL::Telemetry::QueryEvent).new(30_000) { |_| }
+      bytes_per_call(20_000) { queue.push(event) }.should be < 1.0
+      queue.close
+    end
+
+    it "allocates nothing pushing on a full queue" do
+      event = query_event
+      queue = stuck_queue_of(event, 1)
+      queue.push(event).should be_true
+      bytes_per_call(20_000) { queue.push(event) }.should be < 1.0
+    end
+
+    it "allocates nothing pushing on a closed queue" do
+      event, queue = query_event, CQL::Telemetry::EventQueue(CQL::Telemetry::QueryEvent).new(1) { |_| }
+      queue.close
+      bytes_per_call(20_000) { queue.push(event) }.should be < 1.0
+    end
   end
 end

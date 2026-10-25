@@ -79,4 +79,12 @@ def count_queries(operation : Symbol = :select, & : ->) : Array(String)
   statements
 end
 
+# Heap bytes allocated per call of the block, after a warm-up so one-time setup is not counted.
+def bytes_per_call(calls : Int32, & : ->) : Float64
+  100.times { yield }
+  before = GC.stats.total_bytes
+  calls.times { yield }
+  (GC.stats.total_bytes - before) / calls.to_f
+end
+
 require "./support/**"
