@@ -38,9 +38,12 @@ module CQL
   # ```
   #
   class Table
+    include QuotedNameCache
+
     Log = CQL.config.logger
 
     property table_name : Symbol
+
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
     # Bumped whenever `Schema#alter` changes the columns, so SQL rendered from them can be redone.
     getter columns_revision : Int32 = 0

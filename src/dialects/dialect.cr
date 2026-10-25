@@ -7,7 +7,7 @@ module Expression
     # doubling any embedded quote character. Only used when the schema opts in
     # with `quote_identifiers: true`.
     def quote_identifier(name : String) : String
-      %("#{name.gsub('"', "\"\"")}")
+      %("#{name.includes?('"') ? name.gsub('"', "\"\"") : name}")
     end
 
     # Formats a placeholder for prepared statements based on the dialect's syntax

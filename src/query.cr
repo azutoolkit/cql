@@ -871,19 +871,19 @@ module CQL
     # => #<Expression::Query:0x00007f8b1b0b3b00>
     # ```
     def build(limit : Int32? = @limit) : Expression::Query
-      select_cols, aggr_exprs = build_select # Returns Expression::Column with String aliases
+      select_cols, aggr_exprs = build_select
 
       Expression::Query.new(
         select_cols,
-        build_from,     # Returns Expression::From with Expression::Table(String alias)
-        @where,         # Uses aliased expressions internally (String alias)
-        build_group_by, # Returns Expression::GroupBy with Expression::Column(String alias)
-        @having,        # Uses aliased expressions internally (String alias)
-        build_order_by, # Returns Expression::OrderBy with Expression::Column(String alias)
+        build_from,
+        @where,
+        build_group_by,
+        @having,
+        build_order_by,
         joins_snapshot,
         build_limit(limit),
         distinct?,
-        aggr_exprs, # Aggregate expressions contain String aliases
+        aggr_exprs,
         ctes_snapshot,
         recursive?,
         distinct_on_snapshot,
@@ -1196,25 +1196,20 @@ module CQL
     private def build_group_by
       group_by = @group_by
       return if group_by.nil? || group_by.empty?
-      group_cols = group_by.map do |base_col|
-        # find_alias_for_table returns String alias
-        col_alias_str = find_alias_for_table(base_col.table.not_nil!)
-        # Create Expression::Column with String alias
-        Expression::Column.new(base_col, alias_name: col_alias_str)
-      end
-      Expression::GroupBy.new(group_cols)
+      Expression::GroupBy.new(group_by.map { |column| aliased(column) })
     end
 
     private def build_order_by
       order = @order_by
       return if order.nil? || order.empty?
-      order_exprs = order.map do |base_col, direction|
-        # find_alias_for_table returns String alias
-        col_alias_str = find_alias_for_table(base_col.table.not_nil!)
-        # Create Expression::Column with String alias
-        {Expression::Column.new(base_col, alias_name: col_alias_str), direction}
-      end.to_h
-      Expression::OrderBy.new(order_exprs)
+      orders = Hash(Expression::BaseColumn, Expression::OrderDirection).new(initial_capacity: order.size)
+      order.each { |column, direction| orders[aliased(column)] = direction }
+      Expression::OrderBy.new(orders)
+    end
+
+    # The column as it appears in this query: qualified by *alias_name*, or its table's alias.
+    private def aliased(column : BaseColumn, alias_name : String? = nil) : Expression::BaseColumn
+      Expression::Column.new(column, alias_name: alias_name || find_alias_for_table(column.table.not_nil!)).as(Expression::BaseColumn)
     end
 
     private def build_limit(limit : Int32?)
@@ -1228,8 +1223,8 @@ module CQL
     end
 
     # Every column of every table in the query, each table's primary key first.
-    private def implicit_select_columns : Array(Expression::Column)
-      selected = [] of Expression::Column
+    private def implicit_select_columns : Array(Expression::BaseColumn)
+      selected = [] of Expression::BaseColumn
       @query_tables.each do |table_alias, info|
         table = info[:table]
         pk = table.primary_key
@@ -1242,11 +1237,31 @@ module CQL
     end
 
     # The selected columns under their custom or table alias, each once.
-    private def explicit_select_columns : Array(Expression::Column)
-      selected = @columns.map do |column|
-        Expression::Column.new(column, alias_name: @column_aliases.try(&.[column]?) || find_alias_for_table(column.table.not_nil!))
+    private def explicit_select_columns : Array(Expression::BaseColumn)
+      selected = @columns.map { |column| aliased(column, @column_aliases.try(&.[column]?)) }
+      repeats?(selected) ? selected.uniq! { |column| selection_key(column) } : selected
+    end
+
+    # A column is selected once per alias.
+    private def selection_key(column : Expression::BaseColumn) : {String?, Symbol}
+      {column.alias_name, column.column.name}
+    end
+
+    # Whether a key repeats. A select names few columns, so comparing pairs is cheaper than the
+    # hash `uniq!` builds, which is then only paid when there is something to remove.
+    private def repeats?(columns : Array(Expression::BaseColumn)) : Bool
+      return true if columns.size > 16
+      index = 0
+      while index < columns.size
+        key = selection_key(columns.unsafe_fetch(index))
+        other = index + 1
+        while other < columns.size
+          return true if selection_key(columns.unsafe_fetch(other)) == key
+          other += 1
+        end
+        index += 1
       end
-      selected.uniq! { |column| {column.alias_name, column.column.name} }
+      false
     end
 
     private def from_source(table : CQL::Table, alias_name : String) : Expression::Table

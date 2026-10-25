@@ -40,6 +40,15 @@ describe CQL::Query do
       select_query.should eq({output.strip, [] of DB::Any})
     end
 
+    it "selects a column named twice once, and keeps columns named once" do
+      Northwind.query.from(:customers).select(:name).select(customers: [:name, :city]).to_sql
+        .should eq({"SELECT customers.name, customers.city FROM customers", [] of DB::Any})
+      Northwind.query.from(:customers).select(customers: [:name] * 17 + [:city]).to_sql
+        .should eq({"SELECT customers.name, customers.city FROM customers", [] of DB::Any})
+      Northwind.query.from(:customers).select(customers: [:name, :city, :balance]).to_sql
+        .should eq({"SELECT customers.name, customers.city, customers.balance FROM customers", [] of DB::Any})
+    end
+
     it "uses DISTINCT in SELECT statement" do
       select_query = Northwind.query
         .from(:customers).distinct

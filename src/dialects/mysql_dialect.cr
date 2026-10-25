@@ -49,7 +49,7 @@ module Expression
     end
 
     def quote_identifier(name : String) : String
-      "`#{name.gsub('`', "``")}`"
+      "`#{name.includes?('`') ? name.gsub('`', "``") : name}`"
     end
 
     # MySQL uses ? for all placeholders regardless of position
