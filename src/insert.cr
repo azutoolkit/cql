@@ -76,13 +76,27 @@ module CQL
     # ```
     def last_insert_id(as type : PrimaryKeyType = Int64)
       if adapter.postgres_compatible?
-        # Reset to ensure nothing else but the :id is returned
-        @back = Array(Expression::Column).new
-        query, params = back(:id).to_sql
+        query, params = returning_primary_key_sql
         CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one(query, args: params, as: type) }
       else
         commit.last_insert_id
       end
+    end
+
+    # The insert with `RETURNING` the table's declared primary key (`id` when none is declared),
+    # as `{sql, params}`. PostgreSQL and CockroachDB fetch the new key this way.
+    def returning_primary_key_sql
+      own_back = @back
+      @back = [Expression::Column.new(primary_key)]
+      begin
+        to_sql
+      ensure
+        @back = own_back
+      end
+    end
+
+    private def primary_key : BaseColumn
+      @table.try(&.primary_key) || find_column(:id)
     end
 
     private def adapter

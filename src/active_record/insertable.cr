@@ -102,7 +102,7 @@ module CQL
           table_name = {{@type.id}}.table
 
           insertable_attrs = attrs.dup
-          insertable_attrs.delete(:id)
+          insertable_attrs.delete(primary_key_column)
 
           # Filter out ignored fields (fields not in the database schema)
           table_columns = schema.tables[table_name].columns.keys
@@ -111,7 +111,7 @@ module CQL
           {% if Pk == UUID %}
             # Generate UUID before insert, store as String for SQLite compatibility
             generated_id = UUID.random
-            insertable_attrs[:id] = generated_id.to_s.as(DB::Any)
+            insertable_attrs[primary_key_column] = generated_id.to_s.as(DB::Any)
 
             CQL::Insert.new(schema)
               .into(table_name)
@@ -122,7 +122,7 @@ module CQL
           {% elsif Pk == String %}
             # Generate ULID before insert (ULID stored as String)
             generated_id = CQL::ULIDCompat.generate
-            insertable_attrs[:id] = generated_id.as(DB::Any)
+            insertable_attrs[primary_key_column] = generated_id.as(DB::Any)
 
             CQL::Insert.new(schema)
               .into(table_name)
@@ -163,7 +163,7 @@ module CQL
 
           fields_hash = {} of Symbol => DB::Any
           fields.each { |key, value| fields_hash[key] = value.as(DB::Any) }
-          fields_hash.delete(:id)
+          fields_hash.delete(primary_key_column)
 
           # Filter out ignored fields (fields not in the database schema)
           table_columns = schema.tables[table_name].columns.keys
@@ -172,7 +172,7 @@ module CQL
           {% if Pk == UUID %}
             # Generate UUID before insert, store as String for SQLite compatibility
             generated_id = UUID.random
-            fields_hash[:id] = generated_id.to_s.as(DB::Any)
+            fields_hash[primary_key_column] = generated_id.to_s.as(DB::Any)
 
             CQL::Insert.new(schema)
               .into(table_name)
@@ -183,7 +183,7 @@ module CQL
           {% elsif Pk == String %}
             # Generate ULID before insert (ULID stored as String)
             generated_id = CQL::ULIDCompat.generate
-            fields_hash[:id] = generated_id.as(DB::Any)
+            fields_hash[primary_key_column] = generated_id.as(DB::Any)
 
             CQL::Insert.new(schema)
               .into(table_name)
@@ -221,7 +221,7 @@ module CQL
         # ```
         def self.create!(record : {{@type.id}}) : {{@type.id}}
           attrs = record.attributes
-          attrs.delete(:id)
+          attrs.delete(primary_key_column)
 
           # Filter out ignored fields (fields not in the database schema)
           schema = {{@type.id}}.schema
@@ -232,7 +232,7 @@ module CQL
           {% if Pk == UUID %}
             # Generate UUID before insert, store as String for SQLite compatibility
             generated_id = UUID.random
-            filtered_attrs[:id] = generated_id.to_s.as(DB::Any)
+            filtered_attrs[primary_key_column] = generated_id.to_s.as(DB::Any)
 
             CQL::Insert
               .new({{@type.id}}.schema)
@@ -244,7 +244,7 @@ module CQL
           {% elsif Pk == String %}
             # Generate ULID before insert (ULID stored as String)
             generated_id = CQL::ULIDCompat.generate
-            filtered_attrs[:id] = generated_id.as(DB::Any)
+            filtered_attrs[primary_key_column] = generated_id.as(DB::Any)
 
             CQL::Insert
               .new({{@type.id}}.schema)

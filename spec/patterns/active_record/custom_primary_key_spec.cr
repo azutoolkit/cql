@@ -59,6 +59,41 @@ private def insert_badge(uuid : UUID)
   LabelKeyDB.exec_query(&.exec("INSERT INTO badges (badge_uuid, name) VALUES (?, 'Gold')", uuid.to_s))
 end
 
+# Lends no connection: lets a PostgreSQL-adapter schema exist, and generate SQL, without a server.
+private class OfflineSource < CQL::ConnectionSource
+  def using_connection(& : DB::Connection -> _)
+    raise "no database in this spec"
+  end
+
+  def transaction(& : DB::Transaction -> _)
+    raise "no database in this spec"
+  end
+
+  def pool_stats : CQL::PoolStats
+    CQL::PoolStats.new(0, 0, 0, 0)
+  end
+
+  def close : Nil
+  end
+end
+
+LabelKeyPostgresDB = CQL::Schema.define(
+  :label_key_postgres_db,
+  adapter: CQL::Adapter::Postgres,
+  uri: "postgres://localhost/label_key_postgres_db",
+  source: OfflineSource.new
+) do
+  table :labels do
+    primary :label_no, Int32
+    text :name
+  end
+
+  table :tags do
+    primary :id, Int32
+    text :name
+  end
+end
+
 describe "Custom primary key column" do
   before_all do
     {% for table in %w[labels badges passes] %}
@@ -77,6 +112,64 @@ describe "Custom primary key column" do
     {% for table in %w[labels badges passes] %}
       LabelKeyDB.exec("DELETE FROM {{table.id}}")
     {% end %}
+  end
+
+  describe "creating a record" do
+    it "reads back the generated key through the declared column" do
+      label = Label.create!(name: "Noir")
+
+      label.id.should_not be_nil
+      Label.find(label.id!).try(&.name).should eq("Noir")
+    end
+
+    it "reads back the generated key when created from a hash" do
+      label = Label.create!({:name => "Noir"} of Symbol => DB::Any)
+
+      label.id.should_not be_nil
+      Label.find(label.id!).try(&.name).should eq("Noir")
+    end
+
+    it "sets the generated key on an instance saved through #save" do
+      label = Label.new
+      label.name = "Noir"
+
+      label.save.should be_true
+
+      label.id.should_not be_nil
+      label.persisted?.should be_true
+      Label.find(label.id!).try(&.name).should eq("Noir")
+    end
+
+    it "generates a UUID key stored in the declared column" do
+      badge = Badge.create!(name: "Gold")
+
+      badge.id.should be_a(UUID)
+      Badge.find(badge.id!).try(&.name).should eq("Gold")
+      LabelKeyDB.exec_query(&.scalar("SELECT badge_uuid FROM badges")).should eq(badge.id!.to_s)
+    end
+
+    it "returns the declared key column when PostgreSQL fetches the new key" do
+      insert = LabelKeyPostgresDB.insert.into(:labels).values(name: "Noir")
+
+      insert.returning_primary_key_sql.should eq(
+        {"INSERT INTO labels (name) VALUES ($1) RETURNING labels.label_no", ["Noir"] of DB::Any}
+      )
+    end
+
+    it "returns id on PostgreSQL for a table keyed on id" do
+      insert = LabelKeyPostgresDB.insert.into(:tags).values(name: "Noir")
+
+      insert.returning_primary_key_sql.should eq(
+        {"INSERT INTO tags (name) VALUES ($1) RETURNING tags.id", ["Noir"] of DB::Any}
+      )
+    end
+
+    it "leaves the insert's own SQL without RETURNING" do
+      insert = LabelKeyPostgresDB.insert.into(:labels).values(name: "Noir")
+
+      insert.returning_primary_key_sql
+      insert.to_sql.should eq({"INSERT INTO labels (name) VALUES ($1)", ["Noir"] of DB::Any})
+    end
   end
 
   describe ".primary_key_column" do
