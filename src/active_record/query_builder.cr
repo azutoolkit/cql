@@ -652,104 +652,61 @@ module CQL
           result
         end
 
-        # Batch processing - iterate over records in batches
-        # - **@param** batch_size [Int32] Size of each batch
-        # - **@yield** [T] Each record
-        # NOTE: Uses String-based ID comparison to support all PK types (Int32, Int64, UUID, ULID)
+        # Yields each matching record, loading them `batch_size` at a time (see `find_in_batches`).
         def find_each(batch_size : Int32 = 1000, & : T ->)
-          # Ensure we have a consistent ordering to avoid infinite loops
-          # If no ordering is specified, order by primary key (usually id)
-          query_with_order = @query.order_by.empty? ? order_by(id: :asc) : self
+          find_in_batches(batch_size) { |batch| batch.each { |record| yield record } }
+        end
 
-          offset = 0
-          max_iterations = 10000 # Safety limit to prevent infinite loops
-          iteration_count = 0
-          processed_ids = Set(String).new # Use String for universal PK type support
+        # Yields the matching records in batches of up to `batch_size`, ignoring the query's
+        # limit and offset. An unordered, unshaped query pages by primary key
+        # (`WHERE pk > last ORDER BY pk LIMIT n`), so rows deleted mid-iteration never shift
+        # later rows; any other query pages by OFFSET in its order, ties broken by primary key.
+        def find_in_batches(batch_size : Int32 = 1000, & : Array(T) ->)
+          raise ArgumentError.new("batch_size must be positive, got #{batch_size}") unless batch_size > 0
+          primary_key = primary_key_column(@query) if @query.order_by.empty? && !shapes_rows?(@query)
+          if primary_key
+            batches_by_key(primary_key, batch_size) { |batch| yield batch }
+          else
+            batches_by_offset(batch_size) { |batch| yield batch }
+          end
+        end
 
+        # A join can repeat a row; each batch yields it once, and `pk > last` skips it after.
+        private def batches_by_key(primary_key : String, batch_size : Int32, &)
+          ordered = unscope(:offset).tap(&.query.order(primary_key)).limit(batch_size)
+          page = ordered
           loop do
-            iteration_count += 1
-            break if iteration_count > max_iterations
+            rows = page.all
+            batch = rows.uniq(&.id)
+            yield batch unless batch.empty?
+            break if rows.size < batch_size
+            page = ordered.where_gt(primary_key, keyset_value(rows.last.id!))
+          end
+        end
 
-            batch = query_with_order.limit(batch_size).offset(offset).all
-            break if batch.empty?
-
-            # Check if we're processing the same records again (infinite loop detection)
-            # Use .to_s for universal PK type support (works with Int32, Int64, UUID, String/ULID)
-            batch_ids = batch.compact_map(&.id).map(&.to_s).to_set
-            if batch_ids.subset_of?(processed_ids)
-              # We're processing the same records again, break to avoid infinite loop
-              break
-            end
-
-            batch.each do |model_record|
-              if id = model_record.id
-                id_str = id.to_s
-                unless processed_ids.includes?(id_str)
-                  processed_ids.add(id_str)
-                  yield model_record
-                end
-              end
-            end
-
-            # If we got fewer records than requested, we've reached the end
+        private def batches_by_offset(batch_size : Int32, &)
+          ordered = clone_builder.tap { |builder| break_ties_by_primary_key(builder.query) }
+          offset = 0
+          loop do
+            batch = ordered.limit(batch_size).offset(offset).all
+            yield batch unless batch.empty?
             break if batch.size < batch_size
-
             offset += batch_size
           end
         end
 
-        # Process records in batches
-        # - **@param** batch_size [Int32] Size of each batch
-        # - **@yield** [Array(T)] Each batch of records
-        # NOTE: Uses String-based ID comparison to support all PK types (Int32, Int64, UUID, ULID)
-        def find_in_batches(batch_size : Int32 = 1000, & : Array(T) ->)
-          # Ensure we have a consistent ordering to avoid infinite loops
-          # If no ordering is specified, order by primary key (usually id)
-          query_with_order = @query.order_by.empty? ? order_by(id: :asc) : self
+        # Appends the primary key ASC so rows tied on the ORDER BY keep one place across pages.
+        # A GROUP BY, DISTINCT ON, or DISTINCT over an explicit select cannot sort by a column it hides.
+        private def break_ties_by_primary_key(query : Query) : Nil
+          selected = !query.columns.empty? || !query.select_expressions.empty?
+          return if !query.group_by.empty? || query.having || !query.distinct_on.empty? || (query.distinct? && selected)
+          primary_key = T.schema.tables[T.table].primary_key
+          query.order_by.put_if_absent(primary_key, Expression::OrderDirection::ASC) if primary_key
+        end
 
-          offset = 0
-          max_iterations = 10000 # Safety limit to prevent infinite loops
-          iteration_count = 0
-          processed_ids = Set(String).new # Use String for universal PK type support
-
-          loop do
-            iteration_count += 1
-            break if iteration_count > max_iterations
-
-            batch = query_with_order.limit(batch_size).offset(offset).all
-            break if batch.empty?
-
-            # Check if we're processing the same records again (infinite loop detection)
-            # Use .to_s for universal PK type support (works with Int32, Int64, UUID, String/ULID)
-            batch_ids = batch.compact_map(&.id).map(&.to_s).to_set
-            if batch_ids.subset_of?(processed_ids)
-              # We're processing the same records again, break to avoid infinite loop
-              break
-            end
-
-            # Filter out already processed records
-            new_records = batch.reject do |record|
-              if id = record.id
-                processed_ids.includes?(id.to_s)
-              else
-                false
-              end
-            end
-
-            # Add new record IDs to processed set
-            new_records.each do |record|
-              if id = record.id
-                processed_ids.add(id.to_s)
-              end
-            end
-
-            yield new_records unless new_records.empty?
-
-            # If we got fewer records than requested, we've reached the end
-            break if batch.size < batch_size
-
-            offset += batch_size
-          end
+        # Binds keys outside `DB::Any` (UUID) by their string form.
+        private def keyset_value(id) : DB::Any
+          id.is_a?(DB::Any) ? id : id.to_s
         end
 
         # Extract column values from all matching records

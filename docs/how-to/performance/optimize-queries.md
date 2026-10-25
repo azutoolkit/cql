@@ -128,7 +128,11 @@ User.where(active: true).find_in_batches(1000) do |batch|
 end
 ```
 
-Batches are read with `ORDER BY id LIMIT ... OFFSET ...`, so do not change the columns used in your `where` while iterating (for example flagging rows out of the filter), or later batches will skip rows.
+Without an `order`, batches page by primary key (`WHERE id > ? ORDER BY id LIMIT ?`): each batch is an index seek, and it is safe to update the columns used in your `where` (for example flagging rows out of the filter) or to delete rows you have already visited. Across a join, an unordered query still yields each record once; an ordered or shaped query pages by OFFSET and yields a record once per joined row.
+
+With an `order` (or a `select`, `distinct`, `group` or `having`), batches page by `LIMIT ... OFFSET ...` in that order, with the primary key appended to break ties. There, do not change the columns used in your `where` or delete rows while iterating, or later batches will skip rows, and each batch rescans the rows before it, so a full pass costs O(N²/batch size) on large tables.
+
+Either way, a query's own `limit` and `offset` are ignored: batching walks every matching row.
 
 ## Use Exists Instead of Count
 

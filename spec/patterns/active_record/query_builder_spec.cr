@@ -1045,6 +1045,164 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
   end
 
+  describe "keyset batching" do
+    it "yields every row exactly once in id order from #find_each" do
+      ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      TestUser.query.find_each(batch_size: 3) { |user| yielded << user.id!.to_i64 }
+
+      yielded.should eq(ids)
+    end
+
+    it "yields batches of [3, 3, 1] from #find_in_batches" do
+      7.times { |i| create_last_user("User#{i}", 20 + i) }
+
+      sizes = [] of Int32
+      TestUser.query.find_in_batches(batch_size: 3) { |batch| sizes << batch.size }
+
+      sizes.should eq([3, 3, 1])
+    end
+
+    it "pages by primary key without OFFSET, one SELECT per batch" do
+      7.times { |i| create_last_user("User#{i}", 20 + i) }
+
+      statements = count_queries do
+        TestUser.query.find_each(batch_size: 3) { |_| }
+      end
+
+      statements.size.should eq(3)
+      statements[1..].each do |sql|
+        sql.should match(/\bid\s*>\s*\?/i)
+        sql.should match(/ORDER BY\s+\S*\bid\b\S*\s+ASC/i)
+        sql.should match(/LIMIT\s+\?/i)
+      end
+      statements.each(&.should_not(match(/OFFSET/i)))
+    end
+
+    it "confirms the end with one empty fetch" do
+      6.times { |i| create_last_user("User#{i}", 20 + i) }
+
+      statements = count_queries do
+        TestUser.query.find_in_batches(batch_size: 3) { |_| }
+      end
+
+      # two full batches, then one empty fetch to confirm the end
+      statements.size.should eq(3)
+    end
+
+    it "skips a not-yet-visited row deleted mid-iteration" do
+      ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      TestUser.query.find_each(batch_size: 3) do |user|
+        TestUser.find!(ids[4].to_i32).delete! if yielded.empty?
+        yielded << user.id!.to_i64
+      end
+
+      yielded.should eq(ids - [ids[4]])
+    end
+
+    it "does not skip rows when an already-visited row is deleted mid-iteration" do
+      ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      TestUser.query.find_each(batch_size: 3) do |user|
+        TestUser.find!(ids[0].to_i32).delete! if user.id!.to_i64 == ids[2]
+        yielded << user.id!.to_i64
+      end
+
+      yielded.should eq(ids)
+    end
+
+    it "only yields rows matching the where scope" do
+      ages = [30, 40, 30, 30, 40, 30, 30]
+      matching = ages.map_with_index { |age, i| {create_last_user("User#{i}", age).id!.to_i64, age} }
+        .select { |_, age| age == 30 }.map(&.first)
+
+      yielded = [] of Int64
+      TestUser.query.where(age: 30).find_each(batch_size: 2) { |user| yielded << user.id!.to_i64 }
+
+      yielded.should eq(matching)
+    end
+
+    it "visits every row exactly once when the query has its own ORDER BY" do
+      names = %w[Delta Alpha Echo Bravo Foxtrot Charlie Golf]
+      names.each_with_index { |name, i| create_last_user(name, 20 + i) }
+
+      yielded = [] of String
+      TestUser.query.order(name: :desc).find_each(batch_size: 3) { |user| yielded << user.name.to_s }
+
+      yielded.should eq(names.sort.reverse!)
+    end
+
+    it "ignores the query's offset, yielding every row exactly once" do
+      ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      TestUser.query.offset(2).find_each(batch_size: 2) { |user| yielded << user.id!.to_i64 }
+
+      yielded.should eq(ids)
+    end
+
+    it "yields a parent with several joined children once" do
+      UserDB.posts.create!
+      author = create_last_user("Author", 30)
+      reader = create_last_user("Reader", 40)
+      3.times { Post.create!(title: "Post", body: "Body", user_id: author.id) }
+      Post.create!(title: "Post", body: "Body", user_id: reader.id)
+
+      [1, 2].each do |batch_size|
+        yielded = [] of Int64
+        TestUser.query.join(:posts).find_each(batch_size: batch_size) { |user| yielded << user.id!.to_i64 }
+
+        yielded.should eq([author.id!.to_i64, reader.id!.to_i64])
+      end
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "breaks ties in the query's ORDER BY by primary key, visiting every row exactly once" do
+      ids = [30, 20, 30, 20, 30, 20, 30].map_with_index { |age, i| create_last_user("User#{i}", age).id!.to_i64 }
+
+      yielded = [] of Int64
+      statements = count_queries do
+        TestUser.query.order(age: :asc).find_each(batch_size: 2) { |user| yielded << user.id!.to_i64 }
+      end
+
+      yielded.sort.should eq(ids)
+      yielded.uniq.size.should eq(ids.size)
+      statements.each(&.should(match(/ORDER BY\s+\S*age\S*\s+ASC,\s*\S*\bid\b\S*\s+ASC/i)))
+    end
+
+    it "pages a shaped query by OFFSET" do
+      ids = (1..5).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
+
+      yielded = [] of Int64
+      statements = count_queries do
+        TestUser.query.distinct.find_each(batch_size: 2) { |user| yielded << user.id!.to_i64 }
+      end
+
+      yielded.should eq(ids)
+      statements[1..].each(&.should(match(/OFFSET/i)))
+    end
+
+    it "raises ArgumentError for a zero batch_size" do
+      expect_raises(ArgumentError) { TestUser.query.find_each(batch_size: 0) { |_| } }
+    end
+
+    it "keeps an OR condition scoped on every page" do
+      ages = [20, 30, 40, 50, 60, 70]
+      matching = ages.map { |age| {create_last_user("User#{age}", age).id!.to_i64, age} }
+        .select { |_, age| age < 25 || age > 55 }.map(&.first)
+
+      yielded = [] of Int64
+      TestUser.query.where { (age < 25) | (age > 55) }.find_each(batch_size: 1) { |user| yielded << user.id!.to_i64 }
+
+      yielded.should eq(matching)
+    end
+  end
+
   describe "#pluck" do
     it "extracts column values from all matching records" do
       TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
