@@ -107,6 +107,13 @@ module CQL
             {{ raise "CQL association error in #{owner}: association `#{association}` references #{target_path}, but that model type was not found. Define the target model or require the file that defines it before compiling." }}
           {% end %}
 
+          {% if kind == :has_many || kind == :has_one %}
+            {% target_key = target.constant(:CQL_PRIMARY_KEY_COLUMN) || :id %}
+            {% if foreign_key.id == target_key.id %}
+              {{ raise "CQL #{kind.id} error in #{owner}: foreign key `#{foreign_key.id}` is the primary key of #{target}. Associations whose foreign key is the target's primary key (shared primary keys) are not supported: give #{target} its own key column and a separate `#{foreign_key.id}` column, or declare the association from #{target} with belongs_to." }}
+            {% end %}
+          {% end %}
+
           {% if kind == :belongs_to %}
             {% fk_getter = owner.methods.find { |method| method.name == foreign_key.id.stringify && method.args.empty? } %}
             {% unless fk_getter %}

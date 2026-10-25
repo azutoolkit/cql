@@ -59,8 +59,12 @@ module CQL
           .map(&.strip)
           .reject { |part| part == "Nil" || part == "::Nil" }
           .map { |part| part.starts_with?("::") ? part[2..] : part }
+          .map { |part| TYPE_ALIASES.fetch(part, part) }
           .join(" | ")
       end
+
+      # Getter types are written as the model spells them; schema columns use the resolved type.
+      private TYPE_ALIASES = {"Bytes" => "Slice(UInt8)"}
 
       private def compatible_type?(expected_type : String, actual_type : String) : Bool
         return true if expected_type == actual_type
