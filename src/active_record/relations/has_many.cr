@@ -77,10 +77,10 @@ module CQL::ActiveRecord::Relations
 
         parent_id = safe_id(self, Pk)
 
-                 # Build base query
-         base_query = safe_db_operation do
-           build_query({{type.id}}).where({ {{fk}} => parent_id })
-         end
+        # Build base query; the collection scopes it to the parent
+        base_query = safe_db_operation do
+          build_query({{type.id}})
+        end
 
         # Apply additional scope if provided
         {% if scope %}

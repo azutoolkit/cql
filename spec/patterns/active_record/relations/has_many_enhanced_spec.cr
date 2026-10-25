@@ -1,5 +1,22 @@
 require "../spec_helper"
 
+def has_many_isolation_user(name : String, email : String) : TestUser
+  TestUser.create!(name: name, email: email, age: 30, password: "password123", password_confirmation: "password123")
+end
+
+def has_many_isolation_selects(& : ->) : Array(String)
+  statements = [] of String
+  CQL::Telemetry.subscribe("has_many_isolation") do |event|
+    statements << event.sql if event.operation == :select
+  end
+  begin
+    yield
+  ensure
+    CQL::Telemetry.unsubscribe("has_many_isolation")
+  end
+  statements
+end
+
 describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
   before_each do
     UserDB.users.create!
@@ -335,6 +352,115 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
       expect_raises(CQL::ActiveRecord::Relations::BaseRelation::AssociationNotFound) do
         user.posts.last
       end
+    end
+  end
+
+  describe "shared query isolation" do
+    it "keeps the foreign key predicate single across repeated reloads" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      3.times { |i| user.posts.create(title: "Post #{i}", body: "Content #{i}") }
+
+      statements = has_many_isolation_selects do
+        posts = user.posts
+        posts.reload
+        posts.reload
+      end
+
+      statements.size.should eq(2)
+      statements.last.scan("user_id = ?").size.should eq(1)
+      statements.last.should_not contain("COUNT(")
+    end
+
+    it "counts and then reloads full records without a leftover COUNT query" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      3.times { |i| user.posts.create(title: "Post #{i}", body: "Content #{i}") }
+
+      posts = user.posts
+      statements = has_many_isolation_selects do
+        posts.count.should eq(3)
+        posts.reload.map(&.title).sort!.should eq(["Post 0", "Post 1", "Post 2"])
+        posts.count.should eq(3)
+        posts.reload
+      end
+
+      posts.size.should eq(3)
+      statements.last.should_not contain("COUNT(")
+      statements.last.scan("user_id = ?").size.should eq(1)
+    end
+
+    it "leaves the collection unchanged after limit, offset and order chains" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      3.times { |i| user.posts.create(title: "Post #{i}", body: "Content #{i}") }
+
+      posts = user.posts
+      posts.limit(1).all(Post).size.should eq(1)
+      posts.offset(1).all(Post).size.should eq(2)
+      posts.order(title: :desc).all(Post).first.title.should eq("Post 2")
+
+      posts.reload.map(&.title).sort!.should eq(["Post 0", "Post 1", "Post 2"])
+    end
+
+    it "keeps the foreign key predicate single after where, find and find_by calls" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      3.times { |i| user.posts.create(title: "Post #{i}", body: "Content #{i}") }
+
+      posts = user.posts
+      statements = has_many_isolation_selects do
+        posts.where(title: "Post 0").all(Post).size.should eq(1)
+        posts.find(title: "Post 1").map(&.title).should eq(["Post 1"])
+        posts.find_by(title: "Post 2").try(&.title).should eq("Post 2")
+        posts.where(title: "Post 0").all(Post).size.should eq(1)
+      end
+
+      statements.size.should eq(4)
+      statements.map(&.scan("user_id = ?").size).should eq([1, 1, 1, 1])
+      posts.reload.size.should eq(3)
+    end
+
+    it "counts twice on an unloaded collection and then loads full records" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      3.times { |i| user.posts.create(title: "Post #{i}", body: "Content #{i}") }
+
+      posts = user.posts
+      statements = has_many_isolation_selects do
+        posts.count.should eq(3)
+        posts.count.should eq(3)
+        posts.to_a.map(&.title).sort!.should eq(["Post 0", "Post 1", "Post 2"])
+      end
+
+      posts.loaded?.should be_true
+      statements.last.should_not contain("COUNT(")
+      statements.last.scan("user_id = ?").size.should eq(1)
+    end
+
+    it "scopes reload to the parent even when given an unscoped query" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      other = has_many_isolation_user("Jane Doe", "jane@example.com")
+      2.times { |i| user.posts.create(title: "Mine #{i}", body: "Content") }
+      3.times { |i| other.posts.create(title: "Theirs #{i}", body: "Content") }
+
+      posts = CQL::ActiveRecord::Relations::Collection(Post, Int32).new(
+        key: :user_id,
+        id: user.id!,
+        query: CQL::Query.new(Post.schema).from(Post.table)
+      )
+
+      posts.reload.map(&.title).sort!.should eq(["Mine 0", "Mine 1"])
+    end
+
+    it "scopes count to the parent even when given an unscoped query" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      other = has_many_isolation_user("Jane Doe", "jane@example.com")
+      2.times { |i| user.posts.create(title: "Mine #{i}", body: "Content") }
+      3.times { |i| other.posts.create(title: "Theirs #{i}", body: "Content") }
+
+      posts = CQL::ActiveRecord::Relations::Collection(Post, Int32).new(
+        key: :user_id,
+        id: user.id!,
+        query: CQL::Query.new(Post.schema).from(Post.table)
+      )
+
+      posts.count.should eq(2)
     end
   end
 

@@ -46,30 +46,7 @@ module CQL::Performance
     def monitor_query(sql : String, params : Array(DB::Any) = [] of DB::Any, &)
       return yield unless enabled?
 
-      # Execute and measure
-      result, execution_time = measure_execution { yield }
-
-      # Extract metadata
-      rows_affected = extract_rows_affected(result)
-
-      # Record in components
-      record_execution(sql, params, execution_time, rows_affected)
-
-      # Log if configured
-      log_query(sql, params, execution_time, rows_affected) if @config.logging.enabled?
-
-      result
-    rescue ex
-      # Track error count
-      @error_count.add(1)
-
-      # Record error in profiler
-      record_execution(sql, params, Time::Span.zero, nil, ex.message)
-
-      # Log error if configured
-      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
-
-      raise ex
+      measure_and_record(sql, params) { yield }
     end
 
     # API - just wrap the query
@@ -172,15 +149,44 @@ module CQL::Performance
       reconfigure_components
     end
 
+    private def measure_and_record(sql : String, params : Array(DB::Any), &)
+      # Execute and measure
+      result, execution_time = measure_execution { yield }
+
+      # Extract metadata
+      rows_affected = extract_rows_affected(result)
+
+      # Record in components
+      record_execution(sql, params, execution_time, rows_affected)
+
+      # Log if configured
+      log_query(sql, params, execution_time, rows_affected) if @config.logging.enabled?
+
+      result
+    rescue ex
+      # Track error count
+      @error_count.add(1)
+
+      # Record error in profiler
+      record_execution(sql, params, Time::Span.zero, nil, ex.message)
+
+      # Log error if configured
+      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
+
+      raise ex
+    end
+
     private def record_execution(sql : String, params : Array(DB::Any),
                                  execution_time : Time::Span,
                                  rows_affected : Int64? = nil,
                                  error : String? = nil)
-      # Record in profiler
-      @profiler.try(&.record_query(sql, params, execution_time, rows_affected, error))
+      profiler = @profiler
+      detector = @detector unless error
+      return unless profiler || detector
 
-      # Record in N+1 detector
-      @detector.try(&.record_query(sql)) unless error
+      normalized_sql = SQLUtils.normalize_sql(sql)
+      profiler.try(&.record_query(sql, params, execution_time, rows_affected, error, normalized_sql: normalized_sql))
+      detector.try(&.record_query(sql, normalized_sql: normalized_sql))
     end
 
     private def log_query(sql : String, params : Array(DB::Any),

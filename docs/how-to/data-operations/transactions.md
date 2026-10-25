@@ -157,6 +157,18 @@ end
 
 If the inner block raises any other exception and it propagates out of the outer block too, everything is rolled back.
 
+A nested `transaction` call on the same fiber, through `schema.transaction { }` or `Model.transaction { }`, needs no `tx` argument: it runs as a SAVEPOINT on the outer connection, so the whole nest uses one connection. An inner `DB::Rollback` or error undoes only the inner block. If the outer block rescues an inner error, the outer transaction still commits; if the error propagates, everything is rolled back. Fibers spawned inside the block do not join the transaction; they check out their own connection.
+
+```crystal
+schema.transaction do
+  User.create!(name: "Outer")
+  schema.transaction do
+    User.create!(name: "Inner")
+    raise DB::Rollback.new    # undoes only "Inner"
+  end
+end
+```
+
 On the native PostgreSQL engine, `tx.savepoint { |inner| ... }` does the same:
 
 ```crystal
@@ -202,7 +214,7 @@ end
 CQL::Telemetry.unsubscribe_transactions("metrics")
 ```
 
-`DB::Rollback` is reported as a `Rollback` with that error. `Model.transaction(tx)` savepoints emit no events. See [Telemetry](../performance/telemetry.md).
+`DB::Rollback` is reported as a `Rollback` with that error. A nested `transaction { }` emits its own Begin and Commit/Rollback events with `nested: true`; the `Model.transaction(tx)` and `schema.transaction(tx)` overloads emit none. See [Telemetry](../performance/telemetry.md).
 
 ## Cleanup Operations
 

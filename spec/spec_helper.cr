@@ -50,4 +50,13 @@ def require_postgres!
   pending! "PostgreSQL integration specs require a reachable DATABASE_URL" unless postgres_available?
 end
 
+# Installs the monitor as the global one for the block, then restores the previous one.
+def with_global_monitor(monitor : CQL::Performance::Monitor, &)
+  previous = CQL::Performance.monitor
+  CQL::Performance.monitor = monitor
+  yield
+ensure
+  CQL::Performance.monitor = previous if previous
+end
+
 require "./support/**"

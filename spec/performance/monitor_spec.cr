@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 
 describe CQL::Performance::Monitor do
   describe "#initialize" do
@@ -151,6 +152,38 @@ describe CQL::Performance::Monitor do
       params = ["test".as(DB::Any)]
       result = monitor.track("SELECT ?", params) { "ok" }
       result.should eq("ok")
+    end
+  end
+
+  describe "when monitoring is disabled" do
+    it "returns the block value and records nothing through Performance.track" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = false
+      config.profiling.enabled = true
+      config.logging.enabled = false
+      monitor = CQL::Performance::Monitor.new(config: config)
+
+      with_global_monitor(monitor) do
+        CQL::Performance.track("SELECT 1", [] of DB::Any) { 42 }.should eq(42)
+      end
+
+      monitor.profiler.not_nil!.statistics.should be_empty
+      monitor.error_count.should eq(0)
+    end
+
+    it "lets a raising query propagate without counting or recording it" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = false
+      config.profiling.enabled = true
+      config.logging.enabled = false
+      monitor = CQL::Performance::Monitor.new(config: config)
+
+      expect_raises(RuntimeError, "query failed") do
+        monitor.monitor_query("SELECT * FROM bad_table") { raise RuntimeError.new("query failed") }
+      end
+
+      monitor.error_count.should eq(0)
+      monitor.profiler.not_nil!.statistics.should be_empty
     end
   end
 
@@ -447,6 +480,153 @@ describe CQL::Performance::Monitor do
       end
 
       monitor.enabled?.should be_true
+    end
+  end
+end
+
+# Spies for the shared-normalization seam: both interfaces' `record_query` accept an optional
+# `normalized_sql:` keyword, which the monitor fills in once per query.
+class NormalizationSpyProfiler
+  include CQL::Performance::QueryProfilerInterface
+
+  getter received = [] of {String, String?}
+
+  def record_query(sql : String, params : Array(DB::Any),
+                   execution_time : Time::Span,
+                   rows_affected : Int64? = nil,
+                   error : String? = nil,
+                   normalized_sql : String? = nil) : Void
+    @received << {sql, normalized_sql}
+  end
+
+  def statistics
+    {} of String => NamedTuple(count: Int32, total_ms: Float64, avg_ms: Float64, min_ms: Float64, max_ms: Float64)
+  end
+
+  def slowest_queries(limit : Int32) : Array(CQL::Performance::QueryData)
+    [] of CQL::Performance::QueryData
+  end
+
+  def stats_trackers : Hash(String, CQL::Performance::StatsTracker)
+    {} of String => CQL::Performance::StatsTracker
+  end
+
+  def issues : Array(CQL::Performance::Issue)
+    [] of CQL::Performance::Issue
+  end
+
+  def clear : Void
+  end
+end
+
+class NormalizationSpyDetector
+  include CQL::Performance::NPlusOneDetectorInterface
+
+  getter received = [] of {String, String?}
+
+  def record_query(sql : String, normalized_sql : String? = nil) : Void
+    @received << {sql, normalized_sql}
+  end
+
+  def start_relation_loading(relation_name : String, parent_model : String) : Void
+  end
+
+  def end_relation_loading : Void
+  end
+
+  def patterns
+    [] of CQL::Performance::NPlusOnePattern
+  end
+
+  def issues : Array(CQL::Performance::Issue)
+    [] of CQL::Performance::Issue
+  end
+
+  def clear : Void
+  end
+end
+
+describe "CQL::Performance::Monitor shared SQL normalization" do
+  sql = "SELECT * FROM users WHERE id = 42 AND name = 'Alice'"
+  normalized = CQL::Performance::SQLUtils.normalize_sql(sql)
+
+  build_monitor = ->(profiler : NormalizationSpyProfiler, detector : NormalizationSpyDetector) do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = false
+    CQL::Performance::Monitor.new(config: config, profiler: profiler, detector: detector)
+  end
+
+  it "hands the profiler the SQL normalized by the monitor" do
+    profiler = NormalizationSpyProfiler.new
+    detector = NormalizationSpyDetector.new
+
+    build_monitor.call(profiler, detector).track(sql) { 1 }
+
+    profiler.received.should eq([{sql, normalized}])
+  end
+
+  it "hands the N+1 detector the same normalized SQL as the profiler" do
+    profiler = NormalizationSpyProfiler.new
+    detector = NormalizationSpyDetector.new
+
+    build_monitor.call(profiler, detector).track(sql) { 1 }
+
+    detector.received.should eq([{sql, normalized}])
+  end
+
+  it "still hands the profiler the normalized SQL when the tracked block raises, and skips the detector" do
+    profiler = NormalizationSpyProfiler.new
+    detector = NormalizationSpyDetector.new
+
+    expect_raises(Exception, "boom") do
+      build_monitor.call(profiler, detector).track(sql) { raise "boom" }
+    end
+
+    profiler.received.should eq([{sql, normalized}])
+    detector.received.should be_empty
+  end
+end
+
+describe "CQL.config.monitor_performance" do
+  after_each { CQL.reset_config! }
+
+  it "enables the global performance monitor when set to true" do
+    disabled = CQL::Performance::Config.new
+    disabled.monitoring.enabled = false
+
+    with_global_monitor(CQL::Performance::Monitor.new(config: disabled)) do
+      CQL.configure(&.monitor_performance=(true))
+
+      CQL::Performance.monitor.enabled?.should be_true
+    end
+  end
+
+  it "leaves the global performance monitor disabled when false" do
+    disabled = CQL::Performance::Config.new
+    disabled.monitoring.enabled = false
+
+    with_global_monitor(CQL::Performance::Monitor.new(config: disabled)) do
+      CQL.configure(&.monitor_performance=(false))
+
+      CQL::Performance.monitor.enabled?.should be_false
+    end
+  end
+end
+
+describe "CQL::Performance.enable_sql_logging" do
+  it "turns monitoring on so tracked queries are logged" do
+    disabled = CQL::Performance::Config.new
+    disabled.monitoring.enabled = false
+
+    with_global_monitor(CQL::Performance::Monitor.new(config: disabled)) do
+      CQL::Performance.enable_sql_logging(colorize: false)
+
+      CQL::Performance.monitor.enabled?.should be_true
+      Log.capture("*") do |logs|
+        CQL::Performance.track("SELECT 1") { 1 }
+        logs.check(:info, /SELECT 1/)
+      end
     end
   end
 end

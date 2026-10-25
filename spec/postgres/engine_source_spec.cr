@@ -126,11 +126,23 @@ describe CQL::Postgres::EngineSource do
     run_simple(schema, "SELECT 1")
   end
 
-  it "opens a second pooled connection for a transaction nested in a transaction, as crystal-db's pool does" do
-    server = recording_server([] of String)
+  it "runs a transaction nested in a transaction as a SAVEPOINT on the same connection" do
+    statements = [] of String
+    server = recording_server(statements)
     schema = schema_on(server)
     schema.transaction { |_tx| schema.transaction { |_inner| } }
-    server.accepted.should eq 2
+    server.accepted.should eq 1
+    statements.first.should eq "BEGIN"
+    statements[1].should start_with "SAVEPOINT "
+    statements[2].should start_with "RELEASE SAVEPOINT "
+    statements.last.should eq "COMMIT"
+  end
+
+  it "nests a transaction on a pool of one without waiting for a second connection" do
+    server = recording_server([] of String)
+    schema = schema_on(server, "&pool_size=1&checkout_timeout=0.1")
+    schema.transaction { |_tx| schema.transaction { |_inner| } }
+    server.accepted.should eq 1
   end
 
   it "accepts a source of the schema's own adapter: PostgreSQL, and CockroachDB" do

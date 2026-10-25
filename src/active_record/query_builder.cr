@@ -306,13 +306,52 @@ module CQL
           clone_builder.tap(&.query.right(**tables_with_aliases))
         end
 
-        # Add count aggregate
+        # Counts the rows the query returns, or the non-NULL values of *column*.
+        # Without LIMIT or OFFSET, ORDER BY is dropped. With either it counts a derived
+        # table (`SELECT COUNT(*) FROM (...) AS counted_rows`); ORDER BY stays inside it
+        # when counting a column, since it decides which rows fall in the window, and
+        # `group` counts the groups in the window.
+        # `distinct` with joins plus LIMIT or OFFSET keeps every joined column inside
+        # the derived table (MySQL rejects duplicate column names there), and unaliased
+        # aggregate selects cannot be counted with LIMIT or OFFSET.
         # - **@param** column [Symbol] The column to count (defaults to *)
         # - **@return** [Int64] The count result
         def count(column : Symbol = :*)
-          result = @query.clone.count(column)
+          result = count_query(column)
           result = result.get(Int64 | Int32 | Nil) if result.responds_to?(:get)
           result || 0_i64
+        end
+
+        # The `CQL::Query` that `count` runs, on the same executor as this query.
+        def count_query(column : Symbol = :*) : CQL::Query
+          query = @query.clone
+          windowed = !query.limit.nil? || !query.offset.nil?
+          query.unscope(:order) if column == :* || !windowed
+          return query.count(column) unless windowed
+
+          CQL::Query.new(query.schema)
+            .from(select_for_count(query, column), as: :counted_rows)
+            .count(column)
+            .using(query.executor)
+        end
+
+        # Narrows an implicit `SELECT *` to the columns the outer count needs.
+        private def select_for_count(query : CQL::Query, column : Symbol) : CQL::Query
+          explicit = !query.columns.empty? || !query.select_expressions.empty?
+          return query if explicit || query.distinct? || !query.distinct_on.empty?
+          return query.select(column) unless column == :*
+
+          query.group_by.empty? ? select_primary_key(query) : select_group_columns(query)
+        end
+
+        private def select_group_columns(query : CQL::Query) : CQL::Query
+          query.tap { |grouped| grouped.columns.concat(grouped.group_by) }
+        end
+
+        private def select_primary_key(query : CQL::Query) : CQL::Query
+          table_alias, info = query.query_tables.first
+          primary_key = info[:table].primary_key
+          primary_key ? query.select("#{table_alias}.#{primary_key.name}") : query
         end
 
         # Add sum aggregate

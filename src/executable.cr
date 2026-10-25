@@ -28,9 +28,10 @@ module CQL
     def explain(analyze : Bool = false) : String
       sql, params = to_sql
       dialect = schema.dialect
+      explain_sql = dialect.explain(sql, analyze)
       # Plans are diagnostics: not cached, and not counted as application queries.
-      CQL::Execution.run(executor, dialect.explain(sql, analyze), params, :explain, track: false) do |connection|
-        connection.query(dialect.explain(sql, analyze), args: params) do |rows|
+      CQL::Execution.run(executor, explain_sql, params, :explain, track: false) do |connection|
+        connection.query(explain_sql, args: params) do |rows|
           lines = [] of String
           rows.each { lines << dialect.format_plan_row(Array.new(rows.column_count) { rows.read.to_s }) }
           lines.join("\n")

@@ -1,5 +1,18 @@
 require "../spec_helper"
 
+def many_to_many_isolation_selects(& : ->) : Array(String)
+  statements = [] of String
+  CQL::Telemetry.subscribe("many_to_many_isolation") do |event|
+    statements << event.sql if event.operation == :select
+  end
+  begin
+    yield
+  ensure
+    CQL::Telemetry.unsubscribe("many_to_many_isolation")
+  end
+  statements
+end
+
 describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
   before_each do
     UserDB.actors.drop! rescue nil
@@ -628,6 +641,78 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
 
       # Should no longer be loaded
       movie.actors_loaded?.should be_false
+    end
+  end
+
+  describe "shared query isolation" do
+    it "keeps the join table parent predicate single across count, reload and chained queries" do
+      movie = Movie.new("The Matrix", 1999)
+      movie.create!
+      other_movie = Movie.new("Speed", 1994)
+      other_movie.create!
+
+      keanu = Actor.new("Keanu Reeves", 58)
+      keanu.create!
+      laurence = Actor.new("Laurence Fishburne", 62)
+      laurence.create!
+      sandra = Actor.new("Sandra Bullock", 60)
+      sandra.create!
+      MoviesActor.new(movie.id!, keanu.id!).create!
+      MoviesActor.new(movie.id!, laurence.id!).create!
+      MoviesActor.new(other_movie.id!, keanu.id!).create!
+      MoviesActor.new(other_movie.id!, sandra.id!).create!
+
+      actors = movie.actors
+      statements = many_to_many_isolation_selects do
+        actors.count.should eq(2)
+        actors.reload.size.should eq(2)
+        actors.limit(1).all(Actor).size.should eq(1)
+        actors.reload.map(&.name).sort!.should eq(["Keanu Reeves", "Laurence Fishburne"])
+      end
+
+      statements.size.should eq(4)
+      statements.first.should contain("COUNT(")
+      statements[1..].each(&.should_not contain("COUNT("))
+      statements.map(&.scan("movies_actor.movie_id = ?").size).should eq([1, 1, 1, 1])
+    end
+
+    it "scopes reload and count to the parent even when given an unscoped query" do
+      movie = Movie.new("The Matrix", 1999)
+      movie.create!
+      other_movie = Movie.new("Speed", 1994)
+      other_movie.create!
+
+      keanu = Actor.new("Keanu Reeves", 58)
+      keanu.create!
+      sandra = Actor.new("Sandra Bullock", 60)
+      sandra.create!
+      MoviesActor.new(movie.id!, keanu.id!).create!
+      MoviesActor.new(other_movie.id!, sandra.id!).create!
+
+      actors = CQL::ActiveRecord::Relations::ManyCollection(Actor, MoviesActor, Int32).new(
+        key: :movie_id,
+        id: movie.id!,
+        target_key: :actor_id,
+        query: CQL::Query.new(Actor.schema).from(Actor.table)
+      )
+
+      actors.reload.map(&.name).should eq(["Keanu Reeves"])
+      actors.count.should eq(1)
+    end
+
+    it "numbers the join table parent predicate before the caller's conditions on Postgres" do
+      actors = CQL::ActiveRecord::Relations::ManyCollection(Actor, MoviesActor, Int32).new(
+        key: :movie_id, id: 7, target_key: :actor_id
+      )
+
+      actors.where(name: "Keanu Reeves").to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
+        .should eq({
+          "SELECT actors.id, actors.name, actors.age, actors.created_at, actors.updated_at, " \
+          "movies_actor.id, movies_actor.movie_id, movies_actor.actor_id, movies_actor.created_at, movies_actor.updated_at " \
+          "FROM actors INNER JOIN movies_actor ON actors.id = movies_actor.actor_id " \
+          "WHERE (movies_actor.movie_id = $1) AND (actors.name = $2)",
+          [7, "Keanu Reeves"] of DB::Any,
+        })
     end
   end
 end

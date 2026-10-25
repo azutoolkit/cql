@@ -20,16 +20,16 @@ module CQL
   #
   # ## Performance Monitoring
   #
-  # All query execution methods (`all`, `first`, `get`, `each`) are automatically tracked
-  # by the CQL Performance module when enabled. This provides:
+  # All query execution methods (`all`, `first`, `get`, `each`) are tracked by the
+  # CQL Performance module once monitoring is enabled. This provides:
   # - Query execution time tracking
   # - Slow query detection
   # - N+1 query pattern detection
   # - Performance report generation
   #
-  # To enable performance monitoring:
+  # Monitoring is opt-in. To enable it:
   # ```
-  # CQL::Performance.enable_development_mode!
+  # CQL::Performance.enable_monitoring
   # ```
   #
   # To track queries with context:
