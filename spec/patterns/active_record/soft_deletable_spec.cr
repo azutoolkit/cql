@@ -172,6 +172,11 @@ describe CQL::ActiveRecord::SoftDeletable do
       SoftDeletableUser.acts_as_paranoid?.should be_true
     end
 
+    it "is the marker bulk association deletes use to keep soft deletes" do
+      SoftDeletableUser.responds_to?(:acts_as_paranoid?).should be_true
+      Actor.responds_to?(:acts_as_paranoid?).should be_false
+    end
+
     it "soft deletes records by ID using delete!" do
       user = SoftDeletableUser.new("Delete By ID", "delete_id@example.com", 26)
       user.create!

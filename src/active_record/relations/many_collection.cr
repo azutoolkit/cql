@@ -248,10 +248,7 @@ module CQL
           # Clear join table associations
           clear_join_records
 
-          # Delete target records without callbacks
-          target_ids.each do |id|
-            safe_db_operation { Target.delete!(id) }
-          end
+          delete_targets(target_ids)
         else
           clear_join_records
         end
@@ -259,6 +256,18 @@ module CQL
         # Clear internal state since associations are gone
         @records.clear if @loaded
         self
+      end
+
+      # Deletes the target rows without callbacks: one DELETE per chunk of ids, or one soft delete
+      # per record for soft-deletable targets.
+      private def delete_targets(target_ids : Array(Pk)) : Nil
+        if Target.responds_to?(:acts_as_paranoid?)
+          target_ids.each { |id| safe_db_operation { Target.delete!(id) } }
+        else
+          id_chunks(target_ids) do |chunk|
+            safe_db_operation { CQL::Delete.new(Target.schema).from(Target.table).where(id: chunk).commit }
+          end
+        end
       end
 
       # Clear only the join table records (preserve target records)

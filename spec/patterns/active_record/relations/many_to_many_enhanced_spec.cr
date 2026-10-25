@@ -92,6 +92,24 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
       movie.actors.size.should eq(0)
     end
 
+    it "deletes the targets of a delete_all collection in one statement" do
+      movie = Movie.new("Heat", 1995)
+      movie.create!
+      actors = (1..3).map { |i| Actor.new("Actor #{i}", 30 + i).tap(&.create!) }
+      actors.each { |actor| movie.actors << actor }
+      bystander = Actor.new("Bystander", 40)
+      bystander.create!
+      collection = CQL::ActiveRecord::Relations::ManyCollection(Actor, MoviesActor, Int32).new(
+        key: :movie_id, id: movie.id!, target_key: :actor_id, dependent: :delete_all
+      )
+
+      deletes = count_queries(:delete) { collection.clear_with_delete }
+
+      deletes.size.should eq(2) # the join rows, then the three actors
+      Actor.all.map(&.id!).should eq([bystander.id!])
+      MoviesActor.count.should eq(0)
+    end
+
     it "only clears join records when dependent: :nullify" do
       movie = Movie.new("The Matrix", 1999)
       movie.create!

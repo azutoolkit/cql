@@ -59,12 +59,12 @@ ensure
   CQL::Performance.monitor = previous if previous
 end
 
-# Returns the SELECT statements the block ran, in order, so specs can assert query counts.
-def count_queries(& : ->) : Array(String)
+# Returns the statements of *operation* (SELECT by default) the block ran, in order, so specs can assert query counts.
+def count_queries(operation : Symbol = :select, & : ->) : Array(String)
   statements = [] of String
   subscription = "spec_count_queries_#{Random::Secure.hex(4)}"
   CQL::Telemetry.subscribe(subscription) do |event|
-    statements << event.sql if event.operation == :select
+    statements << event.sql if event.operation == operation
   end
   begin
     yield
