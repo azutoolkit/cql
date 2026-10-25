@@ -15,7 +15,9 @@ CQL::Telemetry.log_queries                       # one debug log line per statem
 An event carries `sql`, `operation` (`:select`, `:insert`, `:update`, `:delete`, `:ddl`,
 `:explain`), `duration`, `pool_wait`, `param_count`, `adapter`, `error`, `rows_affected`, `context`, `params` (only with `capture_params`) and `success?`.
 
-Subscribers run inline, before the statement returns. `subscribe(name, async: true)` runs one on a background fiber through a bounded queue (`Telemetry.async_queue_capacity`, default 4096): a full queue drops events (`Telemetry.dropped_events`) rather than blocking, and `Telemetry.flush(timeout)` waits for delivery. On one thread this takes the work out of query latency, not out of CPU; with several threads a hand-off to a parked consumer costs a scheduler wake (microseconds).
+Subscribers run inline, before the statement returns. `subscribe(name, async: true)` runs one on a background fiber through a bounded queue: a full queue drops events (`Telemetry.dropped_events`) rather than blocking, and `Telemetry.flush(timeout)` waits for delivery (pass a timeout at shutdown, so a stuck subscriber cannot hang it). Set `Telemetry.async_queue_capacity` (default 4096) before the first async subscriber: the queue allocates its whole buffer then and lives until `reset!`, which also restores the default. Subscribing a name in one mode removes it from the other, and once `unsubscribe` returns and `flush` returns true, a removed subscriber receives nothing more.
+
+Async delivery takes the work out of query latency, not out of CPU. On one thread the consumer runs only when the application yields, so a tight loop of SQLite statements can fill the queue and drop events; with several threads a hand-off to a parked consumer costs a scheduler wake (about half a microsecond). Queued events keep their SQL, and with `capture_params` their bound values, in memory until delivered.
 
 ## Parameters are redacted by default
 

@@ -113,6 +113,7 @@ module CQL
     @@transaction_subscribers = {} of String => TransactionSubscriber
     @@transaction_ids = Atomic(Int64).new(0)
     @@mutex = CQL::Compat::Mutex.new
+    @@async_queue_capacity : Int32 = DEFAULT_ASYNC_QUEUE_CAPACITY
     @@capture_params = false
     @@tracer : Tracer? = nil
 
@@ -132,8 +133,15 @@ module CQL
       @@tracer = value
     end
 
-    # Events the async queue holds before it drops new ones; a change applies to the next queue created.
-    class_property async_queue_capacity : Int32 = DEFAULT_ASYNC_QUEUE_CAPACITY
+    # Events the async queue holds before it drops new ones. Set it before the first async subscriber: the queue
+    # is built then and kept until `reset!`, which also restores the default.
+    def self.async_queue_capacity : Int32
+      @@async_queue_capacity
+    end
+
+    def self.async_queue_capacity=(value : Int32)
+      @@async_queue_capacity = EventQueue(QueryEvent).checked_capacity(value)
+    end
 
     # Registers (or replaces) the subscriber called *name*, by default called inline after each statement.
     #
@@ -141,7 +149,7 @@ module CQL
     # queue that drops events when full (`dropped_events`). On a single Crystal thread this moves its work
     # out of the query's latency, not out of the CPU; under multi-threading a push to a parked consumer
     # can cost a scheduler wake.
-    def self.subscribe(name : String, async : Bool = false, &block : QueryEvent ->) : Nil
+    def self.subscribe(name : String, *, async : Bool = false, &block : QueryEvent ->) : Nil
       @@mutex.synchronize do
         if async
           @@async_queue ||= EventQueue(QueryEvent).new(@@async_queue_capacity) { |event| notify(@@async_subscribers, event) }
@@ -302,7 +310,7 @@ module CQL
     # :nodoc:
     def self.query_event(adapter : Adapter, operation : Symbol, sql : String, params : Array(DB::Any),
                          duration : Time::Span, error : Exception?, result, pool_wait : Time::Span = Time::Span.zero) : QueryEvent
-      QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows_affected(result), current_context, pool_wait)
+      QueryEvent.new(sql, params.size, (params.map(&.dup) if @@capture_params), duration, error, adapter, operation, rows_affected(result), current_context, pool_wait)
     end
 
     # :nodoc:

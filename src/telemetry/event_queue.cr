@@ -27,11 +27,17 @@ module CQL::Telemetry
       end
     end
 
+    # *capacity* itself when a queue can hold that many events; raises ArgumentError otherwise.
+    def self.checked_capacity(capacity : Int32) : Int32
+      raise ArgumentError.new("capacity must be in 1..#{MAX_CAPACITY}, got #{capacity}") unless capacity.in?(1..MAX_CAPACITY)
+      capacity
+    end
+
     @dropped = Atomic(Int64).new(0)
     @consumer : Fiber
 
     def initialize(capacity : Int32, &@handler : T ->)
-      raise ArgumentError.new("capacity must be in 1..#{MAX_CAPACITY}, got #{capacity}") unless capacity.in?(1..MAX_CAPACITY)
+      capacity = self.class.checked_capacity(capacity)
       @event_slots = Slots.new(capacity)
       @flush_slots = Slots.new(MAX_PENDING_FLUSHES)
       @channel = Channel(T | Flush).new(capacity + MAX_PENDING_FLUSHES)

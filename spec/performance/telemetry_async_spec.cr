@@ -85,4 +85,41 @@ describe "async telemetry subscribers" do
     flush.call.should be_true
     seen.size.should eq(1)
   end
+
+  it "refuses a queue capacity outside 1..max and keeps the previous one" do
+    [0, -1, Int32::MAX].each do |capacity|
+      expect_raises(ArgumentError) { CQL::Telemetry.async_queue_capacity = capacity }
+      CQL::Telemetry.async_queue_capacity.should eq(4096)
+    end
+    CQL::Telemetry.async_queue_capacity = 16
+    CQL::Telemetry.async_queue_capacity.should eq(16)
+  end
+
+  it "captures a copy of Bytes params, not the caller's slice" do
+    CQL::Telemetry.capture_params = true
+    blob = Bytes[1, 2, 3]
+    event = CQL::Telemetry.query_event(CQL::Adapter::SQLite, :select, "SELECT ?", [blob] of DB::Any, 1.millisecond, nil, nil)
+    blob[0] = 9_u8
+    event.params.not_nil!.first.should eq(Bytes[1, 2, 3])
+  end
+
+  it "never delivers a queued event to an async subscriber unsubscribed before the consumer reaches it" do
+    started = Channel(Nil).new(1)
+    blocked = false
+    CQL::Telemetry.subscribe("gate", async: true) do |_|
+      next if blocked
+      blocked = true
+      started.send(nil)
+      gate.receive?
+    end
+    statement.call
+    within { started.receive }
+
+    CQL::Telemetry.subscribe("late", async: true) { |event| seen << event }
+    2.times { statement.call }
+    CQL::Telemetry.unsubscribe("late")
+    gate.close
+    CQL::Telemetry.flush(1.second).should be_true
+    seen.should be_empty
+  end
 end

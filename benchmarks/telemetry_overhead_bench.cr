@@ -76,6 +76,11 @@ workload("sync subscriber") do
   CQL::Telemetry.subscribe("bench") { |_event| }
 end
 
+# The bench loop never yields, so the consumer fiber rarely runs: this row mostly measures the push and drop path.
+workload("async subscriber") do
+  CQL::Telemetry.subscribe("bench", async: true) { |_event| }
+end
+
 workload("tracer") do
   CQL::Telemetry.tracer = NoopTracer.new
 end
