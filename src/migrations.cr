@@ -194,13 +194,11 @@ module CQL
     # migrator.up
     # ```
     def up(steps : Int32 = Migrator.migrations.size)
-      schema.exec_query do |conn|
-        conn.transaction do
-          sorted_migrations[0, steps].each do |migration_class|
-            unless migration_applied?(migration_class.version)
-              migration_class.new(schema).up
-              record_migration(migration_class)
-            end
+      within_migration_transaction do
+        sorted_migrations[0, steps].each do |migration_class|
+          unless migration_applied?(migration_class.version)
+            migration_class.new(schema).up
+            record_migration(migration_class)
           end
         end
       end
@@ -452,6 +450,16 @@ module CQL
 
     private def sorted_migrations
       Migrator.migrations.sort_by(&.version)
+    end
+
+    # Where DDL commits implicitly, a transaction gives no atomicity, so migrations refuse to run inside one.
+    private def within_migration_transaction(&)
+      schema.require_transactional_ddl!
+      if schema.dialect.supports_transactional_ddl?
+        schema.transaction { yield }
+      else
+        yield
+      end
     end
 
     private def ensure_schema_migrations_table

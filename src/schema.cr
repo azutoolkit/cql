@@ -465,9 +465,11 @@ module CQL
       end
     end
 
-    private def require_transactional_ddl! : Nil
+    # Raises where DDL commits implicitly, because running it inside an open transaction would
+    # silently commit the caller's pending work.
+    def require_transactional_ddl! : Nil
       return if active_transaction.nil? || dialect.supports_transactional_ddl?
-      raise DialectError.new(dialect.display_name, "schema changes inside a transaction", "Run the alter outside the transaction.")
+      raise DialectError.new(dialect.display_name, "schema changes inside a transaction", "Run it outside the transaction.")
     end
 
     macro method_missing(call)
