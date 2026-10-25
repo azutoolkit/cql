@@ -78,6 +78,14 @@ describe "has_many without foreign_key:" do
     owner.kids_count.should eq(2)
   end
 
+  it "sets the foreign key on bulk-inserted rows" do
+    owner = HmDefaultOwner.create!(name: "Ann")
+
+    owner.insert_kids_all([{name: "Kim"}, {name: "Lee"}]).should eq(2)
+
+    HmDefaultKid.where(hm_default_owner_id: owner.id!).count.should eq(2)
+  end
+
   it "preloads each owner's records" do
     ann = HmDefaultOwner.create!(name: "Ann")
     bob = HmDefaultOwner.create!(name: "Bob")

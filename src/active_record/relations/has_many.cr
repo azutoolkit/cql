@@ -222,10 +222,10 @@ module CQL::ActiveRecord::Relations
       end
 
       # Inserts *rows* (column values) as associated records with `{{type.id}}.insert_all`, setting
-      # `{{fk.id}}` on each to this record's id, and returns how many were inserted. Unlike
+      # `{{fk}}` on each to this record's id, and returns how many were inserted. Unlike
       # `create_{{name.id}}`, it runs no validations or callbacks and builds no records.
       def insert_{{name.id}}_all(rows : Array(Hash(Symbol, DB::Any)), batch_size : Int32? = nil) : Int64
-        owner = { :{{fk.id}} => CQL::ActiveRecord::IdChunks.bound(safe_id(self, Pk)) }
+        owner = { :{{fk}} => CQL::ActiveRecord::IdChunks.bound(safe_id(self, Pk)) }
         inserted = {{type.id}}.insert_all(rows.map(&.merge(owner)), batch_size)
         @{{name.id}} = nil
         inserted
