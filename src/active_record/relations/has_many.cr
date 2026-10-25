@@ -62,10 +62,11 @@ module CQL::ActiveRecord::Relations
       {% if target_model = type.resolve? %}
         {% parent_id_getter = @type.methods.find { |method| method.name == "id!" && method.args.empty? } %}
         {% target_fk_getter = target_model.methods.find { |method| method.name == fk.stringify && method.args.empty? } %}
-        {% unless target_fk_getter %}
+        {% shared_key = fk.id == (target_model.constant(:CQL_PRIMARY_KEY_COLUMN) || :id).id %}
+        {% unless target_fk_getter || shared_key %}
           {{ raise "CQL has_many error in #{@type}: target model #{type} does not define foreign key `#{fk}`. Add a typed getter/property to #{type}, for example `property #{fk} : #{parent_id_getter ? parent_id_getter.return_type : "ParentPk"}?`." }}
         {% end %}
-        {% if parent_id_getter %}
+        {% if parent_id_getter && !shared_key %}
           {% fk_type = target_fk_getter.return_type.stringify.split("|").map(&.strip).reject { |part| part == "Nil" || part == "::Nil" }.join(" | ") %}
           {% pk_type = (@type.constant(:CQL_PRIMARY_KEY_TYPE) || parent_id_getter.return_type).stringify.split("|").map(&.strip).reject { |part| part == "Nil" || part == "::Nil" }.join(" | ") %}
           {% unless fk_type == pk_type %}

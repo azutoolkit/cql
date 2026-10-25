@@ -31,16 +31,42 @@ module CQL
           @@table = table if table
         end
 
+        def self.primary_key_column : Symbol
+          :id
+        end
+
+        # The primary key column as an expression, for conditions a where-hash cannot express (`IN`).
+        protected def self.primary_key_expression : ::Expression::Column
+          ::Expression::Column.new(cql_column(primary_key_column))
+        end
+
         {% verbatim do %}
-          macro db_context(schema = nil, table = nil)
+          macro db_context(schema = nil, table = nil, primary_key = :id)
+            {% raise "db_context for #{@type}: primary_key must be a Symbol, got #{primary_key}" unless primary_key.is_a?(SymbolLiteral) %}
             {% if schema %}
               CQL_SCHEMA_CONTEXT = {{schema}}
             {% end %}
             {% if table %}
               CQL_TABLE_NAME = {{table}}
             {% end %}
+            CQL_PRIMARY_KEY_COLUMN = {{primary_key}}
 
             self.db_context(schema: {{schema}}, table: {{table}})
+
+            {% if primary_key != :id %}
+              def self.primary_key_column : Symbol
+                {{primary_key}}
+              end
+
+              # Re-declares Identifyable's id storage so DB::Serializable maps it to the declared column
+              {% if CQL_PRIMARY_KEY_TYPE.resolve == UUID %}
+                @[DB::Field(key: {{primary_key.id.stringify}})]
+                @_id_storage : String? = nil
+              {% else %}
+                @[DB::Field(key: {{primary_key.id.stringify}})]
+                @id : {{CQL_PRIMARY_KEY_TYPE}}? = nil
+              {% end %}
+            {% end %}
           end
         {% end %}
 
@@ -76,21 +102,25 @@ module CQL
           new(**fields)
         end
 
-        # Build a new object of type T with the given attributes
+        # Builds a new, unsaved object from a hash of column values. The primary key is ignored, so a
+        # hash from request params cannot make `save` update an existing row; pass
+        # `with_primary_key: true` only for trusted data (a record that is then saved updates that row).
         # - **@param** hash_attrs [Hash(Symbol, DB::Any)] The attributes to use
         # - **@return** [T] The new object
         #
         # **Example** Building a new user object
         #
         # ```
-        # User.from_hash({name: "Alice", email: "alice@example.com"})
+        # User.from_hash({:name => "Alice", :email => "alice@example.com"} of Symbol => DB::Any)
         # ```
-        def self.from_hash(hash_attrs : Hash(Symbol, DB::Any))
-          # Create instance using build method with empty fields and then set attributes
+        def self.from_hash(hash_attrs : Hash(Symbol, DB::Any), *, with_primary_key : Bool = false)
           instance = allocate
           instance.initialize
-          # Use the existing attributes method to set the hash values
-          instance.attributes(hash_attrs) if instance.responds_to?(:attributes)
+          if with_primary_key
+            instance._assign_attributes_with_primary_key(hash_attrs)
+          else
+            instance.attributes(hash_attrs)
+          end
           instance
         end
 
@@ -189,7 +219,8 @@ module CQL
                     {% for name, type in getter_types %}
                       {{name.stringify}} => {{type}},
                     {% end %}
-                  } of String => String
+                  } of String => String,
+                  primary_key: {{@type.constant(:CQL_PRIMARY_KEY_COLUMN) || :id}}
                 )
               end
             {% end %}

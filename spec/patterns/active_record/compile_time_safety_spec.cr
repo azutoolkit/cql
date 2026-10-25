@@ -173,6 +173,59 @@ describe "CQL compile-time safety" do
     error.should contain("target foreign key ForwardComment#post_id type Int32 does not match ForwardPost.id! primary key type Int64")
   end
 
+  it "raises a clear error when a has_many foreign key is the target's primary key" do
+    success, _output, error = Snippets.compile <<-CRYSTAL
+      require "./src/cql"
+
+      SharedKeyDB = CQL::Schema.define(:shared_key_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3:///tmp/shared_key_spec.db") do
+        table :passports do
+          primary :shelf_no, Int32
+        end
+      end
+
+      class SharedPassport
+        include CQL::ActiveRecord::Model(Int32)
+        db_context SharedKeyDB, :passports, primary_key: :shelf_no
+
+        def initialize
+        end
+      end
+
+      class SharedShelf
+        include CQL::ActiveRecord::Model(Int32)
+
+        has_many :passports, SharedPassport, foreign_key: :shelf_no
+      end
+      CRYSTAL
+
+    success.should be_false
+    error.should contain("CQL has_many error in SharedShelf")
+    error.should contain("foreign key `shelf_no` is the primary key of SharedPassport")
+  end
+
+  it "raises a clear error when a has_one foreign key is the target's primary key" do
+    success, _output, error = Snippets.compile <<-CRYSTAL
+      require "./src/cql"
+
+      class SharedProfile
+        include CQL::ActiveRecord::Model(Int32)
+
+        def initialize
+        end
+      end
+
+      class SharedAccount
+        include CQL::ActiveRecord::Model(Int32)
+
+        has_one :profile, SharedProfile, foreign_key: :id
+      end
+      CRYSTAL
+
+    success.should be_false
+    error.should contain("CQL has_one error in SharedAccount")
+    error.should contain("foreign key `id` is the primary key of SharedProfile")
+  end
+
   it "raises a clear schema mapping error when model getter type does not match schema column type" do
     db_path = File.join(Dir.tempdir, "cql_broken_schema_#{Random.rand(1_000_000)}.db")
     success, _output, error = Snippets.run <<-CRYSTAL

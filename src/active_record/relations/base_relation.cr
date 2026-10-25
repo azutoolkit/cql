@@ -64,9 +64,12 @@ module CQL::ActiveRecord::Relations
     end
 
     # Deletes a dependent record with its `delete!` and raises RelationError when that returns
-    # false (a callback halted it), so the owner's delete rolls back instead of orphaning it
+    # false (a callback halted it), so the owner's delete rolls back instead of orphaning it. An
+    # already soft-deleted record counts as deleted: association loads include it, and its
+    # `delete!` leaves it alone.
     macro destroy_dependent(record, association)
-      unless safe_db_operation { {{record}}.delete! }
+      %dependent = {{record}}
+      unless (%dependent.responds_to?(:deleted?) && %dependent.deleted?) || safe_db_operation { %dependent.delete! }
         raise RelationError.new("Cannot delete record because dependent {{association.id}} could not be deleted")
       end
     end

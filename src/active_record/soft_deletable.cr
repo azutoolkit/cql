@@ -86,9 +86,10 @@ module CQL
         end
 
         # Override delete! to perform soft delete; the `dependent:` strategies of the associations
-        # still apply, and `restore!` does not undo them
+        # still apply, and `restore!` does not undo them. An already soft deleted record is left as it
+        # is (false, no callbacks), so it keeps its first `deleted_at`.
         def delete! : Bool
-          return false if id.nil?
+          return false if id.nil? || deleted?
 
           check_delete_restrictions
 
@@ -98,12 +99,7 @@ module CQL
           timestamp = Time.utc
 
           # Update the record in the database
-          where_attrs = Hash(Symbol, DB::Any).new
-          {% if Pk == UUID %}
-            where_attrs[:id] = id!.to_s.as(DB::Any)
-          {% else %}
-            where_attrs[:id] = id!.as(DB::Any)
-          {% end %}
+          where_attrs = {self.class.primary_key_column => CQL::ActiveRecord::IdChunks.bound(id!)}
 
           update_attrs = Hash(Symbol, DB::Any).new
           update_attrs[:deleted_at] = timestamp.as(DB::Any)
@@ -148,12 +144,7 @@ module CQL
           @deleted_at = nil
 
           # Update the record in the database
-          where_attrs = Hash(Symbol, DB::Any).new
-          {% if Pk == UUID %}
-            where_attrs[:id] = id!.to_s.as(DB::Any)
-          {% else %}
-            where_attrs[:id] = id!.as(DB::Any)
-          {% end %}
+          where_attrs = {self.class.primary_key_column => CQL::ActiveRecord::IdChunks.bound(id!)}
 
           update_attrs = Hash(Symbol, DB::Any).new
           update_attrs[:deleted_at] = nil.as(DB::Any)
@@ -187,19 +178,7 @@ module CQL
 
         # Force delete a record by ID (permanent delete)
         def self.force_delete!(id : Pk)
-          {% if Pk == UUID %}
-            CQL::Delete
-              .new({{@type.id}}.schema)
-              .from({{@type.id}}.table)
-              .where(id: id.to_s)
-              .commit
-          {% else %}
-            CQL::Delete
-              .new({{@type.id}}.schema)
-              .from({{@type.id}}.table)
-              .where(id: id)
-              .commit
-          {% end %}
+          delete_of(id).commit
         end
 
         # Soft delete records matching specific fields, record by record in one transaction
@@ -229,8 +208,15 @@ module CQL
           set_deleted_at(ids, Time.utc)
         end
 
+        # Soft deleting only stamps rows not already deleted, so their first `deleted_at` stands and
+        # the count is of rows this call deleted.
         private def self.set_deleted_at(ids : Array(DB::Any), value : Time?) : Int64
-          CQL::Update.new(schema).table(table).set({:deleted_at => value.as(DB::Any)}).where(id: ids).commit.rows_affected
+          keys = primary_key_expression.in(ids)
+          deleted_at = ::Expression::Column.new(cql_column(:deleted_at))
+          rows = value ? keys & deleted_at.null : keys
+          CQL::Update.new(schema).table(table).set({:deleted_at => value.as(DB::Any)})
+            .where { rows }
+            .commit.rows_affected
         end
 
         # Soft deletes every active record and returns how many, in bulk unless the model

@@ -20,6 +20,7 @@ module CQL
           macro finished
             {% owner = @type %}
             {% pk = @type.constant(:CQL_PRIMARY_KEY_TYPE).stringify %}
+            {% owner_key = @type.constant(:CQL_PRIMARY_KEY_COLUMN) || :id %}
 
             {% associations = [] of Nil %}
             {% for const in CQL::ActiveRecord::AssociationRegistry.constants %}
@@ -74,7 +75,7 @@ module CQL
                 {% name = column[0] %}
                 {% type = column[1] %}
                 {% stored = (type == "UUID" || type == "JSON::Any") ? "String" : type %}
-                @[DB::Field(key: {{ name }})]
+                @[DB::Field(key: {{ name == "id" ? owner_key.id.stringify : name }})]
                 @{{ name.id }} : {{ stored.id }}? = nil
 
                 {% if type == "UUID" %}
@@ -99,8 +100,9 @@ module CQL
             end
 
             # The schema column, or a clear error when the getter has no column behind it.
+            # The `id` getter maps to the declared primary key column.
             def self.cql_column(name : Symbol) : CQL::BaseColumn
-              table_columns[name]? || raise ArgumentError.new("#{self} has no column #{name.inspect} in table #{table}. Columns: #{table_columns.keys.join(", ")}")
+              table_columns[name == :id ? {{ owner_key }} : name]? || raise ArgumentError.new("#{self} has no column #{name.inspect} in table #{table}. Columns: #{table_columns.keys.join(", ")}")
             end
 
             # The names of this model's columns, for error messages.
@@ -114,9 +116,10 @@ module CQL
               {% for meta in associations %}
                 {% target = meta.constant(:TARGET) %}
                 {% fk = meta.constant(:FOREIGN_KEY) %}
-                {% target_key, owner_key = meta.constant(:KIND) == :belongs_to ? {"id", fk} : {fk, "id"} %}
+                {% target_key = meta.constant(:TARGET).resolve.constant(:CQL_PRIMARY_KEY_COLUMN) || :id %}
+                {% target_column, owner_column = meta.constant(:KIND) == :belongs_to ? {target_key, fk} : {fk, owner_key} %}
                 when :{{ meta.constant(:ASSOCIATION).id }}
-                  { {{ target }}.table, ->(j : ::Expression::FilterBuilder) { j.table({{ target }}.table).{{ target_key.id }}.eq(j.table({{ owner }}.table).{{ owner_key.id }}) } }
+                  { {{ target }}.table, ->(j : ::Expression::FilterBuilder) { j.table({{ target }}.table).{{ target_column.id }}.eq(j.table({{ owner }}.table).{{ owner_column.id }}) } }
               {% end %}
               else
                 raise ArgumentError.new("#{self} has no association #{name.inspect}. Associations: #{([{% for meta in associations %}{{ meta.constant(:ASSOCIATION).id.stringify }}, {% end %}] of String).join(", ")}")
