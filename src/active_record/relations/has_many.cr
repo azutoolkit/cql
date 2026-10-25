@@ -48,8 +48,8 @@ module CQL::ActiveRecord::Relations
         apply_on_delete {{name}}
       {% end %}
 
-      # Determine foreign key name if not provided
-      {% fk = foreign_key || "#{@type.name.underscore.id}_id".id %}
+      # Determine foreign key name if not provided (a symbol literal, as given or derived)
+      {% fk = foreign_key || "#{@type.name.split("::").last.underscore.id}_id".id.symbolize %}
 
       module ::CQL::ActiveRecord::AssociationRegistry::{{@type.name.gsub(/::/, "__").id}}__has_many__{{name.id}}
         KIND = :has_many

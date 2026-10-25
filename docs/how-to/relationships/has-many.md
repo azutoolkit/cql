@@ -12,7 +12,7 @@ Use `has_many` when:
 ## Options
 
 ```crystal
-has_many :posts, Post                                  # foreign key defaults to user_id (owner name + _id)
+has_many :posts, Post                                  # foreign key defaults to user_id (owner name + _id, without its namespace: Blog::User -> user_id)
 has_many :posts, Post, :user_id                        # third argument is the foreign key
 has_many :posts, Post, foreign_key: :author_id, dependent: :destroy
 ```

@@ -106,7 +106,7 @@ The macro signature is `many_to_many(name, klass, join_through, foreign_key = ni
 
 - `join_through` is the join model class (or its snake_case name as a symbol, like `:movies_actor` for `MoviesActor`), and its table name must be the underscored class name (`PostTag` -> `post_tag`).
 
-Foreign keys default to the owner's name plus `_id` (`post_id`) and the target's name plus `_id` (`tag_id`). Override them with `foreign_key:` and `association_foreign_key:`.
+Foreign keys default to the owner's name plus `_id` (`post_id`) and the target's name plus `_id` (`tag_id`), without their namespace (`Blog::Post` and `Blog::Tag` also give `post_id` and `tag_id`). Override them with `foreign_key:` and `association_foreign_key:`.
 
 ## Create Relationships
 
