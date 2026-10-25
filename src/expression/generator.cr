@@ -45,14 +45,17 @@ module Expression
         string << "DISTINCT " if node.distinct? && node.distinct_on.empty?
         string << @dialect.format_distinct_on(node.distinct_on.map(&.accept(self))) unless node.distinct_on.empty?
         # Columns and select expressions (aggregates, window functions), aliased where given
-        columns_sql = node.columns.map(&.accept(self))
-        expressions_sql = node.select_expressions.map { |expression| select_item(expression) }
-
-        select_parts = columns_sql + expressions_sql
-        if select_parts.empty?
+        if node.columns.empty? && node.select_expressions.empty?
           string << "*"
         else
-          string << select_parts.join(", ")
+          node.columns.each_with_index do |column, index|
+            string << ", " if index > 0
+            string << column.accept(self)
+          end
+          node.select_expressions.each_with_index do |expression, index|
+            string << ", " if index > 0 || !node.columns.empty?
+            string << select_item(expression)
+          end
         end
 
         # From node now contains Expression::Table nodes potentially with aliases

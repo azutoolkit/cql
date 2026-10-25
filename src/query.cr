@@ -1188,54 +1188,31 @@ module CQL
     end
 
     private def build_select
-      selected_columns = [] of Expression::Column
-      aggregate_expressions = [] of Expression::SelectExpression
+      aggregate_expressions = @select_expressions.dup
+      select_everything = @columns.empty? && aggregate_expressions.empty?
+      {select_everything ? implicit_select_columns : explicit_select_columns, aggregate_expressions}
+    end
 
-      @select_expressions.each do |aggr_node|
-        # Aggregate nodes should already contain Expression::Column with String alias
-        aggregate_expressions << aggr_node
-      end
-
-      if @columns.empty? && aggregate_expressions.empty?
-        if @query_tables.empty?
-          return {[] of Expression::Column, [] of Expression::SelectExpression}
-        end
-        # Implicit SELECT * using String aliases
-        @query_tables.each do |table_alias_str, info|
-          pk = info[:table].primary_key
-          if pk && !selected_columns.any? { |col| col.alias_name == table_alias_str && col.column.name == pk.name }
-            # Pass String alias
-            selected_columns << Expression::Column.new(pk, alias_name: table_alias_str)
-          end
-          info[:table].columns.each_value do |base_col|
-            next if pk && base_col.name == pk.name
-            unless selected_columns.any? { |col| col.alias_name == table_alias_str && col.column.name == base_col.name }
-              # Pass String alias
-              selected_columns << Expression::Column.new(base_col, alias_name: table_alias_str)
-            end
-          end
-        end
-      else
-        # Explicit SELECT
-        selected_columns = @columns.map do |base_col|
-          # Check if this column has a custom alias
-          if @column_aliases.has_key?(base_col)
-            # Use the custom column alias
-            Expression::Column.new(base_col, alias_name: @column_aliases[base_col])
-          else
-            # Use the table alias
-            col_alias_str = find_alias_for_table(base_col.table.not_nil!)
-            Expression::Column.new(base_col, alias_name: col_alias_str)
-          end
+    # Every column of every table in the query, each table's primary key first.
+    private def implicit_select_columns : Array(Expression::Column)
+      selected = [] of Expression::Column
+      @query_tables.each do |table_alias, info|
+        table = info[:table]
+        pk = table.primary_key
+        selected << Expression::Column.new(pk, alias_name: table_alias) if pk
+        table.columns.each_value do |column|
+          selected << Expression::Column.new(column, alias_name: table_alias) unless pk && column.name == pk.name
         end
       end
+      selected
+    end
 
-      selected_columns.uniq! do |col_expr|
-        # Use String alias for uniqueness check
-        "#{col_expr.alias_name}.#{col_expr.column.name}"
+    # The selected columns under their custom or table alias, each once.
+    private def explicit_select_columns : Array(Expression::Column)
+      selected = @columns.map do |column|
+        Expression::Column.new(column, alias_name: @column_aliases[column]? || find_alias_for_table(column.table.not_nil!))
       end
-
-      {selected_columns, aggregate_expressions}
+      selected.uniq! { |column| {column.alias_name, column.column.name} }
     end
 
     private def from_source(table : CQL::Table, alias_name : String) : Expression::Table
