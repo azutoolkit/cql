@@ -186,21 +186,29 @@ module Expression
     end
 
     def visit(node : And) : String
-      String.build do |string|
-        # Wrap sides in parentheses for correct precedence
-        string << "(" << node.left.accept(self) << ")"
-        string << " AND "
-        string << "(" << node.right.accept(self) << ")"
-      end
+      String.build { |string| write_condition(node, string) }
     end
 
     def visit(node : Or) : String
-      String.build do |string|
-        # Wrap sides in parentheses for correct precedence
-        string << "(" << node.left.accept(self) << ")"
-        string << " OR "
-        string << "(" << node.right.accept(self) << ")"
+      String.build { |string| write_condition(node, string) }
+    end
+
+    # Writes nested AND/OR conditions into one builder, so a chain of n conditions copies its SQL
+    # once instead of once per nesting level.
+    private def write_condition(node : Condition, string : IO) : Nil
+      case node
+      when And then write_junction(node.left, " AND ", node.right, string)
+      when Or  then write_junction(node.left, " OR ", node.right, string)
+      else          string << node.accept(self)
       end
+    end
+
+    private def write_junction(left : Condition, keyword : String, right : Condition, string : IO) : Nil
+      string << "("
+      write_condition(left, string)
+      string << ")" << keyword << "("
+      write_condition(right, string)
+      string << ")"
     end
 
     # Always parenthesized: `NOT a AND b` would negate only `a`.

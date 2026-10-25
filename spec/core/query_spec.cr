@@ -385,6 +385,19 @@ describe CQL::Query do
       select_query.should eq({output.strip, [10, 20]})
     end
 
+    it "keeps nesting and placeholder order for chained AND, OR and NOT" do
+      query = Northwind.query.from(:customers).select(:name)
+        .where(city: "Lisbon").where(balance: 10).where(name: "Ada")
+        .where { (customers.id > 5) | (customers.city == "x").not }
+      generator = Expression::Generator.new(CQL::Adapter::Postgres)
+
+      query.to_sql(generator).should eq({
+        "SELECT customers.name FROM customers WHERE (((customers.city = $1) AND (customers.balance = $2)) AND (customers.name = $3)) " \
+        "AND ((customers.id > $4) OR (NOT (customers.city = $5)))",
+        ["Lisbon", 10, "Ada", 5, "x"] of DB::Any,
+      })
+    end
+
     it "generates correct PostgreSQL placeholders for LIMIT and OFFSET" do
       generator = Expression::Generator.new(CQL::Adapter::Postgres)
       limit_node = Expression::Limit.new(10, 20)
