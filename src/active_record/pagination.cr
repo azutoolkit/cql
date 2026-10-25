@@ -47,17 +47,10 @@ module CQL
         # next_page = User.after_cursor(first_page.last.id!, limit: 10)
         # ```
         def self.after_cursor(cursor_id : Pk, limit : Int32 = 10)
-          {% if Pk == UUID %}
-            query.where_gt(:id, cursor_id.to_s.as(DB::Any))
-                 .order(:id)
-                 .limit(limit)
-                 .all({{@type.id}})
-          {% else %}
-            query.where_gt(:id, cursor_id.as(DB::Any))
-                 .order(:id)
-                 .limit(limit)
-                 .all({{@type.id}})
-          {% end %}
+          query.where_gt(primary_key_column, CQL::ActiveRecord::IdChunks.bound(cursor_id))
+               .order(primary_key_column)
+               .limit(limit)
+               .all({{@type.id}})
         end
 
         # Cursor-based pagination: get records before a given cursor ID
@@ -73,19 +66,11 @@ module CQL
         # previous_page = User.before_cursor(current_first_id, limit: 10)
         # ```
         def self.before_cursor(cursor_id : Pk, limit : Int32 = 10)
-          {% if Pk == UUID %}
-            query.where_lt(:id, cursor_id.to_s.as(DB::Any))
-                 .order(id: :desc)
-                 .limit(limit)
-                 .all({{@type.id}})
-                 .reverse
-          {% else %}
-            query.where_lt(:id, cursor_id.as(DB::Any))
-                 .order(id: :desc)
-                 .limit(limit)
-                 .all({{@type.id}})
-                 .reverse
-          {% end %}
+          query.where_lt(primary_key_column, CQL::ActiveRecord::IdChunks.bound(cursor_id))
+               .tap(&.query.order_by.[]=(table_columns[primary_key_column], ::Expression::OrderDirection::DESC))
+               .limit(limit)
+               .all({{@type.id}})
+               .reverse
         end
 
         # Keyset pagination with a custom column

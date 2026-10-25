@@ -23,12 +23,38 @@ module CQL
           @@table = table
         end
 
+        def self.primary_key_column : Symbol
+          :id
+        end
+
+        # The primary key column as an expression, for conditions a where-hash cannot express (`IN`).
+        protected def self.primary_key_expression : ::Expression::Column
+          ::Expression::Column.new(cql_column(primary_key_column))
+        end
+
         {% verbatim do %}
-          macro db_context(schema, table)
+          macro db_context(schema, table, primary_key = :id)
+            {% raise "db_context for #{@type}: primary_key must be a Symbol, got #{primary_key}" unless primary_key.is_a?(SymbolLiteral) %}
             CQL_SCHEMA_CONTEXT = {{schema}}
             CQL_TABLE_NAME = {{table}}
+            CQL_PRIMARY_KEY_COLUMN = {{primary_key}}
 
             self.db_context({{schema}}, {{table}})
+
+            {% if primary_key != :id %}
+              def self.primary_key_column : Symbol
+                {{primary_key}}
+              end
+
+              # Re-declares Identifyable's id storage so DB::Serializable maps it to the declared column
+              {% if CQL_PRIMARY_KEY_TYPE.resolve == UUID %}
+                @[DB::Field(key: {{primary_key.id.stringify}})]
+                @_id_storage : String? = nil
+              {% else %}
+                @[DB::Field(key: {{primary_key.id.stringify}})]
+                @id : {{CQL_PRIMARY_KEY_TYPE}}? = nil
+              {% end %}
+            {% end %}
           end
         {% end %}
 
@@ -129,7 +155,8 @@ module CQL
                     {% for name, type in getter_types %}
                       {{name.stringify}} => {{type}},
                     {% end %}
-                  } of String => String
+                  } of String => String,
+                  primary_key: {{@type.constant(:CQL_PRIMARY_KEY_COLUMN) || :id}}
                 )
               end
             {% end %}

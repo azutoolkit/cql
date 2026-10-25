@@ -61,7 +61,7 @@ module CQL
 
         # Like `insert_all`, but a row whose *on_conflict* columns match an existing row updates it:
         # the *update* columns take the incoming values (by default every inserted column except
-        # the conflict columns, `id` and `created_at`; `[] of Symbol` leaves the row as it is).
+        # the conflict columns, the primary key and `created_at`; `[] of Symbol` leaves the row as it is).
         # Returns the rows affected as the database reports them (MySQL counts a changed row twice and
         # an unchanged one as zero).
         #
@@ -85,7 +85,7 @@ module CQL
           {% else %}
             generate_id = nil
           {% end %}
-          CQL::ActiveRecord::BulkInsert.new({{@type.id}}.schema, {{@type.id}}.table, rows, generate_id, conflict)
+          CQL::ActiveRecord::BulkInsert.new({{@type.id}}.schema, {{@type.id}}.table, rows, generate_id, conflict, primary_key_column)
         end
 
         # Create a new record with given attributes and return it as stored, with the values the
@@ -105,15 +105,15 @@ module CQL
           schema = {{@type.id}}.schema
           table = {{@type.id}}.table
           table_columns = schema.tables[table].columns
-          insertable_attrs = attrs.select { |key, _| key != :id && table_columns.has_key?(key) }
+          insertable_attrs = attrs.select { |key, _| key != primary_key_column && table_columns.has_key?(key) }
 
           {% if Pk == UUID %}
             # Stored as a String for SQLite compatibility
             generated_id = UUID.random
-            insertable_attrs[:id] = generated_id.to_s.as(DB::Any)
+            insertable_attrs[primary_key_column] = generated_id.to_s.as(DB::Any)
           {% elsif Pk == String %}
             generated_id = CQL::ULIDCompat.generate
-            insertable_attrs[:id] = generated_id.as(DB::Any)
+            insertable_attrs[primary_key_column] = generated_id.as(DB::Any)
           {% end %}
 
           insert = CQL::Insert.new(schema).into(table).values(insertable_attrs)
@@ -164,7 +164,7 @@ module CQL
         # ```
         def self.create!(record : {{@type.id}}) : {{@type.id}}
           attrs = record.attributes
-          attrs.delete(:id)
+          attrs.delete(primary_key_column)
 
           # Filter out ignored fields (fields not in the database schema)
           schema = {{@type.id}}.schema
@@ -175,7 +175,7 @@ module CQL
           {% if Pk == UUID %}
             # Generate UUID before insert, store as String for SQLite compatibility
             generated_id = UUID.random
-            filtered_attrs[:id] = generated_id.to_s.as(DB::Any)
+            filtered_attrs[primary_key_column] = generated_id.to_s.as(DB::Any)
 
             CQL::Insert
               .new({{@type.id}}.schema)
@@ -187,7 +187,7 @@ module CQL
           {% elsif Pk == String %}
             # Generate ULID before insert (ULID stored as String)
             generated_id = CQL::ULIDCompat.generate
-            filtered_attrs[:id] = generated_id.as(DB::Any)
+            filtered_attrs[primary_key_column] = generated_id.as(DB::Any)
 
             CQL::Insert
               .new({{@type.id}}.schema)

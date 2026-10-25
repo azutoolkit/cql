@@ -77,7 +77,7 @@ module CQL
     # ```
     def last_insert_id(as type : PrimaryKeyType = Int64)
       return commit.last_insert_id unless adapter.dialect.supports_returning?
-      back(:id).get!(type)
+      back(primary_key.name).get!(type)
     end
 
     # Inserts and reads the row returned by the RETURNING clause (`back`) as *kind*, nil when
@@ -107,6 +107,22 @@ module CQL
       raise ArgumentError.new("Insert#get needs the columns to return; call `back` first") if @back.empty?
       return if adapter.dialect.supports_returning?
       raise CQL::DialectError.new(adapter.to_s, "INSERT ... RETURNING", "Insert with `commit` and read the row back with a SELECT.")
+    end
+
+    # The insert with `RETURNING` the table's declared primary key (`id` when none is declared),
+    # as `{sql, params}`. PostgreSQL and CockroachDB fetch the new key this way.
+    def returning_primary_key_sql
+      own_back = @back
+      @back = [Expression::Column.new(primary_key)]
+      begin
+        to_sql
+      ensure
+        @back = own_back
+      end
+    end
+
+    private def primary_key : BaseColumn
+      @table.try(&.primary_key) || find_column(:id)
     end
 
     private def adapter

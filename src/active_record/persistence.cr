@@ -91,21 +91,7 @@ module CQL
           end
 
           # Update the database directly without callbacks
-          {% if Pk == UUID %}
-            result = CQL::Update
-              .new({{@type.id}}.schema)
-              .table({{@type.id}}.table)
-              .set(attrs)
-              .where(id: id!.to_s)
-              .commit
-          {% else %}
-            result = CQL::Update
-              .new({{@type.id}}.schema)
-              .table({{@type.id}}.table)
-              .set(attrs)
-              .where(id: id!)
-              .commit
-          {% end %}
+          result = {{@type.id}}.update_of(id!).set(attrs).commit
 
           # Update the local instance attributes to match
           if result.rows_affected > 0
@@ -172,21 +158,7 @@ module CQL
           end
 
           # Update multiple records directly without callbacks using IN clause
-          {% if Pk == UUID %}
-            result = CQL::Update
-              .new({{@type.id}}.schema)
-              .table({{@type.id}}.table)
-              .set(attrs)
-              .where(id: ids.map(&.to_s.as(DB::Any)))
-              .commit
-          {% else %}
-            result = CQL::Update
-              .new({{@type.id}}.schema)
-              .table({{@type.id}}.table)
-              .set(attrs)
-              .where(id: ids.map(&.as(DB::Any)))
-              .commit
-          {% end %}
+          result = update_of(ids).set(attrs).commit
 
           result.rows_affected
         end

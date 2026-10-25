@@ -38,6 +38,22 @@ Or change the schema column type if the model type is correct.
 
 If the model's table is not defined in the schema, the error reads ``CQL schema mapping error in User: table `users` is not defined in schema `my_db`.`` Both cases raise `CQL::ActiveRecord::SchemaMappingError`.
 
+## Fix Primary Key Mismatches
+
+The validator also compares the model's primary key with the table's declared one:
+
+```text
+CQL schema mapping error in Label: table `labels` declares primary key `label_no`, but the model maps `id` to `id`. Declare `db_context ..., primary_key: :label_no` on the model.
+```
+
+Declare the schema's key column on the model, as in [Primary Key on Another Column](../models/define-model.md#primary-key-on-another-column):
+
+```crystal
+db_context LabelKeyDB, :labels, primary_key: :label_no
+```
+
+Or rename the schema's `primary` column to `id` if the model is right. A table without a declared primary key is not checked.
+
 ## What Is Checked
 
 CQL checks columns that have matching model getters. It does not require every schema column to appear on the model, which lets you omit database-managed columns or fields that are not part of the public model.

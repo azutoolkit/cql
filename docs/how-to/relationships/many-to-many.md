@@ -108,6 +108,8 @@ The macro signature is `many_to_many(name, klass, join_through, foreign_key = ni
 
 Foreign keys default to the owner's name plus `_id` (`post_id`) and the target's name plus `_id` (`tag_id`), without their namespace (`Blog::Post` and `Blog::Tag` also give `post_id` and `tag_id`). Override them with `foreign_key:` and `association_foreign_key:`.
 
+The join matches `association_foreign_key` against the target model's primary key column, which is `id` unless the target declares otherwise. A target keyed on another column must say so with `db_context Schema, :labels, primary_key: :label_no` (see [Primary Key on Another Column](../models/define-model.md#primary-key-on-another-column)); without it the join looks for `id` and fails.
+
 ## Create Relationships
 
 ### Add Tags to a Post

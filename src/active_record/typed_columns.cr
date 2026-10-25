@@ -22,6 +22,7 @@ module CQL
               {% owner = @type %}
               {% table = @type.constant(:CQL_TABLE_NAME) %}
               {% pk = @type.constant(:CQL_PRIMARY_KEY_TYPE).stringify %}
+              {% owner_key = @type.constant(:CQL_PRIMARY_KEY_COLUMN) || :id %}
 
               {% associations = [] of Nil %}
               {% for const in CQL::ActiveRecord::AssociationRegistry.constants %}
@@ -76,7 +77,7 @@ module CQL
                   {% name = column[0] %}
                   {% type = column[1] %}
                   {% stored = (type == "UUID" || type == "JSON::Any") ? "String" : type %}
-                  @[DB::Field(key: {{ name }})]
+                  @[DB::Field(key: {{ name == "id" ? owner_key.id.stringify : name }})]
                   @{{ name.id }} : {{ stored.id }}? = nil
 
                   {% if type == "UUID" %}
@@ -101,8 +102,9 @@ module CQL
               end
 
               # The schema column, or a clear error when the getter has no column behind it.
+              # The `id` getter maps to the declared primary key column.
               def self.cql_column(name : Symbol) : CQL::BaseColumn
-                table_columns[name]? || raise ArgumentError.new("#{self} has no column #{name.inspect} in table {{ table.id }}. Columns: #{table_columns.keys.join(", ")}")
+                table_columns[name == :id ? {{ owner_key }} : name]? || raise ArgumentError.new("#{self} has no column #{name.inspect} in table {{ table.id }}. Columns: #{table_columns.keys.join(", ")}")
               end
 
               # The names of this model's columns, for error messages.
@@ -116,11 +118,12 @@ module CQL
                 {% for meta in associations %}
                   {% target_table = meta.constant(:TARGET).resolve.constant(:CQL_TABLE_NAME) %}
                   {% fk = meta.constant(:FOREIGN_KEY) %}
+                  {% target_key = meta.constant(:TARGET).resolve.constant(:CQL_PRIMARY_KEY_COLUMN) || :id %}
                   when :{{ meta.constant(:ASSOCIATION).id }}
                     {% if meta.constant(:KIND) == :belongs_to %}
-                      { {{ target_table }}, ->(j : ::Expression::FilterBuilder) { j.{{ target_table.id }}.id.eq(j.{{ table.id }}.{{ fk.id }}) } }
+                      { {{ target_table }}, ->(j : ::Expression::FilterBuilder) { j.{{ target_table.id }}.{{ target_key.id }}.eq(j.{{ table.id }}.{{ fk.id }}) } }
                     {% else %}
-                      { {{ target_table }}, ->(j : ::Expression::FilterBuilder) { j.{{ target_table.id }}.{{ fk.id }}.eq(j.{{ table.id }}.id) } }
+                      { {{ target_table }}, ->(j : ::Expression::FilterBuilder) { j.{{ target_table.id }}.{{ fk.id }}.eq(j.{{ table.id }}.{{ owner_key.id }}) } }
                     {% end %}
                 {% end %}
                 else

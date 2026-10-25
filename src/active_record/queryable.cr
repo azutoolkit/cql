@@ -356,7 +356,7 @@ module CQL
             key = id
           {% end %}
           return find_statement.bind(key).get(self) if static_query? && key.is_a?(DB::Any)
-          query.where(id: key).first
+          query.where_primary_key(key).first
         end
 
         # Whether the model reads through CQL's own `self.query` (see `StaticQuery`). `@type` is the
@@ -381,7 +381,7 @@ module CQL
         # The id is the last WHERE value, bound just before the LIMIT.
         private def self.render_find_statement : CQL::StatementTemplate
           sentinel = {% if Pk == Int32 || Pk == Int64 %}0{% else %}""{% end %}
-          sql, params = query.where(id: sentinel).query.limit(1).to_sql
+          sql, params = query.where_primary_key(sentinel).query.limit(1).to_sql
           CQL::StatementTemplate.new(schema, table, sql, params, value_index: params.size - 2)
         end
 
@@ -390,7 +390,7 @@ module CQL
         # - **@return** [T] The record
         def self.find!(id)
           result = find(id)
-          raise DB::NoResultsError.new("No records found with id=#{id}") unless result
+          raise DB::NoResultsError.new("No records found with #{primary_key_column}=#{id}") unless result
           result
         end
 

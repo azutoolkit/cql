@@ -157,7 +157,7 @@ end
 
 ### SchemaMappingError
 
-Raised when strict schema mapping validation is enabled and a model getter type does not match the schema column type.
+Raised when strict schema mapping validation is enabled and a model getter type does not match the schema column type, or the model's primary key column differs from the table's declared primary key (``table `labels` declares primary key `label_no`, but the model maps `id` to `id` ``).
 
 Enable strict validation with:
 
@@ -169,6 +169,7 @@ CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
 - Model property type differs from the column type in `CQL::Schema.define`
 - `db_context` points at the wrong table
 - A schema was changed but the model was not updated
+- The table's `primary` column is not `id` and the model lacks `db_context ..., primary_key: :column`
 
 **Solution:** Update the model property type or the schema column type so they agree.
 
