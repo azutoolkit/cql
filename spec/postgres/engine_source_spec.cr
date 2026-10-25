@@ -99,13 +99,13 @@ describe CQL::Postgres::EngineSource do
   it "raises DB::ConnectionRefused when a connection cannot be opened (lazily, and on connect)" do
     url = "postgres://ada@127.0.0.1:1/app?sslmode=disable"
     schema = CQL::Schema.new(:engine_source_refused, url, CQL::Adapter::Postgres, source: PG::EngineSource.connect(url))
-    expect_raises(DB::ConnectionRefused) { run_simple(schema, "SELECT 1") }
+    expect_raises(DB::ConnectionRefused) { run_simple(schema, "SELECT 1") }.cause.should be_a IO::Error
     expect_raises(DB::ConnectionRefused) { PG::EngineSource.connect("#{url}&pool_min_size=1") }
   end
 
   it "refuses a source for another adapter" do
     source = PG::EngineSource.new(PG::AsyncEngine.new(PG::Pool.new(PG::Config.parse("postgres://ada@127.0.0.1:1/app"))))
-    expect_raises(ArgumentError, /PostgreSQL|Postgres/) do
+    expect_raises(ArgumentError, /speaks Postgres, the schema uses SQLite/) do
       CQL::Schema.new(:engine_source_adapter, "sqlite3://./engine_source.db", CQL::Adapter::SQLite, source: source)
     end
   end
@@ -142,10 +142,15 @@ describe CQL::Postgres::EngineSource do
     CQL::Schema.new(:engine_source_crdb, "cockroachdb://ada@127.0.0.1:1/app", CQL::Adapter::CockroachDB, source: cockroach).source.should be cockroach
   end
 
-  it "keeps the engine's own options out of Schema#uri, which SchemaDump opens through crystal-db" do
-    url = "postgres://ada@127.0.0.1:1/app?pool_size=3&sslmode=disable&max_queries=10&application_name=my%20app&binary_params=true#frag"
+  it "keeps the pool options out of Schema#uri, which SchemaDump opens through crystal-db, and the connection settings in" do
+    url = "postgres://ada@127.0.0.1:1/app?%70ool_size=3&sslmode=disable&max_queries=10&application_name=my%20app&binary_params=true&max_protocol_version=3.0#frag"
     schema = CQL::Schema.new(:engine_source_uri, url, CQL::Adapter::Postgres, source: PG::EngineSource.connect(url))
-    schema.uri.should eq "postgres://ada@127.0.0.1:1/app?sslmode=disable&application_name=my%20app#frag"
+    schema.uri.should eq "postgres://ada@127.0.0.1:1/app?sslmode=disable&application_name=my%20app&binary_params=true&max_protocol_version=3.0#frag"
+  end
+
+  it "leaves no trailing ? when the query held only pool options" do
+    url = "postgres://ada@127.0.0.1:1/app?pool_size=3&max_queries=10"
+    CQL::Schema.new(:engine_source_bare, url, CQL::Adapter::Postgres, source: PG::EngineSource.connect(url)).uri.should eq "postgres://ada@127.0.0.1:1/app"
   end
 
   it "translates a saturated pool to DB::PoolTimeout, keeping the cause" do
@@ -181,7 +186,6 @@ describe CQL::DatabaseSource do
     schema.source.should be_a CQL::DatabaseSource
     schema.with_connection { |connection| connection.scalar("SELECT 1").should eq 1 }
     schema.transaction { |tx| tx.connection.scalar("SELECT 2").should eq 2 }
-    schema.pool_stats.max.should be >= 0
     schema.close
   end
 end

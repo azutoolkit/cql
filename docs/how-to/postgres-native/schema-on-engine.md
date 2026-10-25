@@ -37,11 +37,16 @@ AppDB.close                            # closes the pool; waiting fibers get Poo
   and the other keys of [AsyncEngine and pool options](async-engine.md#pool-options). crystal-db keys
   (`max_pool_size`, `initial_pool_size`, `retry_attempts`, ...) are not understood by the engine and would be sent to the
   server as startup parameters; write the engine's names.
-- A connection that cannot be opened raises `DB::ConnectionRefused` and a saturated pool `DB::PoolTimeout`, as through
-  crystal-db (both keep the engine's error as `cause`). A closed pool raises `CQL::Postgres::PoolClosed`, and server and TLS
+- A connection that cannot be opened raises `DB::ConnectionRefused` and a saturated pool `DB::PoolTimeout` (both keep the
+  engine's error as `cause`). crystal-db raises `DB::ConnectionRefused` only for the first connect and
+  `DB::PoolRetryAttemptsExceeded` (cause dropped) for a lazy one, so code rescuing that class will not match. A closed pool raises `CQL::Postgres::PoolClosed`, and server and TLS
   errors stay `CQL::Postgres::ServerError` subclasses and `TLSRefused`. `retry_attempts` and `retry_delay` do not exist:
   the engine does not retry connects.
-- `Schema#uri` is the URL you passed without the engine's own options (`pool_size`, `max_queries`, ...), because `SchemaDump`
+- A transaction opened inside another one (`schema.transaction` or `Model.transaction` without the outer `tx`) checks out a
+  SECOND connection. On the default `pool_size=10`, ten fibers that each hold one and ask for another all wait
+  `checkout_timeout` and then raise `DB::PoolTimeout`: pass the outer `tx` to the nested call (a savepoint on the same
+  connection) or size the pool for it. `Migrator#up`/`#down` have the same shape (see the CHANGELOG).
+- `Schema#uri` is the URL you passed without the engine's pool options (`pool_size`, `max_queries`, ...; connection settings such as `sslmode` and `max_protocol_version` stay), because `SchemaDump`
   (migrations with `auto_sync`) opens its own connection from it through crystal-db. It must name the same server and
   database as the engine; Schema validates it but does not compare it.
 - A source can be shared by schemas: closing it from one schema closes it for all. A schema refused for a mismatched adapter

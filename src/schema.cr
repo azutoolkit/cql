@@ -55,7 +55,8 @@ module CQL
     # - **@return** [Symbol] the name of the schema
     getter name : Symbol
 
-    # - **@return** [String] the URI of the database
+    # - **@return** [String] the URI of the database: the string given, or for a schema with a `source:` the crystal-db-safe
+    #   form of it (`ConnectionSource#database_uri`, e.g. without the engine's pool options)
     getter uri : String
 
     # - **@return** [String] the version of the schema
@@ -185,7 +186,7 @@ module CQL
     def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0", @quote_identifiers : Bool = false, source : ConnectionSource? = nil)
       validate_uri!
       if source && (declared = source.adapter) && declared != @adapter
-        raise ArgumentError.new("the connection source speaks #{declared}, the schema uses #{@adapter}")
+        raise ArgumentError.new("the connection source speaks #{declared}, the schema uses #{@adapter} (build the engine with adapter: to match)")
       end
       @source = source || DatabaseSource.new(DB.open(@adapter.driver_uri(@uri)))
       @uri = source.database_uri(@uri) if source # `uri` names the same server; the source's own options stay out of it

@@ -13,9 +13,11 @@ module CQL::Postgres
   # source.engine.pipeline([...]) # the engine's own API stays reachable
   # ```
   #
-  # A connection that cannot be opened raises `DB::ConnectionRefused` and a saturated pool `DB::PoolTimeout`, as
-  # through crystal-db (the engine itself raises the underlying `IO::Error` and `CQL::Postgres::PoolTimeout`); the
-  # cause is kept. A closed pool raises `CQL::Postgres::PoolClosed`. The engine does not retry connects.
+  # A connection that cannot be opened raises `DB::ConnectionRefused` and a saturated pool `DB::PoolTimeout` (the
+  # engine itself raises the underlying `IO::Error` and `CQL::Postgres::PoolTimeout`, kept as `cause`). crystal-db's
+  # pool raises `DB::ConnectionRefused` only for the first connect and `DB::PoolRetryAttemptsExceeded` for a lazy one,
+  # so code rescuing that class will not match here. A closed pool raises `CQL::Postgres::PoolClosed`. The engine
+  # does not retry connects.
   # Closing the source closes the engine for every schema that shares it.
   class EngineSource < ConnectionSource
     getter engine : AsyncEngine
@@ -50,13 +52,15 @@ module CQL::Postgres
       PoolStats.new(stats.in_use + stats.idle, stats.idle, stats.in_use, stats.max_size)
     end
 
-    # The URL without the engine's own options (`pool_size`, `max_queries`, ...), for code that opens a second
-    # connection from `Schema#uri` through crystal-db (`SchemaDump`). It must name the same server as the engine.
+    # The URL without the engine's pool options (`pool_size`, `max_queries`, ...), for code that opens a second
+    # connection from `Schema#uri` through crystal-db (`SchemaDump`). Connection settings (`sslmode`,
+    # `max_protocol_version`, `binary_params`, ...) stay: that driver honours them too. It must name the same server
+    # as the engine.
     def database_uri(uri : String) : String
-      base, hash, fragment = uri.partition('#')
+      base, marker, fragment = uri.partition('#')
       location, _, query = base.partition('?')
-      kept = query.split('&', remove_empty: true).reject { |pair| Config::DRIVER_OPTION_KEYS.includes?(URI.decode(pair.partition('=')[0])) }
-      kept.empty? ? "#{location}#{hash}#{fragment}" : "#{location}?#{kept.join('&')}#{hash}#{fragment}"
+      kept = query.split('&', remove_empty: true).reject { |pair| Config::POOL_OPTION_KEYS.includes?(URI.decode(pair.partition('=')[0])) }
+      kept.empty? ? "#{location}#{marker}#{fragment}" : "#{location}?#{kept.join('&')}#{marker}#{fragment}"
     end
 
     def close : Nil
