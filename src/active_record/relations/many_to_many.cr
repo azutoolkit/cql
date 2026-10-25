@@ -123,7 +123,15 @@ module CQL::ActiveRecord::Relations
       # database, loaded or not; `delete!` calls it
       def handle_{{name.id}}_dependency : Nil
         clear_{{name.id}}_cache
-        {{name.id}}.clear
+        collection = {{name.id}}
+
+        {% if dependent == :destroy %}
+          collection.clear_with_destroy
+        {% elsif dependent == :delete_all %}
+          collection.clear_with_delete
+        {% else %}
+          collection.clear_join_records
+        {% end %}
       end
 
       # Count associated records without loading them
@@ -136,7 +144,7 @@ module CQL::ActiveRecord::Relations
            CQL::Query
              .new({{join_class}}.schema)
              .from({{join_class}}.table)
-             .where({ :{{fk}} => parent_id })
+             .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
              .count
              .get(Int64?) || 0_i64
          end
@@ -153,7 +161,7 @@ module CQL::ActiveRecord::Relations
             result = CQL::Query
               .new({{join_class}}.schema)
               .from({{join_class}}.table)
-              .where({ :{{fk}} => parent_id })
+              .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
               .limit(1)
               .first({{join_class}})
             !result.nil?
@@ -175,7 +183,7 @@ module CQL::ActiveRecord::Relations
             result = CQL::Query
               .new({{join_class}}.schema)
               .from({{join_class}}.table)
-              .where({ :{{fk}} => parent_id, :{{target_fk}} => target_id })
+              .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id), :{{target_fk}} => CQL::ActiveRecord::IdChunks.bound(target_id) })
               .limit(1)
               .first({{join_class}})
             !result.nil?
@@ -195,7 +203,7 @@ module CQL::ActiveRecord::Relations
            records = CQL::Query
              .new({{join_class}}.schema)
              .from({{join_class}}.table)
-             .where({ :{{fk}} => parent_id })
+             .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
              .all({{join_class}})
 
            records.compact_map do |record|

@@ -114,6 +114,35 @@ MyDB.transaction do |tx|
 end
 ```
 
+## Associations on a UUID Key
+
+A `has_many` or `has_one` owned by a UUID-keyed model binds the owner's id as text, so its queries and its
+[`dependent:` strategies](../relationships/has-many.md#when-the-parent-is-deleted) work as they do for integer keys. So do a
+`many_to_many`'s queries, its join-row cleanup when the owner is deleted, and `dependent: :destroy`; its `:delete_all`,
+`ids`, `ids=` and `delete(id)` still need the owner and the targets to share a key type. The child's foreign key is typed
+`UUID`:
+
+```crystal
+class SessionNote
+  include CQL::ActiveRecord::Model(Int64)
+  db_context MyDB, :session_notes
+
+  @[DB::Field(converter: CQL::UUIDConverter)]
+  property session_id : UUID
+end
+
+class Session
+  include CQL::ActiveRecord::Model(UUID)
+  db_context MyDB, :sessions
+
+  has_many :notes, SessionNote, foreign_key: :session_id, dependent: :destroy
+end
+```
+
+On SQLite the column is text, so read it with `CQL::UUIDConverter`, which does not accept NULL. A model cannot write a
+UUID column other than its primary key yet, so `SessionNote.create!(session_id: ...)` and `session.notes.create(...)` do
+not compile; insert those rows with `MyDB.insert.into(:session_notes).values(session_id: session.id!.to_s).commit`.
+
 ## Typed Queries
 
 Comparisons in the typed `where` DSL accept the `UUID` itself. CQL binds it as text:

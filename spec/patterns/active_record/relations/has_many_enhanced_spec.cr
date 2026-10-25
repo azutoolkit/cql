@@ -85,6 +85,16 @@ class GuardedPostsOwner
   has_many :posts, GuardedPost, foreign_key: :user_id, dependent: :destroy
 end
 
+# A struct model, so delete! and the strategies run on a value type.
+struct StructPostsOwner
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: UserDB, table: :users
+
+  property email : String
+
+  has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
+end
+
 class UndeclaredPostsOwner
   include CQL::ActiveRecord::Model(Int32)
   db_context schema: UserDB, table: :users
@@ -258,6 +268,18 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
 
       TestUser.find?(free.id!).should_not be_nil
       TestUser.find?(restricted.id!).should_not be_nil
+    end
+
+    it "applies the strategy on a struct model" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      post = user.posts.create(title: "Post 1", body: "Content")
+      owner = StructPostsOwner.find!(user.id!)
+
+      owner.delete!.should be_true
+
+      owner.destroyed?.should be_true
+      Post.find?(post.id!).should be_nil
+      TestUser.find?(user.id!).should be_nil
     end
 
     it "leaves the posts alone when dependent: is not declared" do
@@ -679,6 +701,13 @@ describe "CQL::ActiveRecord::Relations::HasMany Enhanced Tests" do
       statements.first.should contain("LIMIT ?")
       statements.first.should_not contain("COUNT(")
       statements.first.scan("user_id = ?").size.should eq(1)
+    end
+
+    it "counts the posts with posts_count without loading them" do
+      user = has_many_isolation_user("John Doe", "john@example.com")
+      2.times { |i| user.posts.create(title: "Post #{i}", body: "Content") }
+
+      TestUser.find!(user.id!).posts_count.should eq(2)
     end
 
     it "answers posts_any? from memory when the collection is loaded" do

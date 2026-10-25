@@ -44,6 +44,45 @@ class LookupTeam
   many_to_many :players, LookupPlayer, join_through: :lookup_roster
 end
 
+# Deletes its players (soft-deletable) without callbacks when the team is deleted.
+class ReleasingLookupTeam
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: ManyLookupDB, table: :lookup_teams
+
+  property name : String = ""
+
+  many_to_many :players, LookupPlayer, join_through: LookupRoster, foreign_key: :lookup_team_id,
+    association_foreign_key: :lookup_player_id, dependent: :delete_all
+end
+
+# A soft-deletable player that records whose destroy callbacks ran.
+class AuditedLookupPlayer
+  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::SoftDeletable
+  db_context schema: ManyLookupDB, table: :lookup_players
+
+  class_property destroyed_names = [] of String
+
+  property name : String = ""
+
+  before_destroy :audit
+
+  def audit
+    self.class.destroyed_names << name
+    true
+  end
+end
+
+class AuditedReleasingLookupTeam
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: ManyLookupDB, table: :lookup_teams
+
+  property name : String = ""
+
+  many_to_many :players, AuditedLookupPlayer, join_through: LookupRoster, foreign_key: :lookup_team_id,
+    association_foreign_key: :lookup_player_id, dependent: :delete_all
+end
+
 describe "many_to_many lookups" do
   before_each do
     ManyLookupDB.lookup_teams.create!
@@ -82,5 +121,36 @@ describe "many_to_many lookups" do
     players.first(2).each { |player| team.players << player }
 
     team.players.find(id: players.map(&.id!)).map(&.name).sort!.should eq(["A", "B"])
+  end
+
+  it "soft deletes only the players not yet soft deleted with dependent: :delete_all" do
+    team = LookupTeam.create!(name: "Golds")
+    active = LookupPlayer.create!(name: "Active")
+    gone = LookupPlayer.create!(name: "Gone")
+    team.players << active
+    team.players << gone
+    long_ago = Time.utc(2020, 1, 1)
+    LookupPlayer.update_by({:id => gone.id!.as(DB::Any)}, {:deleted_at => long_ago.as(DB::Any)})
+
+    ReleasingLookupTeam.find!(team.id!).delete!.should be_true
+
+    LookupPlayer.with_deleted.find!(active.id!).deleted?.should be_true
+    LookupPlayer.with_deleted.find!(gone.id!).deleted_at.should eq(long_ago)
+    LookupRoster.count.should eq(0)
+  end
+
+  it "runs destroy callbacks only for the players not yet soft deleted with dependent: :delete_all" do
+    team = LookupTeam.create!(name: "Silvers")
+    active = LookupPlayer.create!(name: "Active")
+    gone = LookupPlayer.create!(name: "Gone")
+    team.players << active
+    team.players << gone
+    gone.delete!
+    AuditedLookupPlayer.destroyed_names.clear
+
+    AuditedReleasingLookupTeam.find!(team.id!).delete!.should be_true
+
+    AuditedLookupPlayer.destroyed_names.should eq(["Active"])
+    LookupPlayer.with_deleted.find!(active.id!).deleted?.should be_true
   end
 end
