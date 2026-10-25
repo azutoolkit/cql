@@ -155,7 +155,8 @@ module CQL
                     {% for name, type in getter_types %}
                       {{name.stringify}} => {{type}},
                     {% end %}
-                  } of String => String
+                  } of String => String,
+                  primary_key: {{@type.constant(:CQL_PRIMARY_KEY_COLUMN) || :id}}
                 )
               end
             {% end %}

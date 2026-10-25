@@ -484,6 +484,52 @@ describe "Custom primary key column" do
     end
   end
 
+  describe "typed query DSL" do
+    it "renders id on a custom key as a condition on the declared column" do
+      Label.query.where { id == 7 }.query.to_sql.should eq({
+        "SELECT labels.label_no, labels.name FROM labels WHERE labels.label_no = ?",
+        [7] of DB::Any,
+      })
+    end
+
+    it "returns the row of the declared column when run" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+
+      Label.query.where { id == 7 }.to_a.map(&.id).should eq([7])
+    end
+
+    it "reads the declared column into the id of selected rows" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+      Label.query.select(:id, :name).to_a.map(&.id).should eq([7])
+    end
+
+    it "orders by id on the declared column" do
+      Label.query.order_by(id: :desc).query.to_sql.first.should end_with("ORDER BY labels.label_no DESC")
+    end
+
+    it "renders id on a UUID custom key as a condition on the declared column, bound as text" do
+      uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+
+      Badge.query.where { id == uuid }.query.to_sql.should eq({
+        "SELECT badges.badge_uuid, badges.name FROM badges WHERE badges.badge_uuid = ?",
+        [uuid.to_s] of DB::Any,
+      })
+    end
+
+    it "returns the UUID-keyed row when run" do
+      uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+      insert_badge(uuid)
+      insert_badge(UUID.new("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"))
+
+      Badge.query.where { id == uuid }.to_a.map(&.id).should eq([uuid])
+    end
+
+    it "still maps id to the id column on a model keyed on the default column" do
+      Shelf.query.where { id == 1 }.query.to_sql.first.should end_with("WHERE shelves.id = ?")
+    end
+  end
+
   describe "updating a record" do
     stale = Time.utc(2020, 1, 1)
 
@@ -1133,6 +1179,64 @@ describe "Custom primary key column" do
         Badge.query.all.size.should eq(1)
         Badge.find!(uuid).name.should eq("Silver")
       end
+    end
+  end
+
+  describe "schema mapping validation of the primary key" do
+    keyless = CQL::Schema.define(:keyless_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3:///tmp/custom_primary_key_keyless.db") do
+      table :plain do
+        text :name
+      end
+
+      table :legacy_tags do
+        primary :tag_uuid, String, auto_increment: false
+        integer :id
+      end
+    end
+
+    validate = ->(table : Symbol, key : Symbol, getters : Hash(String, String), schema : CQL::Schema) do
+      CQL::ActiveRecord::SchemaValidator.validate_model!("Model", schema, table, getters, primary_key: key)
+    end
+
+    it "does not check a plain id column against the key getter on a table keyed on another column" do
+      validate.call(:legacy_tags, :tag_uuid, {"id" => "UUID | ::Nil"}, keyless)
+    end
+
+    it "raises naming both columns when the model keeps :id on a table keyed on another column" do
+      error = expect_raises(CQL::ActiveRecord::SchemaMappingError) do
+        CQL::ActiveRecord::SchemaValidator.validate_model!("Label", LabelKeyDB, :labels, {"id" => "Int32 | ::Nil"})
+      end
+
+      message = error.message.to_s
+      message.should contain("`labels`")
+      message.should contain("declares primary key `label_no`")
+      message.should contain("maps `id` to `id`")
+      message.should contain("primary_key: :label_no")
+    end
+
+    it "does not raise when the model's key matches the table's" do
+      validate.call(:labels, :label_no, {"id" => "Int32 | ::Nil"}, LabelKeyDB)
+    end
+
+    it "does not raise on a table keyed on id when the model keeps :id" do
+      validate.call(:shelves, :id, {"id" => "Int32 | ::Nil"}, LabelKeyDB)
+    end
+
+    it "does not raise when the table declares no primary key" do
+      validate.call(:plain, :id, {} of String => String, keyless)
+    end
+
+    it "raises the type mismatch when the key getter's type differs from the key column" do
+      error = expect_raises(CQL::ActiveRecord::SchemaMappingError, /type String does not match/) do
+        validate.call(:badges, :badge_uuid, {"id" => "Int32 | ::Nil"}, LabelKeyDB)
+      end
+
+      error.message.to_s.should contain("badges.badge_uuid")
+      error.message.to_s.should contain("Int32")
+    end
+
+    it "accepts a UUID key getter on a text key column" do
+      validate.call(:badges, :badge_uuid, {"id" => "UUID | ::Nil"}, LabelKeyDB)
     end
   end
 end
