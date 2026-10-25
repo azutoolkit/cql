@@ -10,6 +10,7 @@ require "json"
 require "./exceptions"
 require "./cql"
 require "./pool_stats"
+require "./connection_source"
 
 module CQL
   # The `Schema` class represents a database schema.
@@ -73,15 +74,21 @@ module CQL
     # - **@return** [Hash(Symbol, Table)] the tables in the schema
     getter tables : Hash(Symbol, Table) = {} of Symbol => Table
 
-    # - **@return** [DB::Database] the database connection pool
-    private getter db : DB::Database
+    # - **@return** [ConnectionSource] where connections and transactions come from:
+    #   crystal-db's pool by default, or any other source (e.g. `Postgres::EngineSource`)
+    getter source : ConnectionSource
 
     # Connection pool occupancy, read without checking out a connection.
     # All zeros before the first query when the pool was opened with `initial_pool_size=0`.
     def pool_stats : PoolStats
-      PoolStats.from(@db.pool.stats)
+      @source.pool_stats
     rescue # a stats read must never take the caller down (dashboards poll it)
       PoolStats.new(0, 0, 0, 0)
+    end
+
+    # Closes the connection source (the pool); later statements fail.
+    def close : Nil
+      @source.close
     end
 
     # Fiber-local connection storage for thread-safe transaction handling
@@ -137,6 +144,7 @@ module CQL
     # - **@param** uri [String] the URI of the database
     # - **@param** adapter [Adapter] the database adapter (default: `Adapter::SQLite`)
     # - **@param** version [String] the version of the schema (default: "1.0")
+    # - **@param** source [ConnectionSource] where connections come from (default: crystal-db's pool opened from the URI)
     # - **@yield** [Schema] the schema being built
     # - **@return** [Schema] the built schema
     #
@@ -150,8 +158,8 @@ module CQL
     #   end
     # end
     # ```
-    def self.define(name : Symbol, uri : String, adapter : Adapter, version : String = "1.0", quote_identifiers : Bool = false, &)
-      schema = new(name, uri, adapter, version, quote_identifiers)
+    def self.define(name : Symbol, uri : String, adapter : Adapter, version : String = "1.0", quote_identifiers : Bool = false, source : ConnectionSource? = nil, &)
+      schema = new(name, uri, adapter, version, quote_identifiers, source)
       with schema yield
       schema
     end
@@ -167,9 +175,20 @@ module CQL
     # ```
     # schema = CQL::Schema.new(:northwind, "sqlite3://db.sqlite3")
     # ```
-    def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0", @quote_identifiers : Bool = false)
+    #
+    # **Example** Running on the native PostgreSQL engine's pool
+    # ```
+    # engine = CQL::Postgres::AsyncEngine.connect("postgres://app@db/app?pool_size=10")
+    # schema = CQL::Schema.new(:app, "postgres://app@db/app", CQL::Adapter::Postgres,
+    #   source: CQL::Postgres::EngineSource.new(engine))
+    # ```
+    def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0", @quote_identifiers : Bool = false, source : ConnectionSource? = nil)
       validate_uri!
-      @db = DB.open(@adapter.driver_uri(@uri))
+      if source && (declared = source.adapter) && declared != @adapter
+        raise ArgumentError.new("the connection source speaks #{declared}, the schema uses #{@adapter}")
+      end
+      @source = source || DatabaseSource.new(DB.open(@adapter.driver_uri(@uri)))
+      @uri = source.database_uri(@uri) if source # `uri` names the same server; the source's own options stay out of it
     end
 
     def dialect
@@ -229,7 +248,7 @@ module CQL
       if connection = active_connection
         yield connection
       else
-        @db.using_connection { |pooled| yield pooled }
+        @source.using_connection { |pooled| yield pooled }
       end
     end
 
@@ -239,7 +258,7 @@ module CQL
       if conn = active_connection
         yield conn
       else
-        @db.using_connection do |db_conn|
+        @source.using_connection do |db_conn|
           yield db_conn
         end
       end
@@ -305,7 +324,7 @@ module CQL
     def transaction(&)
       previous_connection = active_connection
       observer = Telemetry.begin_transaction(@adapter, !previous_connection.nil?)
-      @db.transaction do |tx|
+      @source.transaction do |tx|
         self.active_connection = tx.connection
         begin
           yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
@@ -317,7 +336,7 @@ module CQL
         end
       end
     rescue ex : DB::Rollback
-      # DB::Rollback should be caught silently by the outer @db.transaction
+      # DB::Rollback should be caught silently by the outer source transaction
       # and perform the rollback without propagating the exception further.
       # We log it for debugging, but don't convert to ConnectionError.
       Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }

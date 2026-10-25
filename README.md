@@ -100,7 +100,7 @@ in a user name or password as `%2B` (crystal-db reads `+` as a space). See "Cock
 `CQL::Postgres::AsyncEngine` speaks the PostgreSQL wire protocol itself (3.2, falling back to 3.0), on Crystal fibers and the standard
 library's event loop, with its own connection pool. It is also a `CQL::Executor` (`query.using(engine)`); SQLite/MySQL users are unaffected. The engine itself needs only the standard library and `db`. A `CQL::Schema`
 for PostgreSQL opens a crystal-db connection when it is created (through this driver, so the `pg` shard is no longer
-needed; `?initial_pool_size=0` keeps the connection from being opened).
+needed; `?initial_pool_size=0` keeps the connection from being opened). To run a schema on the engine's own pool instead, pass `source: CQL::Postgres::EngineSource.connect(url)` to `CQL::Schema.new` (see `docs/how-to/postgres-native/schema-on-engine.md`).
 
 ```crystal
 require "cql/postgres"

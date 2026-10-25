@@ -1,5 +1,6 @@
 require "db"
 require "./connection"
+require "./refusal"
 
 module CQL::Postgres
   # Lets crystal-db open `postgres://` and `postgresql://` URLs with the wire
@@ -24,17 +25,7 @@ module CQL::Postgres
       # Transport failures become `DB::ConnectionRefused`, which crystal-db's
       # pool retries (`retry_attempts`, `retry_delay`); server errors do not.
       def build : ::DB::Connection
-        Connection.open(@config, @options)
-      rescue ex : IO::Error | OpenSSL::Error
-        refused(ex)
-      rescue ex : UnrecognizedStartupReply
-        ex.cause.is_a?(IO::Error) ? refused(ex) : raise(ex)
-      end
-
-      # crystal-db's pool drops the cause when its retries run out, so say why here (the message names no secret).
-      private def refused(ex : Exception) : NoReturn
-        Session::Log.warn { "could not open a PostgreSQL connection: #{ex.message}" }
-        raise ::DB::ConnectionRefused.new(ex.message, cause: ex)
+        Refusal.translate { Connection.open(@config, @options) }
       end
     end
 

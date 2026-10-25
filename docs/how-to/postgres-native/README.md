@@ -20,6 +20,7 @@ Reference material and the measured compatibility results live in the
 | Guide | Use it to |
 | --- | --- |
 | [AsyncEngine and pool options](async-engine.md) | Connect, size the pool, run queries and transactions |
+| [A Schema on the engine's pool](schema-on-engine.md) | Run models, migrations and `schema.transaction` on the engine's pool |
 | [Streaming and pipelining](streaming-and-pipelining.md) | Read large results in batches, send many statements in one round trip |
 | [COPY and binary parameters](copy-and-binary-params.md) | Bulk load and export, send parameters in binary |
 | [TLS, poolers and timeouts](tls-and-poolers.md) | Secure connections, PgBouncer and friends, cancel, `LISTEN`/`NOTIFY`, isolation levels |
@@ -32,6 +33,7 @@ Related guides: [Configure Database Connection](../configuration/database-connec
 | You want | Use |
 | --- | --- |
 | `CQL::Schema`, models and migrations on PostgreSQL | `CQL::Adapter::Postgres` with a `postgres://` URI; the native driver serves it |
+| Models, migrations and transactions on the engine's pool | `CQL::Schema.new(..., source: CQL::Postgres::EngineSource.connect(url))` |
 | Your own pool, streaming, pipelining, per-transaction options | `CQL::Postgres::AsyncEngine.connect(url)` |
 | Plain `DB.open("postgres://...")` | Nothing extra; `require "cql"` registers the driver |
 
