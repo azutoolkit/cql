@@ -142,20 +142,22 @@ module CQL
       cockroach_db? ? uri.sub(/\Acockroachdb:/, "postgres:") : uri
     end
 
-    def dialect
+    def dialect : Expression::BaseDialect
       case self
-      when SQLite
-        Expression::SqliteDialect.new
-      when MySql
-        Expression::MySqlDialect.new
-      when Postgres
-        Expression::PostgresDialect.new
-      when CockroachDB
-        Expression::CockroachDialect.new
-      else
-        raise "Unsupported adapter: #{self}"
+      in SQLite      then Dialects::SQLITE
+      in MySql       then Dialects::MYSQL
+      in Postgres    then Dialects::POSTGRES
+      in CockroachDB then Dialects::COCKROACH
       end
     end
+  end
+
+  # One stateless dialect per adapter, shared by every query.
+  module Dialects
+    SQLITE    = Expression::SqliteDialect.new
+    MYSQL     = Expression::MySqlDialect.new
+    POSTGRES  = Expression::PostgresDialect.new
+    COCKROACH = Expression::CockroachDialect.new
   end
 end
 

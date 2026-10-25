@@ -9,6 +9,22 @@ module Expression
         dialect.placeholder_format(5).should eq("$5")
         dialect.placeholder_format(99).should eq("$99")
       end
+
+      it "formats boundary and large indexes as $n" do
+        dialect = PostgresDialect.new
+        {-1, 0, 1, 9, 1023, 5000}.each do |index|
+          dialect.placeholder_format(index).should eq("$#{index}")
+        end
+      end
+
+      it "numbers more than ten bound parameters $1..$12 in order" do
+        generator = Generator.new(CQL::Adapter::Postgres)
+        values = (1..12).to_a
+        sql, params = Northwind.query.from(:customers).select(:name).where { customers.id.in(values) }.to_sql(generator)
+
+        sql.should end_with("WHERE customers.id IN (#{(1..12).map { |index| "$#{index}" }.join(", ")})")
+        params.should eq(values.map { |value| value.as(DB::Any) })
+      end
     end
 
     describe "#structure_dump" do

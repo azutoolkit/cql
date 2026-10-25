@@ -245,9 +245,6 @@ module Expression
 
   # Shared implementation helpers for common dialect patterns
   module DialectHelpers
-    # Cache for frequently used SQL fragments
-    @sql_cache : Hash(String, String) = {} of String => String
-
     # Efficient string building with pre-allocated capacity
     protected def build_sql(initial_capacity : Int32 = 256, &)
       String.build(initial_capacity) do |str|
@@ -339,11 +336,6 @@ module Expression
         str << " ON DELETE " << on_delete
         str << " ON UPDATE " << on_update
       end
-    end
-
-    # Cached SQL fragments for common operations
-    protected def cached_sql(key : String, &)
-      @sql_cache[key]? || (@sql_cache[key] = yield.to_s)
     end
   end
 

@@ -5,16 +5,15 @@ module Expression
   class PostgresDialect < BaseDialect
     # Cache for frequently used PostgreSQL-specific strings
     @@cached_strings = {
-      "postgres_placeholder_prefix" => "$",
       "postgres_drop_index_prefix"  => "DROP INDEX IF EXISTS ",
       "postgres_alter_table_prefix" => "ALTER TABLE ",
     }
 
+    PLACEHOLDERS = Array.new(1025) { |index| "$#{index}" }
+
     # PostgreSQL uses $1, $2, etc. for placeholders
     def placeholder_format(param_index : Int32) : String
-      cached_sql("postgres_placeholder_#{param_index}") do
-        "#{@@cached_strings["postgres_placeholder_prefix"]}#{param_index}"
-      end
+      (PLACEHOLDERS[param_index]? if param_index >= 0) || "$#{param_index}"
     end
 
     def structure_dump(uri : URI) : String
