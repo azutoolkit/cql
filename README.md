@@ -19,7 +19,7 @@ A high-performance, type-safe ORM for Crystal applications that combines compile
 - SQL is written in one pass into one buffer; values are always bound, never interpolated
 - `last`, `exists?`, `count` and `find_each` fetch only the rows they need; `preload` loads associations in one query per chunk
 - Bulk writes (`insert_all`, `upsert_all`, `insert_<assoc>_all`), `INSERT ... RETURNING` on PostgreSQL, and opt-in dirty tracking that updates only changed columns
-- Per-query diagnostics (SQL logging, performance monitor, request cache) are opt-in, so they cost nothing until you turn them on
+- Per-query diagnostics (SQL logging, performance monitor, request cache) are off unless you enable them or run in development, so production pays nothing for them
 
 ### Type Safety
 
@@ -43,7 +43,7 @@ A high-performance, type-safe ORM for Crystal applications that combines compile
 - **Type-Safe ORM**: Leverage Crystal's static type system for compile-time safety
 - **High Performance**: Cached find statements, single-pass SQL rendering, and diagnostics that are off until you enable them (see [How CQL Keeps Queries Fast](docs/explanation/performance-design.md))
 - **Active Record Pattern**: Intuitive Active Record API with full CRUD operations
-- **Smart Relationships**: Support for `belongs_to`, `has_one`, `has_many`, and `many_to_many` with compile-time FK/PK validation and automatic N+1 prevention
+- **Smart Relationships**: Support for `belongs_to`, `has_one`, `has_many`, and `many_to_many` with compile-time FK/PK validation and `preload` eager loading for has_many, belongs_to and has_one
 - **Schema Mapping Guardrails**: Opt-in validation checks model getter types against schema column types at application boot
 - **Comprehensive Validations**: Built-in validation system with custom validator support
 - **Lifecycle Callbacks**: Before/after hooks for validation, save, create, update, and destroy
@@ -94,8 +94,8 @@ keeps the names) or after it (it replaces them), the `pg` shard's driver serves 
 `require "pg"` to switch, or compile with `-Dcql_no_postgres_driver` to keep this driver out of crystal-db's registry
 (that flag also wins over `-Dcql_postgres_driver_cockroachdb`; call the `register` methods yourself if you want them).
 Differences from the `pg` shard to know about when switching: `sslmode` takes `disable`, `prefer`, `require` or
-`verify-full` only (`verify-ca`, `allow` and the libpq options `sslcert`, `sslkey`, `auth_methods` and similar are
-rejected, not ignored); `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` are read from the environment when the URL omits
+`verify-full` only (`verify-ca`, `allow` and the libpq options `sslcert`, `sslkey` and similar are rejected, not
+ignored; `auth_methods`, written for the `pg` shard, is accepted and ignored); `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` are read from the environment when the URL omits
 them; arrays decode to their text form and `numeric` to `CQL::Postgres::Types::DecimalText`, so `read(Float64)` and
 `read(Array(Int32))` raise `TypeCastError` (register a codec with `Types.register`); connection failures reach
 crystal-db's pool as `DB::ConnectionRefused`, so `retry_attempts` and `retry_delay` apply.
@@ -521,8 +521,7 @@ BlogDB = CQL::Schema.define(:blog, adapter: CQL::Adapter::Postgres, uri: ENV["DA
 
     # Constraints and indexes
     unique_constraint [:name]
-    # Non-unique indexes are created in a migration:
-    #   schema.alter(:products) { create_index :idx_products_price, [:price, :created_at] }
+    index [:price, :created_at]          # created with the table as idx_products_price_created_at
   end
 end
 ```
@@ -583,6 +582,15 @@ user.save    # UPDATE users SET name = ?, updated_at = ? WHERE users.id = ?
 ```crystal
 class User
   include CQL::ActiveRecord::Model(Int64)
+
+  property name : String
+  property email : String
+  property age : Int32
+  property password : String?
+  property password_confirmation : String?
+
+  def initialize(@name : String, @email : String, @age : Int32 = 1)
+  end
 
   # Built-in validations with clear error messages
   validate :name, presence: true, size: 2..50
@@ -649,7 +657,7 @@ User.transaction do |tx|
   raise "Error!" if some_condition  # Everything safely rolls back
 end
 
-# Nested transactions with savepoints (PostgreSQL)
+# Nested transactions are savepoints (on every adapter)
 User.transaction do |outer_tx|
   user = User.create!(username: "alice", email: "alice@example.com")
 
@@ -899,7 +907,8 @@ crystal spec spec/performance/                     # Performance tests
 
 CQL is actively tested and optimized for:
 
-- **PostgreSQL**: 12, 13, 14, 15, 16 with full feature support
+- **PostgreSQL**: 11 through 18 (native driver matrix above; the full spec suite runs against 16)
+- **CockroachDB**: 24.3 through the PostgreSQL dialect and the native driver
 - **MySQL**: 8.0+ with dialect-specific optimizations
 - **SQLite**: 3.35+ perfect for development and testing
 

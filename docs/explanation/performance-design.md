@@ -19,9 +19,9 @@ For most applications the database round trip dominates. On an in-memory SQLite 
 
 Features that would tax every query are opt-in:
 
-- **Performance monitor** (profiler, N+1 detector): off unless you set `config.monitor_performance = true` or `CQL_MONITORING_ENABLED`. When it is on, a query's log line is formatted only if its level is emitted, and normalized SQL is cached (at most 512 entries).
+- **Performance monitor** (profiler, N+1 detector): off unless you set `config.monitor_performance = true`, call `CQL::Performance.enable_monitoring` or `enable_sql_logging`, set `CQL_MONITORING_ENABLED=true`, or run with `CRYSTAL_ENV` or `CQL_ENV` set to `development`. SQL logging, when on, enables it too. When it is on, a query's log line is formatted only if its level is emitted, and normalized SQL is cached (at most 512 entries).
 - **SQL logging**: on only when development is named, with `CRYSTAL_ENV=development` or `config.env = "development"` (and `CQL_NO_SQL_LOG` unset), or when you set `config.sql_logging = true`. An unset `CRYSTAL_ENV` does not turn it on. Logging every query costs several microseconds, which can be more than the query itself on a fast path.
-- **Per-request query cache**: it stores nothing until `CQL::Cache::RequestQueryCacheHelper.start_request` is called, and it is bounded by `max_size`.
+- **Per-request query cache**: it stores nothing until `CQL::Cache::RequestQueryCacheHelper.start_request` is called (or `RequestQueryCacheHelper.enabled = true`), and it is bounded by `max_size`.
 
 See [Configuration reference](../reference/configuration.md) for every switch.
 
@@ -44,7 +44,7 @@ The ActiveRecord layer picks the query that does the least work:
 - **`count`** drops `ORDER BY` and counts through a subquery when a limit or offset is set.
 - **`find_each` and `find_in_batches`** page by primary key (`WHERE id > ? ORDER BY id LIMIT n`), so each batch costs the same however deep it is.
 - **`preload`** loads `has_many`, `belongs_to` and `has_one` associations with one query per chunk of ids, chunked under the dialect's bind-parameter limit (`Dialect#max_bind_params`).
-- **Bulk writes.** `insert_all`, `upsert_all` and has_many's `insert_<name>_all` send multi-row statements; `delete_all` deletes in one statement when the model has no destroy callbacks and no `dependent:` associations.
+- **Bulk writes.** `insert_all`, `upsert_all` and has_many's `insert_<name>_all` send multi-row statements; `delete_all` reads the matching ids with one SELECT and deletes them with one `DELETE ... WHERE id IN (...)` per chunk of `max_bind_params`, when the model has no destroy callbacks, no `dependent:` association and no `many_to_many`.
 - **`create!` on PostgreSQL and CockroachDB** reads the new row from `INSERT ... RETURNING` (`Dialect#supports_returning?`), one round trip instead of two.
 - **Dirty tracking** (opt-in, `CQL::ActiveRecord::DirtyTracking`) sends only changed columns, and no UPDATE at all when nothing changed.
 

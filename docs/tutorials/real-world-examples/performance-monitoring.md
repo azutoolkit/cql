@@ -170,7 +170,7 @@ N+1 queries happen when you load a list, then query for each item:
 posts = Post.where(published: true).all
 posts.each do |post|
   author = post.user  # This triggers a query for EACH post!
-  puts "#{post.title} by #{author.try(&.name)}"
+  puts "#{post.title} by #{author.try(&.username)}"
 end
 
 # The monitor would show something like:
@@ -187,17 +187,14 @@ users = User.where(active: true).preload(:posts).all # 2 queries, however many u
 users.each { |user| puts "#{user.username}: #{user.posts.size} posts" }
 ```
 
-For a `belongs_to` association, load the parents in one query and look them up in memory:
+A `belongs_to` association preloads the same way:
 
 ```crystal
 # GOOD: two queries in total
-posts = Post.where(published: true).all
-user_ids = posts.map(&.user_id).uniq
-users_by_id = User.where { id.in(user_ids) }.all.index_by(&.id)
+posts = Post.where(published: true).preload(:user).all
 
 posts.each do |post|
-  author = users_by_id[post.user_id]?
-  puts "#{post.title} by #{author.try(&.name)}"
+  puts "#{post.title} by #{post.user.try(&.username)}"
 end
 
 # The monitor shows:
@@ -336,9 +333,8 @@ describe "Performance" do
     # Load posts and their authors
     QueryMonitor.install # once per test run, e.g. in spec_helper.cr
     QueryMonitor.clear
-    posts = Post.where(published: true).all
-    users_by_id = User.where { id.in(posts.map(&.user_id).uniq) }.all.index_by(&.id)
-    posts.each { |p| users_by_id[p.user_id]? }
+    posts = Post.where(published: true).preload(:user).all
+    posts.each(&.user)
 
     # Assert query count
     QueryMonitor.queries.size.should be <= 2
@@ -351,7 +347,7 @@ end
 
 ## Step 7: Production Monitoring
 
-`CQL::Performance` profiles every query, detects N+1 patterns and produces reports. Configure it once at startup:
+`CQL::Performance` is off by default (outside development). Once enabled, it profiles every query, detects N+1 patterns and produces reports. Enable and configure it once at startup:
 
 ```crystal
 CQL::Performance.configure do |config|

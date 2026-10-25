@@ -26,12 +26,6 @@ How CQL works internally:
 
 - [How CQL Keeps Queries Fast](performance-design.md) - What happens on each query, what is opt-in, and what is computed once
 
-
-## Best Practices
-
-Guidelines for effective CQL usage:
-
-
 ---
 
 **Ready to apply this knowledge?** Head to the [How-to Guides](../how-to/README.md) for practical instructions.
