@@ -22,7 +22,7 @@ With 100 posts, this runs 101 queries. The same happens in the other direction w
 
 ## Use Eager Loading
 
-`preload` loads a `has_many` association for all parent records with one extra query (`WHERE foreign_key IN (...)`).
+`preload` loads a `has_many` or `belongs_to` association for all records with one extra query (`WHERE foreign_key IN (...)` or `WHERE id IN (...)`, split into chunks of the database's bind limit). Records that share a `belongs_to` target share one preloaded instance.
 
 ### Basic Preload
 
@@ -44,7 +44,7 @@ posts = Post
   .all
 ```
 
-`preload` only handles `has_many` associations today. Preloading a `belongs_to` (`Post.preload(:user)`), a `has_one` or a `many_to_many` association is silently ignored, so use batch loading (below) or a join for those.
+`preload` handles `has_many` and `belongs_to` associations (`Post.preload(:user)`; a `belongs_to` declared with `cache: false` is skipped). Preloading a `has_one` or a `many_to_many` association is silently ignored, so use batch loading (below) or a join for those.
 
 ## Use Joins for Filtering
 

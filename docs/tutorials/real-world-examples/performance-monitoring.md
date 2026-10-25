@@ -180,7 +180,7 @@ end
 
 ### Solution: Eager Loading
 
-For `has_many` associations, `preload` loads the children in one extra query:
+For `has_many` and `belongs_to` associations, `preload` loads the related records in one extra query:
 
 ```crystal
 users = User.where(active: true).preload(:posts).all # 2 queries, however many users

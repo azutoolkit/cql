@@ -12,6 +12,22 @@ UuidTestDB = CQL::Schema.define(
     bigint :user_id
     timestamps
   end
+
+  table :uuid_session_events do
+    primary :id, Int64, auto_increment: true
+    text :session_id, null: true
+  end
+end
+
+# belongs_to a UUID-keyed model, so its generated preload must bind UUIDs as strings.
+class UuidSessionEvent
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: UuidTestDB, table: :uuid_session_events
+
+  property session_id : UUID?
+
+  belongs_to :session, UuidSession, :session_id
 end
 
 # Model with UUID primary key
@@ -205,6 +221,12 @@ describe "UUID Primary Key Support" do
 
       UuidSession.find(gone.id!).should be_nil
       UuidSession.find!(kept.id!).token.should eq("kept")
+    end
+  end
+
+  describe "belongs_to preload" do
+    it "compiles for a UUID-keyed target" do
+      typeof(UuidSessionEvent.preload(:session).all).should eq(Array(UuidSessionEvent))
     end
   end
 

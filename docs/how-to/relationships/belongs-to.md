@@ -105,7 +105,7 @@ end
 
 The parent is loaded on first access and cached on the instance. Use `comment.reload_post` to fetch it again and `comment.post_loaded?` to check whether it is cached.
 
-`preload` only batches `has_many` associations, so it does not remove the per-record lookup for `belongs_to`. To avoid N+1 queries, load the parents in one query (see [Fix N+1 Queries](../performance/n-plus-one.md)).
+`Comment.preload(:post).all` loads every comment's parent with one extra query (per chunk of the database's bind limit) and caches it, so `comment.post` runs no query. This needs the default `cache: true`; an association declared with `cache: false` is not preloaded. See [Fix N+1 Queries](../performance/n-plus-one.md).
 
 ## Create with Parent
 

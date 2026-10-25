@@ -136,14 +136,14 @@ module CQL::ActiveRecord::Relations
       # Fetches the related records with one query per *chunk_size* parent ids (the dialect's
       # bind-parameter limit by default) and distributes them.
       # - **param** : records (Array(self)) - The parent records
-      # - **param** : parent_ids (Array) - The parent IDs
       # - **param** : chunk_size (Int32) - The most parent ids bound by one query
       # - **return** : Nil
-      def self._preload_{{name.id}}(records : Array(self), parent_ids : Array, chunk_size : Int32 = {{type.id}}.adapter.dialect.max_bind_params) : Nil
-        return if records.empty? || parent_ids.empty?
+      def self._preload_{{name.id}}(records : Array(self), chunk_size : Int32 = {{type.id}}.adapter.dialect.max_bind_params - 1) : Nil
+        parent_ids = records.compact_map(&.id)
+        return if parent_ids.empty?
 
         grouped = {} of Pk => Array({{type.id}})
-        parent_ids.uniq.each_slice(chunk_size) do |ids|
+        CQL::ActiveRecord::IdChunks.each(parent_ids, chunk_size) do |ids|
           {{type.id}}.where({ {{fk}} => ids }).all.each do |record|
             fk_value = record.{{fk.id}}
             next if fk_value.nil?
