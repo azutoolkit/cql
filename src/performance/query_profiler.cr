@@ -17,7 +17,7 @@ module CQL::Performance
     getter error : String?
     @normalized_sql : String?
 
-    def initialize(@sql, @params, @execution_time, @rows_affected = nil, @error = nil)
+    def initialize(@sql, @params, @execution_time, @rows_affected = nil, @error = nil, @normalized_sql = nil)
     end
 
     def normalized_sql : String
@@ -49,11 +49,11 @@ module CQL::Performance
     def record_query(sql : String, params : Array(DB::Any),
                      execution_time : Time::Span,
                      rows_affected : Int64? = nil,
-                     error : String? = nil) : Void
+                     error : String? = nil,
+                     normalized_sql : String? = nil) : Void
       return unless @enabled
 
-      # Create query data
-      query = QueryData.new(sql, params, execution_time, rows_affected, error)
+      query = QueryData.new(sql, params, execution_time, rows_affected, error, normalized_sql)
 
       @mutex.synchronize do
         # Record in memory if needed

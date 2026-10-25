@@ -180,11 +180,13 @@ module CQL::Performance
                                  execution_time : Time::Span,
                                  rows_affected : Int64? = nil,
                                  error : String? = nil)
-      # Record in profiler
-      @profiler.try(&.record_query(sql, params, execution_time, rows_affected, error))
+      profiler = @profiler
+      detector = @detector unless error
+      return unless profiler || detector
 
-      # Record in N+1 detector
-      @detector.try(&.record_query(sql)) unless error
+      normalized_sql = SQLUtils.normalize_sql(sql)
+      profiler.try(&.record_query(sql, params, execution_time, rows_affected, error, normalized_sql: normalized_sql))
+      detector.try(&.record_query(sql, normalized_sql: normalized_sql))
     end
 
     private def log_query(sql : String, params : Array(DB::Any),

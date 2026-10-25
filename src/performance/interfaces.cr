@@ -5,7 +5,8 @@ module CQL::Performance
     abstract def record_query(sql : String, params : Array(DB::Any),
                               execution_time : Time::Span,
                               rows_affected : Int64? = nil,
-                              error : String? = nil) : Void
+                              error : String? = nil,
+                              normalized_sql : String? = nil) : Void
     abstract def statistics
     abstract def slowest_queries(limit : Int32) : Array(QueryData)
     abstract def stats_trackers : Hash(String, StatsTracker)
@@ -14,7 +15,7 @@ module CQL::Performance
   end
 
   module NPlusOneDetectorInterface
-    abstract def record_query(sql : String) : Void
+    abstract def record_query(sql : String, normalized_sql : String? = nil) : Void
     abstract def start_relation_loading(relation_name : String, parent_model : String) : Void
     abstract def end_relation_loading : Void
     abstract def patterns

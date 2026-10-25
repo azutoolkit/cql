@@ -484,6 +484,110 @@ describe CQL::Performance::Monitor do
   end
 end
 
+# Spies for the shared-normalization seam: both interfaces' `record_query` accept an optional
+# `normalized_sql:` keyword, which the monitor fills in once per query.
+class NormalizationSpyProfiler
+  include CQL::Performance::QueryProfilerInterface
+
+  getter received = [] of {String, String?}
+
+  def record_query(sql : String, params : Array(DB::Any),
+                   execution_time : Time::Span,
+                   rows_affected : Int64? = nil,
+                   error : String? = nil,
+                   normalized_sql : String? = nil) : Void
+    @received << {sql, normalized_sql}
+  end
+
+  def statistics
+    {} of String => NamedTuple(count: Int32, total_ms: Float64, avg_ms: Float64, min_ms: Float64, max_ms: Float64)
+  end
+
+  def slowest_queries(limit : Int32) : Array(CQL::Performance::QueryData)
+    [] of CQL::Performance::QueryData
+  end
+
+  def stats_trackers : Hash(String, CQL::Performance::StatsTracker)
+    {} of String => CQL::Performance::StatsTracker
+  end
+
+  def issues : Array(CQL::Performance::Issue)
+    [] of CQL::Performance::Issue
+  end
+
+  def clear : Void
+  end
+end
+
+class NormalizationSpyDetector
+  include CQL::Performance::NPlusOneDetectorInterface
+
+  getter received = [] of {String, String?}
+
+  def record_query(sql : String, normalized_sql : String? = nil) : Void
+    @received << {sql, normalized_sql}
+  end
+
+  def start_relation_loading(relation_name : String, parent_model : String) : Void
+  end
+
+  def end_relation_loading : Void
+  end
+
+  def patterns
+    [] of CQL::Performance::NPlusOnePattern
+  end
+
+  def issues : Array(CQL::Performance::Issue)
+    [] of CQL::Performance::Issue
+  end
+
+  def clear : Void
+  end
+end
+
+describe "CQL::Performance::Monitor shared SQL normalization" do
+  sql = "SELECT * FROM users WHERE id = 42 AND name = 'Alice'"
+  normalized = CQL::Performance::SQLUtils.normalize_sql(sql)
+
+  build_monitor = ->(profiler : NormalizationSpyProfiler, detector : NormalizationSpyDetector) do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = false
+    CQL::Performance::Monitor.new(config: config, profiler: profiler, detector: detector)
+  end
+
+  it "hands the profiler the SQL normalized by the monitor" do
+    profiler = NormalizationSpyProfiler.new
+    detector = NormalizationSpyDetector.new
+
+    build_monitor.call(profiler, detector).track(sql) { 1 }
+
+    profiler.received.should eq([{sql, normalized}])
+  end
+
+  it "hands the N+1 detector the same normalized SQL as the profiler" do
+    profiler = NormalizationSpyProfiler.new
+    detector = NormalizationSpyDetector.new
+
+    build_monitor.call(profiler, detector).track(sql) { 1 }
+
+    detector.received.should eq([{sql, normalized}])
+  end
+
+  it "still hands the profiler the normalized SQL when the tracked block raises, and skips the detector" do
+    profiler = NormalizationSpyProfiler.new
+    detector = NormalizationSpyDetector.new
+
+    expect_raises(Exception, "boom") do
+      build_monitor.call(profiler, detector).track(sql) { raise "boom" }
+    end
+
+    profiler.received.should eq([{sql, normalized}])
+    detector.received.should be_empty
+  end
+end
+
 describe "CQL.config.monitor_performance" do
   after_each { CQL.reset_config! }
 
