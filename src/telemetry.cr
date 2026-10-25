@@ -107,7 +107,6 @@ module CQL
     @@subscribers = {} of String => Subscriber
     @@transaction_subscribers = {} of String => TransactionSubscriber
     @@transaction_ids = Atomic(Int64).new(0)
-    @@contexts = {} of Fiber => String
     @@mutex = CQL::Compat::Mutex.new
     @@capture_params = false
     @@tracer : Tracer? = nil
@@ -193,19 +192,22 @@ module CQL
 
     # Tags events emitted by the current fiber while the block runs.
     def self.with_context(context : String, &)
-      previous = @@mutex.synchronize { @@contexts.put(Fiber.current, context) { nil } }
+      previous = current_context
+      Fiber.current.cql_telemetry_context = context
       yield
     ensure
-      @@mutex.synchronize do
-        previous ? (@@contexts[Fiber.current] = previous) : @@contexts.delete(Fiber.current)
-      end
+      Fiber.current.cql_telemetry_context = previous
+    end
+
+    # The context set by `with_context` on the current fiber, if any.
+    def self.current_context : String?
+      Fiber.current.cql_telemetry_context
     end
 
     def self.reset! : Nil
       @@mutex.synchronize do
         @@subscribers = {} of String => Subscriber
         @@transaction_subscribers = {} of String => TransactionSubscriber
-        @@contexts.clear
       end
       @@capture_params = false
       @@tracer = nil
@@ -260,8 +262,7 @@ module CQL
     # :nodoc:
     def self.query_event(adapter : Adapter, operation : Symbol, sql : String, params : Array(DB::Any),
                          duration : Time::Span, error : Exception?, result, pool_wait : Time::Span = Time::Span.zero) : QueryEvent
-      context = @@mutex.synchronize { @@contexts[Fiber.current]? }
-      QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows_affected(result), context, pool_wait)
+      QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows_affected(result), current_context, pool_wait)
     end
 
     # :nodoc:
@@ -277,4 +278,9 @@ module CQL
       end
     end
   end
+end
+
+class ::Fiber
+  # :nodoc:
+  property cql_telemetry_context : String?
 end

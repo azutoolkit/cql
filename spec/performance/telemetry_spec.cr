@@ -227,6 +227,43 @@ describe CQL::Telemetry do
       add_user.call("grace")
       events.last.context.should be_nil
     end
+
+    it "tags events emitted inside Performance.with_context, the same slot as Telemetry.with_context" do
+      CQL::Performance.with_context("perf-ctx") { add_user.call("ada") }
+
+      events.last.context.should eq("perf-ctx")
+    end
+
+    it "keeps the contexts of concurrently running fibers apart" do
+      done = Channel(Nil).new
+      %w[x y].each do |name|
+        spawn do
+          CQL::Telemetry.with_context(name) do
+            UserDB.query.from(:users).select(:name).all(as: String)
+            sleep 5.milliseconds
+            UserDB.query.from(:users).select(:name).all(as: String)
+          end
+          done.send(nil)
+        end
+      end
+      2.times { done.receive }
+
+      events.map(&.context.to_s).sort!.should eq(%w[x x y y])
+    end
+
+    it "restores the outer context when the block raises, so nothing carries over" do
+      CQL::Telemetry.with_context("outer") do
+        expect_raises(Exception, "boom") { CQL::Telemetry.with_context("tenant-1") { raise "boom" } }
+        CQL::Telemetry.current_context.should eq("outer")
+      end
+      CQL::Telemetry.current_context.should be_nil
+    end
+
+    it "does not hand its context to fibers spawned inside the block" do
+      seen = Channel(String?).new
+      CQL::Telemetry.with_context("parent") { spawn { seen.send(CQL::Telemetry.current_context) } }
+      seen.receive.should be_nil
+    end
   end
 
   describe "tracer" do

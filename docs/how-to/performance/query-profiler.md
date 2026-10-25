@@ -133,7 +133,7 @@ CQL::Performance.with_context("PostsController#index") do
 end
 ```
 
-The context is attached to log lines produced while SQL logging is on. It is stored on the monitor, so use it for one request at a time and not across concurrent fibers.
+The context is attached to log lines produced while SQL logging is on, and to the telemetry events of the block (`QueryEvent#context`). It is the same per-fiber context as `CQL::Telemetry.with_context`, so concurrent requests each keep their own; work you `spawn` inside the block is not tagged.
 
 ## Health and Metrics
 

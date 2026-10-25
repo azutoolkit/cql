@@ -25,7 +25,6 @@ module CQL::Performance
     @sql_formatter : SQLFormatter
     @report_generator : UnifiedReportGenerator
     @start_time : Time = Time.utc
-    @context : String? = nil
     @error_count : Atomic(Int32) = Atomic(Int32).new(0)
 
     def initialize(
@@ -78,11 +77,7 @@ module CQL::Performance
 
     # Context management
     def with_context(context : String, &)
-      old_context = @context
-      @context = context
-      yield
-    ensure
-      @context = old_context
+      CQL::Telemetry.with_context(context) { yield }
     end
 
     # Report generation
@@ -206,7 +201,7 @@ module CQL::Performance
 
     private def format_query(sql : String, params : Array(DB::Any),
                              execution_time : Time::Span, rows_affected : Int64?) : String
-      @sql_formatter.format(sql, params, execution_time, rows_affected, @context)
+      @sql_formatter.format(sql, params, execution_time, rows_affected, CQL::Telemetry.current_context)
     end
 
     private def build_performance_report : PerformanceReport

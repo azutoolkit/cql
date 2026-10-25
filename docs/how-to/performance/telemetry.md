@@ -24,7 +24,11 @@ always available.
 
 ```crystal
 CQL::Telemetry.with_context("req-123") { ... } # fiber-local, attached to events in the block
+CQL::Telemetry.current_context                   # => "req-123" inside that block, nil outside
 ```
+
+The context is shared with `CQL::Performance.with_context`: every subscriber receives it, and it appears in SQL
+log lines when SQL logging is on, whatever `capture_params` says. Use a request id, not personal data.
 
 ## Tracing (OpenTelemetry, Dashforge, ...)
 

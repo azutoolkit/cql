@@ -709,6 +709,41 @@ describe "CQL::Performance.enable_sql_logging" do
   end
 end
 
+describe "CQL::Performance.with_context across fibers" do
+  it "shows each fiber's own context in its SQL log entries and never another's" do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = true
+    monitor = CQL::Performance::Monitor.new(config: config, sql_formatter: CQL::Performance::SQLFormatter.new(colorize_enabled: false))
+    done = Channel(Nil).new
+    entries = [] of String
+
+    with_global_monitor(monitor) do
+      Log.capture("*") do |logs|
+        %w[a b].each do |name|
+          spawn do
+            CQL::Performance.with_context(name) do
+              CQL::Performance.track("SELECT '#{name}1'") { 1 }
+              sleep 5.milliseconds
+              CQL::Performance.track("SELECT '#{name}2'") { 1 }
+            end
+            done.send(nil)
+          end
+        end
+        2.times { done.receive }
+        4.times { logs.next("a logged statement") { |entry| entries << entry.message; true } }
+      end
+    end
+
+    {"a" => "b", "b" => "a"}.each do |own, other|
+      own_entries = entries.select(&.includes?("'#{own}"))
+      own_entries.size.should eq(2)
+      own_entries.each(&.should(contain("{#{own}}")))
+      own_entries.each(&.should_not(contain("{#{other}}")))
+    end
+  end
+end
+
 describe "CQL::Performance::Monitor with CQL::Execution.run" do
   events = [] of CQL::Telemetry::QueryEvent
 

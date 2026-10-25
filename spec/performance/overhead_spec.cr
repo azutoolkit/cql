@@ -35,4 +35,12 @@ describe "instrumentation allocation budget" do
       bytes_per_statement.should be < 1.0
     end
   end
+
+  it "allocates nothing for a context, around a block or a statement" do
+    bytes_per_call(100_000) { CQL::Performance.with_context("req") { } }.should be < 1.0
+    CQL::Telemetry.subscribe("overhead") { |_event| }
+    with_global_monitor(CQL::Performance::Monitor.new(CQL::Performance.minimal_config)) do
+      CQL::Telemetry.with_context("req") { bytes_per_statement.should be < 1.0 }
+    end
+  end
 end
