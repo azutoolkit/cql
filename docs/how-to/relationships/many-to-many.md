@@ -178,7 +178,7 @@ post.tags.exists?(name: "Crystal")        # => Bool
 post.remove_tag(tag)    # or post.tags.delete(tag)
 ```
 
-This deletes the join row. What happens to the tag itself depends on `dependent:`: `:nullify` (the default) leaves it alone, `:destroy` and `:delete_all` also remove the tag.
+This deletes the join row. What happens to the tag itself depends on `dependent:`: `:nullify` (the default) leaves it alone, `:destroy` and `:delete_all` also remove the tag. Any other `dependent:` value is a compile-time error.
 
 ### Remove All Tags from Post
 
@@ -193,6 +193,12 @@ post.tags.delete_all    # => Int64, the number of join rows removed
 ```
 
 `nullify_all` does the same thing: a many-to-many link lives in the join table, so unlinking deletes the join row.
+
+## Delete the Owner
+
+`post.delete!` deletes the post's join rows before deleting the post, even when `dependent:` is not declared and whether or not `post.tags` was loaded. With `dependent: :destroy` it also calls `delete!` on each tag; a tag whose `before_destroy` halts stays, without its join row, and the post is still deleted. With `:delete_all` it deletes the tags' rows without callbacks (soft-deletable tags are soft deleted one by one, through their `delete!`). The join rows and the post's DELETE run in one transaction (a savepoint inside an open one).
+
+`Post.where(...).delete_all` deletes record by record on a model with a many_to_many, so the join rows go too. The class-level `Post.delete!(id)`, `Post.delete_by!` and `Post.delete_all` skip this (except `delete!(id)` and `delete_by!` on a soft-deletable model); the `on_delete: :cascade` foreign keys above cover those.
 
 ## Verify It Works
 

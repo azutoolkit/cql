@@ -793,13 +793,15 @@ module CQL
           clone_builder.tap(&.query.unscope(scope_type))
         end
 
-        # Deletes the matching records and returns how many. A model with destroy callbacks loads
-        # and deletes each record so they run; others delete by id in bulk (soft-deletable models
-        # set `deleted_at`).
+        # Deletes the matching records and returns how many. A model with destroy callbacks or
+        # `dependent:` strategies loads and deletes each record so they run, all in one transaction;
+        # others delete by id in bulk (soft-deletable models set `deleted_at`).
         def delete_all : Int64
-          return T.delete_ids(id_scope.ids(as: T.stored_id_type)) unless T.destroy_callbacks?
+          return T.delete_ids(id_scope.ids(as: T.stored_id_type)) unless T.destroy_callbacks? || T.delete_applies_dependents?
 
-          all.count(&.delete!).to_i64
+          deleted = 0_i64
+          T.schema.transaction { deleted = all.count(&.delete!).to_i64 }
+          deleted
         end
 
         # Alias for group method to match ActiveRecord naming

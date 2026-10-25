@@ -40,6 +40,51 @@ class AuditedSoftDeletableUser
   end
 end
 
+class SoftDeletablePost
+  include CQL::ActiveRecord::Model(Int32)
+
+  db_context schema: SoftDeletableDB, table: :soft_deletable_posts
+
+  property title : String
+  property user_id : Int32?
+
+  def initialize(@title, @user_id = nil)
+  end
+end
+
+# Soft-deletable owners of SoftDeletablePost records, one per `dependent:` strategy.
+class PostDeletingSoftDeletableUser
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context schema: SoftDeletableDB, table: :users
+
+  property name : String
+  property email : String
+  property age : Int32 = 0
+
+  has_many :posts, SoftDeletablePost, foreign_key: :user_id, dependent: :delete_all
+
+  def initialize(@name, @email, @age = 0)
+  end
+end
+
+class PostRestrictedSoftDeletableUser
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context schema: SoftDeletableDB, table: :users
+
+  property name : String
+  property email : String
+  property age : Int32 = 0
+
+  has_many :posts, SoftDeletablePost, foreign_key: :user_id, dependent: :restrict_with_error
+
+  def initialize(@name, @email, @age = 0)
+  end
+end
+
 describe CQL::ActiveRecord::SoftDeletable do
   before_each do
     SoftDeletableDB.users.drop! rescue nil
@@ -413,6 +458,83 @@ describe CQL::ActiveRecord::SoftDeletable do
       # force_delete! should return false for unsaved records
       result = user.force_delete!
       result.should be_false
+    end
+  end
+
+  describe "dependent strategies" do
+    before_each do
+      SoftDeletableDB.soft_deletable_posts.drop! rescue nil
+      SoftDeletableDB.soft_deletable_posts.create!
+    end
+
+    after_each do
+      SoftDeletableDB.soft_deletable_posts.drop!
+    end
+
+    it "applies them when soft deleting" do
+      user = PostDeletingSoftDeletableUser.new("John Doe", "john@example.com", 30)
+      user.create!
+      post = SoftDeletablePost.new("Post", user.id)
+      post.create!
+
+      user.delete!.should be_true
+
+      user.deleted?.should be_true
+      SoftDeletablePost.find?(post.id!).should be_nil
+    end
+
+    it "applies them when force deleting" do
+      user = PostDeletingSoftDeletableUser.new("John Doe", "john@example.com", 30)
+      user.create!
+      user_id = user.id!
+      post = SoftDeletablePost.new("Post", user_id)
+      post.create!
+
+      user.force_delete!.should be_true
+
+      SoftDeletablePost.find?(post.id!).should be_nil
+      PostDeletingSoftDeletableUser.with_deleted.find(user_id).should be_nil
+    end
+
+    it "raises before setting deleted_at when a restricting association has records" do
+      user = PostRestrictedSoftDeletableUser.new("John Doe", "john@example.com", 30)
+      user.create!
+      SoftDeletablePost.new("Post", user.id).create!
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError) { user.delete! }
+
+      user.deleted?.should be_false
+      PostRestrictedSoftDeletableUser.find!(user.id!).deleted_at.should be_nil
+    end
+
+    it "leaves deleted_at unset when a strategy fails" do
+      user = PostDeletingSoftDeletableUser.new("John Doe", "john@example.com", 30)
+      user.create!
+      SoftDeletableDB.soft_deletable_posts.drop!
+
+      expect_raises(SQLite3::Exception, "no such table") { user.delete! }
+
+      SoftDeletableDB.soft_deletable_posts.create!
+      user.deleted?.should be_false
+      PostDeletingSoftDeletableUser.find!(user.id!).deleted_at.should be_nil
+    end
+
+    it "applies them through the class-level delete! and delete_by!, deleting nothing when restricted" do
+      free = PostRestrictedSoftDeletableUser.new("Free User", "free@example.com", 30)
+      free.create!
+      restricted = PostRestrictedSoftDeletableUser.new("Restricted User", "restricted@example.com", 30)
+      restricted.create!
+      SoftDeletablePost.new("Post", restricted.id).create!
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError) do
+        PostRestrictedSoftDeletableUser.delete!(restricted.id!)
+      end
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError) do
+        PostRestrictedSoftDeletableUser.delete_by!(age: 30)
+      end
+
+      PostRestrictedSoftDeletableUser.find!(free.id!).deleted_at.should be_nil
+      PostRestrictedSoftDeletableUser.find!(restricted.id!).deleted_at.should be_nil
     end
   end
 end

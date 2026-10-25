@@ -63,6 +63,14 @@ module CQL::ActiveRecord::Relations
       end
     end
 
+    # Deletes a dependent record with its `delete!` and raises RelationError when that returns
+    # false (a callback halted it), so the owner's delete rolls back instead of orphaning it
+    macro destroy_dependent(record, association)
+      unless safe_db_operation { {{record}}.delete! }
+        raise RelationError.new("Cannot delete record because dependent {{association.id}} could not be deleted")
+      end
+    end
+
     # Creates a query builder with proper error handling
     # - **param** : model_class (Class) - The model class to query
     # - **return** : CQL::Query - A configured query builder

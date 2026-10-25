@@ -15,4 +15,10 @@ SoftDeletableDB = CQL::Schema.define(
     timestamp :created_at, null: true
     timestamp :updated_at, null: true
   end
+
+  table :soft_deletable_posts do
+    primary :id, Int32
+    column :title, String, size: 255
+    column :user_id, Int32, null: true
+  end
 end

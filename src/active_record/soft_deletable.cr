@@ -84,15 +84,17 @@ module CQL
           !new_record? && !deleted?
         end
 
-        # Override delete! to perform soft delete
+        # Override delete! to perform soft delete; the `dependent:` strategies of the associations
+        # still apply, and `restore!` does not undo them
         def delete! : Bool
           return false if id.nil?
+
+          check_delete_restrictions
 
           # Run before destroy callbacks
           return false unless run_callbacks(:before_destroy)
 
-          # Set deleted_at timestamp
-          @deleted_at = Time.utc
+          timestamp = Time.utc
 
           # Update the record in the database
           where_attrs = Hash(Symbol, DB::Any).new
@@ -103,14 +105,13 @@ module CQL
           {% end %}
 
           update_attrs = Hash(Symbol, DB::Any).new
-          update_attrs[:deleted_at] = @deleted_at.as(DB::Any)
+          update_attrs[:deleted_at] = timestamp.as(DB::Any)
 
-          result = {{@type.id}}.update_by(where_attrs, update_attrs)
-
-          success = result.rows_affected > 0
+          success = delete_with_dependents { {{@type.id}}.update_by(where_attrs, update_attrs).rows_affected > 0 }
 
           # Run after destroy callbacks
           if success
+            @deleted_at = timestamp
             run_callbacks(:after_destroy)
             self.destroyed = true
           end
@@ -118,16 +119,16 @@ module CQL
           success
         end
 
-        # Permanently delete the record from the database
+        # Permanently delete the record from the database, applying the `dependent:` strategies
         def force_delete! : Bool
           return false if id.nil?
+
+          check_delete_restrictions
 
           # Run before destroy callbacks
           return false unless run_callbacks(:before_destroy)
 
-          # Actually delete the record from the database
-          result = {{@type.id}}.force_delete!(id!)
-          success = result.rows_affected > 0
+          success = delete_with_dependents { {{@type.id}}.force_delete!(id!).rows_affected > 0 }
 
           # Run after destroy callbacks and clear the ID if successful
           if success
@@ -200,14 +201,13 @@ module CQL
           {% end %}
         end
 
-        # Soft delete records matching specific fields
+        # Soft delete records matching specific fields, record by record in one transaction
         def self.delete_by!(**fields)
-          records = with_deleted.where(**fields).all
           rows_affected = 0_i64
 
-          records.each do |record|
-            if record.delete!
-              rows_affected += 1
+          schema.transaction do
+            with_deleted.where(**fields).all.each do |record|
+              rows_affected += 1 if record.delete!
             end
           end
 

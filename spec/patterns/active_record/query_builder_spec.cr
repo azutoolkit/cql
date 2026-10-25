@@ -1115,6 +1115,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
 
     it "skips a not-yet-visited row deleted mid-iteration" do
+      UserDB.posts.create!
       ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
 
       yielded = [] of Int64
@@ -1124,9 +1125,11 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       end
 
       yielded.should eq(ids - [ids[4]])
+      UserDB.posts.drop!
     end
 
     it "does not skip rows when an already-visited row is deleted mid-iteration" do
+      UserDB.posts.create!
       ids = (1..7).map { |i| create_last_user("User#{i}", 20 + i).id!.to_i64 }
 
       yielded = [] of Int64
@@ -1136,6 +1139,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       end
 
       yielded.should eq(ids)
+      UserDB.posts.drop!
     end
 
     it "only yields rows matching the where scope" do
@@ -1353,6 +1357,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
   describe "#delete_all" do
     it "deletes all records matching current scope" do
+      UserDB.posts.create!
       TestUser.create!(name: "User 1", email: "user1@example.com", age: 25, password: "password123", password_confirmation: "password123")
       TestUser.create!(name: "User 2", email: "user2@example.com", age: 30, password: "password123", password_confirmation: "password123")
 
@@ -1361,9 +1366,11 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
       deleted_count.should be_a(Int64)
       deleted_count.should eq(2)
+      UserDB.posts.drop!
     end
 
     it "runs each record's destroy callbacks when the model declares them" do
+      UserDB.posts.create!
       create_last_user("Ada", 30)
       create_last_user("Linus", 40)
       CallbackTracker.clear
@@ -1373,6 +1380,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       CallbackTracker.order.count("before_destroy").should eq(1)
       CallbackTracker.order.count("after_destroy").should eq(1)
       TestUser.all.map(&.name).should eq(["Linus"])
+      UserDB.posts.drop!
     end
 
     it "deletes by id in one SELECT and one DELETE when the model has no destroy callbacks" do

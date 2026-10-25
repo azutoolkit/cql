@@ -22,7 +22,7 @@ Callbacks allow you to trigger logic at specific points in a record's lifecycle:
 └───────────────────┘
 ```
 
-Each callback is registered with a macro that takes a method name as a symbol (`before_save :normalize_email`). There are no block, `if:` or `unless:` forms. Callbacks run for `save`, `save!` and the instance `delete!`; `create!`, `update!`, `touch` and the class-level `delete!`, `delete_all`, `delete_by!` and `update_all` skip them; `delete_all` on a query runs each record's destroy callbacks when the model declares any, and otherwise deletes in bulk. Several callbacks for one event run in the order they were declared.
+Each callback is registered with a macro that takes a method name as a symbol (`before_save :normalize_email`). There are no block, `if:` or `unless:` forms. Callbacks run for `save`, `save!` and the instance `delete!`; `create!`, `update!`, `touch` and the class-level `delete!`, `delete_all`, `delete_by!` and `update_all` skip them; `delete_all` on a query runs each record's destroy callbacks, in one transaction, when the model declares any (or declares `dependent:` associations), and otherwise deletes in bulk. Several callbacks for one event run in the order they were declared.
 
 ## Available Callbacks
 
