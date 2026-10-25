@@ -4,6 +4,12 @@ InferredContextDB = CQL::Schema.define(:inferred_context, adapter: CQL::Adapter:
   table :inferred_gadgets do
     primary :id, Int64
     column :name, String
+    column :inferred_category_id, Int64, null: true
+  end
+
+  table :inferred_categories do
+    primary :id, Int64
+    column :name, String
   end
 
   table :inferred_crates do
@@ -26,8 +32,11 @@ struct InferredGadget
 
   property id : Int64?
   property name : String
+  property inferred_category_id : Int64?
 
-  def initialize(@name : String); end
+  belongs_to :category, InferredCategory, :inferred_category_id
+
+  def initialize(@name : String, @inferred_category_id : Int64? = nil); end
 end
 
 struct InferredCategory
@@ -35,6 +44,8 @@ struct InferredCategory
 
   property id : Int64?
   property name : String
+
+  has_many :gadgets, InferredGadget, foreign_key: :inferred_category_id
 
   def initialize(@name : String); end
 end
@@ -178,6 +189,34 @@ describe "Model without db_context" do
       gadget = InferredGadget.create!(name: "Widget")
 
       InferredGadget.find!(gadget.id!).name.should eq("Widget")
+    end
+  end
+
+  describe "typed DSL" do
+    before_each do
+      InferredContextDB.inferred_gadgets.create!
+      InferredContextDB.inferred_categories.create!
+    end
+    after_each do
+      InferredContextDB.inferred_gadgets.drop!
+      InferredContextDB.inferred_categories.drop!
+    end
+
+    it "filters with a where block on bare column names" do
+      InferredGadget.create!(name: "Widget")
+      InferredGadget.create!(name: "Gizmo")
+
+      InferredGadget.where { name == "Widget" }.to_a.map(&.name).should eq(["Widget"])
+    end
+
+    it "joins a belongs_to association on the inferred table names" do
+      InferredGadget.query.joins(:category).query.to_sql.first
+        .should contain("INNER JOIN inferred_categories ON inferred_categories.id = inferred_gadgets.inferred_category_id")
+    end
+
+    it "joins a has_many association on the inferred table names" do
+      InferredCategory.query.joins(:gadgets).query.to_sql.first
+        .should contain("INNER JOIN inferred_gadgets ON inferred_gadgets.inferred_category_id = inferred_categories.id")
     end
   end
 end
