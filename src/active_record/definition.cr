@@ -167,7 +167,7 @@ module CQL
               {% end %}
             end
 
-            {% if @type.constant(:CQL_SCHEMA_CONTEXT) %}
+            {% if schema %}
               {% getter_types = {} of String => String %}
               {% for method in @type.methods %}
                 {% if method.args.empty? && !method.name.ends_with?("=") && method.return_type %}
@@ -183,7 +183,7 @@ module CQL
               if ENV["CQL_VALIDATE_SCHEMA_MAPPINGS"]? == "1"
                 CQL::ActiveRecord::SchemaValidator.validate_model!(
                   {{@type.name.stringify}},
-                  {{schema}},
+                  {{schema.id}},
                   {{table}},
                   {
                     {% for name, type in getter_types %}
