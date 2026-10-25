@@ -75,11 +75,11 @@ module CQL
             .table({{@type.id}}.table)
             .set(record.attributes)
             .where(id: record.id!)
-            .with_optimistic_lock(current_version.as(Pk), lock_version_col)
+            .with_optimistic_lock(current_version, lock_version_col)
             .commit
 
           # If successful (no exception), increment the local version to match DB
-          record.{{version_column.id}} = current_version.as(Pk) + 1
+          record.{{version_column.id}} = current_version + 1
           record.clear_changes! if record.responds_to?(:clear_changes!)
           record
         end
