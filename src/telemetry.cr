@@ -1,4 +1,5 @@
 require "./compat"
+require "./telemetry/event_queue"
 
 module CQL
   # Observability for every statement CQL runs: subscribers receive a `QueryEvent`
