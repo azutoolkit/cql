@@ -92,7 +92,14 @@ module CQL
           {% kind = metadata.constant(:KIND) %}
           {% owner = metadata.constant(:OWNER).resolve %}
           {% target_path = metadata.constant(:TARGET) %}
-          {% target = target_path.resolve? %}
+          {% global = target_path.stringify.starts_with?("::") %}
+          {% target_name = global ? target_path.stringify : "::" + target_path.stringify %}
+          {% scopes = global ? [] of Nil : owner.name(generic_args: false).split("::") %}
+          {% target = nil %}
+          {% for depth in (0..scopes.size) %}
+            {% prefix = scopes[0...(scopes.size - depth)].map { |scope| "::" + scope }.join("") %}
+            {% target = target || parse_type(prefix + target_name).resolve? %}
+          {% end %}
           {% association = metadata.constant(:ASSOCIATION) %}
           {% foreign_key = metadata.constant(:FOREIGN_KEY) %}
 

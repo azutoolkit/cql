@@ -36,7 +36,7 @@ module CQL::ActiveRecord::Relations
       {% end %}
 
       # Determine foreign key name if not provided (a symbol literal or the default, as an identifier)
-      {% fk = (foreign_key || "#{@type.name.underscore.id}_id").id %}
+      {% fk = (foreign_key || "#{@type.name.split("::").last.underscore.id}_id").id %}
 
       module ::CQL::ActiveRecord::AssociationRegistry::{{@type.name.gsub(/::/, "__").id}}__has_one__{{name.id}}
         KIND = :has_one

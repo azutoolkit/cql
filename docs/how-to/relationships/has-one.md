@@ -43,7 +43,7 @@ Note: The unique index ensures only one profile per user. Indexes are created wi
 ## Options
 
 ```crystal
-has_one :profile, Profile                       # foreign key defaults to user_id (owner name + _id)
+has_one :profile, Profile                       # foreign key defaults to user_id (owner name + _id, without its namespace: Blog::User -> user_id)
 has_one :profile, Profile, :user_id             # third argument is the foreign key
 has_one :profile, Profile, :user_id, dependent: :nullify, cache: false
 ```

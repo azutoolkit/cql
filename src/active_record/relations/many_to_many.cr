@@ -63,12 +63,12 @@ module CQL::ActiveRecord::Relations
       {% if foreign_key %}
         {% fk = foreign_key.id %}
       {% else %}
-        {% fk = "#{@type.name.underscore.id}_id".id %}
+        {% fk = "#{@type.name.split("::").last.underscore.id}_id".id %}
       {% end %}
       {% if association_foreign_key %}
         {% target_fk = association_foreign_key.id %}
       {% else %}
-        {% target_fk = "#{klass.stringify.underscore.id}_id".id %}
+        {% target_fk = "#{klass.stringify.split("::").last.underscore.id}_id".id %}
       {% end %}
 
       # Determine join table class
