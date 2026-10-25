@@ -888,6 +888,89 @@ describe "CQL::Performance::Monitor with CQL::Execution.run" do
     events.map(&.operation).should eq([:ddl])
     monitor.profiler.not_nil!.statistics.should be_empty
   end
+
+  describe "counters" do
+    counting_monitor = -> do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.profiling.enabled = false
+      config.detection.enabled = false
+      config.logging.enabled = false
+      CQL::Performance::Monitor.new(config: config)
+    end
+
+    it "counts the statements run through Execution.run and times the monitor's own recording" do
+      monitor = counting_monitor.call
+
+      with_global_monitor(monitor) { 5.times { select_names.call } }
+
+      counters = monitor.counters
+      counters.observed_statements.should eq(5)
+      counters.overhead.should be > Time::Span.zero
+      counters.overhead.should be < events.sum(Time::Span.zero, &.duration)
+      summary = monitor.metrics_summary
+      summary["observed_statements"].should eq(5_i64)
+      summary["monitor_overhead_ms"].should be_a(Float64)
+      summary["monitor_overhead_ms"].as(Float64).should be > 0.0
+    end
+
+    it "reports the wait for a pooled connection held by another fiber" do
+      monitor = counting_monitor.call
+      busy = spec_sqlite_schema("monitor_pool_wait.db", "?initial_pool_size=0&max_pool_size=1&checkout_timeout=5")
+      done = Channel(Nil).new
+
+      with_global_monitor(monitor) do
+        busy.with_connection do |_connection|
+          spawn { CQL::Execution.run(busy, "SELECT 1", [] of DB::Any, :select, &.scalar("SELECT 1")); done.send(nil) }
+          Fiber.yield
+          sleep 20.milliseconds
+        end
+        done.receive
+      end
+
+      monitor.counters.pool_wait.p95.should be > Time::Span.zero
+      monitor.metrics_summary["p95_pool_wait_ms"].as(Float64).should be > 0.0
+    end
+  end
+end
+
+describe "CQL::Performance::MonitorCounters" do
+  tracking_monitor = -> do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = false
+    CQL::Performance::Monitor.new(config: config)
+  end
+
+  it "counts statements recorded through track as observed" do
+    monitor = tracking_monitor.call
+    2.times { monitor.track("SELECT 1") { nil } }
+
+    monitor.counters.observed_statements.should eq(2)
+  end
+
+  it "is reset to zero by Monitor#clear" do
+    monitor = tracking_monitor.call
+    monitor.track("SELECT 1") { nil }
+
+    monitor.clear
+
+    monitor.counters.should eq(CQL::Performance::MonitorCounters.zero)
+  end
+
+  it "is zero in PerformanceMetrics built without it" do
+    CQL::Performance::PerformanceMetrics.from_components.monitor.should eq(CQL::Performance::MonitorCounters.zero)
+  end
+
+  it "is exported under the monitor key of PerformanceMetrics#to_h" do
+    monitor = tracking_monitor.call
+    monitor.track("SELECT 1") { nil }
+
+    exported = monitor.metrics.to_h["monitor"].as_h
+
+    exported.keys.sort!.should eq(["observed_statements", "overhead_ms", "p95_pool_wait_ms"])
+    exported["observed_statements"].as_i64.should eq(1)
+  end
 end
 
 describe "CQL::Performance::Monitor SQL logging of bound values" do

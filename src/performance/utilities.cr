@@ -169,6 +169,22 @@ module CQL::Performance
     end
   end
 
+  # What the monitor itself observed: statements it recorded, the estimated time spent recording them and
+  # the wait for a pooled connection of the statements `CQL::Execution.run` reported.
+  record MonitorCounters, observed_statements : Int64, overhead : Time::Span, pool_wait : LatencyPercentiles do
+    def self.zero : self
+      new(0_i64, Time::Span.zero, LatencyPercentiles.zero)
+    end
+
+    def to_h : Hash(String, Int64 | Float64)
+      {
+        "observed_statements" => observed_statements,
+        "overhead_ms"         => overhead.total_milliseconds,
+        "p95_pool_wait_ms"    => pool_wait.p95.total_milliseconds,
+      } of String => Int64 | Float64
+    end
+  end
+
   # Statistics tracking
   class StatsTracker
     property total_count : Int64 = 0

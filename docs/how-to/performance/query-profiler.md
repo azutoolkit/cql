@@ -169,12 +169,13 @@ CQL::Performance.high_priority_issues
 CQL::Performance.metrics_summary
 # => {"total_queries" => ..., "slow_queries" => ..., "error_rate_percent" => ...,
 #     "avg_query_time_ms" => ..., "p95_query_time_ms" => ..., "n_plus_one_patterns" => ...,
-#     "health_score" => ..., "total_issues" => ..., "uptime_seconds" => ...}
+#     "health_score" => ..., "total_issues" => ..., "uptime_seconds" => ...,
+#     "observed_statements" => ..., "monitor_overhead_ms" => ..., "p95_pool_wait_ms" => ...}
 ```
 
 `CQL::Performance.metrics` returns a `PerformanceMetrics` with the full breakdown (query, N+1, cache, system and health metrics, top queries and patterns). It also offers `to_json`, `issues_by_type(:n_plus_one)`, `issues_by_severity(:critical)`, `slowest_queries(limit)` and `most_frequent_queries(limit)`. The slow queries in `to_json` (and `CQL::Performance.export_metrics_as_json`) have no `params` key unless `config.logging.include_params` is on; `slowest_queries(limit)` still returns each `QueryData` with its `params`. In the query lists, `avg_time` and `total_time` are in milliseconds.
 
-`metrics.query_metrics.latency` is a `LatencyPercentiles` (`p50`, `p95`, `p99`) over every statement the profiler recorded, and `query_metrics.to_h` has them as `p50_execution_time_ms`, `p95_execution_time_ms` and `p99_execution_time_ms`. They come from a fixed-size histogram, so an estimate is within 25% from 4 µs up and never outside the recorded minimum and maximum; recording one costs no allocation.
+`metrics.query_metrics.latency` is a `LatencyPercentiles` (`p50`, `p95`, `p99`) over every statement the profiler recorded, and `query_metrics.to_h` has them as `p50_execution_time_ms`, `p95_execution_time_ms` and `p99_execution_time_ms`. They come from a fixed-size histogram, so an estimate is within 25% from 4 µs up and never outside the recorded minimum and maximum; recording one costs no allocation. `metrics.monitor` (also `Monitor#counters`, and `"monitor"` in `to_h`) is what the monitor observed itself: `observed_statements`, the time spent recording them (`overhead`, estimated by timing one statement in 64, so it settles after a few thousand statements) and the p50/p95/p99 wait for a pooled connection (`pool_wait`, from statements run through `CQL::Execution.run`; `track` blocks have none). Together they add about 25 ns and no allocation to each monitored statement on one thread; with several threads recording at once (`-Dpreview_mt`) the shared counters add contention.
 
 ## Generate a Report
 

@@ -249,6 +249,7 @@ module CQL::Performance
     getter issues : Array(Issue)
     getter timestamp : Time = Time.utc
     getter collection_duration : Time::Span = Time::Span.zero
+    getter monitor : MonitorCounters
 
     def initialize(
       @query_metrics : QueryMetrics,
@@ -260,6 +261,7 @@ module CQL::Performance
       @patterns : PerformancePatterns,
       @issues : Array(Issue),
       @collection_duration : Time::Span = Time::Span.zero,
+      @monitor : MonitorCounters = MonitorCounters.zero,
     )
     end
 
@@ -292,6 +294,7 @@ module CQL::Performance
       start_time : Time? = nil,
       config : Config? = nil,
       error_count : Int32 = 0,
+      monitor : MonitorCounters = MonitorCounters.zero,
     ) : self
       start_time ||= Time.utc
       collection_duration = Time.utc - start_time
@@ -318,7 +321,8 @@ module CQL::Performance
         build_top_queries(statistics, slowest_queries, config.try(&.logging.include_params?) || false),
         build_performance_patterns(statistics, n_plus_one_patterns),
         issues,
-        collection_duration
+        collection_duration,
+        monitor
       )
     end
 
@@ -335,6 +339,7 @@ module CQL::Performance
         "top_queries"                 => JSON::Any.new(@top_queries.to_h),
         "patterns"                    => JSON::Any.new(@patterns.to_h),
         "issues"                      => JSON::Any.new(@issues.map { |i| PerformanceMetrics.to_json_any(i.to_h) }),
+        "monitor"                     => PerformanceMetrics.to_json_any(@monitor.to_h),
       }
     end
 
@@ -355,6 +360,9 @@ module CQL::Performance
         "health_score"        => @health_metrics.overall_health_score.to_s,
         "total_issues"        => @health_metrics.total_issues.to_i64,
         "uptime_seconds"      => @system_metrics.uptime.total_seconds,
+        "observed_statements" => @monitor.observed_statements,
+        "monitor_overhead_ms" => @monitor.overhead.total_milliseconds,
+        "p95_pool_wait_ms"    => @monitor.pool_wait.p95.total_milliseconds,
       }
     end
 

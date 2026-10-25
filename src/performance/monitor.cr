@@ -19,6 +19,8 @@ module CQL::Performance
 
     Log = ::Log.for(self)
 
+    private OVERHEAD_SAMPLE_INTERVAL = 64
+
     @config : Config
     @profiler : QueryProfilerInterface?
     @detector : NPlusOneDetectorInterface?
@@ -26,6 +28,10 @@ module CQL::Performance
     @report_generator : UnifiedReportGenerator
     @start_time : Time = Time.utc
     @error_count : Atomic(Int32) = Atomic(Int32).new(0)
+    @observed_statements : Atomic(Int64) = Atomic(Int64).new(0)
+    @sampled_overhead_ns : Atomic(Int64) = Atomic(Int64).new(0)
+    @overhead_samples : Atomic(Int64) = Atomic(Int64).new(0)
+    @pool_wait : StatsTracker = StatsTracker.new
 
     def initialize(
       config : Config = Config.from_env,
@@ -58,7 +64,7 @@ module CQL::Performance
 
     # Records a statement `CQL::Execution.run` has already timed.
     def record(event : CQL::Telemetry::QueryEvent, params : Array(DB::Any)) : Nil
-      record_statement(event.sql, params, event.duration, event.rows_affected, event.error)
+      record_statement(event.sql, params, event.duration, event.rows_affected, event.error, event.pool_wait)
     end
 
     # API - just wrap the query
@@ -102,8 +108,15 @@ module CQL::Performance
         cache: cache_instance,
         start_time: @start_time,
         config: @config,
-        error_count: @error_count.get
+        error_count: @error_count.get,
+        monitor: counters
       )
+    end
+
+    # What the monitor itself observed since it was built or last cleared; `overhead` is estimated from one statement in 64.
+    def counters : MonitorCounters
+      observed = @observed_statements.get
+      MonitorCounters.new(observed, estimated_overhead(observed), @pool_wait.percentiles)
     end
 
     # Get metrics summary
@@ -144,6 +157,10 @@ module CQL::Performance
       @profiler.try(&.clear)
       @detector.try(&.clear)
       @error_count.set(0)
+      @observed_statements.set(0)
+      @sampled_overhead_ns.set(0)
+      @overhead_samples.set(0)
+      @pool_wait.reset
     end
 
     # Check if monitoring is enabled
@@ -158,7 +175,25 @@ module CQL::Performance
     end
 
     private def record_statement(sql : String, params : Array(DB::Any), duration : Time::Span,
-                                 rows_affected : Int64?, error : Exception?) : Nil
+                                 rows_affected : Int64?, error : Exception?, pool_wait : Time::Span? = nil) : Nil
+      index = @observed_statements.add(1)
+      return record_safely(sql, params, duration, rows_affected, error, pool_wait) unless index % OVERHEAD_SAMPLE_INTERVAL == 0
+
+      started = Time.instant
+      record_safely(sql, params, duration, rows_affected, error, pool_wait)
+      @sampled_overhead_ns.add((Time.instant - started).total_nanoseconds.to_i64)
+      @overhead_samples.add(1)
+    end
+
+    private def estimated_overhead(observed : Int64) : Time::Span
+      samples = @overhead_samples.get
+      return Time::Span.zero if samples == 0
+      (@sampled_overhead_ns.get.to_f64 / samples * observed).nanoseconds
+    end
+
+    private def record_safely(sql : String, params : Array(DB::Any), duration : Time::Span,
+                              rows_affected : Int64?, error : Exception?, pool_wait : Time::Span?) : Nil
+      @pool_wait.record(pool_wait) if pool_wait
       if error
         @error_count.add(1)
         record_execution(sql, params, duration, nil, error.message.to_s)
