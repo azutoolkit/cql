@@ -79,9 +79,15 @@ module CQL
         # Deletes the rows with *ids* without callbacks, one statement per chunk of the dialect's
         # bind limit, and returns the number deleted.
         def self.delete_ids(ids : Array) : Int64
-          deleted = 0_i64
-          CQL::ActiveRecord::IdChunks.each(ids, adapter.dialect.max_bind_params - 1) { |chunk| deleted += delete_chunk(chunk) }
-          deleted
+          sum_over_id_chunks(ids) { |chunk| delete_chunk(chunk) }
+        end
+
+        # Runs the block for each chunk of *ids* that fits one statement beside one other bound
+        # value, and sums the rows it reports.
+        protected def self.sum_over_id_chunks(ids : Array, & : Array(DB::Any) -> Int64) : Int64
+          total = 0_i64
+          CQL::ActiveRecord::IdChunks.each(ids, adapter.dialect.max_bind_params - 1) { |chunk| total += yield chunk }
+          total
         end
 
         # The type ids are stored as (UUIDs as strings), for reading them back.

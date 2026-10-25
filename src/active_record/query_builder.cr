@@ -803,9 +803,7 @@ module CQL
         def delete_all : Int64
           return T.delete_ids(id_scope.ids(as: T.stored_id_type)) unless T.destroy_callbacks?
 
-          records = all
-          records.each(&.delete!)
-          records.size.to_i64
+          all.count(&.delete!).to_i64
         end
 
         # Alias for group method to match ActiveRecord naming
