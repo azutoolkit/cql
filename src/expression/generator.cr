@@ -62,8 +62,9 @@ module Expression
       end
     end
 
-    # Query and the statements (Insert, Update, Delete) define `visit` themselves: it also sets `@query`.
-    visit_through_write Join, Where, Having, From, Table, Subquery, GroupBy, OrderBy, BaseColumn,
+    # Query and the statements (Insert, Update, Delete) define `visit` themselves, since it also sets
+    # `@query`; so do columns (see `column_sql`).
+    visit_through_write Join, Where, Having, From, Table, Subquery, GroupBy, OrderBy,
       And, Or, Not, Compare, CompareCondition, Between, InCondition, InSelect, Exists, Is, IsNot, Raw, Cte,
       Setter
 
@@ -181,11 +182,22 @@ module Expression
     end
 
     def visit(node : Column) : String
-      String.build { |io| write(node, io) }
+      column_sql(node)
+    end
+
+    def visit(node : BaseColumn) : String
+      column_sql(node)
     end
 
     def visit(node : TypedColumn) : String
-      String.build { |io| write(node, io) }
+      column_sql(node)
+    end
+
+    # A column on its own, as the dialect hooks that take a String (LIKE, IS NULL, aggregates) need
+    # it: one exactly sized String, where `String.build` would reserve a larger buffer.
+    private def column_sql(node : BaseColumn) : String
+      qualifier, name = column_parts(node)
+      qualifier ? "#{qualifier}.#{name}" : name
     end
 
     private def write(node : BaseColumn, io : IO) : Nil
