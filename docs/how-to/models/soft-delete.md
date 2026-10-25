@@ -43,7 +43,7 @@ end
 ### Delete a Single Record
 
 ```crystal
-user = User.find(1)
+user = User.find!(1)
 user.delete!       # Sets deleted_at to current time
 
 user.deleted?      # => true

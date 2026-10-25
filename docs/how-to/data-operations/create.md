@@ -9,12 +9,14 @@ Create an instance and save separately:
 ```crystal
 user = User.new("John", "john@example.com")
 
-if user.save
+if user.valid? && user.save
   puts "Created user #{user.id}"
 else
   puts "Failed: #{user.errors.map(&.message).join(", ")}"
 end
 ```
+
+`save` raises `CQL::ActiveRecord::Validations::ValidationError` for an invalid record; it returns `false` only when a callback halts the save. Check `valid?` first, as above, to branch without rescuing.
 
 ## Create with save!
 
@@ -24,20 +26,6 @@ Use `save!` to raise an exception on failure:
 user = User.new("John", "john@example.com")
 user.save!  # Raises if validation fails
 puts "Created user #{user.id}"
-```
-
-## Create in One Step
-
-Use `create` to instantiate and save:
-
-```crystal
-user = User.create(name: "John", email: "john@example.com")
-
-if user.persisted?
-  puts "Created user #{user.id}"
-else
-  puts "Failed to create"
-end
 ```
 
 ## Create! in One Step
@@ -83,7 +71,7 @@ puts "Created #{users.size} users"
 
 ## Insert Many Rows at Once
 
-`insert_all` sends multi-row INSERT statements instead of one INSERT (and one SELECT) per record, and returns the
+`insert_all` sends multi-row INSERT statements instead of one INSERT per record (plus a read-back SELECT on SQLite and MySQL), and returns the
 number of rows inserted:
 
 ```crystal
@@ -147,18 +135,21 @@ puts "Created post for user #{user.name}"
 
 ## Create with Default Values
 
-Set defaults in your model:
+`User.create!(**fields)` inserts only the columns you pass and returns the row as stored, so a default must be a column default in the schema:
 
 ```crystal
-struct User
-  property status : String = "pending"
-  property role : String = "user"
+schema.table :users do
+  # ...
+  column :status, String, default: "pending"
+  column :role, String, default: "user"
 end
 
 user = User.create!(name: "John", email: "john@example.com")
 user.status  # => "pending"
 user.role    # => "user"
 ```
+
+Property defaults in the model (`property status : String = "pending"`) apply to records built with `new` and saved with `save`.
 
 ## Create with Timestamp
 
@@ -175,7 +166,9 @@ user.updated_at  # => 2024-01-15 10:30:00 UTC
 ```crystal
 user = User.new("", "invalid-email")
 
-unless user.save
+begin
+  user.save
+rescue CQL::ActiveRecord::Validations::ValidationError
   user.errors.each do |error|
     puts "#{error.field}: #{error.message}"
   end

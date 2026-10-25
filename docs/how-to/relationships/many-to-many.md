@@ -28,7 +28,7 @@ schema.table :tags do
 end
 schema.tags.create!
 
-# Join table, named after the join model (PostTag -> post_tag)
+# Join table: the one the join model's db_context names
 schema.table :post_tag do
   primary :id, Int64, auto_increment: true
   column :post_id, Int64, null: false
@@ -102,9 +102,9 @@ struct Tag
 end
 ```
 
-The macro signature is `many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = :nullify, validate = true, autosave = false)`. One naming convention matters:
+The macro signature is `many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = :nullify, validate = true, autosave = false)`. About `join_through`:
 
-- `join_through` is the join model class (or its snake_case name as a symbol, like `:movies_actor` for `MoviesActor`), and its table name must be the underscored class name (`PostTag` -> `post_tag`).
+- `join_through` is the join model class (or its snake_case name as a symbol, like `:movies_actor` for `MoviesActor`, which is camel-cased to find the class). The join table is whatever that model's `db_context` names.
 
 Foreign keys default to the owner's name plus `_id` (`post_id`) and the target's name plus `_id` (`tag_id`), without their namespace (`Blog::Post` and `Blog::Tag` also give `post_id` and `tag_id`). Override them with `foreign_key:` and `association_foreign_key:`.
 

@@ -48,7 +48,7 @@ has_one :profile, Profile, :user_id             # third argument is the foreign 
 has_one :profile, Profile, :user_id, dependent: :nullify, cache: false
 ```
 
-`dependent` accepts `:destroy`, `:delete` and `:nullify` (the foreign key property must be nilable for `:nullify`); any other value is a compile-time error. It decides what happens to an existing profile when you call `create_profile` or `delete_profile` (`:destroy` when not declared). When you declare it, deleting the user applies it too (see [When the Parent Is Deleted](#when-the-parent-is-deleted)). With `cache: true` (the default) the record is cached on the instance after the first access.
+`dependent` accepts `:destroy`, `:delete` and `:nullify`; any other value is a compile-time error. It decides what happens to an existing profile when you call `create_profile` or `delete_profile` (`:destroy` when not declared). When you declare it, deleting the user applies it too (see [When the Parent Is Deleted](#when-the-parent-is-deleted)). With `cache: true` (the default) the record is cached on the instance after the first access.
 
 `User.preload(:profile).all` loads every user's profile with one extra query (per chunk of the database's bind limit) and caches it, so `user.profile` runs no query. It needs `cache: true`, and it raises `ArgumentError` when the target has no foreign key attribute. As with `user.profile`, a user with several profiles gets an arbitrary one; keep the foreign key unique.
 
@@ -75,16 +75,18 @@ struct Profile
   db_context MyDB, :profiles
 
   property id : Int64?
-  property user_id : Int64
+  property user_id : Int64?
   property bio : String?
   property avatar_url : String?
 
   belongs_to :user, User, :user_id
 
-  def initialize(@user_id : Int64 = 0_i64, @bio : String? = nil, @avatar_url : String? = nil)
+  def initialize(@user_id : Int64? = nil, @bio : String? = nil, @avatar_url : String? = nil)
   end
 end
 ```
+
+Declare the foreign key property nilable (`Int64?`) even when the column is `NOT NULL`: `profile=`, `create_profile`, `delete_profile` and `clear_profile` assign `nil` to it (whatever `dependent` is), and they do not compile against an `Int64` property.
 
 ## Access the Related Record
 

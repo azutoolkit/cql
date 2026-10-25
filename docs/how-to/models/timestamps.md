@@ -59,7 +59,7 @@ post.created_at  # => 2024-01-15 10:30:00 UTC (unchanged)
 post.updated_at  # => 2024-01-15 11:45:00 UTC (updated)
 ```
 
-Only `save`/`save!` do this. `Post.create!(title: "...")` inserts just the fields you pass, so the database default from `timestamps` fills `created_at` and `updated_at`, and the returned record is re-read from the database. `update!` writes the model's attributes as they are and does not touch `updated_at`, so use `save!` (or `touch`) when you want it refreshed.
+Only `save`/`save!` do this. `Post.create!(title: "...")` inserts just the fields you pass, so the database default from `timestamps` fills `created_at` and `updated_at`, and the returned record is the row as stored (from `RETURNING` on PostgreSQL and CockroachDB, read back with a `SELECT` on SQLite and MySQL). `update!` writes the model's attributes as they are and does not touch `updated_at`, so use `save!` (or `touch`) when you want it refreshed.
 
 ## Touch Records
 
