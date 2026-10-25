@@ -16,6 +16,18 @@ InferredContextDB = CQL::Schema.define(:inferred_context, adapter: CQL::Adapter:
     primary :id, Int64
     column :name, String
   end
+
+  table :inferred_twins do
+    primary :id, Int64
+    column :name, String
+  end
+end
+
+InferredMirrorDB = CQL::Schema.define(:inferred_mirror, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("inferred_mirror.db")) do
+  table :inferred_twins do
+    primary :id, Int64
+    column :name, String
+  end
 end
 
 module InferredShop
@@ -96,6 +108,24 @@ struct InferredBranch
 end
 
 struct InferredDish
+  include CQL::ActiveRecord::Model(Int64)
+
+  property id : Int64?
+  property name : String
+
+  def initialize(@name : String); end
+end
+
+struct InferredOrphan
+  include CQL::ActiveRecord::Model(Int64)
+
+  property id : Int64?
+  property name : String
+
+  def initialize(@name : String); end
+end
+
+struct InferredTwin
   include CQL::ActiveRecord::Model(Int64)
 
   property id : Int64?
@@ -189,6 +219,27 @@ describe "Model without db_context" do
       gadget = InferredGadget.create!(name: "Widget")
 
       InferredGadget.find!(gadget.id!).name.should eq("Widget")
+    end
+  end
+
+  describe "unresolvable schema" do
+    it "still infers the table of a model no schema declares" do
+      InferredOrphan.table.should eq(:inferred_orphans)
+    end
+
+    it "names the model, the table and db_context when no schema declares the table" do
+      expect_raises(CQL::ActiveRecord::SchemaMappingError, /InferredOrphan.*inferred_orphans.*db_context/m) do
+        InferredOrphan.schema
+      end
+    end
+
+    it "names the model, every declaring schema and db_context when several declare the table" do
+      error = expect_raises(CQL::ActiveRecord::SchemaMappingError, /InferredTwin.*db_context/m) do
+        InferredTwin.schema
+      end
+
+      error.message.to_s.should contain("InferredContextDB")
+      error.message.to_s.should contain("InferredMirrorDB")
     end
   end
 

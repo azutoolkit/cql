@@ -106,6 +106,8 @@ module CQL
               @@table || {{table}}
             end
 
+            {% table_name = table.id %}
+
             # Schema constants initialize lazily, so a model without `db_context`
             # finds its schema at compile time: the one `CQL::Schema.define` block,
             # in its enclosing namespaces or at the top level, that declares its table.
@@ -115,11 +117,14 @@ module CQL
               {% for depth in (0..namespaces.size) %}
                 {% prefix = namespaces[0...(namespaces.size - depth)].map { |namespace| "::" + namespace }.join("") %}
                 {% scope = prefix.empty? ? @top_level : parse_type(prefix).resolve? %}
-                {% schema_names = scope.constants.select { |name| (value = scope.constant(name)).is_a?(Call) && value.name == "define" && value.receiver.is_a?(Path) && value.receiver.resolve? == CQL::Schema && value.block } %}
-                {% for name in schema_names %}
-                  {% body = scope.constant(name).block.body %}
+                {% for name in scope.constants %}
+                  {% definition = scope.constant(name) %}
+                  {% defines_with_block = definition.is_a?(Call) && definition.name == "define" && definition.block %}
+                  {% defines_schema = defines_with_block && definition.receiver.is_a?(Path) && definition.receiver.resolve? == CQL::Schema %}
+                  {% body = defines_schema ? definition.block.body : nil %}
                   {% declarations = body.is_a?(Expressions) ? body.expressions : [body] %}
-                  {% declares_table = declarations.any? { |declaration| declaration.is_a?(Call) && declaration.name == "table" && declaration.args.first.is_a?(SymbolLiteral) && declaration.args.first.id == table.id } %}
+                  {% table_calls = declarations.select { |declaration| declaration.is_a?(Call) && declaration.name == "table" && declaration.args.first.is_a?(SymbolLiteral) } %}
+                  {% declares_table = table_calls.any? { |table_call| table_call.args.first.id == table_name } %}
                   {% declaring_schemas << prefix + "::" + name.stringify if declares_table %}
                 {% end %}
               {% end %}
@@ -139,7 +144,13 @@ module CQL
               {% if schema %}
                 @@schema || {{schema.id}}
               {% else %}
-                @@schema.not_nil!
+                {% model = @type.name %}
+                {% message = if declaring_schemas.empty?
+                               "CQL schema mapping error in #{model}: no `CQL::Schema.define` block declares table `#{table_name}`. Declare the table in a schema, or add `db_context MySchema, :#{table_name}` to #{model}."
+                             else
+                               "CQL schema mapping error in #{model}: schemas #{declaring_schemas.map { |name| "`#{name.id}`" }.join(", ").id} all declare table `#{table_name}`. Add `db_context <one of them>, :#{table_name}` to #{model} to pick one."
+                             end %}
+                @@schema || raise CQL::ActiveRecord::SchemaMappingError.new({{message}})
               {% end %}
             end
 
