@@ -12,9 +12,14 @@ module CQL
     # The SQL text and its bound parameters, rendered for the schema's dialect
     # (or by the given generator).
     def to_sql(gen : Expression::Generator? = nil)
+      render(build, gen)
+    end
+
+    # Renders an already built statement to SQL and bound values.
+    protected def render(statement : Expression::Statement, gen : Expression::Generator? = nil)
       generator = gen || schema.new_generator
       generator.reset
-      build.accept(generator)
+      statement.accept(generator)
       {generator.query, generator.params}
     end
 

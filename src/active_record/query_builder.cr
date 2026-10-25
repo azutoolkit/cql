@@ -342,11 +342,11 @@ module CQL
 
         # Narrows an implicit `SELECT *` to the columns the outer count needs.
         private def select_for_count(query : CQL::Query, column : Symbol) : CQL::Query
-          explicit = !query.columns.empty? || !query.select_expressions.empty?
-          return query if explicit || query.distinct? || !query.distinct_on.empty?
+          explicit = !query.columns.empty? || query.select_expressions?
+          return query if explicit || query.distinct? || query.distinct_on?
           return query.select(column) unless column == :*
 
-          query.group_by.empty? ? select_primary_key(query) : select_group_columns(query)
+          query.group_by? ? select_group_columns(query) : select_primary_key(query)
         end
 
         private def select_group_columns(query : CQL::Query) : CQL::Query
@@ -379,9 +379,9 @@ module CQL
 
         # An explicit select, DISTINCT or grouping decides which rows come back.
         private def shapes_rows?(query : CQL::Query) : Bool
-          selected = !query.columns.empty? || !query.select_expressions.empty?
-          deduplicated = query.distinct? || !query.distinct_on.empty?
-          selected || deduplicated || !query.group_by.empty? || !query.having.nil?
+          selected = !query.columns.empty? || query.select_expressions?
+          deduplicated = query.distinct? || query.distinct_on?
+          selected || deduplicated || query.group_by? || !query.having.nil?
         end
 
         # Add sum aggregate
@@ -547,8 +547,8 @@ module CQL
         # reversed `ORDER BY ... LIMIT 1` would not pick the same last row.
         private def reshapes_rows?(query : Query) : Bool
           paged = query.limit || query.offset
-          aggregated = !query.group_by.empty? || query.having || !query.select_expressions.empty?
-          deduplicated = query.distinct? || !query.distinct_on.empty?
+          aggregated = query.group_by? || query.having || query.select_expressions?
+          deduplicated = query.distinct? || query.distinct_on?
           !!(paged || aggregated || deduplicated)
         end
 
@@ -556,7 +556,7 @@ module CQL
         # (alone when the query is unordered); nil when neither exists.
         private def reversed_for_last(query : Query) : Query?
           primary_key = T.schema.tables[T.table].primary_key
-          return if primary_key.nil? && query.order_by.empty?
+          return if primary_key.nil? && !query.order_by?
           reversed = query.clone.reverse_order
           reversed.order_by.put_if_absent(primary_key, Expression::OrderDirection::DESC) if primary_key
           reversed
@@ -565,7 +565,7 @@ module CQL
         # With joins and no explicit select, rows are hydrated from the model's own
         # columns only; aggregates and `pluck` keep the query untouched.
         private def row_query(kind) : Query
-          joined_without_select = @query.columns.empty? && @query.joins.any?
+          joined_without_select = @query.columns.empty? && @query.joins?
           return @query unless joined_without_select && kind == T
           @query.clone.tap(&.columns.concat(T.table_columns.values))
         end
@@ -659,7 +659,7 @@ module CQL
         # later rows; any other query pages by OFFSET in its order, ties broken by primary key.
         def find_in_batches(batch_size : Int32 = 1000, & : Array(T) ->)
           raise ArgumentError.new("batch_size must be positive, got #{batch_size}") unless batch_size > 0
-          primary_key = primary_key_column(@query) if @query.order_by.empty? && !shapes_rows?(@query)
+          primary_key = primary_key_column(@query) if !@query.order_by? && !shapes_rows?(@query)
           if primary_key
             batches_by_key(primary_key, batch_size) { |batch| yield batch }
           else
@@ -694,8 +694,8 @@ module CQL
         # Appends the primary key ASC so rows tied on the ORDER BY keep one place across pages.
         # A GROUP BY, DISTINCT ON, or DISTINCT over an explicit select cannot sort by a column it hides.
         private def break_ties_by_primary_key(query : Query) : Nil
-          selected = !query.columns.empty? || !query.select_expressions.empty?
-          return if !query.group_by.empty? || query.having || !query.distinct_on.empty? || (query.distinct? && selected)
+          selected = !query.columns.empty? || query.select_expressions?
+          return if query.group_by? || query.having || query.distinct_on? || (query.distinct? && selected)
           primary_key = T.schema.tables[T.table].primary_key
           query.order_by.put_if_absent(primary_key, Expression::OrderDirection::ASC) if primary_key
         end
@@ -728,7 +728,7 @@ module CQL
         def ids(as as_kind = Int64)
           query = @query.clone
           query.columns.clear
-          query.select_expressions.clear
+          query.select_expressions.clear if query.select_expressions?
           query.columns << T.cql_column(:id)
           query.all(as: as_kind)
         end

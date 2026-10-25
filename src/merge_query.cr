@@ -37,7 +37,7 @@ module CQL
     # A lock is a safety guarantee: a locked scope merged into another stays locked.
     private def merge_locking
       @current_query.row_lock = @other_query.row_lock || @current_query.row_lock
-      @current_query.distinct_on.concat(@other_query.distinct_on).uniq!(&.object_id)
+      @current_query.distinct_on.concat(@other_query.distinct_on).uniq!(&.object_id) if @other_query.distinct_on?
     end
 
     private def merge_distinct
@@ -47,20 +47,22 @@ module CQL
 
     # CTEs travel with the query that uses them; the same name must mean the same CTE.
     private def merge_ctes
-      @other_query.ctes.each do |cte|
-        existing = @current_query.ctes.find { |current| current.name == cte.name }
-        raise ArgumentError.new("Merge conflict: CTE #{cte.name} is defined differently in both queries") if existing && existing.object_id != cte.object_id
-        @current_query.ctes << cte unless existing
+      if @other_query.ctes?
+        @other_query.ctes.each do |cte|
+          existing = @current_query.ctes.find { |current| current.name == cte.name }
+          raise ArgumentError.new("Merge conflict: CTE #{cte.name} is defined differently in both queries") if existing && existing.object_id != cte.object_id
+          @current_query.ctes << cte unless existing
+        end
       end
-      @other_query.derived_tables.each { |name, table| @current_query.derived_tables[name] ||= table }
+      @other_query.derived_tables.each { |name, table| @current_query.derived_tables[name] ||= table } if @other_query.derived_tables?
       @current_query.recursive = @current_query.recursive? || @other_query.recursive?
     end
 
     private def merge_collections
       # These directly modify collections obtained via getters. This is okay.
       @current_query.columns.concat(@other_query.columns).uniq!(&.object_id)
-      @current_query.select_expressions.concat(@other_query.select_expressions).uniq!(&.object_id)
-      @current_query.joins.concat(@other_query.joins).uniq!(&.object_id)
+      @current_query.select_expressions.concat(@other_query.select_expressions).uniq!(&.object_id) if @other_query.select_expressions?
+      @current_query.joins.concat(@other_query.joins).uniq!(&.object_id) if @other_query.joins?
     end
 
     private def merge_query_tables
@@ -95,7 +97,7 @@ module CQL
 
     private def merge_group_by
       # Modifies the array obtained via getter. This is okay.
-      @current_query.group_by.concat(@other_query.group_by).uniq!(&.object_id)
+      @current_query.group_by.concat(@other_query.group_by).uniq!(&.object_id) if @other_query.group_by?
     end
 
     private def merge_having_clause
@@ -117,6 +119,7 @@ module CQL
 
     private def merge_order_by
       # Modifies the hash obtained via getter. This is okay.
+      return unless @other_query.order_by?
       @other_query.order_by.each do |col, dir|
         @current_query.order_by[col] = dir
       end

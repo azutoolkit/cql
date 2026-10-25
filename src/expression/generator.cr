@@ -45,14 +45,17 @@ module Expression
         string << "DISTINCT " if node.distinct? && node.distinct_on.empty?
         string << @dialect.format_distinct_on(node.distinct_on.map(&.accept(self))) unless node.distinct_on.empty?
         # Columns and select expressions (aggregates, window functions), aliased where given
-        columns_sql = node.columns.map(&.accept(self))
-        expressions_sql = node.select_expressions.map { |expression| select_item(expression) }
-
-        select_parts = columns_sql + expressions_sql
-        if select_parts.empty?
+        if node.columns.empty? && node.select_expressions.empty?
           string << "*"
         else
-          string << select_parts.join(", ")
+          node.columns.each_with_index do |column, index|
+            string << ", " if index > 0
+            write_column_reference(column, string)
+          end
+          node.select_expressions.each_with_index do |expression, index|
+            string << ", " if index > 0 || !node.columns.empty?
+            string << select_item(expression)
+          end
         end
 
         # From node now contains Expression::Table nodes potentially with aliases
@@ -169,35 +172,58 @@ module Expression
     # `qualifier.column` for a column expression. The qualifier is the table
     # alias when one is set, otherwise the column's own table name.
     private def column_reference(node : BaseColumn) : String
+      qualifier, name = column_parts(node)
+      qualifier ? "#{qualifier}.#{name}" : name
+    end
+
+    # Writes the reference straight into *string*, so a column in a larger clause is not built as
+    # its own String first.
+    private def write_column_reference(node : BaseColumn, string : IO) : Nil
+      qualifier, name = column_parts(node)
+      string << qualifier << '.' if qualifier
+      string << name
+    end
+
+    # `{alias or table, column}` for a column reference; `{nil, "*"}` for a bare `*`, which the
+    # query builder expands when specific tables are needed.
+    private def column_parts(node : BaseColumn) : {String?, String}
       column_name = node.column.name
+      name = column_name == :* ? "*" : ident(column_name)
       if alias_name = node.alias_name
-        column_name == :* ? "#{ident(alias_name)}.*" : "#{ident(alias_name)}.#{ident(column_name)}"
+        {ident(alias_name), name}
       elsif column_name == :*
-        # SELECT * - the query builder expands it when specific tables are needed
-        "*"
+        {nil, name}
       else
         table = node.column.table
         raise "Internal Error: Column expression missing table context and no alias provided" unless table
-        "#{ident(table.table_name)}.#{ident(column_name)}"
+        {ident(table.table_name), name}
       end
     end
 
     def visit(node : And) : String
-      String.build do |string|
-        # Wrap sides in parentheses for correct precedence
-        string << "(" << node.left.accept(self) << ")"
-        string << " AND "
-        string << "(" << node.right.accept(self) << ")"
-      end
+      String.build { |string| write_condition(node, string) }
     end
 
     def visit(node : Or) : String
-      String.build do |string|
-        # Wrap sides in parentheses for correct precedence
-        string << "(" << node.left.accept(self) << ")"
-        string << " OR "
-        string << "(" << node.right.accept(self) << ")"
+      String.build { |string| write_condition(node, string) }
+    end
+
+    # Writes nested AND/OR conditions into one builder, so a chain of n conditions copies its SQL
+    # once instead of once per nesting level.
+    private def write_condition(node : Condition, string : IO) : Nil
+      case node
+      when And then write_junction(node.left, " AND ", node.right, string)
+      when Or  then write_junction(node.left, " OR ", node.right, string)
+      else          string << node.accept(self)
       end
+    end
+
+    private def write_junction(left : Condition, keyword : String, right : Condition, string : IO) : Nil
+      string << "("
+      write_condition(left, string)
+      string << ")" << keyword << "("
+      write_condition(right, string)
+      string << ")"
     end
 
     # Always parenthesized: `NOT a AND b` would negate only `a`.
@@ -207,8 +233,7 @@ module Expression
 
     def visit(node : Compare) : String
       String.build do |string|
-        # Left side is an Expression::Column, which now handles alias
-        string << node.left.accept(self)
+        write_column_reference(node.left, string)
         string << " "
         string << node.operator
         string << " "

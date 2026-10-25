@@ -6,7 +6,7 @@ This guide shows you how to configure different database connections for develop
 
 ## Environments with `CQL.configure`
 
-`CQL.config` reads `CRYSTAL_ENV` (default `development`) when it is first created and applies the strategy for `production`, `test` or `development`; any other name gets the development strategy.
+`CQL.config` reads `CRYSTAL_ENV` (default `development`) when it is first created and applies the strategy for `production`, `test` or `development`; any other name gets the development strategy. SQL logging is on by default only when development is named (`CRYSTAL_ENV=development` or `c.env = "development"`), not when `CRYSTAL_ENV` is unset.
 
 ```crystal
 require "cql"
@@ -40,7 +40,7 @@ Run with `CRYSTAL_ENV=production` and the block starts from the production defau
 | `migrations_table` | `:schema_migrations` (default) | `:test_migrations` | `:schema_migrations` (default) |
 | `schema_file` / `schema_class` / `schema_name` | `app_schema.cr` / `:AppSchema` / `:app_schema` (defaults) | `test_schema.cr` / `:TestSchema` / `:test_schema` | defaults |
 | `log_level` | Debug | Error | Info |
-| `sql_logging` | true unless `CQL_NO_SQL_LOG` is set | false (default) | false (default) |
+| `sql_logging` | true when development is named, unless `CQL_NO_SQL_LOG` is set | false (default) | false (default) |
 
 `sql_logging = false` in your block turns development's SQL logging off.
 

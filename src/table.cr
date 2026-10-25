@@ -42,6 +42,13 @@ module CQL
 
     property table_name : Symbol
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
+    # Bumped whenever `Schema#alter` changes the columns, so SQL rendered from them can be redone.
+    getter columns_revision : Int32 = 0
+
+    def columns_changed! : Nil
+      @columns_revision += 1
+    end
+
     @primary : BaseColumn = PrimaryKey(Int32).new(:id)
     getter as_name : String?
     getter foreign_keys : Array(ForeignKey) = [] of ForeignKey
