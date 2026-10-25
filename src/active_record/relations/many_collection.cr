@@ -53,14 +53,14 @@ module CQL
       # - **param** : autosave (Bool) - Whether to automatically save records
       # - **return** : ManyCollection
       def initialize(
-        @key : Symbol,                             # movie_id
-        @id : Pk,                                  # movie id value
-        @target_key : Symbol,                      # actor_id
-        @cascade : Bool = false,                   # delete associated records (deprecated)
-        @query : CQL::Query = build_query(Target), # query object
-        @dependent : Symbol = :nullify,            # dependency strategy
-        @validate : Bool = true,                   # validate records
-        @autosave : Bool = false,                  # autosave records
+        @key : Symbol,                  # movie_id
+        @id : Pk,                       # movie id value
+        @target_key : Symbol,           # actor_id
+        @cascade : Bool = false,        # delete associated records (deprecated)
+        query : CQL::Query? = nil,      # base query; scoped through the join table on first use
+        @dependent : Symbol = :nullify, # dependency strategy
+        @validate : Bool = true,        # validate records
+        @autosave : Bool = false,       # autosave records
       )
         # Handle legacy cascade parameter with deprecation warning
         if @cascade
@@ -69,19 +69,16 @@ module CQL
         end
 
         # Initialize parent with auto_load: false to prevent loading in base initializer
-        super(@key, @id, @cascade, @query, auto_load: false, dependent: @dependent)
+        super(@key, @id, @cascade, query, auto_load: false, dependent: @dependent)
         @through_table = Through.table
         @records = [] of Target
       end
 
-      # Override reload to perform the correct JOIN query for many-to-many
-      # - **return** : Array(Target)
-      def reload
-        @records = safe_db_operation do
-          @query.all(Target)
-        end
-        @loaded = true
-        @records
+      # Joins the join table and scopes it to the parent; the caller's query is never mutated.
+      protected def scope_to_parent(query : CQL::Query) : CQL::Query
+        query.clone
+          .join(Through.table) { Target.table_column(:id).eq(Through.table_column(@target_key)) }
+          .where { Through.table_column(@key).eq(@id) }
       end
 
       # Adds an existing record to the association.
