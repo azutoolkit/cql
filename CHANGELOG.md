@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Model.insert_all(rows, batch_size: nil)` inserts an array of hashes or named tuples with multi-row INSERT statements and returns the number of rows inserted. Each statement binds at most the dialect's `max_bind_params` values unless `batch_size` sets the rows per statement, and a run of several statements commits or rolls back as one transaction. It runs no validations or callbacks and returns no records; it fills missing or nil `created_at`/`updated_at` columns with the current time, generates ids for UUID and ULID primary keys, and drops a nil `id` on other keys. Every row must have the same keys, each a column of the table, and `batch_size` may not bind more than `max_bind_params` values per statement, or it raises `ArgumentError` before any statement runs. See docs/how-to/data-operations/create.md.
+
 ### Changed
 
 - has_many preload splits its `WHERE fk IN (...)` into one query per chunk of parent ids, so preloading more parents than the database's bind-parameter limit works (it used to fail with "too many SQL variables" on SQLite or a driver or protocol error on PostgreSQL and MySQL). The limit comes from the new dialect hook `max_bind_params` (32767 by default, the most both PostgreSQL drivers accept, 999 for SQLite, the lowest default of any SQLite build); up to that many distinct parents still preload in one query. Chunks are separate statements, so outside a transaction they may see different snapshots.

@@ -196,6 +196,29 @@ describe "UUID Primary Key Support" do
     end
   end
 
+  describe ".insert_all" do
+    it "generates a UUID for each row without an id" do
+      UuidSession.insert_all([{token: "bulk a", user_id: 1_i64}, {token: "bulk b", user_id: 2_i64}]).should eq(2)
+
+      ids = UuidSession.all.map(&.id.not_nil!)
+      ids.size.should eq(2)
+      ids.uniq.size.should eq(2)
+    end
+
+    it "generates a UUID for a nil id and keeps a given one" do
+      given = UUID.random
+      rows = [
+        {:id => nil.as(DB::Any), :token => "nil id".as(DB::Any), :user_id => 1_i64.as(DB::Any)},
+        {:id => given.to_s.as(DB::Any), :token => "given id".as(DB::Any), :user_id => 2_i64.as(DB::Any)},
+      ]
+
+      UuidSession.insert_all(rows).should eq(2)
+
+      UuidSession.find_by!(token: "given id").id.should eq(given)
+      UuidSession.find_by!(token: "nil id").id.should_not be_nil
+    end
+  end
+
   describe "multiple record creation" do
     it "generates unique UUIDs for 10 records" do
       sessions = Array.new(10) do |i|

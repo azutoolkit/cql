@@ -43,6 +43,29 @@ module CQL
           find_by(attributes) || create!(attributes)
         end
 
+        # Inserts *rows* with multi-row INSERT statements and returns the number inserted.
+        # Runs no validations or callbacks. Fills missing `created_at`/`updated_at` columns and,
+        # for UUID and ULID keys, missing ids. A *batch_size* may not bind more values per
+        # statement than the dialect's `max_bind_params`.
+        #
+        # ```
+        # User.insert_all([{name: "Ada", email: "ada@example.com"}, {name: "Linus", email: "linus@example.com"}])
+        # ```
+        def self.insert_all(rows : Array(Hash(Symbol, DB::Any)), batch_size : Int32? = nil) : Int64
+          {% if Pk == UUID %}
+            generate_id = -> { UUID.random.to_s.as(DB::Any) }
+          {% elsif Pk == String %}
+            generate_id = -> { CQL::ULIDCompat.generate.as(DB::Any) }
+          {% else %}
+            generate_id = nil
+          {% end %}
+          CQL::ActiveRecord::BulkInsert.new({{@type.id}}.schema, {{@type.id}}.table, rows, generate_id).call(batch_size)
+        end
+
+        def self.insert_all(rows : Array(NamedTuple), batch_size : Int32? = nil) : Int64
+          insert_all(rows.map { |row| row.to_h.transform_values(&.as(DB::Any)) }, batch_size)
+        end
+
         # Create a new record with given attributes
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
         # - **@return** [{{@type.id}}] The created record instance

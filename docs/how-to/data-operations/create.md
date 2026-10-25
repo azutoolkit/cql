@@ -66,6 +66,32 @@ end
 puts "Created #{users.size} users"
 ```
 
+## Insert Many Rows at Once
+
+`insert_all` sends multi-row INSERT statements instead of one INSERT (and one SELECT) per record, and returns the
+number of rows inserted:
+
+```crystal
+inserted = User.insert_all([
+  {name: "Alice", email: "alice@example.com"},
+  {name: "Bob", email: "bob@example.com"},
+])
+inserted # => 2
+```
+
+It is not a faster `create!`:
+
+- No validations or callbacks run, and no records come back. Load them afterwards if you need them.
+- Missing or nil `created_at`/`updated_at` columns are set to the current time, and UUID and ULID primary keys get
+  generated ids. A nil `id` on an auto-increment key is left to the database.
+- Every row must have the same keys, each a column of the table. Unlike `create!`, which silently ignores keys that
+  are not columns, `insert_all` raises `ArgumentError` before inserting anything.
+- Rows are split so no statement binds more values than the database allows (`max_bind_params` on the dialect: 999 on
+  SQLite, 32767 elsewhere). `batch_size:` sets the rows per statement, up to that limit.
+- When the rows need several statements, they run in one transaction (a savepoint inside an existing one), so a
+  failing row inserts nothing.
+- An explicit integer `id` is inserted as given; on PostgreSQL it does not advance the table's sequence.
+
 ## Create with Relationships
 
 ```crystal

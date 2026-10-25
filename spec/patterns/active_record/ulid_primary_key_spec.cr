@@ -225,6 +225,23 @@ describe "ULID Primary Key Support" do
     end
   end
 
+  describe ".insert_all" do
+    it "generates a ULID for each row with a missing or nil id" do
+      rows = [
+        {:id => nil.as(DB::Any), :event_type => "bulk".as(DB::Any), :payload => "a".as(DB::Any)},
+        {:id => nil.as(DB::Any), :event_type => "bulk".as(DB::Any), :payload => "b".as(DB::Any)},
+      ]
+
+      UlidEvent.insert_all(rows).should eq(2)
+      UlidEvent.insert_all([{event_type: "bulk", payload: "c"}]).should eq(1)
+
+      ids = UlidEvent.where(event_type: "bulk").all.map(&.id!)
+      ids.size.should eq(3)
+      ids.uniq.size.should eq(3)
+      ids.each(&.should(match(/^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$/)))
+    end
+  end
+
   describe "ULID format validation" do
     it "generates valid ULID format (Crockford Base32)" do
       event = UlidEvent.create!(
