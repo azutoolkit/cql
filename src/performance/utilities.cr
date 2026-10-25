@@ -43,12 +43,23 @@ module CQL::Performance
 
   # SQL normalization and formatting
   module SQLUtils
+    # One pass over the original four rewrites (placeholders, bare numbers, quoted literals,
+    # whitespace runs). Each alternative starts with a distinct character class, so leftmost
+    # matching reproduces the sequential output exactly. `\$\d+` must stay before `\b\d+\b`
+    # so the digits of a `$1` placeholder are not matched as a bare number. A literal `?` is
+    # already its own replacement and needs no alternative.
+    NORMALIZABLE_TOKEN = /\$\d+|\b\d+\b|'.+?'|\s+/
+
     def self.normalize_sql(sql : String) : String
-      sql.gsub(/\$\d+|\?/, "?")
-        .gsub(/\b\d+\b/, "?")
-        .gsub(/'.+?'/, "'?'")
-        .gsub(/\s+/, " ")
-        .strip
+      sql.gsub(NORMALIZABLE_TOKEN) { |token| normalized_token(token) }.strip
+    end
+
+    private def self.normalized_token(token : String) : String
+      case token[0]
+      when '\''         then "'?'"
+      when .whitespace? then " "
+      else                   "?"
+      end
     end
 
     def self.truncate_sql(sql : String, max_length : Int32 = 100) : String

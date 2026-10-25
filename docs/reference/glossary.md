@@ -82,7 +82,7 @@ Object-Relational Mapping - a technique for converting data between incompatible
 The process of saving data to a database so it survives beyond the application's runtime.
 
 ### Preload
-Loading a `has_many` association for many records with one extra query instead of one query per record (`User.preload(:posts)`).
+Loading a `has_many`, `belongs_to` or `has_one` association for many records with one extra query instead of one query per record (`User.preload(:posts)`, `Post.preload(:user)`).
 
 ### Primary Key
 A unique identifier for each record in a table, typically named `id`.

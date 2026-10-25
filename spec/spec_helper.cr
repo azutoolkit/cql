@@ -50,4 +50,28 @@ def require_postgres!
   pending! "PostgreSQL integration specs require a reachable DATABASE_URL" unless postgres_available?
 end
 
+# Installs the monitor as the global one for the block, then restores the previous one.
+def with_global_monitor(monitor : CQL::Performance::Monitor, &)
+  previous = CQL::Performance.monitor
+  CQL::Performance.monitor = monitor
+  yield
+ensure
+  CQL::Performance.monitor = previous if previous
+end
+
+# Returns the statements of *operation* (SELECT by default) the block ran, in order, so specs can assert query counts.
+def count_queries(operation : Symbol = :select, & : ->) : Array(String)
+  statements = [] of String
+  subscription = "spec_count_queries_#{Random::Secure.hex(4)}"
+  CQL::Telemetry.subscribe(subscription) do |event|
+    statements << event.sql if event.operation == operation
+  end
+  begin
+    yield
+  ensure
+    CQL::Telemetry.unsubscribe(subscription)
+  end
+  statements
+end
+
 require "./support/**"

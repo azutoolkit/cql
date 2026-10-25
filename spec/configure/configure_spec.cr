@@ -128,13 +128,18 @@ describe "CQL.configure" do
     end
 
     it "sets up SQL logging in development without raising" do
-      with_crystal_env("development") do
-        CQL.configure { |config| config.db = CQLSpecSupport.sqlite_uri("configure_build_schema_dev.db") }
+      disabled = CQL::Performance::Config.new
+      disabled.monitoring.enabled = false
 
-        CQL.build_schema(:configured_dev) { }.should be_a(CQL::Schema)
-        logging_enabled = false
-        CQL::Performance.monitor.configure { |performance| logging_enabled = performance.logging.enabled? }
-        logging_enabled.should be_true
+      with_global_monitor(CQL::Performance::Monitor.new(config: disabled)) do
+        with_crystal_env("development") do
+          CQL.configure { |config| config.db = CQLSpecSupport.sqlite_uri("configure_build_schema_dev.db") }
+
+          CQL.build_schema(:configured_dev) { }.should be_a(CQL::Schema)
+          logging_enabled = false
+          CQL::Performance.monitor.configure { |performance| logging_enabled = performance.logging.enabled? }
+          logging_enabled.should be_true
+        end
       end
     end
   end

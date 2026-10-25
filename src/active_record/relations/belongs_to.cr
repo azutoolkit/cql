@@ -131,6 +131,27 @@ module CQL::ActiveRecord::Relations
         record
       end
 
+      {% if cache %}
+        # Loads this association for *records* with one query per *chunk_size* distinct foreign
+        # keys (the dialect's bind-parameter limit by default).
+        def self._preload_{{assoc.id}}(records : Array(self), chunk_size : Int32 = {{klass.id}}.adapter.dialect.max_bind_params - 1) : Nil
+          keys = records.compact_map(&.{{foreign_key.id}}).reject(&.==(0))
+          found = {} of typeof(keys.first) => {{klass.id}}
+          CQL::ActiveRecord::IdChunks.each(keys, chunk_size) do |chunk|
+            {{klass.id}}.where({:id => chunk}).all.each { |target| found[target.id!] = target }
+          end
+          records.each do |record|
+            target = record.{{foreign_key.id}}.try { |key| found[key]? }
+            record._set_preloaded_{{assoc.id}}(target)
+          end
+        end
+
+        def _set_preloaded_{{assoc.id}}(record : {{klass.id}}?) : Nil
+          @_cached_{{assoc.id}} = record
+          @_{{assoc.id}}_loaded = true
+        end
+      {% end %}
+
       # Build a new associated record without saving
       def build_{{assoc.id}}(**attributes) : {{klass.id}}
         safe_db_operation do

@@ -19,7 +19,7 @@ current_user = User.find(session[:user_id])  # Query 1
 current_user = User.find(session[:user_id])  # Query 2 (duplicate!)
 ```
 
-`CQL::Cache::RequestQueryCache` keys every SQL statement by its text and bound parameters. Every `all`, `get` and `each` call on a query goes through `RequestQueryCacheHelper.with_cache(sql, params)`, so a repeated statement within one request is counted as a hit.
+`CQL::Cache::RequestQueryCache` keys every SQL statement by its text plus a hash of its bound parameters; the parameter values themselves are not kept. Every `all`, `get` and `each` call on a query goes through `RequestQueryCacheHelper.with_cache(sql, params)`, so a repeated statement within one request is counted as a hit. Tracking is off until a request starts: outside `start_request`/`end_request` (or an explicit `enabled = true`), `with_cache` just runs the block, so queries pay nothing for it.
 
 ## What It Does (and Does Not Do)
 
@@ -130,11 +130,12 @@ Clears the tracked statements and keeps the request ID.
 ### Disable and Re-enable
 
 ```crystal
-CQL::Cache::RequestQueryCacheHelper.enabled = false
-CQL::Cache::RequestQueryCacheHelper.enabled?  # => false
+CQL::Cache::RequestQueryCacheHelper.enabled = true   # track outside requests too
+CQL::Cache::RequestQueryCacheHelper.enabled = false  # stop tracking, even inside a request
+CQL::Cache::RequestQueryCacheHelper.enabled?
 ```
 
-While disabled, `with_cache` just runs the block.
+Tracking is on while any request is active (between `start_request` and `end_request`), or after `enabled = true`. While it is off, `with_cache` just runs the block. When the last active request ends, `end_request` clears the tracked statements and turns request tracking off again. The cache is process-wide: overlapping requests share it, and their stats are combined. `enabled = false` turns tracking off even for requests that are still active.
 
 ### Track a Specific Statement
 
@@ -159,19 +160,19 @@ Other keys: `enabled`, `max_size`, `sets`, `clears`. A high `hits` count on an e
 
 ## Memory Bound
 
-`RequestQueryCache.new(max_size : Int32 = 1000)` caps the tracked statements. When the cap is reached the entry with the fewest accesses (then the oldest) is evicted. The shared instance used by the helper is `RequestQueryCache.instance`, created with the default of 1000.
+`RequestQueryCache.new(max_size : Int32 = 1000)` caps the tracked statements. When the cap is reached the oldest tracked statement is evicted. The shared instance used by the helper is `RequestQueryCache.instance`, created with the default of 1000.
 
 ## Best Practices
 
 1. **Enable for all requests** - Use middleware so every request starts clean.
-2. **Always pair start with end** - The provided handlers use `ensure`; do the same in custom code.
+2. **Always pair start with end** - Tracking stays on while any request is active, so an `end_request` skipped on an error path keeps it on for the life of the process. Use `CQL.with_request_cache` or call `end_request` in an `ensure`.
 3. **Use the stats to find duplicates** - Then fix them at the source.
 4. **Don't rely on it for long-term caching** - See [Configure Redis Cache](redis.md).
 
 ## Troubleshooting
 
 **`hits` and `misses` stay at zero:**
-- Check `RequestQueryCacheHelper.enabled?`.
+- Tracking is off outside a request: check that your middleware calls `start_request`, or `RequestQueryCacheHelper.enabled?`.
 - With `CQL.with_request_cache`, check that `c.cache.on` is true.
 
 **Counters keep growing across requests:**

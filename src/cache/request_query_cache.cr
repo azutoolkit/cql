@@ -1,205 +1,179 @@
 require "./cache_interface"
-require "digest/md5"
 require "db"
 
 module CQL
   module Cache
-    # Per-request query cache that automatically stores SQL query results
-    # during a single request and clears when a new request begins.
+    # Per-request query cache that tracks SQL queries executed during a request.
     #
-    # Features:
-    # - Automatic cache key generation based on SQL + parameters
-    # - Per-request lifecycle management
-    # - Thread-safe operations
-    # - Memory efficient with configurable max size
-    # - Statistics and monitoring support
+    # Tracking is opt-in: it runs while at least one request is active (between
+    # `start_request` and `end_request`), or while explicitly enabled through `enabled=`.
+    # When disabled, `with_cache` is a plain yield. The cache is process-wide, so
+    # overlapping requests share the tracked statements and the counters.
+    #
+    # Entries are keyed by the SQL text plus a hash of the bound parameters, so no
+    # parameter values are retained, and bounded by `max_size`; the oldest entry
+    # (insertion order) is evicted first.
     class RequestQueryCache
-      # Cache entry for storing query results
-      private class QueryCacheEntry
-        property result : String
-        property created_at : Int64
-        property access_count : Int32
+      alias Key = {String, UInt64}
+      alias Result = Array(DB::Any) | DB::Any
 
-        def initialize(@result : String, @created_at = Time.utc.to_unix)
-          @access_count = 0
-        end
+      private EXECUTED_MARKER = "executed"
 
-        def touch
-          @access_count += 1
-        end
-      end
-
-      @cache = {} of String => QueryCacheEntry
+      @cache = {} of Key => Result
       @request_id : String?
       @mutex = CQL::Compat::Mutex.new
       @max_size : Int32
-      @enabled : Bool = true
-      @stats = {
-        "hits"   => 0_i64,
-        "misses" => 0_i64,
-        "sets"   => 0_i64,
-        "clears" => 0_i64,
-      }
+      @explicitly_enabled = false
+      @active_requests = 0
+      @hits = 0_i64
+      @misses = 0_i64
+      @sets = 0_i64
+      @clears = 0_i64
 
       class_getter instance : RequestQueryCache = RequestQueryCache.new
 
       def initialize(@max_size : Int32 = 1000)
       end
 
-      # Start a new request context - clears existing cache
+      # Starts a request context: clears the cache and enables tracking until the
+      # matching `end_request`.
       def start_request(request_id : String? = nil) : Nil
         @mutex.synchronize do
-          @cache.clear
+          reset_cache
           @request_id = request_id || Random::Secure.hex(16)
-          @stats["clears"] += 1
+          @active_requests += 1
         end
       end
 
-      # End current request context
+      # Ends a request context. Once no request is active, clears the cache and stops
+      # request-scoped tracking.
       def end_request : Nil
         @mutex.synchronize do
-          @cache.clear
+          @active_requests -= 1 if @active_requests > 0
+          next unless @active_requests.zero?
+
+          reset_cache
           @request_id = nil
-          @stats["clears"] += 1
         end
       end
 
-      # Get current request ID
       def current_request_id : String?
         @request_id
       end
 
-      # Check if cache is enabled
+      # True while any request is active or the cache was explicitly enabled.
       def enabled? : Bool
-        @enabled
+        @explicitly_enabled || @active_requests > 0
       end
 
-      # Enable/disable the cache
-      def enabled=(@enabled : Bool) : Nil
-      end
-
-      # Generate cache key from SQL query and parameters
-      private def cache_key(sql : String, params : Array(DB::Any)) : String
-        # Create a stable hash from SQL + parameters
-        content = sql + params.map(&.inspect).join(",")
-        "qc:" + Digest::MD5.hexdigest(content)
-      end
-
-      # Get cached result for a query
-      def get(sql : String, params : Array(DB::Any)) : (Array(DB::Any) | DB::Any)?
-        return unless @enabled
-
-        key = cache_key(sql, params)
-
+      # Explicitly enables tracking outside requests; `false` disables tracking entirely,
+      # including for requests that are still active.
+      def enabled=(enabled : Bool) : Nil
         @mutex.synchronize do
-          if entry = @cache[key]?
-            entry.touch
-            @stats["hits"] += 1
-            return entry.result
-          else
-            @stats["misses"] += 1
-            return
-          end
+          @explicitly_enabled = enabled
+          @active_requests = 0 unless enabled
+        end
+      end
+
+      # Get cached result for a query. Keys are the SQL plus a hash of the parameters,
+      # so a stored result is advisory, not a guaranteed match for these exact values.
+      def get(sql : String, params : Array(DB::Any)) : Result?
+        return unless enabled?
+
+        key = key_for(sql, params)
+        @mutex.synchronize do
+          found = true
+          result = @cache.fetch(key) { found = false; nil }
+          found ? (@hits += 1) : (@misses += 1)
+          result
         end
       end
 
       # Store query result in cache
-      def set(sql : String, params : Array(DB::Any), result : Array(DB::Any) | DB::Any) : Nil
-        return unless @enabled
+      def set(sql : String, params : Array(DB::Any), result : Result) : Nil
+        return unless enabled?
 
-        key = cache_key(sql, params)
-
+        key = key_for(sql, params)
         @mutex.synchronize do
-          # Evict old entries if we're at max size
-          if @cache.size >= @max_size && !@cache.has_key?(key)
-            evict_oldest
-          end
+          next unless enabled?
 
-          @cache[key] = QueryCacheEntry.new(result)
-          @stats["sets"] += 1
+          store(key, result)
+          @sets += 1
         end
       end
 
-      # Clear all cached queries
       def clear : Nil
-        @mutex.synchronize do
-          @cache.clear
-          @stats["clears"] += 1
-        end
+        @mutex.synchronize { reset_cache }
       end
 
-      # Get cache statistics
       def stats : Hash(String, String | Int32 | Int64 | Float64)
         @mutex.synchronize do
-          total_queries = @stats["hits"] + @stats["misses"]
-          hit_rate = total_queries > 0 ? (@stats["hits"].to_f / total_queries.to_f * 100.0).round(2) : 0.0
+          total_queries = @hits + @misses
+          hit_rate = total_queries > 0 ? (@hits.to_f / total_queries.to_f * 100.0).round(2) : 0.0
 
           {
-            "enabled"          => @enabled.to_s,
+            "enabled"          => enabled?.to_s,
             "request_id"       => @request_id || "none",
             "size"             => @cache.size,
             "max_size"         => @max_size,
-            "hits"             => @stats["hits"],
-            "misses"           => @stats["misses"],
-            "sets"             => @stats["sets"],
-            "clears"           => @stats["clears"],
+            "hits"             => @hits,
+            "misses"           => @misses,
+            "sets"             => @sets,
+            "clears"           => @clears,
             "hit_rate_percent" => hit_rate,
-          }
+          } of String => String | Int32 | Int64 | Float64
         end
       end
 
-      # Get cache size
       def size : Int32
-        @mutex.synchronize do
-          @cache.size
-        end
+        @mutex.synchronize { @cache.size }
       end
 
       # Check if a query has been executed before in this request
       def query_executed?(sql : String, params : Array(DB::Any)) : Bool
-        return false unless @enabled
-        key = cache_key(sql, params)
-        @mutex.synchronize do
-          @cache.has_key?(key)
-        end
+        return false unless enabled?
+
+        key = key_for(sql, params)
+        @mutex.synchronize { @cache.has_key?(key) }
       end
 
-      # Mark a query as executed
+      # Records a query execution, counting a hit when it was already seen.
       def mark_query_executed(sql : String, params : Array(DB::Any)) : Nil
-        return unless @enabled
-        key = cache_key(sql, params)
+        return unless enabled?
+
+        key = key_for(sql, params)
         @mutex.synchronize do
+          next unless enabled?
+
           if @cache.has_key?(key)
-            @stats["hits"] += 1
-            if entry = @cache[key]?
-              entry.touch
-            end
+            @hits += 1
           else
-            @stats["misses"] += 1
-            @cache[key] = QueryCacheEntry.new("executed", Time.utc.to_unix)
-            @stats["sets"] += 1
+            @misses += 1
+            store(key, EXECUTED_MARKER)
+            @sets += 1
           end
         end
       end
 
       # Simple cache tracking without result storage
       def with_cache(sql : String, params : Array(DB::Any), & : -> T) : T forall T
-        return yield unless @enabled
-
-        mark_query_executed(sql, params)
+        mark_query_executed(sql, params) if enabled?
         yield
       end
 
-      private def evict_oldest : Nil
-        # Find the oldest entry (lowest access count, then oldest created_at)
-        oldest_entry = @cache.min_by? do |_, entry|
-          {entry.access_count, entry.created_at}
-        end
+      private def key_for(sql : String, params : Array(DB::Any)) : Key
+        {sql, params.hash}
+      end
 
-        if oldest_entry
-          key, _ = oldest_entry
-          @cache.delete(key)
-        end
+      # Inserts with a single key lookup, then evicts the oldest entry if over the cap.
+      private def store(key : Key, result : Result) : Nil
+        @cache[key] = result
+        @cache.shift? if @cache.size > @max_size
+      end
+
+      private def reset_cache : Nil
+        @cache.clear
+        @clears += 1
       end
     end
 
@@ -236,8 +210,8 @@ module CQL
       end
 
       # Execute a query with caching
-      def self.with_cache(sql : String, params : Array(DB::Any), &block : -> T) : T forall T
-        RequestQueryCache.instance.with_cache(sql, params, &block)
+      def self.with_cache(sql : String, params : Array(DB::Any), & : -> T) : T forall T
+        RequestQueryCache.instance.with_cache(sql, params) { yield }
       end
     end
   end

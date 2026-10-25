@@ -12,6 +12,22 @@ UuidTestDB = CQL::Schema.define(
     bigint :user_id
     timestamps
   end
+
+  table :uuid_session_events do
+    primary :id, Int64, auto_increment: true
+    text :session_id, null: true
+  end
+end
+
+# belongs_to a UUID-keyed model, so its generated preload must bind UUIDs as strings.
+class UuidSessionEvent
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: UuidTestDB, table: :uuid_session_events
+
+  property session_id : UUID?
+
+  belongs_to :session, UuidSession, :session_id
 end
 
 # Model with UUID primary key
@@ -193,6 +209,53 @@ describe "UUID Primary Key Support" do
       # UUID should be valid format (8-4-4-4-12 hex characters)
       uuid_string = session.id!.to_s
       uuid_string.should match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    end
+  end
+
+  describe "query delete_all" do
+    it "deletes the matching UUID rows in bulk" do
+      gone = UuidSession.create!(token: "gone", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+      kept = UuidSession.create!(token: "kept", user_id: 2_i64, created_at: Time.utc, updated_at: Time.utc)
+
+      UuidSession.where(token: "gone").delete_all.should eq(1)
+
+      UuidSession.find(gone.id!).should be_nil
+      UuidSession.find!(kept.id!).token.should eq("kept")
+    end
+  end
+
+  describe "belongs_to preload" do
+    it "compiles for a UUID-keyed target" do
+      typeof(UuidSessionEvent.preload(:session).all).should eq(Array(UuidSessionEvent))
+    end
+  end
+
+  describe ".insert_all" do
+    it "generates a UUID for each row without an id" do
+      UuidSession.insert_all([{token: "bulk a", user_id: 1_i64}, {token: "bulk b", user_id: 2_i64}]).should eq(2)
+
+      ids = UuidSession.all.map(&.id.not_nil!)
+      ids.size.should eq(2)
+      ids.uniq.size.should eq(2)
+    end
+
+    it "generates a UUID for a nil id and keeps a given one" do
+      given = UUID.random
+      rows = [
+        {:id => nil.as(DB::Any), :token => "nil id".as(DB::Any), :user_id => 1_i64.as(DB::Any)},
+        {:id => given.to_s.as(DB::Any), :token => "given id".as(DB::Any), :user_id => 2_i64.as(DB::Any)},
+      ]
+
+      UuidSession.insert_all(rows).should eq(2)
+
+      UuidSession.find_by!(token: "given id").id.should eq(given)
+      UuidSession.find_by!(token: "nil id").id.should_not be_nil
+    end
+
+    it "rejects upsert_all on: :id when ids are generated, since they never match" do
+      expect_raises(ArgumentError, /never matches a generated id/) do
+        UuidSession.upsert_all([{token: "t", user_id: 1_i64}], on_conflict: :id)
+      end
     end
   end
 

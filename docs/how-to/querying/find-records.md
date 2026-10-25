@@ -52,17 +52,23 @@ user = User.last
 puts user.try(&.name)
 ```
 
-`last` loads the matching rows and returns the final one. On large tables, order descending and take the first row instead:
-
-```crystal
-user = User.order(id: :desc).first
-```
+`last` fetches a single row: the one with the highest primary key, or, when the query is ordered, the first row of the reversed order (ties go to the higher primary key).
 
 ## Find All Records
 
 ```crystal
 users = User.all
 users.each { |u| puts u.name }
+```
+
+## Iterate Over Many Records
+
+`each` loads the matching rows, releases the connection, then yields them, so the block may run other queries and `break` stops early. For large tables use `find_each`, which loads one batch at a time and pages by primary key:
+
+```crystal
+User.query.where(active: true).find_each(batch_size: 500) do |user|
+  user.touch
+end
 ```
 
 ## Find with Order

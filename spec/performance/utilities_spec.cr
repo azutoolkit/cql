@@ -137,6 +137,49 @@ describe "CQL::Performance Utilities" do
       end
     end
 
+    # Outputs captured from the original four-gsub implementation (quirks included),
+    # so a single-pass rewrite must reproduce them exactly.
+    describe ".normalize_sql parity" do
+      expectations = {
+        "SELECT * FROM users WHERE name = 'O''Brien' AND id = 1" => "SELECT * FROM users WHERE name = '?''?' AND id = ?",
+        "SELECT * FROM users WHERE name = 'it\\'s' AND age = 5"  => "SELECT * FROM users WHERE name = '?'s' AND age = ?",
+        "SELECT * FROM t WHERE a = 'x' OR b = 'y'"               => "SELECT * FROM t WHERE a = '?' OR b = '?'",
+        "SELECT * FROM t WHERE a = ''"                           => "SELECT * FROM t WHERE a = ''",
+        "SELECT * FROM t WHERE a = 'multi\nline'"                => "SELECT * FROM t WHERE a = 'multi line'",
+        "SELECT * FROM t WHERE a = 'unterminated"                => "SELECT * FROM t WHERE a = 'unterminated",
+        "SELECT '12' FROM t WHERE a = '34' AND b = 56"           => "SELECT '?' FROM t WHERE a = '?' AND b = ?",
+        "SELECT * FROM t WHERE price > 12.50 AND qty < 3"        => "SELECT * FROM t WHERE price > ?.? AND qty < ?",
+        "SELECT * FROM t WHERE balance < -5 AND x = -1.5"        => "SELECT * FROM t WHERE balance < -? AND x = -?.?",
+        "SELECT * FROM t WHERE a = 1e5 AND b = 0x1F"             => "SELECT * FROM t WHERE a = 1e5 AND b = 0x1F",
+        "SELECT * FROM table2 WHERE col1 = 1 AND t3.c = 3"       => "SELECT * FROM table2 WHERE col1 = ? AND t3.c = ?",
+        "SELECT * FROM users_1 WHERE a1b = 2"                    => "SELECT * FROM users_1 WHERE a1b = ?",
+        "SELECT * FROM t WHERE a = 1 LIMIT 10 OFFSET 20"         => "SELECT * FROM t WHERE a = ? LIMIT ? OFFSET ?",
+        "SELECT * FROM t WHERE a = $1 AND b = $12 AND c = ?"     => "SELECT * FROM t WHERE a = ? AND b = ? AND c = ?",
+        "SELECT * FROM users WHERE id IN (1, 2, 3)"              => "SELECT * FROM users WHERE id IN (?, ?, ?)",
+        "SELECT * FROM users WHERE id IN ($1, $2, $3)"           => "SELECT * FROM users WHERE id IN (?, ?, ?)",
+        "SELECT * FROM users WHERE id IN (?, ?, ?)"              => "SELECT * FROM users WHERE id IN (?, ?, ?)",
+        "INSERT INTO t (a, b) VALUES ($1, $2)"                   => "INSERT INTO t (a, b) VALUES (?, ?)",
+        "INSERT INTO t (a, b) VALUES (1, 'x')"                   => "INSERT INTO t (a, b) VALUES (?, '?')",
+        "SELECT *\n  FROM users\n\tWHERE id = 1\r\n  AND x = 2"  => "SELECT * FROM users WHERE id = ? AND x = ?",
+        "select * From USERS where Id = 7"                       => "select * From USERS where Id = ?",
+        "SELECT * FROM users -- comment 42\nWHERE id = 1"        => "SELECT * FROM users -- comment ? WHERE id = ?",
+        "SELECT /* hint 7 */ * FROM users"                       => "SELECT /* hint ? */ * FROM users",
+        "SELECT \"col 1\" FROM \"t\" WHERE x = 1"                => "SELECT \"col ?\" FROM \"t\" WHERE x = ?",
+        "'a\nb' AND c = 'd'"                                     => "'a b'?'d'",
+        "   \n\t "                                               => "",
+        ""                                                       => "",
+      }
+
+      it "matches the original output for every input in the table" do
+        mismatches = expectations.compact_map do |sql, expected|
+          actual = CQL::Performance::SQLUtils.normalize_sql(sql)
+          "#{sql.inspect}: expected #{expected.inspect}, got #{actual.inspect}" unless actual == expected
+        end
+
+        mismatches.should be_empty
+      end
+    end
+
     describe ".truncate_sql" do
       it "returns the full string when under max_length" do
         sql = "SELECT * FROM users"

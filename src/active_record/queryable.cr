@@ -319,15 +319,14 @@ module CQL
 
         # Iterate over each record matching the current query
         # - **@yield** [T] Each model instance
-        def self.each(&block : {{@type.id}} ->)
-          query.each(&block)
+        def self.each(& : {{@type.id}} ->)
+          query.each { |record| yield record }
         end
 
         # Check if any records exist matching the current query
         # - **@return** [Bool] True if records exist
         def self.exists? : Bool
-          count_result = count
-          count_result > 0
+          query.exists?
         end
 
         # Check if no records exist matching the current query

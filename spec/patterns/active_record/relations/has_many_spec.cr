@@ -280,6 +280,44 @@ describe CQL::ActiveRecord::Relations::HasMany do
       user.posts.all.map(&.id!).sort!.should eq([post1.id.not_nil!, post2.id.not_nil!].sort)
     end
 
+    it "assigns ids with one UPDATE" do
+      user = TestUser.create!(name: "Ids User", email: "ids@example.com", age: 30, password: "password123", password_confirmation: "password123")
+      posts = (1..3).map { |i| Post.create!(title: "Loose #{i}", body: "b") }
+      other = Post.create!(title: "Other", body: "b")
+
+      updates = count_queries(:update) { user.posts.ids = posts.map(&.id!) }
+
+      updates.size.should eq(1)
+      user.posts.map(&.id!).sort!.should eq(posts.map(&.id!).sort!)
+      Post.find!(other.id!).user_id.should be_nil
+    end
+
+    it "chunks ids so each UPDATE stays within the bind limit beside the SET value" do
+      user = TestUser.create!(name: "Many Ids", email: "manyids@example.com", age: 30, password: "password123", password_confirmation: "password123")
+      limit = Post.adapter.dialect.max_bind_params
+      ids = (1..limit).to_a # limit ids + the SET value do not fit one statement
+
+      updates = count_queries(:update) { user.posts.ids = ids }
+
+      updates.size.should eq(2)
+    end
+
+    it "sends a repeated id once" do
+      user = TestUser.create!(name: "Dup Ids", email: "dupids@example.com", age: 30, password: "password123", password_confirmation: "password123")
+      post = Post.create!(title: "Dup", body: "b")
+
+      updates = count_queries(:update) { user.posts.ids = [post.id!, post.id!] }
+
+      updates.first.scan("?").size.should eq(2) # the SET value and one id
+      user.posts.map(&.id!).should eq([post.id!])
+    end
+
+    it "assigns no ids without an UPDATE" do
+      user = TestUser.create!(name: "No Ids", email: "noids@example.com", age: 30, password: "password123", password_confirmation: "password123")
+
+      count_queries(:update) { user.posts.ids = [] of Int32 }.should be_empty
+    end
+
     it "reloads posts after changes" do
       user = TestUser.new(
         name: "John Doe",

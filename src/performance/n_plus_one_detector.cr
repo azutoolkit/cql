@@ -36,11 +36,11 @@ module CQL::Performance
     end
 
     # Direct method call for query recording
-    def record_query(sql : String) : Void
+    def record_query(sql : String, normalized_sql : String? = nil) : Void
       return unless @enabled
       return if should_ignore?(sql)
 
-      normalized = SQLUtils.normalize_sql(sql)
+      normalized = normalized_sql || SQLUtils.normalize_sql(sql)
       should_log = false
       log_query = ""
       log_count = 0

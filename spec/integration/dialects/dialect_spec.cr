@@ -16,6 +16,20 @@ end
 
 module Expression
   describe BaseDialect do
+    describe "CQL::Adapter#dialect" do
+      it "returns one shared instance per adapter" do
+        CQL::Adapter.each do |adapter|
+          adapter.dialect.should be(adapter.dialect)
+        end
+      end
+
+      it "returns distinct instances for adapters with different dialect classes" do
+        CQL::Adapter::Postgres.dialect.should_not be(CQL::Adapter::CockroachDB.dialect)
+        CQL::Adapter::Postgres.dialect.should_not be(CQL::Adapter::SQLite.dialect)
+        CQL::Adapter::SQLite.dialect.should_not be(CQL::Adapter::MySql.dialect)
+      end
+    end
+
     # Test placeholders across dialects
     describe "#placeholder_format" do
       it "formats placeholders according to dialect rules" do

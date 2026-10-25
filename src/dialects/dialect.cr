@@ -14,6 +14,12 @@ module Expression
     # and the parameter index
     abstract def placeholder_format(param_index : Int32) : String
 
+    # The most parameters one prepared statement may bind. The protocols allow 65535, but the
+    # `pg` shard writes the count as a signed Int16.
+    def max_bind_params : Int32
+      Int16::MAX.to_i32
+    end
+
     # Dumps only the DB structure (no data) to a string
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String
@@ -245,9 +251,6 @@ module Expression
 
   # Shared implementation helpers for common dialect patterns
   module DialectHelpers
-    # Cache for frequently used SQL fragments
-    @sql_cache : Hash(String, String) = {} of String => String
-
     # Efficient string building with pre-allocated capacity
     protected def build_sql(initial_capacity : Int32 = 256, &)
       String.build(initial_capacity) do |str|
@@ -313,11 +316,14 @@ module Expression
       table_name : String,
       columns : Array(String),
       unique : Bool,
+      if_not_exists : Bool = false,
     ) : String
       build_sql(128) do |str|
         str << "CREATE "
         str << "UNIQUE " if unique
-        str << "INDEX " << index_name << " ON " << table_name
+        str << "INDEX "
+        str << "IF NOT EXISTS " if if_not_exists
+        str << index_name << " ON " << table_name
         str << " (" << columns.join(", ") << ")"
       end
     end
@@ -339,11 +345,6 @@ module Expression
         str << " ON DELETE " << on_delete
         str << " ON UPDATE " << on_update
       end
-    end
-
-    # Cached SQL fragments for common operations
-    protected def cached_sql(key : String, &)
-      @sql_cache[key]? || (@sql_cache[key] = yield.to_s)
     end
   end
 
@@ -406,6 +407,16 @@ module Expression
         str << "CONSTRAINT #{constraint.name} " if constraint.name
         str << "CHECK (" << constraint.condition << ")"
       end
+    end
+
+    # Generates SQL to create an index that is skipped when it already exists.
+    def create_index_if_not_exists(
+      index_name : String,
+      table_name : String,
+      columns : Array(String),
+      unique : Bool,
+    ) : String
+      build_create_index(index_name, table_name, columns, unique, if_not_exists: true)
     end
   end
 end

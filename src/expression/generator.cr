@@ -550,12 +550,14 @@ module Expression
     end
 
     def visit(node : CreateIndex) : String
-      @query = @dialect.create_index(
-        CQL::Identifier.validate!(node.index.index_name.to_s, "index name"),
-        node.index.table.table_name.to_s,
-        node.index.columns.map(&.to_s),
-        node.index.unique?
-      )
+      index = node.index
+      args = {
+        validate_index_name!(index.index_name),
+        index.table.table_name.to_s,
+        index.columns.map(&.to_s),
+        index.unique?,
+      }
+      @query = node.if_not_exists? ? @dialect.create_index_if_not_exists(*args) : @dialect.create_index(*args)
     end
 
     def visit(node : CreateTable) : String
@@ -706,6 +708,13 @@ module Expression
       fk.columns.each { |col| CQL::Identifier.validate!(col.to_s, "column name") }
       CQL::Identifier.validate!(fk.references_table.to_s, "table name")
       fk.references_columns.each { |col| CQL::Identifier.validate!(col.to_s, "column name") }
+    end
+
+    # PostgreSQL truncates longer names (and IF NOT EXISTS can then skip a different index); MySQL rejects them.
+    private def validate_index_name!(name : String) : String
+      CQL::Identifier.validate!(name, "index name")
+      return name if name.size <= CQL::Index::MAX_NAME_LENGTH
+      raise ArgumentError.new("Index name #{name.inspect} is longer than #{CQL::Index::MAX_NAME_LENGTH} characters; give the index a shorter name")
     end
 
     private def validate_optional!(name : String?, kind : String) : Nil

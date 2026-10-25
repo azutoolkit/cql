@@ -103,6 +103,34 @@ module CQL::ActiveRecord::Relations
         record
       end
 
+      {% if cache %}
+        # Loads this association for *records* with one query per *chunk_size* parent ids (the
+        # dialect's bind-parameter limit by default). Like the lazy reader, a parent with several
+        # children gets an arbitrary one. Keys are compared as strings, so the child's foreign key
+        # type need not match the parent's primary key type.
+        def self._preload_{{name.id}}(records : Array(self), chunk_size : Int32 = {{kind.id}}.adapter.dialect.max_bind_params - 1) : Nil
+          \{% if {{kind.id}}.has_method?({{fk.stringify}}) %}
+            found = {} of String => {{kind.id}}
+            CQL::ActiveRecord::IdChunks.each(records.compact_map(&.id), chunk_size) do |ids|
+              {{kind.id}}.where({:{{fk}} => ids}).all.each do |child|
+                child.{{fk}}.try { |key| found[key.to_s] ||= child }
+              end
+            end
+            records.each do |record|
+              id = record.id
+              record._set_preloaded_{{name.id}}(found[id.to_s]?) unless id.nil?
+            end
+          \{% else %}
+            raise ArgumentError.new("Cannot preload {{name.id}}: {{kind.id}} has no {{fk}} attribute")
+          \{% end %}
+        end
+
+        def _set_preloaded_{{name.id}}(record : {{kind.id}}?) : Nil
+          @_cached_{{name.id}} = record
+          @_{{name.id}}_loaded = true
+        end
+      {% end %}
+
       # Build a new associated record without saving
       def build_{{name.id}}(**attributes) : {{kind.id}}
         parent_id = safe_id(self, typeof(@id))

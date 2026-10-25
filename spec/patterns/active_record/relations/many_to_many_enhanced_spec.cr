@@ -149,6 +149,24 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
       movie.actors.size.should eq(0)
     end
 
+    it "deletes the targets of a delete_all collection in one statement" do
+      movie = Movie.new("Heat", 1995)
+      movie.create!
+      actors = (1..3).map { |i| Actor.new("Actor #{i}", 30 + i).tap(&.create!) }
+      actors.each { |actor| movie.actors << actor }
+      bystander = Actor.new("Bystander", 40)
+      bystander.create!
+      collection = CQL::ActiveRecord::Relations::ManyCollection(Actor, MoviesActor, Int32).new(
+        key: :movie_id, id: movie.id!, target_key: :actor_id, dependent: :delete_all
+      )
+
+      deletes = count_queries(:delete) { collection.clear_with_delete }
+
+      deletes.size.should eq(2) # the join rows, then the three actors
+      Actor.all.map(&.id!).should eq([bystander.id!])
+      MoviesActor.count.should eq(0)
+    end
+
     it "only clears join records when dependent: :nullify" do
       movie = Movie.new("The Matrix", 1999)
       movie.create!
@@ -437,6 +455,48 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
       # Check inclusion
       movie.actors_include?(actor1).should be_true
       movie.actors_include?(actor2).should be_false
+    end
+
+    it "answers empty? on an unloaded collection with one LIMIT select through the join table" do
+      movie = Movie.new("The Matrix", 1999)
+      movie.create!
+      other_movie = Movie.new("Speed", 1994)
+      other_movie.create!
+      actor = Actor.new("Keanu Reeves", 58)
+      actor.create!
+      MoviesActor.new(other_movie.id!, actor.id!).create!
+
+      statements = many_to_many_isolation_selects { movie.actors.empty?.should be_true }
+      statements.size.should eq(1)
+      statements.first.should contain("movies_actor")
+      statements.first.should contain("LIMIT ?")
+      statements.first.should_not contain("COUNT(")
+
+      MoviesActor.new(movie.id!, actor.id!).create!
+      movie.actors.empty?.should be_false
+    end
+  end
+
+  describe "single-query lookups" do
+    it "answers exists?, find and find_by with one query each" do
+      movie = Movie.new("Ronin", 1998)
+      movie.create!
+      other = Movie.new("Leon", 1994)
+      other.create!
+      deniro = Actor.new("De Niro", 55).tap(&.create!)
+      reno = Actor.new("Reno", 50).tap(&.create!)
+      movie.actors << deniro
+      other.actors << reno
+      actors = movie.actors
+
+      count_queries { actors.exists?(name: "De Niro").should be_true }.size.should eq(1)
+      count_queries { actors.exists?(name: "Reno").should be_false }.size.should eq(1)
+      count_queries { actors.find(name: "De Niro").map(&.id).should eq([deniro.id]) }.size.should eq(1)
+      count_queries { actors.find_by(name: "Reno").should be_nil }.size.should eq(1)
+      actors.find_by(id: deniro.id!).try(&.name).should eq("De Niro")
+      actors.find(id: reno.id!).should be_empty
+      actors.find.map(&.id).should eq([deniro.id])
+      actors.find_by.try(&.id).should eq(deniro.id)
     end
   end
 

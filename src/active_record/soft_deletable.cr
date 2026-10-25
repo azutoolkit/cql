@@ -223,9 +223,19 @@ module CQL
             .commit
         end
 
-        # Soft delete all records in the table
-        def self.delete_all
-          all.each(&.delete!)
+        # Soft deletes a chunk of ids for `delete_ids`: sets `deleted_at` instead of deleting.
+        protected def self.delete_chunk(ids : Array(DB::Any)) : Int64
+          set_deleted_at(ids, Time.utc)
+        end
+
+        private def self.set_deleted_at(ids : Array(DB::Any), value : Time?) : Int64
+          CQL::Update.new(schema).table(table).set({:deleted_at => value.as(DB::Any)}).where(id: ids).commit.rows_affected
+        end
+
+        # Soft deletes every active record and returns how many, in bulk unless the model
+        # declares destroy callbacks.
+        def self.delete_all : Int64
+          query.delete_all
         end
 
         # Force delete all records in the table
@@ -236,9 +246,9 @@ module CQL
             .commit
         end
 
-        # Restore all soft-deleted records
-        def self.restore_all
-          only_deleted.all.each(&.restore!)
+        # Restores every soft-deleted record with one UPDATE per chunk of ids and returns how many.
+        def self.restore_all : Int64
+          sum_over_id_chunks(only_deleted.ids(as: stored_id_type)) { |chunk| set_deleted_at(chunk, nil) }
         end
 
         # Count including soft-deleted records

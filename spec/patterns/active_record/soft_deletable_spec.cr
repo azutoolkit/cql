@@ -16,6 +16,30 @@ class SoftDeletableUser
   end
 end
 
+# A soft-deletable model with a destroy callback, so bulk deletes go record by record.
+class AuditedSoftDeletableUser
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context schema: SoftDeletableDB, table: :users
+
+  class_property destroyed_names = [] of String
+
+  property name : String
+  property email : String
+  property age : Int32 = 0
+
+  before_destroy :audit
+
+  def initialize(@name, @email, @age = 0)
+  end
+
+  def audit
+    self.class.destroyed_names << name
+    name != "Protected"
+  end
+end
+
 describe CQL::ActiveRecord::SoftDeletable do
   before_each do
     SoftDeletableDB.users.drop! rescue nil
@@ -167,9 +191,42 @@ describe CQL::ActiveRecord::SoftDeletable do
     end
   end
 
+  describe "QueryBuilder#delete_all" do
+    it "soft deletes the matching rows with one UPDATE and no DELETE" do
+      gone = SoftDeletableUser.new("Gone", "gone@example.com", 20)
+      gone.save!
+      kept = SoftDeletableUser.new("Kept", "kept@example.com", 50)
+      kept.save!
+
+      deleted = 0_i64
+      updates = [] of String
+      deletes = count_queries(:delete) { updates = count_queries(:update) { deleted = SoftDeletableUser.where(age: 20).delete_all } }
+
+      deleted.should eq(1)
+      updates.size.should eq(1)
+      deletes.should be_empty
+      SoftDeletableUser.all.map(&.name).should eq(["Kept"])
+      SoftDeletableUser.with_deleted.find!(gone.id!).deleted_at.should_not be_nil
+    end
+
+    it "skips rows that are already soft deleted unless with_deleted is used" do
+      user = SoftDeletableUser.new("Twice", "twice@example.com", 20)
+      user.save!
+      user.delete!
+
+      SoftDeletableUser.where(age: 20).delete_all.should eq(0)
+      SoftDeletableUser.with_deleted.where(age: 20).delete_all.should eq(1)
+    end
+  end
+
   describe "class methods" do
     it "provides acts_as_paranoid? to check if model uses soft deletes" do
       SoftDeletableUser.acts_as_paranoid?.should be_true
+    end
+
+    it "is the marker bulk association deletes use to keep soft deletes" do
+      SoftDeletableUser.responds_to?(:acts_as_paranoid?).should be_true
+      Actor.responds_to?(:acts_as_paranoid?).should be_false
     end
 
     it "soft deletes records by ID using delete!" do
@@ -220,6 +277,35 @@ describe CQL::ActiveRecord::SoftDeletable do
       SoftDeletableUser.count_only_deleted.should eq(1) # Deleted users
     end
 
+    it "soft deletes every active record with delete_all in one UPDATE" do
+      SoftDeletableUser.new("All 1", "all1@example.com", 25).save!
+      SoftDeletableUser.new("All 2", "all2@example.com", 30).save!
+
+      updates = count_queries(:update) { SoftDeletableUser.delete_all.should eq(2) }
+
+      updates.size.should eq(1)
+      SoftDeletableUser.count.should eq(0)
+      SoftDeletableUser.count_only_deleted.should eq(2)
+    end
+
+    it "soft deletes record by record when the model declares destroy callbacks" do
+      AuditedSoftDeletableUser.destroyed_names.clear
+      AuditedSoftDeletableUser.new("Audited", "audited@example.com").save!
+      AuditedSoftDeletableUser.new("Protected", "protected@example.com").save!
+
+      AuditedSoftDeletableUser.delete_all.should eq(1)
+
+      AuditedSoftDeletableUser.destroyed_names.sort.should eq(["Audited", "Protected"])
+      AuditedSoftDeletableUser.all.map(&.name).should eq(["Protected"])
+    end
+
+    it "restores nothing and leaves active records alone when none are deleted" do
+      SoftDeletableUser.new("Active", "active@example.com").save!
+
+      count_queries(:update) { SoftDeletableUser.restore_all.should eq(0) }.should be_empty
+      SoftDeletableUser.count.should eq(1)
+    end
+
     it "restores all soft-deleted records with restore_all" do
       # Create and delete some users
       user1 = SoftDeletableUser.new("Restore All 1", "restore_all1@example.com", 25)
@@ -234,28 +320,13 @@ describe CQL::ActiveRecord::SoftDeletable do
       SoftDeletableUser.count.should eq(0)
       SoftDeletableUser.count_only_deleted.should eq(2)
 
-      # Restore all
-      SoftDeletableUser.restore_all
+      # Restore all, with one UPDATE
+      updates = count_queries(:update) { SoftDeletableUser.restore_all.should eq(2) }
+      updates.size.should eq(1)
 
       # All users should be restored
       SoftDeletableUser.count.should eq(2)
       SoftDeletableUser.count_only_deleted.should eq(0)
-    end
-
-    it "soft deletes all records with delete_all" do
-      # Create some users
-      user1 = SoftDeletableUser.new("Delete All 1", "delete_all1@example.com", 25)
-      user2 = SoftDeletableUser.new("Delete All 2", "delete_all2@example.com", 30)
-
-      user1.create!
-      user2.create!
-
-      # Delete all
-      SoftDeletableUser.delete_all
-
-      # All users should be soft-deleted
-      SoftDeletableUser.count.should eq(0)
-      SoftDeletableUser.count_only_deleted.should eq(2)
     end
 
     it "force deletes all records with force_delete_all" do

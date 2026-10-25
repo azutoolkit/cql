@@ -92,9 +92,11 @@ module CQL
       @source.close
     end
 
-    # Fiber-local connection storage for thread-safe transaction handling
-    @fiber_connections = {} of Fiber => DB::Connection
+    # Fiber-local transaction stacks: each fiber's entered transactions (and savepoints), innermost last
+    @fiber_transactions = {} of Fiber => Array(DB::Transaction)
     @fiber_mutex = CQL::Compat::Mutex.new
+    # Mirrors `@fiber_transactions.size`: queries skip the mutex only while no fiber has a transaction open
+    @fibers_in_transaction = Atomic(Int32).new(0)
 
     # Creates a new expression generator for thread-safe SQL generation.
     # Each call returns a fresh Generator instance to avoid state corruption
@@ -122,19 +124,33 @@ module CQL
     # Gets the active connection for the current fiber, if any.
     # Used internally for transaction support.
     private def active_connection : DB::Connection?
+      active_transaction.try(&.connection)
+    end
+
+    # The fiber's innermost transaction still open; any closed by hand (`tx.commit`/`tx.rollback`)
+    # are skipped, so work falls back to the enclosing transaction rather than leaving it.
+    private def active_transaction : DB::Transaction?
+      return if @fibers_in_transaction.get.zero? # this fiber's own push is already visible, so 0 means it has none
       @fiber_mutex.synchronize do
-        @fiber_connections[Fiber.current]?
+        @fiber_transactions[Fiber.current]?.try { |stack| stack.reverse_each.find { |tx| !tx.closed? } }
       end
     end
 
-    # Sets the active connection for the current fiber.
-    # Used internally for transaction support.
-    private def active_connection=(conn : DB::Connection?)
+    # Pushes *tx* onto the fiber's transaction stack for the block and pops it afterwards.
+    private def with_active_transaction(tx : DB::Transaction, &)
+      fiber = Fiber.current
       @fiber_mutex.synchronize do
-        if conn
-          @fiber_connections[Fiber.current] = conn
-        else
-          @fiber_connections.delete(Fiber.current)
+        (@fiber_transactions[fiber] ||= [] of DB::Transaction).push(tx)
+        @fibers_in_transaction.set(@fiber_transactions.size)
+      end
+      begin
+        yield
+      ensure
+        @fiber_mutex.synchronize do
+          stack = @fiber_transactions[fiber]
+          stack.pop
+          @fiber_transactions.delete(fiber) if stack.empty?
+          @fibers_in_transaction.set(@fiber_transactions.size)
         end
       end
     end
@@ -225,9 +241,8 @@ module CQL
     # schema.build
     # ```
     def build
-      @tables.each do |_tbl_name, table|
-        sql = table.create_sql
-        exec(sql)
+      @tables.each_value do |table|
+        table.create_statements.each { |sql| exec(sql) }
       end
     end
 
@@ -319,21 +334,22 @@ module CQL
     # end
     # ```
     #
+    # Called inside another transaction on the same fiber, it runs as a SAVEPOINT
+    # on that transaction's connection.
+    #
     # Publishes `Telemetry::TransactionEvent`s to `Telemetry.subscribe_transactions`
     # subscribers. A manual `tx.rollback` followed by a normal return still
     # reports Commit, since CQL cannot see it.
     def transaction(&)
-      previous_connection = active_connection
-      observer = Telemetry.begin_transaction(@adapter, !previous_connection.nil?)
-      @source.transaction do |tx|
-        self.active_connection = tx.connection
-        begin
+      outer = active_transaction
+      observer = Telemetry.begin_transaction(@adapter, !outer.nil?)
+      # Nested calls open a SAVEPOINT on the outer transaction's connection.
+      (outer || @source).transaction do |tx|
+        with_active_transaction(tx) do
           yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
         rescue ex
           observer.try &.failed(ex)
           raise ex
-        ensure
-          self.active_connection = previous_connection
         end
       end
     rescue ex : DB::Rollback
@@ -349,12 +365,8 @@ module CQL
     end
 
     def transaction(tx : DB::Transaction, &)
-      previous_connection = active_connection
-      self.active_connection = tx.connection
-      begin
+      with_active_transaction(tx) do
         yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
-      ensure
-        self.active_connection = previous_connection
       end
     end
 

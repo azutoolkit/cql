@@ -67,8 +67,11 @@ This loads the matching records and soft deletes each one, so `before_destroy`/`
 ### Delete All Records
 
 ```crystal
-User.delete_all   # Soft deletes all users
+User.delete_all   # Soft deletes all active users and returns how many
 ```
+
+Without `before_destroy`/`after_destroy` callbacks this sets `deleted_at` in bulk (one SELECT of the ids, then one
+UPDATE per chunk of the database's bind limit). With destroy callbacks it soft deletes record by record so they run.
 
 ## Restore Records
 
@@ -90,8 +93,11 @@ User.restore!(user_id)
 ### Restore All Deleted Records
 
 ```crystal
-User.restore_all
+User.restore_all   # Returns how many records were restored
 ```
+
+Restoring runs no callbacks, so `restore_all` clears `deleted_at` in bulk: one SELECT of the ids, then one UPDATE per
+chunk.
 
 ## Query Records
 

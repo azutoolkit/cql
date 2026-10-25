@@ -194,8 +194,8 @@ describe CQL::Performance::Config do
       ENV.delete("CQL_SLOW_QUERY_MS")
 
       config = CQL::Performance::Config.from_env
-      # Without any env set, defaults should apply
-      config.monitoring.enabled?.should be_true
+      # Without any env set, defaults should apply (monitoring is opt-in)
+      config.monitoring.enabled?.should be_false
       config.profiling.slow_query_threshold.should eq(100.milliseconds)
     end
 
@@ -245,13 +245,63 @@ describe CQL::Performance::Config do
 
       config = CQL::Performance::Config.from_env
 
-      config.monitoring.enabled?.should be_true
+      config.monitoring.enabled?.should be_false
       config.logging.enabled?.should be_false
       config.logging.colorize?.should be_false
       config.reporting.include_stack_traces?.should be_false
       config.cache.enabled?.should be_true
 
       ENV.delete("CRYSTAL_ENV")
+    end
+
+    describe "monitoring is opt-in" do
+      it "is disabled when no environment is set" do
+        with_performance_env({} of String => String?) do
+          CQL::Performance::Config.from_env.enabled?.should be_false
+        end
+      end
+
+      it "is disabled in production" do
+        {"CRYSTAL_ENV", "CQL_ENV"}.each do |name|
+          with_performance_env({name => "production"}) do
+            CQL::Performance::Config.from_env.enabled?.should be_false
+          end
+        end
+      end
+
+      it "is disabled in test" do
+        {"CRYSTAL_ENV", "CQL_ENV"}.each do |name|
+          with_performance_env({name => "test"}) do
+            CQL::Performance::Config.from_env.enabled?.should be_false
+          end
+        end
+      end
+
+      it "is enabled by CQL_MONITORING_ENABLED=true" do
+        with_performance_env({"CQL_MONITORING_ENABLED" => "true"}) do
+          CQL::Performance::Config.from_env.enabled?.should be_true
+        end
+      end
+
+      it "is enabled by CQL_MONITORING_ENABLED=true in production" do
+        with_performance_env({"CRYSTAL_ENV" => "production", "CQL_MONITORING_ENABLED" => "true"}) do
+          CQL::Performance::Config.from_env.enabled?.should be_true
+        end
+      end
+
+      it "is enabled by default in development" do
+        {"CRYSTAL_ENV", "CQL_ENV"}.each do |name|
+          with_performance_env({name => "development"}) do
+            CQL::Performance::Config.from_env.enabled?.should be_true
+          end
+        end
+      end
+
+      it "lets CQL_MONITORING_ENABLED=false switch development monitoring off" do
+        with_performance_env({"CQL_ENV" => "development", "CQL_MONITORING_ENABLED" => "false"}) do
+          CQL::Performance::Config.from_env.enabled?.should be_false
+        end
+      end
     end
   end
 end
@@ -260,7 +310,7 @@ describe CQL::Performance::Config::Monitoring do
   it "has correct defaults" do
     ENV.delete("CRYSTAL_ENV")
     monitoring = CQL::Performance::Config::Monitoring.new
-    monitoring.enabled?.should be_true
+    monitoring.enabled?.should be_false
     monitoring.plan_analysis?.should be_true
     monitoring.n_plus_one_detection?.should be_true
     monitoring.query_profiling?.should be_true
@@ -445,4 +495,16 @@ end
 # Helper to extract nested hash values with correct type
 private def hash_value(h, key)
   h[key]
+end
+
+# Runs the block with exactly the given performance-related ENV values (nil or
+# absent means unset) and restores the previous values afterwards.
+private def with_performance_env(values : Hash(String, String?), &)
+  names = %w[CRYSTAL_ENV CQL_ENV CQL_MONITORING_ENABLED]
+  previous = names.to_h { |name| {name, ENV[name]?} }
+  names.each { |name| ENV.delete(name) }
+  values.each { |name, value| value ? (ENV[name] = value) : ENV.delete(name) }
+  yield
+ensure
+  previous.try &.each { |name, value| value ? (ENV[name] = value) : ENV.delete(name) }
 end

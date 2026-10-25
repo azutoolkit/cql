@@ -170,6 +170,16 @@ module Expression
       build_create_index(index_name, table_name, columns, unique)
     end
 
+    # MySQL has no `CREATE INDEX IF NOT EXISTS`.
+    def create_index_if_not_exists(
+      index_name : String,
+      table_name : String,
+      columns : Array(String),
+      unique : Bool,
+    ) : String
+      create_index(index_name, table_name, columns, unique)
+    end
+
     # Foreign key operations
     def add_foreign_key(
       constraint_name : String,
