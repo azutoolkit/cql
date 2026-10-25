@@ -1,18 +1,24 @@
 module CQL
   module ActiveRecord
-    # Multi-row INSERT behind `Model.insert_all`. Every row is checked before the first statement,
-    # and a run of several batches commits or rolls back as a whole.
+    # Multi-row INSERT behind `Model.insert_all` and `Model.upsert_all`. Every row is checked before
+    # the first statement, and a run of several batches commits or rolls back as a whole.
     struct BulkInsert
       alias Row = Hash(Symbol, DB::Any)
 
       TIMESTAMP_COLUMNS = {:created_at, :updated_at}
+      KEPT_ON_CONFLICT  = {:id, :created_at}
+
+      # ON CONFLICT for `Model.upsert_all`: *target* columns find the existing row, *update* columns take
+      # the incoming value (by default every inserted column but the target, `id` and `created_at`).
+      record Conflict, target : Array(Symbol), update : Array(Symbol)? = nil
 
       @rows : Array(Row)
       @table_columns : Set(Symbol)
+      @generated_ids = false
 
       # *generate_id* fills a missing or nil `:id` (UUID and ULID keys); without it a nil `:id` is
       # dropped so the database assigns one.
-      def initialize(@schema : CQL::Schema, @table : Symbol, rows : Array(Row), generate_id : (-> DB::Any)? = nil)
+      def initialize(@schema : CQL::Schema, @table : Symbol, rows : Array(Row), generate_id : (-> DB::Any)? = nil, @conflict : Conflict? = nil)
         @table_columns = @schema.tables[@table].columns.keys.to_set
         @rows = complete(rows, generate_id)
       end
@@ -20,19 +26,53 @@ module CQL
       # Inserts the rows, *batch_size* per statement (by default as many as the dialect's
       # bind-parameter limit allows), and returns the number of rows inserted.
       def call(batch_size : Int32? = nil) : Int64
-        raise ArgumentError.new("batch_size must be positive, got #{batch_size}") if batch_size && batch_size <= 0
+        per_statement, update = prepare(batch_size)
         return 0_i64 if @rows.empty?
-
-        per_statement = rows_per_statement(checked_columns.size, batch_size)
-        return insert(@rows) if @rows.size <= per_statement
+        return statement(@rows, update).commit.rows_affected if @rows.size <= per_statement
 
         inserted = 0_i64
-        @schema.transaction { @rows.each_slice(per_statement) { |batch| inserted += insert(batch) } }
+        @schema.transaction do
+          @rows.each_slice(per_statement) { |batch| inserted += statement(batch, update).commit.rows_affected }
+        end
         inserted
       end
 
-      private def insert(batch : Array(Row)) : Int64
-        CQL::Insert.new(@schema).into(@table).values(batch).commit.rows_affected
+      # The statement `call` sends for the first batch, checked and built but not run.
+      def first_statement(batch_size : Int32? = nil) : CQL::Insert?
+        per_statement, update = prepare(batch_size)
+        statement(@rows.first(per_statement), update) unless @rows.empty?
+      end
+
+      # Checks the arguments and rows; returns the rows per statement and the ON CONFLICT update columns.
+      private def prepare(batch_size : Int32?) : {Int32, Array(Symbol)?}
+        raise ArgumentError.new("batch_size must be positive, got #{batch_size}") if batch_size && batch_size <= 0
+        return {1, nil} if @rows.empty?
+
+        columns = checked_columns
+        {rows_per_statement(columns.size, batch_size), @conflict.try { |conflict| checked_update(conflict, columns) }}
+      end
+
+      private def statement(batch : Array(Row), update : Array(Symbol)?) : CQL::Insert
+        insert = CQL::Insert.new(@schema).into(@table)
+        conflict = @conflict
+        conflict ? insert.upsert(batch, conflict.target.uniq, update) : insert.values(batch)
+      end
+
+      private def checked_update(conflict : Conflict, columns : Set(Symbol)) : Array(Symbol)
+        raise ArgumentError.new("on_conflict needs at least one column") if conflict.target.empty?
+        require_inserted(conflict.target, columns, "on_conflict")
+        if @generated_ids && conflict.target.includes?(:id)
+          raise ArgumentError.new("on_conflict: :id never matches a generated id; give every row its id")
+        end
+        update = (conflict.update || columns.to_a - conflict.target - KEPT_ON_CONFLICT.to_a).uniq
+        require_inserted(update, columns, "update")
+        update
+      end
+
+      private def require_inserted(names : Array(Symbol), columns : Set(Symbol), option : String) : Nil
+        missing = names.reject { |name| columns.includes?(name) }
+        return if missing.empty?
+        raise ArgumentError.new("#{option} names columns that the rows do not insert into #{@table}: #{missing.join(", ")}")
       end
 
       private def rows_per_statement(column_count : Int32, batch_size : Int32?) : Int32
@@ -70,7 +110,10 @@ module CQL
         filled = row.dup
         if row[:id]?.nil?
           filled.delete(:id)
-          generate_id.try { |generate| filled[:id] = generate.call }
+          generate_id.try do |generate|
+            filled[:id] = generate.call
+            @generated_ids = true
+          end
         end
         stamped.each { |column| filled[column] = now if row[column]?.nil? }
         filled

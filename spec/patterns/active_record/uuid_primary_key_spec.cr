@@ -217,6 +217,12 @@ describe "UUID Primary Key Support" do
       UuidSession.find_by!(token: "given id").id.should eq(given)
       UuidSession.find_by!(token: "nil id").id.should_not be_nil
     end
+
+    it "rejects upsert_all on: :id when ids are generated, since they never match" do
+      expect_raises(ArgumentError, /never matches a generated id/) do
+        UuidSession.upsert_all([{token: "t", user_id: 1_i64}], on_conflict: :id)
+      end
+    end
   end
 
   describe "multiple record creation" do
