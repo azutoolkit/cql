@@ -131,7 +131,7 @@ Raised by `schema.alter :table` when the table is not registered in the schema (
 
 ### Database errors during a migration
 
-A failing statement in `up` or `down` raises the driver's exception and rolls back the whole `migrator.up`/`migrator.down` transaction (MySQL commits DDL implicitly).
+A failing statement in `up` or `down` raises the driver's exception. Earlier migrations of the run stay applied, because migration statements run outside the migrator's transaction.
 
 **Common causes:**
 - Table already exists (only for tables created outside CQL; `create!` uses `IF NOT EXISTS`)
@@ -245,8 +245,8 @@ Log.setup do |c|
   c.bind("cql.*", :debug, Log::IOBackend.new)
 end
 
-# Or let CQL print formatted SQL (auto-enabled when CRYSTAL_ENV=development)
-CQL.configure { |config| config.sql_logging = true }
+# Or let CQL print formatted SQL (`config.sql_logging = true` takes effect when CQL.build_schema runs)
+CQL::Performance.enable_sql_logging
 ```
 
 ### Print Error Details

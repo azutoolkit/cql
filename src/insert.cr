@@ -51,6 +51,7 @@ module CQL
     # Column names (in order) established by the first row; later rows are
     # aligned to this order and must provide exactly the same columns.
     @column_index : Hash(Symbol, Int32) = {} of Symbol => Int32
+    @column_names : Array(Symbol) = [] of Symbol
     @back : Array(Expression::Column) = Array(Expression::Column).new
     @query : Query? = nil
     # Upsert: the conflict target, then what to do about it (nil = not chosen yet).
@@ -75,12 +76,37 @@ module CQL
     # insert.into(:users).values(name: "John", age: 30).last_insert_id
     # ```
     def last_insert_id(as type : PrimaryKeyType = Int64)
-      if adapter.postgres_compatible?
-        query, params = returning_primary_key_sql
-        CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one(query, args: params, as: type) }
-      else
-        commit.last_insert_id
-      end
+      return commit.last_insert_id unless adapter.dialect.supports_returning?
+      back(primary_key.name).get!(type)
+    end
+
+    # Inserts and reads the row returned by the RETURNING clause (`back`) as *kind*, nil when
+    # nothing was inserted (`on_conflict(...).do_nothing`).
+    # - **@raise** [CQL::DialectError] Before inserting, when the dialect does not `supports_returning?`
+    # - **@raise** [ArgumentError] Before inserting, when no `back` columns are set
+    #
+    # ```
+    # insert.into(:users).values(name: "John").back(:id, :name).get({Int64, String})
+    # ```
+    def get(as kind)
+      require_returning!
+      query, params = to_sql
+      CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one?(query, args: params, as: kind) }
+    rescue ex
+      Log.error { "Insert failed: #{ex.message}" }
+      raise ex
+    end
+
+    def get!(as kind)
+      result = get(kind)
+      raise DB::NoResultsError.new("The insert returned no row") if result.nil?
+      result
+    end
+
+    private def require_returning! : Nil
+      raise ArgumentError.new("Insert#get needs the columns to return; call `back` first") if @back.empty?
+      return if adapter.dialect.supports_returning?
+      raise CQL::DialectError.new(adapter.to_s, "INSERT ... RETURNING", "Insert with `commit` and read the row back with a SELECT.")
     end
 
     # The insert with `RETURNING` the table's declared primary key (`id` when none is declared),
@@ -356,21 +382,27 @@ module CQL
       columns.each_with_index do |column, index|
         @columns << column
         @column_index[column.column.name] = index
+        @column_names << column.column.name
       end
       @values << row
     end
 
-    # Later rows must name the same columns, in any order; values are placed by column position.
+    # Later rows must name the same columns, in any order; values are placed by column position
+    # (a row that lists them in the first row's order needs no index lookup).
     private def add_row(fields)
       row = Array(DB::Any).new(@column_index.size, nil)
       count = 0
       fields.each do |field, value|
-        index = @column_index[field]? || raise_column_mismatch(fields)
-        row[index] = db_value(value)
+        row[column_position(field, count, fields)] = db_value(value)
         count += 1
       end
       raise_column_mismatch(fields) unless count == @column_index.size
       @values << row
+    end
+
+    private def column_position(field : Symbol, count : Int32, fields) : Int32
+      return count if @column_names[count]? == field
+      @column_index[field]? || raise_column_mismatch(fields)
     end
 
     private def db_value(value) : DB::Any

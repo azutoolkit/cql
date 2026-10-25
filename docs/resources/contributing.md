@@ -43,7 +43,7 @@ Feature requests are welcome! Open an issue describing:
 5. **Format and lint your code**
    ```shell
    crystal tool format src spec     # apply formatting
-   crystal tool format --check src spec  # what CI checks
+   crystal tool format --check src spec  # CI checks src; keep spec formatted too
    bin/ameba                        # lint (build it first with `shards build ameba`)
    ```
 
@@ -78,7 +78,7 @@ Feature requests are welcome! Open an issue describing:
 ### Code Design
 
 - Values are always bound as parameters; identifiers go through `CQL::Identifier` or `Dialect#quote_identifier`. Never interpolate user input into SQL
-- Add a feature as a new AST node, a visitor method and a dialect hook rather than `if`/`case` branches on the adapter
+- Add a feature as a new AST node, a visitor method and a dialect hook rather than `if`/`case` branches on the adapter. In `Expression::Generator`, a node that appears inside statements writes its SQL with a private `write(node, io)` overload and gets its String `visit` from `visit_through_write`; a node without one falls back to its String `visit`
 
 ### Documentation
 

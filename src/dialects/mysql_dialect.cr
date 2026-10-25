@@ -5,7 +5,6 @@ module Expression
   class MySqlDialect < BaseDialect
     # Cache for frequently used MySQL-specific strings
     @@cached_strings = {
-      "mysql_placeholder"       => "?",
       "mysql_auto_increment"    => " AUTO_INCREMENT",
       "mysql_drop_index_prefix" => "DROP INDEX ",
       "mysql_on_suffix"         => " ON ",
@@ -50,12 +49,12 @@ module Expression
     end
 
     def quote_identifier(name : String) : String
-      "`#{name.gsub('`', "``")}`"
+      "`#{name.includes?('`') ? name.gsub('`', "``") : name}`"
     end
 
     # MySQL uses ? for all placeholders regardless of position
     def placeholder_format(param_index : Int32) : String
-      @@cached_strings["mysql_placeholder"]
+      "?"
     end
 
     def structure_dump(uri : URI) : String
@@ -237,27 +236,6 @@ module Expression
     # MySQL doesn't support RETURNING clause in versions before 8.0.21
     def format_returning(columns : Array(String)) : String
       ""
-    end
-
-    def format_insert_values(values : Array(Array(DB::Any)), placeholders : Array(String)) : String
-      return "" if values.empty?
-
-      build_sql(values.size * 16) do |str|
-        str << " VALUES "
-        # `placeholders` is a flat list spanning every row, so each row must
-        # read from its own offset (otherwise rows reuse the first row's `$n`).
-        offset = 0
-        values.each_with_index do |row, i|
-          str << "("
-          row.size.times do |j|
-            str << placeholders[offset + j]
-            str << ", " if j < row.size - 1
-          end
-          offset += row.size
-          str << ")"
-          str << ", " if i < values.size - 1
-        end
-      end
     end
 
     def format_update_returning(columns : Array(String)) : String

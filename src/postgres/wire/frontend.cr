@@ -65,9 +65,10 @@ module CQL::Postgres::Wire
       raise ArgumentError.new("a statement takes at most #{UInt16::MAX} parameters, got #{params.size}") if params.size > UInt16::MAX
       raise ArgumentError.new("at most #{UInt16::MAX} result formats can be requested") if result_formats.size > UInt16::MAX
       raise ArgumentError.new("a parameter still waits for the statement's types") if params.any?(&.deferred)
-      frame(io, 'B') do |body|
-        cstring(body, "") # unnamed portal
-        cstring(body, statement)
+      check_cstring(statement)
+      unbuffered_frame(io, 'B') do |body|
+        write_cstring(body, "") # unnamed portal
+        write_cstring(body, statement)
         int16(body, params.size)
         params.each { |param| int16(body, param.format) }
         int16(body, params.size)
@@ -86,8 +87,8 @@ module CQL::Postgres::Wire
 
     # Runs the unnamed portal, returning at most *max_rows* rows (0: all of them).
     def self.execute(io : IO, max_rows : Int32 = 0) : Nil
-      frame(io, 'E') do |body|
-        cstring(body, "")
+      unbuffered_frame(io, 'E') do |body|
+        write_cstring(body, "")
         int32(body, max_rows)
       end
     end
@@ -107,7 +108,7 @@ module CQL::Postgres::Wire
     end
 
     def self.sync(io : IO) : Nil
-      frame(io, 'S') { }
+      unbuffered_frame(io, 'S') { }
     end
 
     def self.flush(io : IO) : Nil
@@ -138,16 +139,44 @@ module CQL::Postgres::Wire
       io.write(body.to_slice)
     end
 
+    # For the per-query messages (Bind, Execute, Sync), whose body cannot fail once its inputs are
+    # checked: written in place into the session's buffer and the length filled in afterwards,
+    # instead of through a body buffer that is then copied. A body that raised would leave a
+    # partial frame behind, so every other message goes through `frame`.
+    private def self.unbuffered_frame(io : IO, type : Char, & : IO ->) : Nil
+      return frame(io, type) { |body| yield body } unless io.is_a?(IO::Memory)
+
+      io.write_byte(type.ord.to_u8)
+      start = io.pos
+      int32(io, 0)
+      yield io
+      length = (io.pos - start).to_i32
+      header = io.to_slice
+      4.times { |index| header[start + index] = (length >> (24 - 8 * index)).to_u8! }
+    end
+
+    # Big-endian bytes written in one call: `write_bytes` with `NetworkEndian` reverses a
+    # StaticArray per value, which costs more than the rest of a Bind message.
     private def self.int16(io : IO, value : Int) : Nil
-      io.write_bytes(value.to_u16!, IO::ByteFormat::NetworkEndian)
+      word = value.to_u16!
+      io.write(StaticArray[(word >> 8).to_u8!, word.to_u8!].to_slice)
     end
 
     private def self.int32(io : IO, value : Int) : Nil
-      io.write_bytes(value.to_i32, IO::ByteFormat::NetworkEndian)
+      word = value.to_i32
+      io.write(StaticArray[(word >> 24).to_u8!, (word >> 16).to_u8!, (word >> 8).to_u8!, word.to_u8!].to_slice)
     end
 
     private def self.cstring(io : IO, text : String) : Nil
+      check_cstring(text)
+      write_cstring(io, text)
+    end
+
+    private def self.check_cstring(text : String) : Nil
       raise ArgumentError.new("NUL bytes cannot be sent in a protocol string") if text.includes?('\0')
+    end
+
+    private def self.write_cstring(io : IO, text : String) : Nil
       io << text
       io.write_byte(0_u8)
     end

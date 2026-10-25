@@ -23,6 +23,16 @@ BenchSchema = CQL::Schema.define(:bench, adapter: CQL::Adapter::SQLite, uri: "sq
   end
 end
 
+# The same tables for a schema that quotes identifiers (`quote_identifiers: true`).
+QuotedBenchSchema = CQL::Schema.define(:quoted_bench, adapter: CQL::Adapter::SQLite, uri: "sqlite3::memory:", quote_identifiers: true) do
+  table :users do
+    primary :id, Int32
+    column :name, String
+    column :email, String
+    column :age, Int32
+  end
+end
+
 INSERT_ROWS = Array.new(500) do |index|
   {:name => "user #{index}", :email => "user#{index}@example.com", :age => 20 + index % 50} of Symbol => DB::Any
 end
@@ -40,6 +50,10 @@ end
 
 workload("simple where by id") do |job|
   job.report("to_sql") { BenchSchema.query.from(:users).where(id: 42).to_sql }
+end
+
+workload("quoted simple where by id") do |job|
+  job.report("to_sql") { QuotedBenchSchema.query.from(:users).where(id: 42).to_sql }
 end
 
 workload("10-condition where") do |job|

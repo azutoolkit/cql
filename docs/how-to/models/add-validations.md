@@ -91,7 +91,7 @@ Validations are stored per property, so a second `validate :email, ...` replaces
 
 ### Unknown Options
 
-Only these options are accepted: `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `match`, `size`, `presence`, `required`, `confirmation`, `accept`, plus `message`. Any other option, or a `validate` for a property that does not exist, fails at compile time.
+Only these options are accepted: `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `match`, `size`, `presence`, `required`, `confirmation`, `accept`, plus `message` and `on` (the validation context). Any other option, or a `validate` for a property that does not exist, fails at compile time.
 
 ## Checking Validity
 
@@ -215,7 +215,7 @@ end
 
 ## Validations and Save
 
-`save`, `save!` and `create!` run validations before touching the database (`update!` does not; use `save` to update with validation). An invalid record raises `CQL::ActiveRecord::Validations::ValidationError`:
+`save`, `save!` and the instance `record.create!` run validations before touching the database (the class method `Model.create!(...)` and `update!` do not; use `save` to update with validation). An invalid record raises `CQL::ActiveRecord::Validations::ValidationError`:
 
 ```crystal
 user = User.new("", "invalid")

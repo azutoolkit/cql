@@ -355,15 +355,17 @@ module CQL
           {% else %}
             key = id
           {% end %}
-          # `@type` is the receiver, so a subclass, or a model whose `self.query` is not CQL's own,
-          # renders the statement per call.
+          return find_statement.bind(key).get(self) if static_query? && key.is_a?(DB::Any)
+          query.where_primary_key(key).first
+        end
+
+        # Whether the model reads through CQL's own `self.query` (see `StaticQuery`). `@type` is the
+        # receiver, so a subclass, or a model that defines its own `self.query`, answers false.
+        private def self.static_query? : Bool
           \{% begin %}
             \{% scope = @type.class.methods.find { |method| method.name == "query" && method.args.empty? } %}
-            \{% if scope && scope.annotation(CQL::ActiveRecord::StaticQuery) %}
-              return find_statement.bind(key).get(self) if key.is_a?(DB::Any)
-            \{% end %}
+            \{% if scope && scope.annotation(CQL::ActiveRecord::StaticQuery) %} true \{% else %} false \{% end %}
           \{% end %}
-          query.where_primary_key(key).first
         end
 
         # The query's SQL does not change between calls (see `StaticQuery`), so it is rendered once

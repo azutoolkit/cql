@@ -88,54 +88,43 @@ module CQL
           CQL::ActiveRecord::BulkInsert.new({{@type.id}}.schema, {{@type.id}}.table, rows, generate_id, conflict, primary_key_column)
         end
 
-        # Create a new record with given attributes
+        # Create a new record with given attributes and return it as stored, with the values the
+        # database filled in. A model that reads through CQL's own `self.query` gets the row from the
+        # INSERT's RETURNING clause where the dialect `supports_returning?` (PostgreSQL, CockroachDB);
+        # otherwise the row is read back by id through `self.query`.
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
         # - **@return** [{{@type.id}}] The created record instance
         #
         # **Example** Creating a new record
         #
         # ```
-        # user = User.create!(name: "Alice", email: "alice@example.com")
+        # user = User.create!({:name => "Alice".as(DB::Any)})
         # ```
         def self.create!(attrs : Hash(Symbol, DB::Any)) : {{@type.id}}
+          # The including model's, which a subclass shares
           schema = {{@type.id}}.schema
-          table_name = {{@type.id}}.table
-
-          insertable_attrs = attrs.dup
-          insertable_attrs.delete(primary_key_column)
-
-          # Filter out ignored fields (fields not in the database schema)
-          table_columns = schema.tables[table_name].columns.keys
-          insertable_attrs = insertable_attrs.select { |key, _| table_columns.includes?(key) }
+          table = {{@type.id}}.table
+          table_columns = schema.tables[table].columns
+          insertable_attrs = attrs.select { |key, _| key != primary_key_column && table_columns.has_key?(key) }
 
           {% if Pk == UUID %}
-            # Generate UUID before insert, store as String for SQLite compatibility
+            # Stored as a String for SQLite compatibility
             generated_id = UUID.random
             insertable_attrs[primary_key_column] = generated_id.to_s.as(DB::Any)
-
-            CQL::Insert.new(schema)
-              .into(table_name)
-              .values(insertable_attrs)
-              .commit
-
-            {{@type.id}}.find!(generated_id)
           {% elsif Pk == String %}
-            # Generate ULID before insert (ULID stored as String)
             generated_id = CQL::ULIDCompat.generate
             insertable_attrs[primary_key_column] = generated_id.as(DB::Any)
+          {% end %}
 
-            CQL::Insert.new(schema)
-              .into(table_name)
-              .values(insertable_attrs)
-              .commit
+          insert = CQL::Insert.new(schema).into(table).values(insertable_attrs)
+          return insert.back(table_columns.keys).get!({{@type.id}}) if static_query? && schema.dialect.supports_returning?
 
+          {% if Pk == UUID || Pk == String %}
+            insert.commit
             {{@type.id}}.find!(generated_id)
           {% else %}
             # Int32/Int64 - use database auto-increment
-            pk_id = CQL::Insert.new(schema)
-              .into(table_name)
-              .values(insertable_attrs)
-              .last_insert_id(as: Pk) # RETURNING on PostgreSQL/CockroachDB, where commit.last_insert_id is always 0
+            pk_id = insert.last_insert_id(as: Pk)
 
             {% if Pk == Int32 %}
               if pk_id > Int32::MAX || pk_id < Int32::MIN
@@ -148,7 +137,7 @@ module CQL
           {% end %}
         end
 
-        # Create a new record with given fields
+        # Create a new record with given fields (see `create!(attrs)`)
         # - **@param** fields [NamedTuple] The fields to use
         # - **@return** [{{@type.id}}] The created record instance
         #
@@ -158,55 +147,9 @@ module CQL
         # user = User.create!(name: "Alice", email: "alice@example.com")
         # ```
         def self.create!(**fields) : {{@type.id}}
-          schema = {{@type.id}}.schema
-          table_name = {{@type.id}}.table
-
-          fields_hash = {} of Symbol => DB::Any
-          fields.each { |key, value| fields_hash[key] = value.as(DB::Any) }
-          fields_hash.delete(primary_key_column)
-
-          # Filter out ignored fields (fields not in the database schema)
-          table_columns = schema.tables[table_name].columns.keys
-          fields_hash = fields_hash.select { |key, _| table_columns.includes?(key) }
-
-          {% if Pk == UUID %}
-            # Generate UUID before insert, store as String for SQLite compatibility
-            generated_id = UUID.random
-            fields_hash[primary_key_column] = generated_id.to_s.as(DB::Any)
-
-            CQL::Insert.new(schema)
-              .into(table_name)
-              .values(fields_hash)
-              .commit
-
-            {{@type.id}}.find!(generated_id)
-          {% elsif Pk == String %}
-            # Generate ULID before insert (ULID stored as String)
-            generated_id = CQL::ULIDCompat.generate
-            fields_hash[primary_key_column] = generated_id.as(DB::Any)
-
-            CQL::Insert.new(schema)
-              .into(table_name)
-              .values(fields_hash)
-              .commit
-
-            {{@type.id}}.find!(generated_id)
-          {% else %}
-            # Int32/Int64 - use database auto-increment
-            pk_id = CQL::Insert.new(schema)
-              .into(table_name)
-              .values(fields_hash)
-              .last_insert_id(as: Pk) # RETURNING on PostgreSQL/CockroachDB, where commit.last_insert_id is always 0
-
-            {% if Pk == Int32 %}
-              if pk_id > Int32::MAX || pk_id < Int32::MIN
-                raise CQL::Error.new("Primary key overflow: #{pk_id} exceeds Int32 range")
-              end
-              {{@type.id}}.find!(pk_id.to_i32)
-            {% else %}
-              {{@type.id}}.find!(pk_id.as(Pk))
-            {% end %}
-          {% end %}
+          attrs = {} of Symbol => DB::Any
+          fields.each { |key, value| attrs[key] = value.as(DB::Any) }
+          create!(attrs)
         end
 
         # Create a new record from a model instance

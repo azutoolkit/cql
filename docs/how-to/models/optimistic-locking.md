@@ -15,7 +15,7 @@ Your table needs a version column:
 
 ```crystal
 schema.table :users do
-  primary :id, Int64, auto_increment: true
+  primary :id, Int32, auto_increment: true
   column :name, String
   lock_version :version  # Adds integer column with default 1
   timestamps
@@ -43,16 +43,16 @@ end
 
 ## Enable Optimistic Locking
 
-Include the module and configure the version column:
+Include the module and configure the version column. `OptimisticLocking` currently needs an `Int32` primary key and an `Int32` version column (`lock_version` creates one):
 
 ```crystal
 struct User
-  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::Model(Int32)
   include CQL::ActiveRecord::OptimisticLocking
 
   db_context MyDB, :users
 
-  property id : Int64?
+  property id : Int32?
   property name : String
   property version : Int32?
 
@@ -138,13 +138,13 @@ You can use both modules together:
 
 ```crystal
 struct User
-  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::Model(Int32)
   include CQL::ActiveRecord::SoftDeletable
   include CQL::ActiveRecord::OptimisticLocking
 
   db_context MyDB, :users
 
-  property id : Int64?
+  property id : Int32?
   property name : String
   property version : Int32?
 

@@ -61,6 +61,10 @@ module CQL
         # Update a record using optimistic locking
         def self.update_with_lock!(record : {{@type.id}})
           raise CQL::Error.new("Record must be persisted for optimistic locking") unless record.persisted?
+          if record.responds_to?(:stamp_deferred_update)
+            return record unless record.changed?
+            record.stamp_deferred_update(record.changed_columns)
+          end
           lock_version_col = :{{version_column.id}}
 
           current_version = record.{{version_column.id}}
@@ -78,6 +82,7 @@ module CQL
 
           # If successful (no exception), increment the local version to match DB
           record.{{version_column.id}} = current_version.as(Pk) + 1
+          record.clear_changes! if record.responds_to?(:clear_changes!)
           record
         end
 

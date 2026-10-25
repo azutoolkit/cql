@@ -128,7 +128,8 @@ lock_version                              # Int32 `version` column for optimisti
 | `Float64` | DOUBLE PRECISION | DOUBLE PRECISION | DOUBLE | DOUBLE |
 | `String` | VARCHAR | VARCHAR | VARCHAR(255) | TEXT |
 | `Bool` | BOOLEAN | BOOLEAN | TINYINT(1) | BOOLEAN |
-| `Time` | TIMESTAMP | TIMESTAMP | DATETIME | TIMESTAMP |
+| `Time` (`timestamp`, `timestamps`) | TIMESTAMP | TIMESTAMP | DATETIME(3) | TIMESTAMP |
+| `Time` (`date`) | DATE | DATE | DATE | DATE |
 | `Time::Span` | INTERVAL | INTERVAL | TIME | INTERVAL |
 | `Slice(UInt8)` | BYTEA | BYTEA | BLOB | BLOB |
 | `JSON::Any` | JSONB | JSONB | JSON | TEXT |
@@ -326,11 +327,11 @@ end
 migrator = schema.migrator                                      # auto_sync: true by default
 migrator = schema.migrator(CQL::MigratorConfig.new(auto_sync: false))
 
-# Apply migrations (one transaction, version order)
+# Apply migrations (version order; each migration commits on its own pooled connection)
 migrator.up                    # Apply all pending
 migrator.up(1)                 # Run at most the first 1 migration in order
 
-# Rollback migrations (one transaction, newest first)
+# Rollback migrations (newest first; same caveat)
 migrator.down                  # Rollback ALL applied migrations
 migrator.down(1)               # Rollback 1 migration
 migrator.rollback              # Alias for down(1)

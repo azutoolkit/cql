@@ -38,9 +38,12 @@ module CQL
   # ```
   #
   class Table
+    include QuotedNameCache
+
     Log = CQL.config.logger
 
     property table_name : Symbol
+
     getter columns : Hash(Symbol, BaseColumn) = {} of Symbol => BaseColumn
     # Bumped whenever `Schema#alter` changes the columns, so SQL rendered from them can be redone.
     getter columns_revision : Int32 = 0
@@ -470,7 +473,7 @@ module CQL
     # date :birthday, as: "date_of_birth", null: false, default: Time.local, unique: true, index: true
     # ```
     def date(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Date).new(name, as_name, null, default, unique)
+      col = DateColumn(Date).new(name, as_name, null, default, unique)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil

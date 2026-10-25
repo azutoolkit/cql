@@ -76,8 +76,8 @@ Post.where { published_at.between(start_date, end_date) }.all
 ## NULL Checks
 
 ```crystal
-# Where null
-User.where(deleted_at: nil).all
+# Where null (use block; the hash form `where(deleted_at: nil)` binds NULL to `= ?`, which matches no row)
+User.where { deleted_at == nil }.all
 
 # Where not null (use block)
 User.where { deleted_at != nil }.all

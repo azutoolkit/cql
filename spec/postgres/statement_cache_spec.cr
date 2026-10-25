@@ -34,6 +34,15 @@ describe CQL::Postgres::StatementCache do
     cache.size.should eq 1
   end
 
+  it "evicts by recency of use while sparing statements about to be used" do
+    cache = CQL::Postgres::StatementCache.new(3)
+    {"a", "b", "c"}.each { |sql| cache.store(sql, statement("s#{sql}")) }
+    cache.fetch("a") # b is now the oldest, then c
+
+    cache.evict(room: 1, keep: Set{"sb"}).map(&.name).should eq ["sc"]
+    cache.evict(room: 3).map(&.name).should eq ["sb", "sa"]
+  end
+
   it "evicts nothing while there is room" do
     cache = CQL::Postgres::StatementCache.new(2)
     cache.store("a", statement("sa"))

@@ -18,6 +18,21 @@ module Expression
       @quote_identifiers ? @dialect.quote_identifier(name.to_s) : name.to_s
     end
 
+    # Tables and columns keep their quoted names (see `CQL::QuotedNameCache`).
+    private def ident(table : CQL::Table) : String
+      @quote_identifiers ? table.__quoted_name(@dialect, table.table_name) : table.table_name.to_s
+    end
+
+    private def ident(column : CQL::BaseColumn) : String
+      @quote_identifiers ? column.__quoted_name(@dialect, column.name) : column.name.to_s
+    end
+
+    # An alias that is just the table's name is quoted like the table.
+    private def alias_ident(alias_name : String, table : CQL::Table?) : String
+      return ident(alias_name) unless table && @quote_identifiers
+      table.table_name.to_s == alias_name ? ident(table) : ident(alias_name)
+    end
+
     # Helper method to check if a column is an auto-timestamp column
     private def is_auto_timestamp_column?(column : CQL::BaseColumn) : Bool
       column_name = column.name.to_s
@@ -37,57 +52,82 @@ module Expression
       @dialect.placeholder_format(@params.size)
     end
 
-    # Template Method for common visit methods
+    # A statement's clauses write into its one builder through `write(node, io)` instead of each
+    # building a String that its parent copies. A node type without its own `write` falls back to
+    # its String `visit`; the `visit` of a node that has one is a shim over it.
+    private def write(node : Node, io : IO) : Nil
+      io << node.accept(self)
+    end
+
+    # Defines the String `visit` of each type as a shim over its `write`. A listed type without its
+    # own `write` would reach the fallback above, which calls `visit` again, so that fails to compile.
+    private macro visit_through_write(*types)
+      {% for type in types %}
+        def visit(node : {{type}}) : String
+          String.build { |io| write(node, io) }
+        end
+      {% end %}
+
+      macro finished
+        \{% for type in {{types}} %}
+          \{% unless @type.methods.any? { |method| method.name == "write" && method.args.first.restriction.resolve.id == type.id } %}
+            \{% raise "#{@type} lists #{type} in visit_through_write but defines no write(node : #{type}, io)" %}
+          \{% end %}
+        \{% end %}
+      end
+    end
+
+    # Query and the statements (Insert, Update, Delete) define `visit` themselves, since it also sets
+    # `@query`; so do columns (see `column_sql`).
+    visit_through_write Join, Where, Having, From, Table, Subquery, GroupBy, OrderBy,
+      And, Or, Not, Compare, CompareCondition, Between, InCondition, InSelect, Exists, Is, IsNot, Raw, Cte,
+      Setter
+
     def visit(node : Query) : String
-      @query = String.build do |string|
-        string << with_clause(node)
-        string << "SELECT "
-        string << "DISTINCT " if node.distinct? && node.distinct_on.empty?
-        string << @dialect.format_distinct_on(node.distinct_on.map(&.accept(self))) unless node.distinct_on.empty?
-        # Columns and select expressions (aggregates, window functions), aliased where given
-        if node.columns.empty? && node.select_expressions.empty?
-          string << "*"
-        else
-          node.columns.each_with_index do |column, index|
-            string << ", " if index > 0
-            write_column_reference(column, string)
-          end
-          node.select_expressions.each_with_index do |expression, index|
-            string << ", " if index > 0 || !node.columns.empty?
-            string << select_item(expression)
-          end
-        end
+      @query = String.build { |io| write(node, io) }
+    end
 
-        # From node now contains Expression::Table nodes potentially with aliases
-        string << node.from.accept(self)
-        # Join nodes now contain Expression::Table nodes potentially with aliases
-        node.joins.each { |join| string << join.accept(self) }
-        string << node.where.try &.accept(self) if node.where       # Where conditions handle aliases internally
-        string << node.group_by.try &.accept(self) if node.group_by # GroupBy handles aliases internally
-        string << node.having.try &.accept(self) if node.having     # Having handles aliases internally
-        string << node.order_by.try &.accept(self) if node.order_by # OrderBy handles aliases internally
-        string << node.limit.try &.accept(self) if node.limit
-        node.lock.try { |lock| string << @dialect.format_lock(lock) }
+    private def write(node : Query, io : IO) : Nil
+      write_with_clause(node, io)
+      io << "SELECT "
+      io << "DISTINCT " if node.distinct? && node.distinct_on.empty?
+      io << @dialect.format_distinct_on(node.distinct_on.map(&.accept(self))) unless node.distinct_on.empty?
+      write_select_list(node, io)
+      write(node.from, io)
+      node.joins.each { |join| write(join, io) }
+      node.where.try { |where| write(where, io) }
+      node.group_by.try { |group_by| write(group_by, io) }
+      node.having.try { |having| write(having, io) }
+      node.order_by.try { |order_by| write(order_by, io) }
+      node.limit.try { |limit| write(limit, io) }
+      node.lock.try { |lock| io << @dialect.format_lock(lock) }
+    end
+
+    # Columns, then select expressions (aggregates, window functions) with their optional
+    # `AS alias`; `*` when there are neither.
+    private def write_select_list(node : Query, io : IO) : Nil
+      if node.columns.empty? && node.select_expressions.empty?
+        io << "*"
+        return
+      end
+
+      node.columns.each_with_index do |column, index|
+        io << ", " if index > 0
+        write(column, io)
+      end
+      node.select_expressions.each_with_index do |expression, index|
+        io << ", " if index > 0 || !node.columns.empty?
+        write(expression, io)
+        expression.as_name.try { |name| io << " AS " << ident(name) }
       end
     end
 
-    # An aggregate or window function in the SELECT list, with its optional `AS alias`.
-    private def select_item(expression : SelectExpression) : String
-      sql = expression.accept(self)
-      (name = expression.as_name) ? "#{sql} AS #{ident(name)}" : sql
-    end
-
-    def visit(node : Join) : String
-      String.build do |string|
-        string << @dialect.join_keyword(node.join_type)
-        # table node needs to output alias if present
-        string << node.table.accept(self)
-        unless node.join_type.cross?
-          string << " ON "
-          # condition node needs to output aliased columns if present
-          string << node.condition.accept(self)
-        end
-      end
+    private def write(node : Join, io : IO) : Nil
+      io << @dialect.join_keyword(node.join_type)
+      write(node.table, io)
+      return if node.join_type.cross?
+      io << " ON "
+      write(node.condition, io)
     end
 
     def visit(node : Insert) : String
@@ -97,177 +137,175 @@ module Expression
                   node.query.not_nil!.columns
                 end
 
-      @query = String.build do |string|
-        string << "INSERT INTO "
-        string << node.table.accept(self)
-        string << " ("
+      @query = String.build do |io|
+        io << "INSERT INTO "
+        write(node.table, io)
+        io << " ("
         columns.each_with_index do |col, i|
-          string << ident(col.column.name)
-          string << ", " if i < columns.size - 1
+          io << ident(col.column)
+          io << ", " if i < columns.size - 1
         end
-        string << ")"
+        io << ")"
 
         if q = node.query
           raise ArgumentError.new("ON CONFLICT is not supported with INSERT ... SELECT") if node.conflict
-          string << " " << q.accept(self)
+          io << " "
+          write(q, io)
         else
-          # Store placeholders for values
-          placeholders = [] of String
-
-          # Add all values to params and collect placeholders
-          node.values.each do |row|
-            row.each do |val|
-              placeholders << bind(val)
-            end
-          end
-
-          # Use dialect to format insert values
-          string << @dialect.format_insert_values(node.values, placeholders)
-          node.conflict.try { |conflict| string << conflict.accept(self) }
+          write_values(node.values, io)
+          node.conflict.try { |conflict| write(conflict, io) }
 
           # Handle returning clause if needed
           if !node.back.empty?
             column_names = node.back.map(&.accept(self))
-            string << @dialect.format_returning(column_names)
+            io << @dialect.format_returning(column_names)
           end
         end
       end
     end
 
     def visit(node : Delete) : String
-      @query = String.build do |string|
-        string << "DELETE FROM "
-        string << node.table.accept(self)
+      @query = String.build do |io|
+        io << "DELETE FROM "
+        write(node.table, io)
         if using = node.using
-          string << " USING " << using.accept(self)
+          io << " USING "
+          write(using, io)
         end
-        string << node.where.not_nil!.accept(self) if node.where
+        node.where.try { |where| write(where, io) }
         if !node.back.empty?
           column_names = node.back.map(&.accept(self))
-          string << @dialect.format_delete_returning(column_names)
+          io << @dialect.format_delete_returning(column_names)
         end
       end
     end
 
-    def visit(node : Where) : String
-      String.build do |string|
-        string << " WHERE "                   # Remove parens, they might interfere with precedence
-        string << node.condition.accept(self) # Condition handles aliases internally
+    # Values are bound row by row, so `$n` numbering runs across the rows.
+    private def write_values(rows : Array(Array(DB::Any)), io : IO) : Nil
+      return if rows.empty?
+      io << " VALUES "
+      rows.each_with_index do |row, row_index|
+        io << ", " if row_index > 0
+        io << '('
+        bind_row(row, io)
+        io << ')'
       end
+    end
+
+    # Binds a row's values in one step; each placeholder is its value's 1-based position in the
+    # parameters, as `bind` gives it.
+    private def bind_row(row : Array(DB::Any), io : IO) : Nil
+      first = @params.size
+      @params.concat(row)
+      row.each_index do |index|
+        io << ", " if index > 0
+        io << @dialect.placeholder_format(first + index + 1)
+      end
+    end
+
+    private def write(node : Where, io : IO) : Nil
+      io << " WHERE "
+      write(node.condition, io)
     end
 
     def visit(node : Column) : String
-      column_reference(node)
+      column_sql(node)
     end
 
     def visit(node : BaseColumn) : String
-      column_reference(node)
+      column_sql(node)
     end
 
     def visit(node : TypedColumn) : String
-      # TypedColumn behaves the same as Column for SQL generation
-      column_reference(node)
+      column_sql(node)
     end
 
-    # `qualifier.column` for a column expression. The qualifier is the table
-    # alias when one is set, otherwise the column's own table name.
-    private def column_reference(node : BaseColumn) : String
+    # A column on its own, as the dialect hooks that take a String (LIKE, IS NULL, aggregates) need
+    # it: one exactly sized String, where `String.build` would reserve a larger buffer.
+    private def column_sql(node : BaseColumn) : String
       qualifier, name = column_parts(node)
       qualifier ? "#{qualifier}.#{name}" : name
     end
 
-    # Writes the reference straight into *string*, so a column in a larger clause is not built as
-    # its own String first.
-    private def write_column_reference(node : BaseColumn, string : IO) : Nil
+    private def write(node : BaseColumn, io : IO) : Nil
       qualifier, name = column_parts(node)
-      string << qualifier << '.' if qualifier
-      string << name
+      io << qualifier << '.' if qualifier
+      io << name
     end
 
     # `{alias or table, column}` for a column reference; `{nil, "*"}` for a bare `*`, which the
     # query builder expands when specific tables are needed.
     private def column_parts(node : BaseColumn) : {String?, String}
       column_name = node.column.name
-      name = column_name == :* ? "*" : ident(column_name)
+      name = column_name == :* ? "*" : ident(node.column)
       if alias_name = node.alias_name
-        {ident(alias_name), name}
+        {alias_ident(alias_name, node.column.table), name}
       elsif column_name == :*
         {nil, name}
       else
         table = node.column.table
         raise "Internal Error: Column expression missing table context and no alias provided" unless table
-        {ident(table.table_name), name}
+        {ident(table), name}
       end
     end
 
-    def visit(node : And) : String
-      String.build { |string| write_condition(node, string) }
+    private def write(node : And, io : IO) : Nil
+      write_junction(node.left, " AND ", node.right, io)
     end
 
-    def visit(node : Or) : String
-      String.build { |string| write_condition(node, string) }
+    private def write(node : Or, io : IO) : Nil
+      write_junction(node.left, " OR ", node.right, io)
     end
 
-    # Writes nested AND/OR conditions into one builder, so a chain of n conditions copies its SQL
-    # once instead of once per nesting level.
-    private def write_condition(node : Condition, string : IO) : Nil
-      case node
-      when And then write_junction(node.left, " AND ", node.right, string)
-      when Or  then write_junction(node.left, " OR ", node.right, string)
-      else          string << node.accept(self)
-      end
-    end
-
-    private def write_junction(left : Condition, keyword : String, right : Condition, string : IO) : Nil
-      string << "("
-      write_condition(left, string)
-      string << ")" << keyword << "("
-      write_condition(right, string)
-      string << ")"
+    private def write_junction(left : Condition, keyword : String, right : Condition, io : IO) : Nil
+      io << "("
+      write(left, io)
+      io << ")" << keyword << "("
+      write(right, io)
+      io << ")"
     end
 
     # Always parenthesized: `NOT a AND b` would negate only `a`.
-    def visit(node : Not) : String
-      "NOT (#{node.condition.accept(self)})"
+    private def write(node : Not, io : IO) : Nil
+      io << "NOT ("
+      write(node.condition, io)
+      io << ")"
     end
 
-    def visit(node : Compare) : String
-      String.build do |string|
-        write_column_reference(node.left, string)
-        string << " "
-        string << node.operator
-        string << " "
-        string << bind(node.right)
+    private def write(node : Compare, io : IO) : Nil
+      write(node.left, io)
+      io << ' ' << node.operator << ' ' << bind(node.right)
+    end
+
+    # Either side is a column or condition (written) or a value (bound).
+    private def write(node : CompareCondition, io : IO) : Nil
+      write_operand(node.left, io)
+      io << ' ' << node.operator << ' '
+      write_operand(node.right, io)
+    end
+
+    private def write_operand(operand, io : IO) : Nil
+      case operand
+      when BaseColumn, Condition then write(operand, io)
+      else                            io << bind(operand.as(DB::Any))
       end
     end
 
-    def visit(node : CompareCondition) : String
-      String.build do |string|
-        # Left and Right can be Expression::BaseColumn (now alias-aware)
-        # or DB::Any (which becomes a placeholder)
-        if node.left.is_a?(Expression::BaseColumn) || node.left.is_a?(Condition)
-          string << node.left.as(Expression::BaseColumn | Condition).accept(self)
-        else
-          string << bind(node.left.as(DB::Any))
-        end
-        string << " "
-        string << node.operator
-        string << " "
-        if node.right.is_a?(Expression::BaseColumn) || node.right.is_a?(Condition)
-          string << node.right.as(Expression::BaseColumn | Condition).accept(self)
-        else
-          string << bind(node.right.as(DB::Any))
-        end
+    private def write(node : Cte, io : IO) : Nil
+      io << ident(node.name) << " AS ("
+      write(node.statement, io)
+      io << ")"
+    end
+
+    private def write_with_clause(node : Query, io : IO) : Nil
+      return if node.ctes.empty?
+      io << "WITH "
+      io << "RECURSIVE " if node.recursive?
+      node.ctes.each_with_index do |cte, index|
+        io << ", " if index > 0
+        write(cte, io)
       end
-    end
-
-    def visit(node : Cte) : String
-      "#{ident(node.name)} AS (#{node.statement.accept(self)})"
-    end
-
-    private def with_clause(node : Query) : String
-      return "" if node.ctes.empty?
-      "WITH #{"RECURSIVE " if node.recursive?}#{node.ctes.join(", ", &.accept(self))} "
+      io << ' '
     end
 
     def visit(node : WindowFunction) : String
@@ -312,10 +350,10 @@ module Expression
     end
 
     def visit(node : OnConflict) : String
-      target = node.target.map { |column| ident(column.column.name) }
+      target = node.target.map { |column| ident(column.column) }
       return @dialect.format_on_conflict_nothing(target) if node.do_nothing?
 
-      refreshed = node.refreshed.map { |column| name = ident(column.column.name); "#{name} = #{@dialect.excluded_reference(name)}" }
+      refreshed = node.refreshed.map { |column| name = ident(column.column); "#{name} = #{@dialect.excluded_reference(name)}" }
       @dialect.format_on_conflict_update(target, refreshed + node.assignments.map(&.accept(self)))
     end
 
@@ -331,12 +369,10 @@ module Expression
       node.needs_grouping_as_operand? ? @dialect.wrap_compound_operand(sql) : sql
     end
 
-    def visit(node : Raw) : String
-      String.build do |sql|
-        node.fragments.each_with_index do |fragment, index|
-          sql << fragment
-          append_binding(sql, node.bindings[index]) if index < node.bindings.size
-        end
+    private def write(node : Raw, io : IO) : Nil
+      node.fragments.each_with_index do |fragment, index|
+        io << fragment
+        append_binding(io, node.bindings[index]) if index < node.bindings.size
       end
     end
 
@@ -353,18 +389,9 @@ module Expression
       placeholder
     end
 
-    def visit(node : Between) : String
-      low_placeholder = bind(node.low)
-
-      high_placeholder = bind(node.high)
-
-      String.build do |string|
-        string << node.column.accept(self)
-        string << " BETWEEN "
-        string << low_placeholder
-        string << " AND "
-        string << high_placeholder
-      end
+    private def write(node : Between, io : IO) : Nil
+      write(node.column, io)
+      io << " BETWEEN " << bind(node.low) << " AND " << bind(node.high)
     end
 
     def visit(node : Like) : String
@@ -377,69 +404,51 @@ module Expression
       node.insensitive? ? @dialect.format_not_ilike(column, bind(node.value)) : @dialect.format_not_like(column, bind(node.value))
     end
 
-    def visit(node : InCondition) : String
-      String.build do |string|
-        # Column node handles alias
-        string << node.column.accept(self)
-        string << " IN ("
-        node.values.each_with_index do |value, i|
-          string << bind(value)
-          string << ", " if i < node.values.size - 1
-        end
-        string << ")"
+    private def write(node : InCondition, io : IO) : Nil
+      write(node.column, io)
+      io << " IN ("
+      node.values.each_with_index do |value, index|
+        io << ", " if index > 0
+        io << bind(value)
+      end
+      io << ")"
+    end
+
+    private def write(node : OrderBy, io : IO) : Nil
+      return if node.orders.empty?
+      io << " ORDER BY "
+      node.orders.each_with_index do |(column, direction), index|
+        io << ", " if index > 0
+        write(column, io)
+        io << (direction.asc? ? " ASC" : " DESC")
       end
     end
 
-    def visit(node : OrderBy) : String
-      return "" if node.orders.empty?
-      String.build do |string|
-        string << " ORDER BY "
-        # Column nodes handle alias
-        node.orders.each_with_index do |(column, direction), i|
-          string << column.accept(self)
-          string << " "
-          string << direction.to_s.upcase
-          string << ", " if i < node.orders.size - 1
-        end
+    private def write(node : GroupBy, io : IO) : Nil
+      return if node.columns.empty?
+      io << " GROUP BY "
+      node.columns.each_with_index do |column, index|
+        io << ", " if index > 0
+        write(column, io)
       end
     end
 
-    def visit(node : GroupBy) : String
-      return "" if node.columns.empty?
-
-      String.build do |string|
-        string << " GROUP BY "
-        # Column nodes handle alias
-        node.columns.each_with_index do |column, i|
-          string << column.accept(self)
-          string << ", " if i < node.columns.size - 1
-        end
-      end
+    private def write(node : InSelect, io : IO) : Nil
+      write(node.column, io)
+      io << " IN ("
+      write(node.query, io)
+      io << ")"
     end
 
-    def visit(node : InSelect) : String
-      String.build do |string|
-        # Column node handles alias
-        string << node.column.accept(self)
-        string << " IN ("
-        string << node.query.accept(self)
-        string << ")"
-      end
+    private def write(node : Exists, io : IO) : Nil
+      io << "EXISTS ("
+      write(node.sub_query, io)
+      io << ")"
     end
 
-    def visit(node : Exists) : String
-      String.build do |string|
-        string << "EXISTS ("
-        string << node.sub_query.accept(self)
-        string << ")"
-      end
-    end
-
-    def visit(node : Having) : String
-      String.build do |string|
-        string << " HAVING "
-        string << node.condition.accept(self)
-      end
+    private def write(node : Having, io : IO) : Nil
+      io << " HAVING "
+      write(node.condition, io)
     end
 
     def visit(node : Limit) : String
@@ -465,33 +474,26 @@ module Expression
       end
     end
 
-    def visit(node : From) : String
-      String.build do |string|
-        string << " FROM "
-        node.tables.each_with_index do |table_expr, i|
-          # Table expression visitor now handles alias
-          string << table_expr.accept(self)
-          string << ", " if i < node.tables.size - 1
-        end
+    private def write(node : From, io : IO) : Nil
+      io << " FROM "
+      node.tables.each_with_index do |table, index|
+        io << ", " if index > 0
+        write(table, io)
       end
     end
 
-    def visit(node : Table) : String
-      # Only output alias if it differs from the table name
-      String.build do |string|
-        table_name = node.table.table_name.to_s
-        string << ident(table_name)
-        # Only add AS clause if alias is different from the table name
-        if alias_name = node.alias_name
-          if alias_name != table_name
-            string << " AS " << ident(alias_name)
-          end
-        end
-      end
+    # `AS alias` only when the alias differs from the table name.
+    private def write(node : Table, io : IO) : Nil
+      table_name = node.table.table_name.to_s
+      io << ident(node.table)
+      alias_name = node.alias_name
+      io << " AS " << ident(alias_name) if alias_name && alias_name != table_name
     end
 
-    def visit(node : Subquery) : String
-      "(#{node.statement.accept(self)}) AS #{ident(node.alias_name)}"
+    private def write(node : Subquery, io : IO) : Nil
+      io << "("
+      write(node.statement, io)
+      io << ") AS " << ident(node.alias_name)
     end
 
     def visit(node : Null) : String
@@ -503,8 +505,9 @@ module Expression
       end
     end
 
-    def visit(node : Is) : String
-      "#{node.column.accept(self)} IS #{bind(node.value)}"
+    private def write(node : Is, io : IO) : Nil
+      write(node.column, io)
+      io << " IS " << bind(node.value)
     end
 
     def visit(node : IsNull) : String
@@ -512,8 +515,9 @@ module Expression
       @dialect.format_is_null(node.column.accept(self))
     end
 
-    def visit(node : IsNot) : String
-      "#{node.column.accept(self)} IS NOT #{bind(node.value)}"
+    private def write(node : IsNot, io : IO) : Nil
+      write(node.column, io)
+      io << " IS NOT " << bind(node.value)
     end
 
     def visit(node : IsNotNull) : String
@@ -551,25 +555,23 @@ module Expression
       @dialect.format_sum(node.column.accept(self))
     end
 
-    def visit(node : Setter) : String
-      "#{ident(node.column.column.name)} = #{bind(node.value)}"
+    private def write(node : Setter, io : IO) : Nil
+      io << ident(node.column.column) << " = " << bind(node.value)
     end
 
     def visit(node : Update) : String
-      @query = String.build do |string|
-        string << "UPDATE "
-        string << node.table.accept(self)
-        string << " SET "
-        node.setters.each_with_index do |setter, i|
-          string << setter.accept(self)
-          string << ", " if i < node.setters.size - 1
+      @query = String.build do |io|
+        io << "UPDATE "
+        write(node.table, io)
+        io << " SET "
+        node.setters.each_with_index do |setter, index|
+          io << ", " if index > 0
+          write(setter, io)
         end
-        if where = node.where
-          string << where.accept(self)
-        end
+        node.where.try { |where| write(where, io) }
         if !node.back.empty?
           column_names = node.back.map(&.accept(self))
-          string << @dialect.format_update_returning(column_names)
+          io << @dialect.format_update_returning(column_names)
         end
       end
     end

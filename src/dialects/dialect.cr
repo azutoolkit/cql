@@ -7,7 +7,7 @@ module Expression
     # doubling any embedded quote character. Only used when the schema opts in
     # with `quote_identifiers: true`.
     def quote_identifier(name : String) : String
-      %("#{name.gsub('"', "\"\"")}")
+      %("#{name.includes?('"') ? name.gsub('"', "\"\"") : name}")
     end
 
     # Formats a placeholder for prepared statements based on the dialect's syntax
@@ -18,6 +18,12 @@ module Expression
     # `pg` shard writes the count as a signed Int16.
     def max_bind_params : Int32
       Int16::MAX.to_i32
+    end
+
+    # Whether INSERT can return the stored row (`INSERT ... RETURNING`), so it need not be read
+    # back with a second statement.
+    def supports_returning? : Bool
+      false
     end
 
     # Dumps only the DB structure (no data) to a string
@@ -113,9 +119,6 @@ module Expression
 
   # Handles Data Manipulation Language (DML) formatting specifics.
   module DmlDialect
-    # Formats the VALUES clause for an INSERT statement.
-    abstract def format_insert_values(values : Array(Array(DB::Any)), placeholders : Array(String)) : String
-
     # Formats the RETURNING clause for general statements (often INSERT).
     abstract def format_returning(columns : Array(String)) : String
 
