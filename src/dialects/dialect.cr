@@ -310,11 +310,14 @@ module Expression
       table_name : String,
       columns : Array(String),
       unique : Bool,
+      if_not_exists : Bool = false,
     ) : String
       build_sql(128) do |str|
         str << "CREATE "
         str << "UNIQUE " if unique
-        str << "INDEX " << index_name << " ON " << table_name
+        str << "INDEX "
+        str << "IF NOT EXISTS " if if_not_exists
+        str << index_name << " ON " << table_name
         str << " (" << columns.join(", ") << ")"
       end
     end
@@ -398,6 +401,16 @@ module Expression
         str << "CONSTRAINT #{constraint.name} " if constraint.name
         str << "CHECK (" << constraint.condition << ")"
       end
+    end
+
+    # Generates SQL to create an index that is skipped when it already exists.
+    def create_index_if_not_exists(
+      index_name : String,
+      table_name : String,
+      columns : Array(String),
+      unique : Bool,
+    ) : String
+      build_create_index(index_name, table_name, columns, unique, if_not_exists: true)
     end
   end
 end
