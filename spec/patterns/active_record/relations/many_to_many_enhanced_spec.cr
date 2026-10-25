@@ -1,5 +1,62 @@
 require "../spec_helper"
 
+# A target whose primary key is not named `id`; only generated SQL is checked
+LabelNoPkDB = CQL::Schema.define(
+  :label_no_pk_db,
+  adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3:///tmp/many_to_many_label_no_pk_spec.db"
+) do
+  table :labels do
+    primary :label_no, Int32
+    text :name
+  end
+
+  table :movie_labels do
+    primary :id, Int32
+    integer :movie_id
+    integer :label_no
+  end
+end
+
+class NumberedLabel
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: LabelNoPkDB, table: :labels
+
+  property name : String = ""
+
+  def initialize
+  end
+end
+
+class MovieLabel
+  include CQL::ActiveRecord::Model(Int32)
+  db_context schema: LabelNoPkDB, table: :movie_labels
+
+  property movie_id : Int32?
+  property label_no : Int32?
+
+  def initialize
+  end
+end
+
+# The Matrix (Keanu, Laurence) and Speed (Keanu)
+def seed_matrix_and_speed : {Movie, Movie}
+  movie = Movie.new("The Matrix", 1999)
+  movie.create!
+  other_movie = Movie.new("Speed", 1994)
+  other_movie.create!
+
+  keanu = Actor.new("Keanu Reeves", 58)
+  keanu.create!
+  laurence = Actor.new("Laurence Fishburne", 62)
+  laurence.create!
+  MoviesActor.new(movie.id!, keanu.id!).create!
+  MoviesActor.new(movie.id!, laurence.id!).create!
+  MoviesActor.new(other_movie.id!, keanu.id!).create!
+
+  {movie, other_movie}
+end
+
 def many_to_many_isolation_selects(& : ->) : Array(String)
   statements = [] of String
   CQL::Telemetry.subscribe("many_to_many_isolation") do |event|
@@ -713,6 +770,63 @@ describe "CQL::ActiveRecord::Relations::ManyToMany Enhanced Tests" do
           "WHERE (movies_actor.movie_id = $1) AND (actors.name = $2)",
           [7, "Keanu Reeves"] of DB::Any,
         })
+    end
+
+    it "joins on the target table's declared primary key" do
+      labels = CQL::ActiveRecord::Relations::ManyCollection(NumberedLabel, MovieLabel, Int32).new(
+        key: :movie_id, id: 7, target_key: :label_no
+      )
+
+      labels.where(name: "Noir").to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
+        .should eq({
+          "SELECT labels.label_no, labels.name, movie_labels.id, movie_labels.movie_id, movie_labels.label_no " \
+          "FROM labels INNER JOIN movie_labels ON labels.label_no = movie_labels.label_no " \
+          "WHERE (movie_labels.movie_id = $1) AND (labels.name = $2)",
+          [7, "Noir"] of DB::Any,
+        })
+    end
+  end
+
+  describe "bulk unlinking" do
+    it "delete_all removes only this movie's join rows and keeps the actors" do
+      movie, other_movie = seed_matrix_and_speed
+
+      movie.actors.delete_all.should eq(2)
+
+      MoviesActor.count.should eq(1)
+      Actor.count.should eq(2)
+      movie.actors.reload.should be_empty
+      other_movie.actors.reload.map(&.name).should eq(["Keanu Reeves"])
+    end
+
+    it "nullify_all removes only this movie's join rows and keeps the actors" do
+      movie, other_movie = seed_matrix_and_speed
+
+      movie.actors.nullify_all.should eq(2)
+
+      MoviesActor.count.should eq(1)
+      Actor.count.should eq(2)
+      movie.actors.reload.should be_empty
+      other_movie.actors.reload.map(&.name).should eq(["Keanu Reeves"])
+    end
+
+    it "clear_with_destroy destroys the actors of a collection that was never loaded" do
+      seeded, _ = seed_matrix_and_speed
+      movie = Movie.find!(seeded.id!)
+
+      movie.actors.clear_with_destroy
+
+      Actor.count.should eq(0)
+    end
+
+    it "delete_all empties an already loaded collection" do
+      movie, _ = seed_matrix_and_speed
+      movie.actors.all.size.should eq(2)
+
+      movie.actors.delete_all
+
+      movie.actors.loaded?.should be_true
+      movie.actors.size.should eq(0)
     end
   end
 end

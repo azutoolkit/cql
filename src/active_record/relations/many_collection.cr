@@ -76,9 +76,15 @@ module CQL
 
       # Joins the join table and scopes it to the parent; the caller's query is never mutated.
       protected def scope_to_parent(query : CQL::Query) : CQL::Query
+        primary_key = target_primary_key
         query.clone
-          .join(Through.table) { Target.table_column(:id).eq(Through.table_column(@target_key)) }
+          .join(Through.table) { Target.table_column(primary_key).eq(Through.table_column(@target_key)) }
           .where { Through.table_column(@key).eq(@id) }
+      end
+
+      # The target table's declared primary key column, `:id` when none is declared.
+      private def target_primary_key : Symbol
+        Target.schema.tables[Target.table].primary_key.try(&.name) || :id
       end
 
       # Adds an existing record to the association.
@@ -221,7 +227,7 @@ module CQL
       def clear_with_destroy
         if @dependent == :destroy
           # Get target records before clearing associations
-          target_records = @loaded ? @records.dup : all
+          target_records = all.dup
 
           # Clear join table associations
           clear_join_records
@@ -263,17 +269,33 @@ module CQL
 
       # Clear only the join table records (preserve target records)
       def clear_join_records
-        safe_db_operation do
+        delete_all
+        self
+      end
+
+      # Unlinks every associated record by deleting this parent's join rows.
+      # The records themselves stay, since they may belong to other parents;
+      # `clear` with `dependent: :delete_all` or `:destroy` removes them too.
+      # - **return** : Int64 - Number of join rows deleted
+      def delete_all : Int64
+        rows_affected = safe_db_operation do
           CQL::Delete
             .new(Through.schema)
             .from(@through_table)
             .where({@key => @id})
             .commit
+            .rows_affected
         end
 
-        # Clear internal state since associations are gone
         @records.clear if @loaded
-        self
+        rows_affected
+      end
+
+      # The link lives in the join table, so nullifying it deletes the join rows
+      # (same as `delete_all`).
+      # - **return** : Int64 - Number of join rows deleted
+      def nullify_all : Int64
+        delete_all
       end
 
       # Build a new target record but don't save it or create association
