@@ -155,9 +155,10 @@ module CQL
       collection.dup unless collection.nil? || collection.empty?
     end
 
-    # The first row mapped to *kind* (the query itself is left untouched).
+    # The first row mapped to *kind*, rendered with `LIMIT 1` instead of on a clone.
     def first(as kind)
-      clone.limit(1).get(kind)
+      sql, params = render(build(limit: 1))
+      PreparedSelect.new(@schema, sql, params).using(executor).get(kind)
     end
 
     def first!(as kind)
@@ -860,6 +861,7 @@ module CQL
     # ameba/enable Metrics/CyclomaticComplexity
 
     # Builds the final query expression.
+    # - **@param** limit [Int32?] Overrides the query's limit for this build (the query is unchanged)
     # - **@return** [Expression::Query] The query expression
     #
     # **Example**
@@ -868,7 +870,7 @@ module CQL
     # query.build
     # => #<Expression::Query:0x00007f8b1b0b3b00>
     # ```
-    def build : Expression::Query
+    def build(limit : Int32? = @limit) : Expression::Query
       select_cols, aggr_exprs = build_select # Returns Expression::Column with String aliases
 
       Expression::Query.new(
@@ -879,7 +881,7 @@ module CQL
         @having,        # Uses aliased expressions internally (String alias)
         build_order_by, # Returns Expression::OrderBy with Expression::Column(String alias)
         joins_snapshot,
-        build_limit,
+        build_limit(limit),
         distinct?,
         aggr_exprs, # Aggregate expressions contain String aliases
         ctes_snapshot,
@@ -1215,8 +1217,8 @@ module CQL
       Expression::OrderBy.new(order_exprs)
     end
 
-    private def build_limit
-      Expression::Limit.new(@limit, @offset) if @limit || @offset
+    private def build_limit(limit : Int32?)
+      Expression::Limit.new(limit, @offset) if limit || @offset
     end
 
     private def build_select

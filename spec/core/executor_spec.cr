@@ -41,6 +41,14 @@ describe CQL::Pinnable do
     executor.statements.should eq 4
   end
 
+  it "runs first on the pinned executor" do
+    ExecutorDB.insert.into(:things).values(name: "pinned").commit
+    executor = CountingExecutor.new(ExecutorDB)
+
+    ExecutorDB.query.from(:things).select(:name).using(executor).first(as: String).should eq("pinned")
+    executor.statements.should eq 1
+  end
+
   it "still accepts a plain connection" do
     ExecutorDB.with_connection do |connection|
       ExecutorDB.insert.into(:things).values(name: "c").using(connection).commit
