@@ -50,7 +50,7 @@ module Expression
         else
           node.columns.each_with_index do |column, index|
             string << ", " if index > 0
-            string << column.accept(self)
+            write_column_reference(column, string)
           end
           node.select_expressions.each_with_index do |expression, index|
             string << ", " if index > 0 || !node.columns.empty?
@@ -172,16 +172,31 @@ module Expression
     # `qualifier.column` for a column expression. The qualifier is the table
     # alias when one is set, otherwise the column's own table name.
     private def column_reference(node : BaseColumn) : String
+      qualifier, name = column_parts(node)
+      qualifier ? "#{qualifier}.#{name}" : name
+    end
+
+    # Writes the reference straight into *string*, so a column in a larger clause is not built as
+    # its own String first.
+    private def write_column_reference(node : BaseColumn, string : IO) : Nil
+      qualifier, name = column_parts(node)
+      string << qualifier << '.' if qualifier
+      string << name
+    end
+
+    # `{alias or table, column}` for a column reference; `{nil, "*"}` for a bare `*`, which the
+    # query builder expands when specific tables are needed.
+    private def column_parts(node : BaseColumn) : {String?, String}
       column_name = node.column.name
+      name = column_name == :* ? "*" : ident(column_name)
       if alias_name = node.alias_name
-        column_name == :* ? "#{ident(alias_name)}.*" : "#{ident(alias_name)}.#{ident(column_name)}"
+        {ident(alias_name), name}
       elsif column_name == :*
-        # SELECT * - the query builder expands it when specific tables are needed
-        "*"
+        {nil, name}
       else
         table = node.column.table
         raise "Internal Error: Column expression missing table context and no alias provided" unless table
-        "#{ident(table.table_name)}.#{ident(column_name)}"
+        {ident(table.table_name), name}
       end
     end
 
@@ -218,8 +233,7 @@ module Expression
 
     def visit(node : Compare) : String
       String.build do |string|
-        # Left side is an Expression::Column, which now handles alias
-        string << node.left.accept(self)
+        write_column_reference(node.left, string)
         string << " "
         string << node.operator
         string << " "
