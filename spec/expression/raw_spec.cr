@@ -86,6 +86,25 @@ describe Expression::Raw do
     end
   end
 
+  describe "template cache" do
+    it "parses a fragment once and binds fresh values each time" do
+      first = Expression::Raw.build("customers.id = ?", {1})
+      second = Expression::Raw.build("customers.id = ?", {2})
+
+      second.fragments.should be(first.fragments)
+      first.bindings.should eq([1] of Expression::Raw::Value)
+      second.bindings.should eq([2] of Expression::Raw::Value)
+    end
+
+    it "stays within its size limit, dropping the oldest template first" do
+      oldest = Expression::Raw.build("customers.id = ? -- oldest", {0})
+      Expression::Raw::Template::CACHE_LIMIT.times { |i| Expression::Raw.build("customers.id = ? -- #{i}", {i}) }
+
+      Expression::Raw::Template.cached_count.should be <= Expression::Raw::Template::CACHE_LIMIT
+      Expression::Raw.build("customers.id = ? -- oldest", {0}).fragments.should_not be(oldest.fragments)
+    end
+  end
+
   describe "validation" do
     it "rejects too few or too many positional values" do
       expect_raises(ArgumentError, /expects 2 value\(s\), got 1/) { base.call.where("a = ? AND b = ?", 1) }
