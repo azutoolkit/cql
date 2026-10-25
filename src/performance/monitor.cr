@@ -172,6 +172,8 @@ module CQL::Performance
         record_execution(sql, params, duration, rows_affected)
         log_query(sql, params, duration, rows_affected) if @config.logging.enabled?
       end
+    rescue ex
+      Log.error(exception: ex) { "performance monitor failed to record a statement" }
     end
 
     private def record_execution(sql : String, params : Array(DB::Any),

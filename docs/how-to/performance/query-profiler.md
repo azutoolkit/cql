@@ -2,7 +2,7 @@
 
 This guide shows you how to use CQL's built-in performance monitor: the query profiler, the N+1 detector, health metrics and reports.
 
-It lives in `CQL::Performance`. Every select, insert, update and delete CQL runs is timed once in `CQL::Execution.run` and recorded by the monitor (DDL and `explain` are not), so once monitoring is enabled you get data without wrapping your queries; a failed statement is recorded with its real duration. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
+It lives in `CQL::Performance`. Every select, insert, update and delete CQL runs is timed once in `CQL::Execution.run` and recorded by the monitor (DDL and `explain` are not), so once monitoring is enabled you get data without wrapping your queries; a failed statement is recorded with its real duration. A profiler or detector that raises while recording is logged at error and never changes the statement's outcome. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
 
 ## Turn It On
 

@@ -566,6 +566,37 @@ class NormalizationSpyProfiler
   end
 end
 
+class RaisingProfiler
+  include CQL::Performance::QueryProfilerInterface
+
+  def record_query(sql : String, params : Array(DB::Any),
+                   execution_time : Time::Span,
+                   rows_affected : Int64? = nil,
+                   error : String? = nil,
+                   normalized_sql : String? = nil) : Void
+    raise "profiler broke"
+  end
+
+  def statistics
+    {} of String => NamedTuple(count: Int32, total_ms: Float64, avg_ms: Float64, min_ms: Float64, max_ms: Float64)
+  end
+
+  def slowest_queries(limit : Int32) : Array(CQL::Performance::QueryData)
+    [] of CQL::Performance::QueryData
+  end
+
+  def stats_trackers : Hash(String, CQL::Performance::StatsTracker)
+    {} of String => CQL::Performance::StatsTracker
+  end
+
+  def issues : Array(CQL::Performance::Issue)
+    [] of CQL::Performance::Issue
+  end
+
+  def clear : Void
+  end
+end
+
 class NormalizationSpyDetector
   include CQL::Performance::NPlusOneDetectorInterface
 
@@ -690,6 +721,14 @@ describe "CQL::Performance::Monitor with CQL::Execution.run" do
     CQL::Performance::Monitor.new(config: config)
   end
 
+  raising_monitor = -> do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.detection.enabled = false
+    config.logging.enabled = false
+    CQL::Performance::Monitor.new(config: config, profiler: RaisingProfiler.new)
+  end
+
   statement_count = ->(monitor : CQL::Performance::Monitor) { monitor.profiler.not_nil!.statistics.values.sum(&.[:count]) }
   total_ms = ->(monitor : CQL::Performance::Monitor) { monitor.profiler.not_nil!.statistics.values.sum(&.[:total_ms]) }
   select_names = -> { UserDB.query.from(:users).select(:name).where(name: "ada").all(as: String) }
@@ -741,6 +780,23 @@ describe "CQL::Performance::Monitor with CQL::Execution.run" do
     trackers.first.total_time.should be > Time::Span.zero
     trackers.first.errors.should eq(1)
     monitor.error_count.should eq(1)
+  end
+
+  it "keeps the driver's exception when the monitor fails recording a failed statement" do
+    with_global_monitor(raising_monitor.call) do
+      expect_raises(SQLite3::Exception, /no such column/) { UserDB.query.from(:users).where("nope = ?", 1).all(as: Int32) }
+    end
+  end
+
+  it "returns the result when the monitor fails recording a successful statement" do
+    with_global_monitor(raising_monitor.call) { select_names.call.should eq([] of String) }
+  end
+
+  it "logs a monitor failure as an error" do
+    Log.capture("*") do |logs|
+      with_global_monitor(raising_monitor.call) { select_names.call }
+      logs.check(:error, /performance monitor/i)
+    end
   end
 
   it "does not record an explain" do
