@@ -19,6 +19,30 @@ private class CountingCountExecutor
   end
 end
 
+private class LastSoftDeletableUser
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+
+  db_context schema: SoftDeletableDB, table: :users
+
+  property name : String
+  property email : String
+  property age : Int32 = 0
+
+  def initialize(@name, @email, @age = 0)
+  end
+end
+
+private def create_last_user(name : String, age : Int32)
+  TestUser.create!(name: name, email: "#{name.downcase}@example.com", age: age, password: "password123", password_confirmation: "password123")
+end
+
+private def create_last_users
+  create_last_user("Bravo", 30)
+  create_last_user("Alpha", 40)
+  create_last_user("Charlie", 30)
+end
+
 describe CQL::ActiveRecord::Queryable::QueryBuilder do
   before_each do
     UserDB.users.create!
@@ -501,6 +525,162 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
 
       result.should be_a(TestUser?)
       result.should_not be_nil
+    end
+  end
+
+  describe "#last without loading every row" do
+    it "returns the highest-id record with a single LIMIT ... DESC select from the model" do
+      create_last_users
+      newest = TestUser.query.order(:id).all.last
+
+      result = nil
+      statements = count_queries { result = TestUser.last }
+
+      result.try(&.id).should eq(newest.id)
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT")
+      statements.first.should contain("DESC")
+    end
+
+    it "returns the highest-id record with a single LIMIT ... DESC select from the builder" do
+      create_last_users
+      newest = TestUser.query.order(:id).all.last
+
+      result = nil
+      statements = count_queries { result = TestUser.query.last }
+
+      result.try(&.id).should eq(newest.id)
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT")
+      statements.first.should contain("DESC")
+    end
+
+    it "reverses a custom order and keeps the old result" do
+      create_last_users
+
+      result = nil
+      statements = count_queries { result = TestUser.query.order(name: :asc).last }
+
+      result.try(&.name).should eq("Charlie")
+      statements.size.should eq(1)
+      statements.first.should match(/ORDER BY\s+"?(\w+"?\.)?"?name"?\s+DESC/i)
+      statements.first.should contain("LIMIT ?")
+    end
+
+    it "reverses a multi-column order column by column" do
+      create_last_users
+
+      result = nil
+      statements = count_queries { result = TestUser.query.order(age: :asc, name: :desc).last }
+
+      result.try(&.name).should eq("Alpha")
+      statements.size.should eq(1)
+      statements.first.should match(/age"?\s+DESC,\s*"?(\w+"?\.)?"?name"?\s+ASC/i)
+      statements.first.should contain("LIMIT ?")
+    end
+
+    it "keeps the old semantics when the query has a limit" do
+      create_last_users
+
+      TestUser.query.order(:id).limit(2).last.try(&.name).should eq("Alpha")
+    end
+
+    it "keeps the old semantics when the query has an offset or distinct" do
+      create_last_users
+
+      TestUser.query.order(:id).offset(1).last.try(&.name).should eq("Charlie")
+      TestUser.query.order(:id).distinct.last.try(&.name).should eq("Charlie")
+    end
+
+    it "returns nil for an empty table" do
+      TestUser.last.should be_nil
+      TestUser.query.last.should be_nil
+    end
+
+    it "returns the last row of a partial select with a single LIMIT 1 select" do
+      create_last_users
+      newest = TestUser.query.order(:id).all.last
+
+      result = nil
+      statements = count_queries { result = TestUser.query.select(:id, :name).last }
+
+      result.try(&.id).should eq(newest.id)
+      result.try(&.name).should eq("Charlie")
+      statements.size.should eq(1)
+      statements.first.should contain("LIMIT ?")
+      statements.first.should contain("DESC")
+    end
+
+    it "breaks ties on the order by the primary key, so the later insert is last" do
+      create_last_user("Bravo", 30)
+      create_last_user("Delta", 30)
+
+      result = nil
+      statements = count_queries { result = TestUser.query.order(age: :asc).last }
+
+      result.try(&.name).should eq("Delta")
+      statements.first.should match(/age"?\s+DESC,\s*"?(\w+"?\.)?"?id"?\s+DESC/i)
+    end
+
+    it "orders a join without a select by the table-qualified primary key" do
+      UserDB.posts.create!
+      [create_last_user("Author", 30), create_last_user("Newest", 40)].each do |user|
+        Post.create!(title: "Post", body: "Body", user_id: user.id)
+      end
+
+      result = nil
+      statements = count_queries { result = TestUser.query.join(:posts).last }
+
+      result.try(&.name).should eq("Newest")
+      statements.size.should eq(1)
+      statements.first.should contain("ORDER BY users.id DESC LIMIT ?")
+    ensure
+      UserDB.posts.drop!
+    end
+
+    it "keeps the soft-delete filter and skips a soft-deleted newest row" do
+      SoftDeletableDB.users.create!
+      kept = LastSoftDeletableUser.new("Kept", "kept@example.com")
+      kept.create!
+      LastSoftDeletableUser.new("Deleted", "deleted@example.com").tap(&.create!).delete!
+
+      result = nil
+      statements = count_queries { result = LastSoftDeletableUser.last }
+
+      result.try(&.id).should eq(kept.id)
+      statements.first.should contain("deleted_at IS NULL")
+    ensure
+      SoftDeletableDB.users.drop!
+    end
+
+    it "returns the last row from last! on both builders and raises when empty" do
+      expect_raises(Exception, "No records found") { TestUser.query.last! }
+      expect_raises(Exception, "No records found") { TestUser.query.select(:id, :name).last! }
+
+      create_last_users
+
+      TestUser.query.last!.name.should eq("Charlie")
+      TestUser.query.select(:id, :name).last!.name.should eq("Charlie")
+    end
+
+    it "loads every row when the query is grouped" do
+      create_last_users
+
+      result = nil
+      statements = count_queries { result = TestUser.query.select(:age).group(:age).order(:age).last }
+
+      result.try(&.age).should eq(40)
+      statements.first.should_not contain("LIMIT")
+    end
+
+    it "loads every row when the query selects an aggregate" do
+      create_last_users
+
+      result = nil
+      statements = count_queries { result = TestUser.query.select(max: :age).last(as: Int32) }
+
+      result.should eq(40)
+      statements.first.should_not contain("ORDER BY")
     end
   end
 

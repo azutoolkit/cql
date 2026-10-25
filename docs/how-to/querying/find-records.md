@@ -52,11 +52,7 @@ user = User.last
 puts user.try(&.name)
 ```
 
-`last` loads the matching rows and returns the final one. On large tables, order descending and take the first row instead:
-
-```crystal
-user = User.order(id: :desc).first
-```
+`last` fetches a single row: the one with the highest primary key, or, when the query is ordered, the first row of the reversed order (ties go to the higher primary key).
 
 ## Find All Records
 

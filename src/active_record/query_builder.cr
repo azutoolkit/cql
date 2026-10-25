@@ -486,8 +486,7 @@ module CQL
         # Execute the query and return the last result (using reverse order)
         # - **@return** [T?] Last model instance or nil
         def last(as as_kind = T)
-          results = row_query(as_kind).all(as_kind)
-          results.last?
+          last_row(row_query(as_kind), as_kind)
         end
 
         # Execute the query and return the last result, raises if not found
@@ -509,6 +508,32 @@ module CQL
         # - **@yield** [T] Each model instance
         def each(&block : T ->)
           row_query(T).each(as: T, &block)
+        end
+
+        # Fetches one row with the order reversed; queries that reshape their rows
+        # still load them all, since reordering them could change the result.
+        private def last_row(query : Query, kind)
+          reversed = reversed_for_last(query) unless reshapes_rows?(query)
+          reversed ? reversed.first(kind) : query.all(kind).last?
+        end
+
+        # Paging, grouping, aggregates and DISTINCT decide which rows exist, so the
+        # reversed `ORDER BY ... LIMIT 1` would not pick the same last row.
+        private def reshapes_rows?(query : Query) : Bool
+          paged = query.limit || query.offset
+          aggregated = !query.group_by.empty? || query.having || !query.select_expressions.empty?
+          deduplicated = query.distinct? || !query.distinct_on.empty?
+          !!(paged || aggregated || deduplicated)
+        end
+
+        # The reversed order, with the primary key DESC appended to break ties
+        # (alone when the query is unordered); nil when neither exists.
+        private def reversed_for_last(query : Query) : Query?
+          primary_key = T.schema.tables[T.table].primary_key
+          return if primary_key.nil? && query.order_by.empty?
+          reversed = query.clone.reverse_order
+          reversed.order_by.put_if_absent(primary_key, Expression::OrderDirection::DESC) if primary_key
+          reversed
         end
 
         # With joins and no explicit select, rows are hydrated from the model's own
@@ -849,7 +874,7 @@ module CQL
         end
 
         def last(as as_kind = T::Row)
-          @query.all(as_kind).last?
+          last_row(@query, as_kind)
         end
 
         def last!(as as_kind = T::Row)
