@@ -44,12 +44,12 @@ Settings marked **inert** are accepted and validated but nothing in `src/` reads
 | `auto_sync` | `Bool` | `true` | Passed to the migrator: rewrite the schema file on construction, `up` and `down`. Also gates the auto-fix in `build_migrator` and `CQL.verify_schema(auto_fix: true)`. |
 | `bootstrap` | `Bool` | `false` | `CQL.build_migrator` dumps the schema file from the live database right after building the migrator. |
 | `verify_schema` | `Bool` | `false` | `CQL.build_migrator` checks the schema file against the database (ignored when `bootstrap` is on) and logs a warning on mismatch; with `auto_sync` it rewrites the file. |
-| `sql_logging` | `Bool` | unset: on in `development` unless `CQL_NO_SQL_LOG` is set, off otherwise | `CQL.build_schema` calls `CQL::Performance.enable_sql_logging` when true. Assigning `true` or `false` overrides the environment default. |
+| `sql_logging` | `Bool` | unset: on in `development` unless `CQL_NO_SQL_LOG` is set, off otherwise | `CQL.build_schema` calls `CQL::Performance.enable_sql_logging` when true, which also enables the performance monitor. Assigning `true` or `false` overrides the environment default. |
 | `sql_logging_colorize` | `Bool` | `true` | Passed to `enable_sql_logging(colorize:)`. |
 | `pool_size` | `Int32` | `10`, then per environment | Writing it also writes `pool.size`. Must be positive. |
 | `timezone` | `Symbol` | `:utc` | **Inert.** Validated (`:utc` or `:local`), never read. |
 | `auto_load` | `Bool` | `true` (`false` in test and production) | **Inert.** No model loading is driven by it. |
-| `monitor_performance` | `Bool` | `false` | **Inert.** |
+| `monitor_performance` | `Bool` | `false` | When true, `CQL.configure` enables the global performance monitor (`CQL::Performance.enable_monitoring`) after the block finishes. One-way: `false` does not switch off a monitor enabled elsewhere, and `CQL.reset_config!` does not reset it. |
 | `sql_logging_async` | `Bool` | `false` | **Inert.** SQL logging is always synchronous. |
 
 Predicate forms exist for the booleans: `auto_load?`, `auto_sync?`, `bootstrap?`, `verify_schema?`, `sql_logging?`, `monitor_performance?`.

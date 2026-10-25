@@ -447,6 +447,7 @@ module CQL
     config = Configure.current
     yield config
     config.validate!
+    CQL::Performance.enable_monitoring if config.monitor_performance?
     config
   end
 

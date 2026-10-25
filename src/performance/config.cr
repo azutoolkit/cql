@@ -8,7 +8,7 @@ module CQL::Performance
   class Config
     # Monitoring configuration
     class Monitoring
-      property? enabled : Bool = true
+      property? enabled : Bool = false
       property? plan_analysis : Bool = true
       property? n_plus_one_detection : Bool = true
       property? query_profiling : Bool = true
@@ -141,7 +141,6 @@ module CQL::Performance
         profiling.slow_query_threshold = 10.milliseconds
       when production_mode?
         # Production optimizations
-        monitoring.enabled = true
         logging.enabled = false
         logging.colorize = false
         reporting.include_stack_traces = false

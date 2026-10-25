@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The performance monitor (query profiler and N+1 detector) is now opt-in: it costs several regex passes and two global locks per query, and it was on by default outside the test environment. Turn it on with `CQL::Performance.enable_monitoring`, `CQL.configure { |c| c.monitor_performance = true }` (the option existed but was never read), `CQL_MONITORING_ENABLED=true`, or `CQL_ENV`/`CRYSTAL_ENV=development`; production no longer enables it implicitly, so apps reading `CQL::Performance.metrics` or health checks must opt in. SQL logging runs through the monitor, so `CQL::Performance.enable_sql_logging` enables it too, as does `CQL.build_schema` when `sql_logging` is on (setting `sql_logging = true` in `CQL.configure` alone does not); `CQL.build_schema` treats an unset `CRYSTAL_ENV` as development, so it turns on SQL logging and the monitor there. With the default configuration, enabling the monitor (including through SQL logging) also turns on the profiler, which keeps slow-query records, including bound parameters, in memory. Enabling is one-way: `monitor_performance = false` does not switch off a monitor enabled elsewhere, and `CQL.reset_config!` does not reset the monitor.
+
 ### Fixed
 
 - A `schema.transaction` opened inside another one now runs as a SAVEPOINT on the outer transaction's connection. Before, it checked out a second pooled connection and committed independently: an inner block's writes survived when the outer transaction rolled back, it held two connections at once, and on SQLite it failed with `database is locked`. An inner `DB::Rollback` or error now undoes only the inner block. Code that relied on the inner block committing independently must now run it on a separate fiber/connection. crystal-db allows one open savepoint per transaction, so `Model.transaction(tx)` with the outer `tx` inside an open nested `schema.transaction` now raises; use the inner block's transaction instead.

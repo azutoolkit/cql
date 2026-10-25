@@ -46,9 +46,21 @@ describe "Query inspection" do
       names.union(names).explain.should contain("users")
     end
 
-    it "is not recorded as an executed query" do
-      UserDB.query.from(:users).where(name: "ada").explain
-      CQL::Performance.monitor.metrics.to_json.should_not contain("EXPLAIN")
+    it "is not recorded as an executed query, unlike a normal query" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.profiling.enabled = true
+      config.logging.enabled = false
+      monitor = CQL::Performance::Monitor.new(config: config)
+
+      with_global_monitor(monitor) do
+        UserDB.query.from(:users).select(:name).all(as: String)
+        UserDB.query.from(:users).where(name: "ada").explain
+      end
+
+      recorded = monitor.profiler.not_nil!.statistics.keys
+      recorded.any?(&.matches?(/FROM users/i)).should be_true
+      recorded.none?(&.matches?(/EXPLAIN/i)).should be_true
     end
 
     it "rejects ANALYZE on SQLite with a clear error" do

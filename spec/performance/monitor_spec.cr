@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 
 describe CQL::Performance::Monitor do
   describe "#initialize" do
@@ -151,6 +152,38 @@ describe CQL::Performance::Monitor do
       params = ["test".as(DB::Any)]
       result = monitor.track("SELECT ?", params) { "ok" }
       result.should eq("ok")
+    end
+  end
+
+  describe "when monitoring is disabled" do
+    it "returns the block value and records nothing through Performance.track" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = false
+      config.profiling.enabled = true
+      config.logging.enabled = false
+      monitor = CQL::Performance::Monitor.new(config: config)
+
+      with_global_monitor(monitor) do
+        CQL::Performance.track("SELECT 1", [] of DB::Any) { 42 }.should eq(42)
+      end
+
+      monitor.profiler.not_nil!.statistics.should be_empty
+      monitor.error_count.should eq(0)
+    end
+
+    it "lets a raising query propagate without counting or recording it" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = false
+      config.profiling.enabled = true
+      config.logging.enabled = false
+      monitor = CQL::Performance::Monitor.new(config: config)
+
+      expect_raises(RuntimeError, "query failed") do
+        monitor.monitor_query("SELECT * FROM bad_table") { raise RuntimeError.new("query failed") }
+      end
+
+      monitor.error_count.should eq(0)
+      monitor.profiler.not_nil!.statistics.should be_empty
     end
   end
 
@@ -447,6 +480,49 @@ describe CQL::Performance::Monitor do
       end
 
       monitor.enabled?.should be_true
+    end
+  end
+end
+
+describe "CQL.config.monitor_performance" do
+  after_each { CQL.reset_config! }
+
+  it "enables the global performance monitor when set to true" do
+    disabled = CQL::Performance::Config.new
+    disabled.monitoring.enabled = false
+
+    with_global_monitor(CQL::Performance::Monitor.new(config: disabled)) do
+      CQL.configure(&.monitor_performance=(true))
+
+      CQL::Performance.monitor.enabled?.should be_true
+    end
+  end
+
+  it "leaves the global performance monitor disabled when false" do
+    disabled = CQL::Performance::Config.new
+    disabled.monitoring.enabled = false
+
+    with_global_monitor(CQL::Performance::Monitor.new(config: disabled)) do
+      CQL.configure(&.monitor_performance=(false))
+
+      CQL::Performance.monitor.enabled?.should be_false
+    end
+  end
+end
+
+describe "CQL::Performance.enable_sql_logging" do
+  it "turns monitoring on so tracked queries are logged" do
+    disabled = CQL::Performance::Config.new
+    disabled.monitoring.enabled = false
+
+    with_global_monitor(CQL::Performance::Monitor.new(config: disabled)) do
+      CQL::Performance.enable_sql_logging(colorize: false)
+
+      CQL::Performance.monitor.enabled?.should be_true
+      Log.capture("*") do |logs|
+        CQL::Performance.track("SELECT 1") { 1 }
+        logs.check(:info, /SELECT 1/)
+      end
     end
   end
 end

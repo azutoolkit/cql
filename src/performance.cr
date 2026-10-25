@@ -23,7 +23,7 @@ require "./performance/monitor"
 #   config.logging.colorize = true
 # end
 #
-# # CQL Query integration - queries are automatically tracked
+# # CQL Query integration - once monitoring is enabled, queries are tracked
 # schema = CQL::Schema.define do
 #   table :users do
 #     primary :id, Int64
@@ -32,7 +32,7 @@ require "./performance/monitor"
 #   end
 # end
 #
-# # All query executions are monitored
+# # Every query execution is monitored once monitoring is enabled
 # users = schema.query.from(:users).where(active: true).all(User)
 #
 # # Track with context for better insights
@@ -92,8 +92,14 @@ module CQL::Performance
     self.monitor = Monitor.new(minimal_config)
   end
 
-  # SQL logging convenience
+  # Monitoring is opt-in; this turns on the global monitor.
+  def self.enable_monitoring
+    configure(&.monitoring.enabled=(true))
+  end
+
+  # SQL logging convenience. SQL is logged by the monitor, so this enables monitoring too.
   def self.enable_sql_logging(colorize : Bool = true, pretty : Bool = true)
+    enable_monitoring
     configure do |config|
       config.logging.enabled = true
       config.logging.colorize = colorize

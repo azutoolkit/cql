@@ -2,9 +2,21 @@
 
 This guide shows you how to use CQL's built-in performance monitor: the query profiler, the N+1 detector, health metrics and reports.
 
-It lives in `CQL::Performance`. Every statement CQL runs (selects, inserts, updates, deletes and `Schema#exec`) is passed to `CQL::Performance.track`, so you get data without wrapping your queries. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
+It lives in `CQL::Performance`. Every statement CQL runs (selects, inserts, updates, deletes and `Schema#exec`) is passed to `CQL::Performance.track`, so once monitoring is enabled you get data without wrapping your queries. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
 
 ## Turn It On
+
+Monitoring is opt-in: it runs several regex passes and takes two global locks per query, so it is off unless you enable it. Any of these turns it on:
+
+```crystal
+CQL.configure { |c| c.monitor_performance = true } # when the configure block finishes
+CQL::Performance.enable_monitoring
+CQL::Performance.enable_sql_logging                # SQL is logged by the monitor, so this enables it too
+```
+
+The environment can enable it as well: `CQL_MONITORING_ENABLED=true`, or `CRYSTAL_ENV`/`CQL_ENV=development` (see the table below). `CQL.build_schema` calls `enable_sql_logging` when `sql_logging` is on, which is the default in development and when `CRYSTAL_ENV` is unset. Enabling is one-way: `monitor_performance = false` and `CQL.reset_config!` do not switch off a monitor that is already on; use `CQL::Performance.disable!` for that.
+
+Health checks and dashboards that read `CQL::Performance.metrics` only see data once monitoring is on, so enable it explicitly in production if you rely on them. The profiler keeps slow queries, including their bound parameters, in memory.
 
 Quick setups:
 
@@ -31,9 +43,10 @@ Without any setup the monitor starts from `Config.from_env`:
 | --- | --- |
 | `CRYSTAL_ENV=development` or `CQL_ENV=development` | monitoring and SQL logging on |
 | `CRYSTAL_ENV=test` or `CQL_ENV=test` | monitoring and logging off, slow threshold 10 ms |
-| `CRYSTAL_ENV=production` or `CQL_ENV=production` | monitoring on, logging off |
+| `CRYSTAL_ENV=production` or `CQL_ENV=production` | monitoring and logging off |
+| none of the above | monitoring and logging off |
 | `CQL_MONITORING_ENABLED=true\|false` | override monitoring |
-| `CQL_SQL_LOGGING=true\|false` | override SQL logging |
+| `CQL_SQL_LOGGING=true\|false` | override SQL logging (logs only while monitoring is on) |
 | `CQL_SLOW_QUERY_MS=200` | slow query threshold in milliseconds |
 
 Presets are available as `CQL::Performance.development_config`, `test_config`, `production_config` and `minimal_config`. Install your own with `CQL::Performance.monitor = CQL::Performance::Monitor.new(config)`.
@@ -43,6 +56,7 @@ Presets are available as `CQL::Performance.development_config`, `test_config`, `
 The profiler keeps running statistics per normalized query (literal numbers, quoted strings and placeholders are replaced by `?`, so `WHERE id = 1` and `WHERE id = 2` count as one query).
 
 ```crystal
+CQL::Performance.enable_monitoring
 profiler = CQL::Performance.monitor.profiler.not_nil!
 
 profiler.statistics.each do |sql, stats|
@@ -80,6 +94,7 @@ Statistics are kept for all queries. The slow query list holds up to 1000 entrie
 The detector watches the most recent queries (`detection.detection_window`, default 10). When the same normalized query appears at least `detection.threshold` times (default 2), it records a pattern together with the query that came just before it.
 
 ```crystal
+CQL::Performance.enable_monitoring
 detector = CQL::Performance.monitor.detector.not_nil!
 
 detector.patterns.each do |pattern|

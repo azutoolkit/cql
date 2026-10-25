@@ -46,30 +46,7 @@ module CQL::Performance
     def monitor_query(sql : String, params : Array(DB::Any) = [] of DB::Any, &)
       return yield unless enabled?
 
-      # Execute and measure
-      result, execution_time = measure_execution { yield }
-
-      # Extract metadata
-      rows_affected = extract_rows_affected(result)
-
-      # Record in components
-      record_execution(sql, params, execution_time, rows_affected)
-
-      # Log if configured
-      log_query(sql, params, execution_time, rows_affected) if @config.logging.enabled?
-
-      result
-    rescue ex
-      # Track error count
-      @error_count.add(1)
-
-      # Record error in profiler
-      record_execution(sql, params, Time::Span.zero, nil, ex.message)
-
-      # Log error if configured
-      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
-
-      raise ex
+      measure_and_record(sql, params) { yield }
     end
 
     # API - just wrap the query
@@ -170,6 +147,33 @@ module CQL::Performance
     def configure(&)
       yield @config
       reconfigure_components
+    end
+
+    private def measure_and_record(sql : String, params : Array(DB::Any), &)
+      # Execute and measure
+      result, execution_time = measure_execution { yield }
+
+      # Extract metadata
+      rows_affected = extract_rows_affected(result)
+
+      # Record in components
+      record_execution(sql, params, execution_time, rows_affected)
+
+      # Log if configured
+      log_query(sql, params, execution_time, rows_affected) if @config.logging.enabled?
+
+      result
+    rescue ex
+      # Track error count
+      @error_count.add(1)
+
+      # Record error in profiler
+      record_execution(sql, params, Time::Span.zero, nil, ex.message)
+
+      # Log error if configured
+      Log.error { "Query failed: #{ex.message}\nSQL: #{sql}\nParams: #{params.inspect}" } if @config.logging.enabled?
+
+      raise ex
     end
 
     private def record_execution(sql : String, params : Array(DB::Any),
