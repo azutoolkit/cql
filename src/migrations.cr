@@ -151,7 +151,7 @@ module CQL
   #   table :schema_migrations do
   #     primary :id, Int32
   #     column :name, String
-  #     column :version, Int32, index: true, unique: true
+  #     column :version, Int32, unique: true
   #     timestamps
   #   end
   # end
@@ -459,7 +459,7 @@ module CQL
       schema.table @config.migration_table_name do
         primary :id, Int32
         column :name, String
-        column :version, Int64, index: true, unique: true
+        column :version, Int64, unique: true
         # Don't use timestamps macro for SQLite compatibility
         column :created_at, String, null: true
         column :updated_at, String, null: true

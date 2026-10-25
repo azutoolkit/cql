@@ -2,9 +2,45 @@
 
 This guide shows you how to create database indexes to improve query performance.
 
-## Indexes Are Created With `schema.alter`
+## Declare Indexes With the Table
 
-`index: true` on a column and `index [...]` inside a `schema.table` block only describe an index in memory; `table.create!` does not emit `CREATE INDEX`. Create indexes with `create_index` inside `schema.alter`, as in the migrations below. The table must be known to the schema (declared with `schema.table` or loaded from your schema file), otherwise `schema.alter` raises `CQL::Schema::Error`. Index names are always given explicitly.
+`index: true` on a column and `index [...]` inside a `schema.table` block declare indexes that `table.create!` and `schema.build` create right after the table:
+
+```crystal
+class CreateUsers < CQL::Migration(4)
+  def up
+    schema.table :users do
+      primary :id, Int64
+      column :email, String, index: true
+      column :name, String
+      column :status, String
+      index [:name, :status], unique: true
+      index [:status], name: "idx_users_by_status"
+    end
+    schema.users.create!
+  end
+
+  def down
+    schema.users.drop!
+  end
+end
+```
+
+This runs `CREATE TABLE IF NOT EXISTS users (...)` followed by one statement per index:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name_status ON users (name, status)
+CREATE INDEX IF NOT EXISTS idx_users_by_status ON users (status)
+```
+
+- Without `name:`, the index is named `idx_<table>_<columns>`. Names longer than 63 characters raise `ArgumentError`; pass a shorter `name:`.
+- Index names are shared by the whole schema on SQLite and PostgreSQL. If two tables declare the same explicit `name:`, `IF NOT EXISTS` skips the second index without an error, so keep explicit names unique.
+- `IF NOT EXISTS` makes calling `create!` again safe on SQLite, PostgreSQL and CockroachDB. MySQL has no `CREATE INDEX IF NOT EXISTS`, so there CQL emits a plain `CREATE INDEX`, and calling `create!` a second time fails with a duplicate key name error.
+
+## Add Indexes to an Existing Table
+
+For a table that already exists, use `create_index` inside `schema.alter`, as in the migrations below. The table must be known to the schema (declared with `schema.table` or loaded from your schema file), otherwise `schema.alter` raises `CQL::Schema::Error`. Index names are always given explicitly.
 
 ## Create a Simple Index
 

@@ -225,9 +225,8 @@ module CQL
     # schema.build
     # ```
     def build
-      @tables.each do |_tbl_name, table|
-        sql = table.create_sql
-        exec(sql)
+      @tables.each_value do |table|
+        table.create_statements.each { |sql| exec(sql) }
       end
     end
 

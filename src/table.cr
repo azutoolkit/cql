@@ -47,6 +47,7 @@ module CQL
     getter foreign_keys : Array(ForeignKey) = [] of ForeignKey
     getter unique_constraints : Array(UniqueConstraint) = [] of UniqueConstraint
     getter check_constraints : Array(CheckConstraint) = [] of CheckConstraint
+    getter indexes : Array(Index) = [] of Index
 
     getter schema : Schema
 
@@ -595,26 +596,28 @@ module CQL
       timestamp(name: :updated_at, default: timestamp_default_value)
     end
 
-    # Adds a new column to the table.
+    # Declares an index that `create!` and `Schema#build` create after the table.
+    # Declaring an index with the same name again replaces the earlier one.
     # - **@param** columns [Array(Symbol)] the columns to be indexed
     # - **@param** unique [Bool] whether the index should be unique (default: false)
-    # - **@param** table [Table] the table to add the index to (default: self)
+    # - **@param** name [String, nil] the index name (default: `idx_<table>_<columns>`)
     # - **@return** [Index] the new index
     #
     # **Example** Adding a new index
     #
     # ```
     # add_index([:email], unique: true)
-    # add_index([:email, :username], unique: true)
-    # add_index([:email, :username], unique: true, table: users)
+    # add_index([:email, :username], unique: true, name: "idx_users_login")
     # ```
-    def add_index(columns : Array(Symbol), unique : Bool = false)
-      index = Index.new(self, columns, unique, nil)
+    def add_index(columns : Array(Symbol), unique : Bool = false, name : String? = nil) : Index
+      index = Index.new(self, columns, unique, name)
+      @indexes.reject! { |existing| existing.index_name == index.index_name }
+      @indexes << index
       index
     end
 
-    def index(columns : Array(Symbol), unique : Bool = false)
-      add_index(columns, unique)
+    def index(columns : Array(Symbol), unique : Bool = false, name : String? = nil) : Index
+      add_index(columns, unique, name)
     end
 
     # Adds a UNIQUE constraint to the table.
@@ -653,6 +656,17 @@ module CQL
     # Includes column definitions and foreign key constraints.
     def create_sql
       Expression::CreateTable.new(self).accept(schema.new_generator).to_s
+    end
+
+    # Generates one `CREATE INDEX` statement per declared index, skipped when the index already
+    # exists (except on MySQL, which has no `IF NOT EXISTS` for indexes).
+    def create_index_sqls(generator : Expression::Generator = schema.new_generator) : Array(String)
+      indexes.map { |index| Expression::CreateIndex.new(index, if_not_exists: true).accept(generator) }
+    end
+
+    # The statements that create the table and its indexes, in execution order.
+    def create_statements : Array(String)
+      [create_sql].concat(create_index_sqls)
     end
 
     # Generates the SQL to drop the table.
@@ -701,7 +715,7 @@ module CQL
     def create!
       schema.tables[table_name] = self if schema.tables[table_name].nil?
       Log.debug { "Creating table #{table_name}" }
-      schema.exec "#{create_sql};"
+      create_statements.each { |sql| schema.exec sql }
     end
 
     # Drops the table from the database.

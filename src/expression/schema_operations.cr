@@ -143,8 +143,9 @@ module Expression
 
   class CreateIndex < AlterAction
     getter index : CQL::Index
+    getter? if_not_exists : Bool
 
-    def initialize(@index : CQL::Index)
+    def initialize(@index : CQL::Index, @if_not_exists : Bool = false)
     end
 
     def accept(visitor : Visitor)

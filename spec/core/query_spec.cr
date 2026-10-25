@@ -448,7 +448,7 @@ describe CQL::Query do
       index = CQL::Index.new(Northwind.tables[:users], [:name, :email], unique: true)
 
       output = <<-SQL
-        CREATE UNIQUE INDEX idx_name_emai ON users (name, email)
+        CREATE UNIQUE INDEX idx_users_name_email ON users (name, email)
       SQL
 
       Expression::CreateIndex.new(index).accept(Expression::Generator.new).should eq(output.strip)
@@ -458,7 +458,7 @@ describe CQL::Query do
       index = CQL::Index.new(Northwind.tables[:orders], [:customer_id, :order_date], unique: false)
 
       output = <<-SQL
-        CREATE INDEX idx_cust_orde ON orders (customer_id, order_date)
+        CREATE INDEX idx_orders_customer_id_order_date ON orders (customer_id, order_date)
       SQL
 
       Expression::CreateIndex.new(index).accept(Expression::Generator.new).should eq(output.strip)

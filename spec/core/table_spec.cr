@@ -1,5 +1,13 @@
 require "../spec_helper"
 
+private def index_list(schema : CQL::Schema, table : Symbol) : Hash(String, Int64)
+  schema.exec_query do |connection|
+    connection.query_all("PRAGMA index_list(#{table})", as: {Int64, String, Int64, String, Int64})
+      .reject { |index| index[3] == "u" }
+      .to_h { |index| {index[1], index[2]} }
+  end
+end
+
 describe CQL::Table do
   describe "initialization" do
     it "creates a table with valid name" do
@@ -122,6 +130,97 @@ describe CQL::Table do
       table.timestamps
       table.columns[:created_at]?.should_not be_nil
       table.columns[:updated_at]?.should_not be_nil
+    end
+  end
+
+  describe "indexes" do
+    it "creates declared indexes with the table" do
+      table = TableDB.table(:indexed_users) do
+        primary :id, Int32
+        column :name, String
+        column :email, String
+        column :city, String, index: true
+        index [:name, :email], unique: true
+      end
+      table.drop! rescue nil
+
+      begin
+        table.create!
+        table.create!
+
+        index_list(TableDB, :indexed_users).should eq({
+          "idx_indexed_users_name_email" => 1_i64,
+          "idx_indexed_users_city"       => 0_i64,
+        })
+      ensure
+        table.drop!
+      end
+    end
+
+    it "creates declared indexes when building the schema" do
+      schema = CQL::Schema.define(:index_build, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("index_build.db")) do
+        table :indexed_posts do
+          primary :id, Int32
+          column :title, String
+          index [:title], name: "idx_posts_by_title"
+        end
+      end
+      schema.tables[:indexed_posts].drop! rescue nil
+
+      begin
+        schema.build
+        index_list(schema, :indexed_posts).should eq({"idx_posts_by_title" => 0_i64})
+      ensure
+        schema.tables[:indexed_posts].drop!
+      end
+    end
+
+    it "generates CREATE INDEX statements per dialect" do
+      table = TableDB.table(:indexed_accounts) do
+        column :name, String
+        column :email, String
+        index [:name, :email], unique: true
+      end
+
+      table.create_index_sqls(Expression::Generator.new(CQL::Adapter::Postgres)).should eq([
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_indexed_accounts_name_email ON indexed_accounts (name, email)",
+      ])
+      table.create_index_sqls(Expression::Generator.new(CQL::Adapter::MySql)).should eq([
+        "CREATE UNIQUE INDEX idx_indexed_accounts_name_email ON indexed_accounts (name, email)",
+      ])
+    end
+
+    it "rejects index names longer than 63 characters" do
+      table = TableDB.table(:organization_memberships) do
+        column :organization_id, Int64
+        column :membership_role_id, Int64
+        column :status, String
+        index [:organization_id, :membership_role_id, :status]
+      end
+
+      expect_raises(ArgumentError, /idx_organization_memberships_organization_id_membership_role_id_status/) do
+        table.create_index_sqls
+      end
+    end
+
+    it "does not record indexes created through alter" do
+      table = TableDB.table(:indexed_accounts) do
+        column :email, String
+      end
+      alter = CQL::AlterTable.new(table, TableDB)
+      alter.create_index(:idx_accounts_email, [:email])
+
+      alter.to_sql(Expression::Generator.new).should eq("CREATE INDEX idx_accounts_email ON indexed_accounts (email);\n")
+      table.indexes.should be_empty
+    end
+
+    it "keeps one index per name when declared twice" do
+      table = TableDB.table(:indexed_accounts) do
+        column :email, String, index: true
+      end
+      table.column(:email, String, index: true)
+
+      table.indexes.map(&.index_name).should eq(["idx_indexed_accounts_email"])
     end
   end
 
