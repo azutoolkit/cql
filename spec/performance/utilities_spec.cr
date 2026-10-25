@@ -370,6 +370,83 @@ describe "CQL::Performance Utilities" do
     end
   end
 
+  describe "StatsTracker percentiles" do
+    percentile_keys = ["p50_time_ms", "p95_time_ms", "p99_time_ms"]
+
+    it "estimates p50, p95 and p99 of 1..100 ms within bucket error" do
+      tracker = CQL::Performance::StatsTracker.new
+      (1..100).each { |i| tracker.record(i.milliseconds) }
+
+      p50, p95, p99 = {0.5, 0.95, 0.99}.map { |quantile| tracker.percentile(quantile) }
+
+      p50.should be >= 41.milliseconds
+      p50.should be <= 60.milliseconds
+      p99.should be >= 80.milliseconds
+      p99.should be <= 120.milliseconds
+      p50.should be <= p95
+      p95.should be <= p99
+    end
+
+    it "refuses a quantile outside 0.0..1.0, NaN included" do
+      tracker = CQL::Performance::StatsTracker.new
+      tracker.record(1.millisecond)
+      [Float64::NAN, -0.1, 1.5].each { |quantile| expect_raises(ArgumentError) { tracker.percentile(quantile) } }
+    end
+
+    it "returns zero for an empty tracker" do
+      tracker = CQL::Performance::StatsTracker.new
+
+      tracker.percentile(0.5).should eq(Time::Span.zero)
+      percentile_keys.each { |key| tracker.to_h[key].should eq(0.0) }
+    end
+
+    it "stays within the recorded range for sub-microsecond and multi-minute samples" do
+      tracker = CQL::Performance::StatsTracker.new
+      tracker.record(200.nanoseconds)
+      tracker.record(2.minutes)
+
+      [0.0, 0.5, 0.95, 0.99, 1.0].each do |quantile|
+        tracker.percentile(quantile).should be >= tracker.min_time
+        tracker.percentile(quantile).should be <= tracker.max_time
+      end
+    end
+
+    it "reports the same value for every percentile of a single sample" do
+      tracker = CQL::Performance::StatsTracker.new
+      tracker.record(7.milliseconds)
+
+      tracker.percentile(0.5).should eq(tracker.percentile(0.99))
+      tracker.percentile(0.5).total_milliseconds.should be_close(7.0, 7.0 * 0.25)
+    end
+
+    it "clears percentiles on reset" do
+      tracker = CQL::Performance::StatsTracker.new
+      (1..10).each { |i| tracker.record(i.milliseconds) }
+
+      tracker.reset
+
+      tracker.percentile(0.5).should eq(Time::Span.zero)
+      percentile_keys.each { |key| tracker.to_h[key].should eq(0.0) }
+    end
+
+    it "adds percentile keys to to_h and keeps the existing keys" do
+      tracker = CQL::Performance::StatsTracker.new
+      tracker.record(10.milliseconds)
+      tracker.record(30.milliseconds, error: true)
+
+      hash = tracker.to_h
+
+      percentile_keys.each { |key| hash[key].should be_a(Float64) }
+      hash["total_count"].should eq(2_i64)
+      hash["total_time_ms"].should eq(40.0)
+      hash["avg_time_ms"].should eq(20.0)
+      hash["min_time_ms"].should eq(10.0)
+      hash["max_time_ms"].should eq(30.0)
+      hash["error_count"].should eq(1_i64)
+      hash["error_rate"].should eq(50.0)
+    end
+  end
+
   describe "Cache" do
     describe "#get" do
       it "computes and caches a value on first access" do
