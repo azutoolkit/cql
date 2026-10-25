@@ -135,7 +135,7 @@ Validation: `mode` must be one of `disable`, `allow`, `prefer`, `require`, `veri
 | `key_prefix` | `String` | `"cql"` | | | | fragment cache keys |
 | `name` | `String` | `"cql"` | | | | `Cache.cache_name` |
 | `memory_size` | `Int32?` | `1000` | `1000` | `100` | `5000` | memory and fragment cache size. `memory_size must be positive` |
-| `request_cache` | `Bool` | `true` | | | | `CQL.start_request_cache`, `CQL.end_request_cache`, `CQL.with_request_cache`, `RequestQueryCacheHelper.enabled` |
+| `request_cache` | `Bool` | `true` | | | | `CQL.start_request_cache`, `CQL.end_request_cache`, `CQL.with_request_cache` |
 | `request_size` | `Int32` | `1000` | `1000` | `100` | `2000` | validation only: `request_size must be positive` |
 | `fragment_versions` | `Bool` | `true` | | | | fragment cache `enable_versioning` |
 | `fragment_tags` | `Bool` | `true` | | | | fragment cache `enable_tagging` |

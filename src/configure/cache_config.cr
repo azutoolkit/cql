@@ -190,11 +190,8 @@ module CQL
         CQL::Cache::Cache.default_ttl = ttl
         CQL::Cache::Cache.cache_name = name
 
-        # Configure request query cache
-        if request_cache?
-          CQL::Cache::RequestQueryCacheHelper.enabled = true
-          # Request cache max size is handled internally by RequestQueryCache
-        end
+        # The request query cache tracks only between start_request and end_request
+        # (per-request middleware); enabling it here would track every query.
 
         # Enable middleware integration if requested
         if middleware?
