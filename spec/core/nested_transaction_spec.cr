@@ -246,4 +246,40 @@ describe "CQL::Schema#transaction nesting" do
       other.query_one("SELECT COUNT(*) FROM nested_rows", as: Int64).should eq 1
     end
   end
+
+  it "keeps each fiber's queries on its own transaction while other fibers run outside one" do
+    open_tx_connections = [] of DB::Connection
+    wrong_connections = [] of String
+    plain_queries_beside_open_tx = 0
+    done = Channel(Nil).new
+    fibers = 6
+
+    fibers.times do |i|
+      spawn do
+        3.times do
+          if i.even?
+            schema.transaction do |tx|
+              open_tx_connections << tx.connection
+              Fiber.yield
+              schema.exec_query { |conn| wrong_connections << "tx fiber #{i}" unless conn.same?(tx.connection) }
+              Fiber.yield
+              open_tx_connections.reject!(&.same?(tx.connection))
+            end
+          else
+            plain_queries_beside_open_tx += 1 unless open_tx_connections.empty?
+            schema.exec_query { |conn| wrong_connections << "plain fiber #{i}" if open_tx_connections.any?(&.same?(conn)) }
+            Fiber.yield
+          end
+        end
+      rescue ex
+        wrong_connections << "fiber #{i} raised #{ex.message}"
+      ensure
+        done.send(nil)
+      end
+    end
+    fibers.times { done.receive }
+
+    plain_queries_beside_open_tx.should be > 0
+    wrong_connections.should be_empty
+  end
 end

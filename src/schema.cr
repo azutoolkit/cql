@@ -87,6 +87,8 @@ module CQL
     # Fiber-local transaction stacks: each fiber's entered transactions (and savepoints), innermost last
     @fiber_transactions = {} of Fiber => Array(DB::Transaction)
     @fiber_mutex = CQL::Compat::Mutex.new
+    # Mirrors `@fiber_transactions.size`: queries skip the mutex only while no fiber has a transaction open
+    @fibers_in_transaction = Atomic(Int32).new(0)
 
     # Creates a new expression generator for thread-safe SQL generation.
     # Each call returns a fresh Generator instance to avoid state corruption
@@ -120,6 +122,7 @@ module CQL
     # The fiber's innermost transaction still open; any closed by hand (`tx.commit`/`tx.rollback`)
     # are skipped, so work falls back to the enclosing transaction rather than leaving it.
     private def active_transaction : DB::Transaction?
+      return if @fibers_in_transaction.get.zero? # this fiber's own push is already visible, so 0 means it has none
       @fiber_mutex.synchronize do
         @fiber_transactions[Fiber.current]?.try { |stack| stack.reverse_each.find { |tx| !tx.closed? } }
       end
@@ -128,7 +131,10 @@ module CQL
     # Pushes *tx* onto the fiber's transaction stack for the block and pops it afterwards.
     private def with_active_transaction(tx : DB::Transaction, &)
       fiber = Fiber.current
-      @fiber_mutex.synchronize { (@fiber_transactions[fiber] ||= [] of DB::Transaction).push(tx) }
+      @fiber_mutex.synchronize do
+        (@fiber_transactions[fiber] ||= [] of DB::Transaction).push(tx)
+        @fibers_in_transaction.set(@fiber_transactions.size)
+      end
       begin
         yield
       ensure
@@ -136,6 +142,7 @@ module CQL
           stack = @fiber_transactions[fiber]
           stack.pop
           @fiber_transactions.delete(fiber) if stack.empty?
+          @fibers_in_transaction.set(@fiber_transactions.size)
         end
       end
     end
