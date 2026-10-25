@@ -171,7 +171,7 @@ CQL::Performance.metrics_summary
 #     "total_issues" => ..., "uptime_seconds" => ...}
 ```
 
-`CQL::Performance.metrics` returns a `PerformanceMetrics` with the full breakdown (query, N+1, cache, system and health metrics, top queries and patterns). It also offers `to_json`, `issues_by_type(:n_plus_one)`, `issues_by_severity(:critical)`, `slowest_queries(limit)` and `most_frequent_queries(limit)`. The slow queries in `to_json` (and `CQL::Performance.export_metrics_as_json`) have no `params` key unless `config.logging.include_params` is on; `slowest_queries(limit)` still returns each `QueryData` with its `params`.
+`CQL::Performance.metrics` returns a `PerformanceMetrics` with the full breakdown (query, N+1, cache, system and health metrics, top queries and patterns). It also offers `to_json`, `issues_by_type(:n_plus_one)`, `issues_by_severity(:critical)`, `slowest_queries(limit)` and `most_frequent_queries(limit)`. The slow queries in `to_json` (and `CQL::Performance.export_metrics_as_json`) have no `params` key unless `config.logging.include_params` is on; `slowest_queries(limit)` still returns each `QueryData` with its `params`. In the query lists, `avg_time` and `total_time` are in milliseconds.
 
 ## Generate a Report
 

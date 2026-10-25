@@ -780,7 +780,6 @@ describe "CQL::Performance::Monitor metrics export of bound values" do
   it "exports a slow query's params in the metrics JSON when include_params is on" do
     json = build_monitor.call(true).metrics.to_json
 
-    JSON.parse(json)["top_queries"]["slowest_queries"][0].as_h.has_key?("params").should be_true
-    json.should contain(secret)
+    JSON.parse(json)["top_queries"]["slowest_queries"][0]["params"].should eq(JSON.parse(%(["#{secret}"])))
   end
 end

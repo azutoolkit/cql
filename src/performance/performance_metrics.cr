@@ -17,12 +17,16 @@ module CQL::Performance
     # Helper method to convert values to JSON::Any recursively
     def self.to_json_any(value) : JSON::Any
       case value
+      when JSON::Any
+        value
       when String, Int32, Int64, Float64, Bool, Nil
         JSON::Any.new(value)
       when Array
         JSON::Any.new(value.map { |v| to_json_any(v) })
       when Hash
         JSON::Any.new(value.transform_values { |v| to_json_any(v) })
+      when NamedTuple
+        JSON::Any.new(value.map { |key, v| {key.to_s, to_json_any(v)} }.to_h)
       when Time
         JSON::Any.new(value.to_rfc3339)
       when Time::Span
