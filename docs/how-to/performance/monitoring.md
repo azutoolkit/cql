@@ -159,7 +159,7 @@ CQL::Performance.healthy?                   # => Bool
 CQL::Performance.critical_issues            # => Array(CQL::Performance::Issue)
 ```
 
-Use `CQL::Performance.enable_sql_logging` / `disable_sql_logging` for formatted SQL logging, and `CQL::Performance.configure { |config| ... }` to tune thresholds. See [Telemetry](telemetry.md) for the event API.
+Use `CQL::Performance.enable_sql_logging` / `disable_sql_logging` for formatted SQL logging (bound values are left out unless `config.logging.include_params` is on; see [Log SQL](query-profiler.md#log-sql)), and `CQL::Performance.configure { |config| ... }` to tune thresholds. See [Telemetry](telemetry.md) for the event API.
 
 ## Database Statistics
 

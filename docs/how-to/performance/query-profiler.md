@@ -51,6 +51,30 @@ Without any setup the monitor starts from `Config.from_env`:
 
 Presets are available as `CQL::Performance.development_config`, `test_config`, `production_config` and `minimal_config`. Install your own with `CQL::Performance.monitor = CQL::Performance::Monitor.new(config)`.
 
+## Log SQL
+
+With SQL logging on, the monitor logs each statement to the `cql.performance.monitor` source: at info, at warn once it takes `profiling.slow_query_threshold` or longer, and at error from `profiling.very_slow_threshold`. A statement that raises is logged at error as `Query failed: <message>` followed by its SQL.
+
+Bound parameter values are left out of these lines, since they often hold personal data or secrets. To log them, opt in:
+
+```crystal
+CQL::Performance.enable_sql_logging
+CQL::Performance.configure do |config|
+  config.logging.include_params = true  # adds "Parameters: [...]", and "Params: [...]" to a failure
+  config.logging.max_param_length = 20  # characters kept of each value
+end
+```
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `logging.include_params` | false | log the bound values of each statement and of a failed one |
+| `logging.max_param_length` | 50 | characters kept of each logged value (`...` marks the cut) |
+| `logging.max_sql_length` | 500 | characters kept of the SQL in a statement's line |
+| `logging.colorize` | true | ANSI colors; `enable_sql_logging(colorize:)` sets it |
+| `logging.pretty_format` | true | break the SQL over lines at its clauses; `enable_sql_logging(pretty:)` sets it |
+
+`include_params` covers the bound values only. Values written into the SQL text itself, and the exception message of a failed statement, are logged as they are.
+
 ## Read the Profile
 
 The profiler keeps running statistics per normalized query (literal numbers, quoted strings and placeholders are replaced by `?`, so `WHERE id = 1` and `WHERE id = 2` count as one query).
