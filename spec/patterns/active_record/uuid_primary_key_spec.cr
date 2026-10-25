@@ -438,6 +438,14 @@ describe "UUID Primary Key Support" do
       UuidTag.find?(tag.id!).should be_nil
     end
 
+    it "inserts associated rows bound to the owner's UUID as a string" do
+      session = UuidSession.create!(token: "owner", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+
+      NoteDestroyingSession.find!(session.id!).insert_notes_all([{} of Symbol => DB::Any, {} of Symbol => DB::Any]).should eq(2)
+
+      uuid_session_note_count(session).should eq(2)
+    end
+
     it "clears the foreign key with dependent: :nullify" do
       session, note_id = uuid_session_with_note
 
