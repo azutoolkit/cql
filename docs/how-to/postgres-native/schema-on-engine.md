@@ -50,7 +50,7 @@ SOURCE.engine.pipeline([AppDB.query.from(:users).select(:name)]) # the engine's 
 AppDB.close # closes the pool for every schema sharing SOURCE; later statements raise CQL::Postgres::PoolClosed
 ```
 
-Statements run through `CQL::Execution`, so telemetry and the [performance monitor](../performance/query-profiler.md) see them. `Schema#exec`, `explain`, `engine.exec` and `engine.pipeline` pass `track: false`: telemetry sees them, the monitor does not.
+Statements run through `CQL::Execution`, so telemetry and the [performance monitor](../observability/query-profiler.md) see them. `Schema#exec`, `explain`, `engine.exec` and `engine.pipeline` pass `track: false`: telemetry sees them, the monitor does not.
 
 ## What Differs from crystal-db's Pool
 
@@ -85,4 +85,4 @@ The source's adapter must match the schema's (`CQL::Adapter::Postgres` or `Cockr
 - [Use Transactions](../data-operations/transactions.md)
 - [Set Up Connection Pooling](../configuration/connection-pooling.md)
 - [Dump and Validate Your Schema](../migrations/schema-dump-and-validation.md)
-- [Telemetry](../performance/telemetry.md)
+- [Telemetry](../observability/telemetry.md)

@@ -257,6 +257,8 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 - Added how-to pages for the native PostgreSQL driver, CockroachDB, CTEs, window functions, set operations, upsert, row locking, raw fragments, `explain`, JSON/geo predicates and the typed `where` DSL; plus schema dump/validation, UUID/ULID keys, safety guardrails and the query profiler.
 - Added `benchmarks/README.md` and `script/README.md`.
 - Rewrote the Optimize Queries how-to as a code-first reference (preload vs. joins, projections, batching, aggregates, bulk writes, indexes, CTEs, `to_sql`/`explain`), and fixed the joins example in Avoid N+1 Queries to call `Post.query.joins`.
+- Rewrote every page under `docs/`, the repo `README.md` and the `examples/`, `benchmarks/`, `script/` and `playground/` READMEs against the current code, following `.claude/docs-style-guide.md`: code-first how-to pages, complete reference tables, runnable tutorials and GitBook `{% hint %}` callouts. Every example was compiled and run (SQLite, plus PostgreSQL 16 and Redis locally where available) and dozens of wrong claims were corrected, for example `add_column` ignores `default:`, `validate ... on:` does not compile, `rollback(n)` counts pending migrations, and the schema-mapping check runs after top-level code.
+- Regrouped the how-to guides: CTEs, window functions, set operations, FULL/CROSS joins, raw fragments and JSON/geo predicates moved to `how-to/advanced-sql/`; upsert and row locking to `how-to/data-operations/`; telemetry, the query profiler and monitoring to `how-to/observability/`; the explanation pages out of single-page folders. `docs/.gitbook.yaml` redirects every moved page and the pages of the layout before the Diátaxis reorganization.
 
 ## [0.0.435]
 

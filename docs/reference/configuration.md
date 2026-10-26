@@ -278,7 +278,7 @@ With the test pool of 1, `migrator.up` and `down` with `auto_sync` on raise `CQL
 | `NO_COLOR` | `CQL::Performance::SQLFormatter` | Present: SQL logging is not colorized. |
 | `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` | native PostgreSQL driver | Used when the URL has no host, port, user or password (defaults `localhost`, `5432`, `postgres`, none). |
 
-`CQL.config` reads none of the `CQL_CACHE_*`, `CQL_REDIS_*` or `CQL_MEMORY_CACHE_MAX_SIZE` variables; they apply only through `CQL::Cache::Cache.configure_from_env` or `CacheStoreConfig.from_env` (see [Redis cache](../how-to/caching/redis.md)). The performance monitor has its own options, set with `CQL::Performance.configure` (see [Profile Queries](../how-to/performance/query-profiler.md)).
+`CQL.config` reads none of the `CQL_CACHE_*`, `CQL_REDIS_*` or `CQL_MEMORY_CACHE_MAX_SIZE` variables; they apply only through `CQL::Cache::Cache.configure_from_env` or `CacheStoreConfig.from_env` (see [Redis cache](../how-to/caching/redis.md)). The performance monitor has its own options, set with `CQL::Performance.configure` (see [Profile Queries](../how-to/observability/query-profiler.md)).
 
 ## Helpers
 

@@ -44,7 +44,7 @@ AppDB.query.from(customers: :c).right(orders: :o) # aliases: ... FROM customers 
 # No such foreign key: ArgumentError "Could not find a foreign key relationship between ..."
 ```
 
-On models, join declared associations with `User.query.joins(:posts)` and `left_joins`; see [Write Typed Queries](typed-where-dsl.md).
+On models, join declared associations with `User.query.joins(:posts)` and `left_joins`; see [Write Typed Queries](../querying/typed-where-dsl.md).
 
 ## Emulate FULL JOIN on MySQL
 
@@ -69,7 +69,7 @@ PostgreSQL and CockroachDB support both joins. CQL renders `FULL JOIN` and `RIGH
 
 ## See Also
 
-- [Build Complex Queries](complex-queries.md)
+- [Build Complex Queries](../querying/complex-queries.md)
 - [Combine Queries with Set Operations](set-operations.md)
-- [Write Typed Queries](typed-where-dsl.md)
+- [Write Typed Queries](../querying/typed-where-dsl.md)
 - [Use CTEs and Recursive CTEs](ctes.md)

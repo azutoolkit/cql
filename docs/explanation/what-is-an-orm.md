@@ -45,13 +45,13 @@ The class stands for the table and each instance for one row. CQL decodes rows i
 | `user.save` on a saved record | `UPDATE users SET name = ?, email = ? WHERE users.id = ?` |
 | `post.user` (a `belongs_to`) | `SELECT users.id, users.name, users.email FROM users WHERE users.id = ? LIMIT ?` |
 
-Associations replace hand-written joins: a `posts.user_id` column becomes `belongs_to :user, User, :user_id` on `Post`, and `post.user` returns `User?`. See [Set Up Belongs To](../../how-to/relationships/belongs-to.md).
+Associations replace hand-written joins: a `posts.user_id` column becomes `belongs_to :user, User, :user_id` on `Post`, and `post.user` returns `User?`. See [Set Up Belongs To](../how-to/relationships/belongs-to.md).
 
 ## What the Mapping Buys You
 
 | Benefit | How CQL provides it |
 | :--- | :--- |
-| Type safety | Assigning an `Int32` to `user.name` is a compile error, and so is `User.query.where { name == 1 }`. See [Safety Guardrails](../safety-guardrails.md). |
+| Type safety | Assigning an `Int32` to `user.name` is a compile error, and so is `User.query.where { name == 1 }`. See [Safety Guardrails](safety-guardrails.md). |
 | Injection safety | Every value is sent as a bound parameter, never spliced into the SQL text. |
 | Portability | The same query renders `?` placeholders for SQLite and MySQL and `$1` for PostgreSQL and CockroachDB. |
 | One place to change | A new column is one property on the model plus one migration. |
@@ -85,8 +85,8 @@ rows = AppDB.exec_query do |conn|
 end
 ```
 
-`exec_query` yields the schema's pooled `DB::Connection`, or the fiber's transaction connection, so raw statements and model calls can share a transaction. Bind values with `?` there too, never with string interpolation. See [Use Raw SQL Fragments Safely](../../how-to/querying/raw-fragments.md) and [Optimize Queries](../../how-to/performance/optimize-queries.md).
+`exec_query` yields the schema's pooled `DB::Connection`, or the fiber's transaction connection, so raw statements and model calls can share a transaction. Bind values with `?` there too, never with string interpolation. See [Use Raw SQL Fragments Safely](../how-to/advanced-sql/raw-fragments.md) and [Optimize Queries](../how-to/performance/optimize-queries.md).
 
 ## Two Patterns: Active Record and Repository
 
-CQL's models follow the [Active Record pattern](../design-patterns/active-record.md): an object carries its data and saves itself (`user.save`). For domain code that must not know about the database, CQL also supports the [Repository pattern](../design-patterns/repository.md), through the generic `CQL::Repository(T, Pk)` or a repository you write around a model.
+CQL's models follow the [Active Record pattern](active-record-pattern.md): an object carries its data and saves itself (`user.save`). For domain code that must not know about the database, CQL also supports the [Repository pattern](repository-pattern.md), through the generic `CQL::Repository(T, Pk)` or a repository you write around a model.

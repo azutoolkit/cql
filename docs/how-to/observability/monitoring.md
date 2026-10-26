@@ -156,6 +156,6 @@ Keep SQL logging off in production; the production preset does. Give exporters t
 
 - [Telemetry](telemetry.md)
 - [Profile Queries and Detect N+1](query-profiler.md)
-- [Avoid N+1 Queries](n-plus-one.md)
-- [Optimize Queries](optimize-queries.md)
+- [Avoid N+1 Queries](../performance/n-plus-one.md)
+- [Optimize Queries](../performance/optimize-queries.md)
 - [Performance Monitoring Tutorial](../../tutorials/real-world-examples/performance-monitoring.md)

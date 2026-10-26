@@ -90,6 +90,6 @@ SQLite has no row locks (it serializes writers), so use a plain transaction ther
 
 ## See Also
 
-- [Use Transactions](../data-operations/transactions.md)
+- [Use Transactions](transactions.md)
 - [Add Optimistic Locking](../models/optimistic-locking.md)
-- [Inspect Queries with to_sql and explain](explain-and-to-sql.md)
+- [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)

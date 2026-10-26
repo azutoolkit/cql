@@ -114,7 +114,7 @@ AppDB.query.from(:orders).select(:customer_id, :total).distinct_on(:customer_id)
 AppDB.query.from(:orders).count(:customer_id, distinct: true, as: :buyers)
 ```
 
-`CQL::Query` also gained `full(:table) { |j| ... }` and `cross(:table)` joins (see [Use FULL and CROSS Joins](../how-to/querying/joins-full-cross.md)). Row locks, `DISTINCT ON`, `FULL` joins and geospatial filters raise `CQL::DialectError` on the dialects that lack them. JSON and geo predicates (`documents.data.json_eq(["profile", "country"], "US")`, `places.location.within_distance(-122.4, 37.8, 500)`) are covered in [Query JSON and Geospatial Columns](../how-to/querying/json-and-geo-predicates.md).
+`CQL::Query` also gained `full(:table) { |j| ... }` and `cross(:table)` joins (see [Use FULL and CROSS Joins](../how-to/advanced-sql/joins-full-cross.md)). Row locks, `DISTINCT ON`, `FULL` joins and geospatial filters raise `CQL::DialectError` on the dialects that lack them. JSON and geo predicates (`documents.data.json_eq(["profile", "country"], "US")`, `places.location.within_distance(-122.4, 37.8, 500)`) are covered in [Query JSON and Geospatial Columns](../how-to/advanced-sql/json-and-geo-predicates.md).
 
 ## Inspecting a Query Before It Runs
 
@@ -145,7 +145,7 @@ CQL::Telemetry.subscribe("metrics") { |event| Log.info { "sql.#{event.operation}
 CQL::Telemetry.alert_on_slow(200.milliseconds) { |event| Log.warn { event.sql } }
 ```
 
-See [Telemetry](../how-to/performance/telemetry.md) for subscribers, the tracer hook and parameter capture.
+See [Telemetry](../how-to/observability/telemetry.md) for subscribers, the tracer hook and parameter capture.
 
 ## Compatibility Notes
 

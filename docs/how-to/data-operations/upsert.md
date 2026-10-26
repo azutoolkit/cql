@@ -62,7 +62,7 @@ AppDB.insert.into(:accounts).upsert(rows, conflict: [:email])                   
 AppDB.insert.into(:accounts).upsert(rows, conflict: [:email], update: [] of Symbol) # DO NOTHING
 ```
 
-For models, `Model.upsert_all(rows, on_conflict: :email)` batches the rows and keeps `id` and `created_at`; see [Create Records](../data-operations/create.md).
+For models, `Model.upsert_all(rows, on_conflict: :email)` batches the rows and keeps `id` and `created_at`; see [Create Records](create.md).
 
 ## Get the Row Back
 
@@ -110,7 +110,7 @@ A statement from `build` is a snapshot: a later `do_update` on the same `Insert`
 
 ## See Also
 
-- [Create Records](../data-operations/create.md)
-- [Use Transactions](../data-operations/transactions.md)
-- [Inspect Queries with to_sql and explain](explain-and-to-sql.md)
+- [Create Records](create.md)
+- [Use Transactions](transactions.md)
+- [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
 - [The query DSL: before and after](../../explanation/dsl-before-after.md)

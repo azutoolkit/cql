@@ -2,8 +2,8 @@
 
 > [!WARNING]
 > None of the four programs here compiles against the current `src/`. They were written for an earlier
-> `CQL::Performance` API. For the current one, use [Monitor Performance](../../docs/how-to/performance/monitoring.md)
-> and [Profile Queries and Detect N+1](../../docs/how-to/performance/query-profiler.md).
+> `CQL::Performance` API. For the current one, use [Monitor Performance](../../docs/how-to/observability/monitoring.md)
+> and [Profile Queries and Detect N+1](../../docs/how-to/observability/query-profiler.md).
 
 | File | Meant to show | Why it does not compile |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ their own once monitoring is on.
 
 ## See Also
 
-- [Monitor Performance](../../docs/how-to/performance/monitoring.md)
-- [Telemetry](../../docs/how-to/performance/telemetry.md)
+- [Monitor Performance](../../docs/how-to/observability/monitoring.md)
+- [Telemetry](../../docs/how-to/observability/telemetry.md)
 - [Avoid N+1 Queries](../../docs/how-to/performance/n-plus-one.md)
 - [blog/](../blog/README.md): a running app with `monitor_performance = true` and a logger report

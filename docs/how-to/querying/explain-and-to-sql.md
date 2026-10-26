@@ -80,13 +80,13 @@ query.explain(analyze: true) # EXPLAIN ANALYZE: runs the statement and times it
 {% endhint %}
 
 {% hint style="info" %}
-Plans are diagnostics: `explain` is not cached and not counted by the performance monitor. Telemetry reports it with the operation `:explain` (see [Telemetry](../performance/telemetry.md)). Plan text differs per database, so do not parse it in application code.
+Plans are diagnostics: `explain` is not cached and not counted by the performance monitor. Telemetry reports it with the operation `:explain` (see [Telemetry](../observability/telemetry.md)). Plan text differs per database, so do not parse it in application code.
 {% endhint %}
 
 ## See Also
 
 - [Optimize Queries](../performance/optimize-queries.md)
-- [Telemetry](../performance/telemetry.md)
-- [Combine Queries with Set Operations](set-operations.md)
-- [Upsert Records](upsert.md)
-- [Lock Rows](row-locking.md)
+- [Telemetry](../observability/telemetry.md)
+- [Combine Queries with Set Operations](../advanced-sql/set-operations.md)
+- [Upsert Records](../data-operations/upsert.md)
+- [Lock Rows](../data-operations/row-locking.md)

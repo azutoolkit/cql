@@ -1,0 +1,96 @@
+root: ./
+
+structure:
+  readme: README.md
+  summary: SUMMARY.md
+
+redirects:
+  # Pages moved when the how-to sections were regrouped
+  how-to/querying/ctes: how-to/advanced-sql/ctes.md
+  how-to/querying/window-functions: how-to/advanced-sql/window-functions.md
+  how-to/querying/set-operations: how-to/advanced-sql/set-operations.md
+  how-to/querying/joins-full-cross: how-to/advanced-sql/joins-full-cross.md
+  how-to/querying/raw-fragments: how-to/advanced-sql/raw-fragments.md
+  how-to/querying/json-and-geo-predicates: how-to/advanced-sql/json-and-geo-predicates.md
+  how-to/querying/upsert: how-to/data-operations/upsert.md
+  how-to/querying/row-locking: how-to/data-operations/row-locking.md
+  how-to/performance/telemetry: how-to/observability/telemetry.md
+  how-to/performance/monitoring: how-to/observability/monitoring.md
+  how-to/performance/query-profiler: how-to/observability/query-profiler.md
+  explanation/concepts/what-is-orm: explanation/what-is-an-orm.md
+  explanation/design-patterns/active-record: explanation/active-record-pattern.md
+  explanation/design-patterns/repository: explanation/repository-pattern.md
+
+  # Pages from the layout before the Diátaxis reorganization (822225bb)
+  introduction: README.md
+  faqs: resources/faq.md
+  troubleshooting: resources/faq.md
+  performance-metrics: how-to/observability/monitoring.md
+  reference-and-utilities/quick-reference: reference/quick-reference.md
+  reference-and-utilities/modern-configuration: reference/configuration.md
+  foundation/core-concepts: explanation/README.md
+  foundation/schemas: how-to/configuration/database-connection.md
+  foundation/initializing-the-database: how-to/configuration/database-connection.md
+  foundation/altering-the-schema: how-to/migrations/add-columns.md
+  foundation/migrations: how-to/migrations/create-migration.md
+  foundation/crud-operations: how-to/data-operations/create.md
+  foundation/crud-operations/creating-records: how-to/data-operations/create.md
+  foundation/crud-operations/reading-records: how-to/querying/find-records.md
+  foundation/crud-operations/updating-records: how-to/data-operations/update.md
+  foundation/crud-operations/deleting-records: how-to/data-operations/delete.md
+  foundation/patterns: explanation/README.md
+  foundation/patterns/active-record: explanation/active-record-pattern.md
+  foundation/patterns/entity-framework: explanation/repository-pattern.md
+  foundation/patterns/repository: explanation/repository-pattern.md
+  getting-started/getting-started: tutorials/getting-started/your-first-cql-app.md
+  getting-started/guides: how-to/README.md
+  getting-started/configuration: how-to/configuration/configure-cql.md
+  getting-started/architecture-overview: explanation/README.md
+  getting-started/best-practices: how-to/README.md
+  getting-started/feature-comparison: reference/database-support.md
+  active-record-with-cql/active-record-with-cql: explanation/active-record-pattern.md
+  active-record-with-cql/defining-models: how-to/models/define-model.md
+  active-record-with-cql/crud-operations: how-to/data-operations/create.md
+  active-record-with-cql/queryable: how-to/querying/find-records.md
+  active-record-with-cql/complex-queries: how-to/querying/complex-queries.md
+  active-record-with-cql/validations: how-to/models/add-validations.md
+  active-record-with-cql/relations: how-to/relationships/has-many.md
+  active-record-with-cql/relations/belongsto: how-to/relationships/belongs-to.md
+  active-record-with-cql/relations/hasone: how-to/relationships/has-one.md
+  active-record-with-cql/relations/hasmany: how-to/relationships/has-many.md
+  active-record-with-cql/relations/manytomany: how-to/relationships/many-to-many.md
+  active-record-with-cql/callbacks: how-to/models/use-callbacks.md
+  active-record-with-cql/transactions: how-to/data-operations/transactions.md
+  active-record-with-cql/persistence-details: how-to/data-operations/create.md
+  active-record-with-cql/optimistic-locking: how-to/models/optimistic-locking.md
+  active-record-with-cql/scopes: how-to/querying/scopes.md
+  active-record-with-cql/soft-deletes: how-to/models/soft-delete.md
+  active-record-with-cql/touch: how-to/models/timestamps.md
+  active-record-with-cql/integrated-migration-workflow: tutorials/real-world-examples/migration-workflows.md
+  database-management/configure-migration-integration: how-to/configuration/configure-cql.md
+  database-management/migrations: how-to/migrations/create-migration.md
+  database-management/handling-migrations: how-to/migrations/run-migrations.md
+  database-management/migration-guide: tutorials/real-world-examples/migration-workflows.md
+  database-management/schema-dump: how-to/migrations/schema-dump-and-validation.md
+  caching-and-performance/caching-guide: how-to/caching/query-cache.md
+  caching-and-performance/centralized-cache-configuration: how-to/caching/query-cache.md
+  caching-and-performance/per-request-query-caching: how-to/caching/per-request.md
+  caching-and-performance/redis-cache-configuration: how-to/caching/redis.md
+  advanced-topics/performance-optimization: how-to/performance/optimize-queries.md
+  advanced-topics/performance-tools: how-to/observability/query-profiler.md
+  advanced-topics/testing-strategies: how-to/testing/test-models.md
+  advanced-topics/security-guide: explanation/safety-guardrails.md
+  examples-and-tutorials/examples: tutorials/README.md
+  examples-and-tutorials/examples-1: tutorials/README.md
+  examples-and-tutorials/examples-1/blog-engine: tutorials/building-a-blog/01-project-setup.md
+  examples-and-tutorials/examples-1/configuration-example: how-to/configuration/configure-cql.md
+  examples-and-tutorials/examples-1/generated-schema-example: how-to/migrations/schema-dump-and-validation.md
+  examples-and-tutorials/examples-1/logger-report-example: how-to/observability/query-profiler.md
+  examples-and-tutorials/examples-1/migration-configuration-example: how-to/configuration/configure-cql.md
+  examples-and-tutorials/examples-1/migrator-config-example: how-to/configuration/configure-cql.md
+  examples-and-tutorials/examples-1/performance-monitoring-example: tutorials/real-world-examples/performance-monitoring.md
+  examples-and-tutorials/examples-1/postgresql-migration-workflow: tutorials/real-world-examples/migration-workflows.md
+  examples-and-tutorials/examples-1/schema-migration-workflow: tutorials/real-world-examples/migration-workflows.md
+  help-and-resources/community: resources/community.md
+  help-and-resources/troubleshooting: resources/faq.md
+  help-and-resources/faqs: resources/faq.md

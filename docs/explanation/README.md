@@ -4,12 +4,12 @@ Background on how CQL works and why it is designed the way it is. For step-by-st
 
 ## Concepts
 
-- [What is an ORM?](concepts/what-is-orm.md): what object-relational mapping does, what it buys you, and CQL's exits when it gets in the way
+- [What is an ORM?](what-is-an-orm.md): what object-relational mapping does, what it buys you, and CQL's exits when it gets in the way
 
 ## Design Patterns
 
-- [Active Record Pattern](design-patterns/active-record.md): the pattern CQL's models follow
-- [Repository Pattern](design-patterns/repository.md): `CQL::Repository` and repositories written around a model
+- [Active Record Pattern](active-record-pattern.md): the pattern CQL's models follow
+- [Repository Pattern](repository-pattern.md): `CQL::Repository` and repositories written around a model
 
 ## Query DSL
 

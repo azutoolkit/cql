@@ -94,7 +94,7 @@ A column literally named `sql` still filters with `where(sql: "abc")`.
 
 ## See Also
 
-- [Filter with Where Clauses](filter-records.md)
-- [Write Typed Queries](typed-where-dsl.md)
+- [Filter with Where Clauses](../querying/filter-records.md)
+- [Write Typed Queries](../querying/typed-where-dsl.md)
 - [Query JSON and Geospatial Columns](json-and-geo-predicates.md)
 - [The query DSL: before and after](../../explanation/dsl-before-after.md)

@@ -93,7 +93,7 @@ statements = (1..200).map { |n| {"SELECT $1::int + 1", [n.as(DB::Any)]} }
 sums = engine.pipeline(statements)
 ```
 
-Each statement reaches telemetry; the first one's duration covers the round trip. `pipeline` passes `track: false`, so the [performance monitor](../performance/query-profiler.md) does not see them. Large batches go out in chunks that fit the socket buffers; `COPY` cannot be pipelined.
+Each statement reaches telemetry; the first one's duration covers the round trip. `pipeline` passes `track: false`, so the [performance monitor](../observability/query-profiler.md) does not see them. Large batches go out in chunks that fit the socket buffers; `COPY` cannot be pipelined.
 
 ### Handle Failures
 

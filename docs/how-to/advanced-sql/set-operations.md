@@ -82,5 +82,5 @@ MySQL needs 8.0.31+ for `INTERSECT` and `EXCEPT`. Render for another dialect wit
 
 - [Use CTEs and Recursive CTEs](ctes.md)
 - [Use FULL and CROSS Joins](joins-full-cross.md)
-- [Build Complex Queries](complex-queries.md)
-- [Inspect Queries with to_sql and explain](explain-and-to-sql.md)
+- [Build Complex Queries](../querying/complex-queries.md)
+- [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)

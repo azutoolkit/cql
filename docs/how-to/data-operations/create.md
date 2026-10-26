@@ -104,7 +104,7 @@ No validations or callbacks run and no records come back. Missing timestamps get
 keys get ids. Unknown columns, rows with different keys or a bad `batch_size` raise `ArgumentError` before anything
 is inserted. Several statements run in one transaction.
 
-[Upsert Records](../querying/upsert.md) covers `upsert_all` options.
+[Upsert Records](upsert.md) covers `upsert_all` options.
 
 ## Read Columns Back From Your Own Insert
 
@@ -125,4 +125,4 @@ inserted.
 - [Use Transactions](transactions.md)
 - [Add Validations](../models/add-validations.md)
 - [Use Callbacks](../models/use-callbacks.md)
-- [Upsert Records](../querying/upsert.md)
+- [Upsert Records](upsert.md)

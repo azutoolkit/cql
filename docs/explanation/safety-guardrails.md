@@ -1,6 +1,6 @@
 # Safety Guardrails
 
-CQL makes the unsafe version of a query hard to write. This page explains each guardrail and where the responsibility passes back to you; for the steps, see [Use Raw SQL Fragments Safely](../how-to/querying/raw-fragments.md) and [Write Typed Queries](../how-to/querying/typed-where-dsl.md).
+CQL makes the unsafe version of a query hard to write. This page explains each guardrail and where the responsibility passes back to you; for the steps, see [Use Raw SQL Fragments Safely](../how-to/advanced-sql/raw-fragments.md) and [Write Typed Queries](../how-to/querying/typed-where-dsl.md).
 
 | Layer | Protects against | Where it stops |
 | :--- | :--- | :--- |
@@ -110,8 +110,8 @@ The compiler does not compare a model with its schema definition. With `CQL_VALI
 ## Bound Values Stay Out of Logs and Errors
 
 - The native PostgreSQL driver keeps passwords and bound values out of the messages it builds; a server error shows the server's own wording only for error classes known to be value-free.
-- `CQL::Telemetry.capture_params` is off by default, so `event.params` is `nil` unless you opt in. See [Telemetry](../how-to/performance/telemetry.md).
-- The [SQL log](../how-to/performance/query-profiler.md#log-sql) leaves bound values out of its lines unless `logging.include_params` is on (then `logging.max_param_length` truncates each value). The error line of a failed statement also drops everything from the first to the last quote of the driver's message; unquoted text, such as an encoding error or `RAISE EXCEPTION` output, is kept.
+- `CQL::Telemetry.capture_params` is off by default, so `event.params` is `nil` unless you opt in. See [Telemetry](../how-to/observability/telemetry.md).
+- The [SQL log](../how-to/observability/query-profiler.md#log-sql) leaves bound values out of its lines unless `logging.include_params` is on (then `logging.max_param_length` truncates each value). The error line of a failed statement also drops everything from the first to the last quote of the driver's message; unquoted text, such as an encoding error or `RAISE EXCEPTION` output, is kept.
 - The profiler keeps the parameters of recorded queries in memory, but the metrics JSON (`CQL::Performance.metrics.to_json`) includes them only when `logging.include_params` is on.
 
 ## What CQL Does Not Do

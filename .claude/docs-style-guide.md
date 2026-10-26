@@ -39,7 +39,11 @@ how-to page.
 - **Names:** CQL, PostgreSQL, SQLite, MySQL, CockroachDB, `QueryBuilder` (what `Model.query` and
   `Model.where` return), `CQL::Query` (what `AppDB.query` returns).
 - **Links** are relative and must resolve. End how-to and reference pages with `## See Also` (6 links
-  at most).
+  at most). GitBook publishes only `docs/`, so a link to anything outside it (the repo `README.md`,
+  `examples/`, `benchmarks/`, `CHANGELOG.md`, `src/`) is an absolute `https://github.com/azutoolkit/cql/...`
+  URL. Files outside `docs/` render on GitHub, so they use GitHub alerts (`> [!NOTE]`), not hints.
+- **Moving a page** needs a redirect from its old path in `docs/.gitbook.yaml` (`old/path: new/path.md`,
+  relative to `docs/`, no leading slash) and an update to `docs/SUMMARY.md` and the section `README.md`.
 
 ## By page type (Diátaxis)
 

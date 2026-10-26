@@ -22,7 +22,7 @@ DATABASE_URL=postgres://user:pass@localhost/db crystal run --release benchmarks/
 DATABASE_URL=postgres://user:pass@localhost/db crystal run --release benchmarks/pg_binary_params_bench.cr
 ```
 
-[benchmarks/README.md](../../../benchmarks/README.md) lists every workload and setting (`BENCH_OPS`, `BENCH_CONCURRENCY`, `BENCH_ROUNDS` and more).
+[benchmarks/README.md](https://github.com/azutoolkit/cql/blob/master/benchmarks/README.md) lists every workload and setting (`BENCH_OPS`, `BENCH_CONCURRENCY`, `BENCH_ROUNDS` and more).
 
 ## Run One Workload
 
@@ -68,11 +68,11 @@ end
 # label, iterations per second, time per iteration, deviation, bytes allocated per iteration
 ```
 
-Run it with the configuration you deploy. SQL logging and the performance monitor, when on, add to every statement: [What monitoring costs](query-profiler.md#what-monitoring-costs) has the numbers.
+Run it with the configuration you deploy. SQL logging and the performance monitor, when on, add to every statement: [What monitoring costs](../observability/query-profiler.md#what-monitoring-costs) has the numbers.
 
 ## See Also
 
 - [How CQL Keeps Queries Fast](../../explanation/performance-design.md)
 - [Optimize Queries](optimize-queries.md)
-- [Profile Queries and Detect N+1](query-profiler.md)
-- [Monitor Performance](monitoring.md)
+- [Profile Queries and Detect N+1](../observability/query-profiler.md)
+- [Monitor Performance](../observability/monitoring.md)

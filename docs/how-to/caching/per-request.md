@@ -92,4 +92,4 @@ The tracker is one per process: overlapping requests share its statements and co
 - [Enable Query Caching](query-cache.md)
 - [Configure Redis Cache](redis.md)
 - [Avoid N+1 Queries](../performance/n-plus-one.md)
-- [Monitor Performance](../performance/monitoring.md)
+- [Monitor Performance](../observability/monitoring.md)

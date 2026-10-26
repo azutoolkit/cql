@@ -122,6 +122,6 @@ User::Row                   # the record type of a partial select
 
 - [Filter with Where Clauses](filter-records.md)
 - [Build Complex Queries](complex-queries.md)
-- [Use Raw SQL Fragments Safely](raw-fragments.md)
-- [Query JSON and Geospatial Columns](json-and-geo-predicates.md)
+- [Use Raw SQL Fragments Safely](../advanced-sql/raw-fragments.md)
+- [Query JSON and Geospatial Columns](../advanced-sql/json-and-geo-predicates.md)
 - [The query DSL: before and after](../../explanation/dsl-before-after.md)

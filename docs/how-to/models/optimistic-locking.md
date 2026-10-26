@@ -109,6 +109,6 @@ With [dirty tracking](dirty-tracking.md), an unchanged record sends no `UPDATE` 
 
 - [Track Changes and Update Only Changed Columns](dirty-tracking.md)
 - [Implement Soft Deletes](soft-delete.md)
-- [Lock Rows](../querying/row-locking.md)
+- [Lock Rows](../data-operations/row-locking.md)
 - [Use Transactions](../data-operations/transactions.md)
 - [Define a Model](define-model.md)

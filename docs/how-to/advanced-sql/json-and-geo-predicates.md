@@ -97,7 +97,7 @@ Document.where { Document.table_column(:location).within_distance(-122.4, 37.8, 
 
 ## See Also
 
-- [Write Typed Queries](typed-where-dsl.md)
+- [Write Typed Queries](../querying/typed-where-dsl.md)
 - [Use Raw SQL Fragments Safely](raw-fragments.md)
-- [Filter with Where Clauses](filter-records.md)
-- [Inspect Queries with to_sql and explain](explain-and-to-sql.md)
+- [Filter with Where Clauses](../querying/filter-records.md)
+- [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)

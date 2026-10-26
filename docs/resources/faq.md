@@ -63,7 +63,7 @@ rows = AppDB.exec_query do |conn|
 end
 ```
 
-See [Use Raw SQL Fragments Safely](../how-to/querying/raw-fragments.md).
+See [Use Raw SQL Fragments Safely](../how-to/advanced-sql/raw-fragments.md).
 
 ### Why is my query returning an empty array?
 
@@ -86,7 +86,7 @@ end
 CQL::Telemetry.log_queries # one debug line per statement on the "cql.telemetry" source
 ```
 
-See [Inspect Queries with to_sql and explain](../how-to/querying/explain-and-to-sql.md) and [Telemetry](../how-to/performance/telemetry.md).
+See [Inspect Queries with to_sql and explain](../how-to/querying/explain-and-to-sql.md) and [Telemetry](../how-to/observability/telemetry.md).
 
 ## Relationships
 

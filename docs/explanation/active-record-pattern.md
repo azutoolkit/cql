@@ -76,7 +76,7 @@ draft.save                  # raises CQL::ActiveRecord::Validations::ValidationE
 | `user.create!` | raises `ValidationError` | callbacks do not run |
 | `User.create!(name: "", email: "x")` | inserts without validating | callbacks do not run |
 
-`save` validates once, before `before_save`, so a value a callback sets is not validated. A callback halts the save only by returning `false`; any other value, including `nil`, lets it continue. Beyond `presence` and `match`, `validate` accepts `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `size`, `required`, `confirmation` and `accept`, and the hooks run before and after validation, save, create, update and destroy. See [Add Validations](../../how-to/models/add-validations.md), [Use Callbacks](../../how-to/models/use-callbacks.md) and [Callback Hooks](../../reference/api/callback-hooks.md).
+`save` validates once, before `before_save`, so a value a callback sets is not validated. A callback halts the save only by returning `false`; any other value, including `nil`, lets it continue. Beyond `presence` and `match`, `validate` accepts `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `size`, `required`, `confirmation` and `accept`, and the hooks run before and after validation, save, create, update and destroy. See [Add Validations](../how-to/models/add-validations.md), [Use Callbacks](../how-to/models/use-callbacks.md) and [Callback Hooks](../reference/api/callback-hooks.md).
 
 ## Associations Are Declared on the Model
 
@@ -120,7 +120,7 @@ post.comments.all         # Array(Comment); the post must be saved first
 | Everything about an entity is in one class | Models in a large domain grow into long classes |
 | Little setup: no mapper or repository layer | Testing a model usually needs a database (an in-memory SQLite file works well) |
 
-Active Record fits CRUD-heavy applications, prototypes, and domains whose objects look like their tables. When business rules must not know about storage, data comes from more than one source, or tests must run without a database, consider the [Repository pattern](repository.md).
+Active Record fits CRUD-heavy applications, prototypes, and domains whose objects look like their tables. When business rules must not know about storage, data comes from more than one source, or tests must run without a database, consider the [Repository pattern](repository-pattern.md).
 
 | Pattern | Holds the data | Talks to the database | In CQL |
 | :--- | :--- | :--- | :--- |

@@ -35,7 +35,7 @@ User.where(name: "Ada").count # => 1   SELECT COUNT(*) FROM users WHERE users.na
 | Learn CQL step by step | [Tutorials](tutorials/README.md) | [Your First CQL App](tutorials/getting-started/your-first-cql-app.md) |
 | Get a specific task done | [How-to Guides](how-to/README.md) | [Configure Database Connection](how-to/configuration/database-connection.md) |
 | Look up a method, option or error | [Reference](reference/README.md) | [Quick Reference](reference/quick-reference.md) |
-| Understand how CQL works and why | [Explanation](explanation/README.md) | [What is an ORM?](explanation/concepts/what-is-orm.md) |
+| Understand how CQL works and why | [Explanation](explanation/README.md) | [What is an ORM?](explanation/what-is-an-orm.md) |
 | Get help or contribute | [Resources](resources/README.md) | [FAQ](resources/faq.md) |
 
 Source, issues and releases: [azutoolkit/cql](https://github.com/azutoolkit/cql) on GitHub. CQL is available under the MIT license.

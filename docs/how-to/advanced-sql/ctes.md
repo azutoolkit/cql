@@ -124,6 +124,6 @@ In a set operation, an operand that declares CTEs is grouped: `UNION (WITH t AS 
 
 - [Use Window Functions](window-functions.md)
 - [Combine Queries with Set Operations](set-operations.md)
-- [Build Complex Queries](complex-queries.md)
-- [Inspect Queries with to_sql and explain](explain-and-to-sql.md)
+- [Build Complex Queries](../querying/complex-queries.md)
+- [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
 - [The query DSL: before and after](../../explanation/dsl-before-after.md)

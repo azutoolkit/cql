@@ -80,7 +80,7 @@ User.where("lower(email) = :email AND age > :age", email: "ada@example.com", age
 # ... WHERE lower(email) = ? AND age > ?   params: ["ada@example.com", 18]
 ```
 
-The fragment itself must be a literal you wrote; see [Use Raw SQL Fragments Safely](raw-fragments.md).
+The fragment itself must be a literal you wrote; see [Use Raw SQL Fragments Safely](../advanced-sql/raw-fragments.md).
 
 ## Order, Limit and Count
 
@@ -97,4 +97,4 @@ User.where(active: true).count # SELECT COUNT(*) FROM users WHERE users.active =
 - [Find Records](find-records.md)
 - [Build Complex Queries](complex-queries.md)
 - [Create Query Scopes](scopes.md)
-- [Use Raw SQL Fragments Safely](raw-fragments.md)
+- [Use Raw SQL Fragments Safely](../advanced-sql/raw-fragments.md)

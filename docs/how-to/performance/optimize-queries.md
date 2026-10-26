@@ -224,8 +224,8 @@ Keep SQL logging and the performance monitor off in production; each adds severa
 ## See Also
 
 - [Avoid N+1 Queries](n-plus-one.md)
-- [Profile Queries and Detect N+1](query-profiler.md)
+- [Profile Queries and Detect N+1](../observability/query-profiler.md)
 - [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
-- [Use CTEs and Recursive CTEs](../querying/ctes.md)
+- [Use CTEs and Recursive CTEs](../advanced-sql/ctes.md)
 - [Create Indexes](../migrations/indexes.md)
 - [How CQL Keeps Queries Fast](../../explanation/performance-design.md)

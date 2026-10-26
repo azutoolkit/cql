@@ -106,4 +106,4 @@ puts User.where(active: true).query.explain
 - [Add Columns](add-columns.md)
 - [Optimize Queries](../performance/optimize-queries.md)
 - [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
-- [Upsert Records](../querying/upsert.md)
+- [Upsert Records](../data-operations/upsert.md)

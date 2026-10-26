@@ -125,6 +125,6 @@ Aliases are checked as identifiers (`as: :"x; DROP TABLE staff"` raises `Invalid
 ## See Also
 
 - [Use CTEs and Recursive CTEs](ctes.md)
-- [Build Complex Queries](complex-queries.md)
-- [Inspect Queries with to_sql and explain](explain-and-to-sql.md)
+- [Build Complex Queries](../querying/complex-queries.md)
+- [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
 - [The query DSL: before and after](../../explanation/dsl-before-after.md)

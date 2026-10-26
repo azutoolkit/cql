@@ -183,4 +183,4 @@ entity.name = "Updated"
 repo.save(entity)
 ```
 
-The two patterns mix well: use models directly for plain CRUD, and a repository where the domain is complex. See [Active Record Pattern](active-record.md) for the model side.
+The two patterns mix well: use models directly for plain CRUD, and a repository where the domain is complex. See [Active Record Pattern](active-record-pattern.md) for the model side.

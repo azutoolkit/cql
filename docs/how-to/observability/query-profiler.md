@@ -119,7 +119,7 @@ CQL::Performance.start_relation_loading("user", "Post")  # markers take window s
 CQL::Performance.end_relation_loading
 ```
 
-To fix a pattern, see [Avoid N+1 Queries](n-plus-one.md).
+To fix a pattern, see [Avoid N+1 Queries](../performance/n-plus-one.md).
 
 {% hint style="info" %}
 A count never exceeds `detection_window`, so with the default of 10 an N+1 issue is at most `medium` and never appears in `critical_issues` or `high_priority_issues`.
@@ -203,6 +203,6 @@ The monitor allocates only a slow query's `QueryData` and SQL log lines. The ben
 
 - [Monitor Performance](monitoring.md)
 - [Telemetry](telemetry.md)
-- [Avoid N+1 Queries](n-plus-one.md)
-- [Optimize Queries](optimize-queries.md)
+- [Avoid N+1 Queries](../performance/n-plus-one.md)
+- [Optimize Queries](../performance/optimize-queries.md)
 - [How CQL Keeps Queries Fast](../../explanation/performance-design.md)

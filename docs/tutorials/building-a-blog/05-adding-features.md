@@ -377,7 +377,7 @@ Check: without those variables, `crystal src/demo.cr` still prints the Step 6 ou
 
 | Before deploying | Where |
 | :--- | :--- |
-| CQL binds every value as a parameter; keep raw SQL to literals you control | [Use Raw SQL Fragments Safely](../../how-to/querying/raw-fragments.md) |
+| CQL binds every value as a parameter; keep raw SQL to literals you control | [Use Raw SQL Fragments Safely](../../how-to/advanced-sql/raw-fragments.md) |
 | Index the columns you filter and join on | [Create Indexes](../../how-to/migrations/indexes.md) |
 | Load associations with `preload` instead of in a loop | [Avoid N+1 Queries](../../how-to/performance/n-plus-one.md) |
 | Paginate every list | [Paginate Results](../../how-to/querying/pagination.md) |

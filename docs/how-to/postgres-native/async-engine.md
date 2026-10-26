@@ -165,5 +165,5 @@ end
 - [Stream Large Results and Pipeline Statements](streaming-and-pipelining.md)
 - [Configure TLS, Poolers, Timeouts and Transactions](tls-and-poolers.md)
 - [Set Up Connection Pooling](../configuration/connection-pooling.md)
-- [Telemetry](../performance/telemetry.md)
-- [Profile Queries and Detect N+1](../performance/query-profiler.md)
+- [Telemetry](../observability/telemetry.md)
+- [Profile Queries and Detect N+1](../observability/query-profiler.md)

@@ -129,5 +129,5 @@ The `transaction(tx)` overloads emit no events, and a manual `tx.rollback` is re
 - [Create Records](create.md)
 - [Update Records](update.md)
 - [Add Optimistic Locking](../models/optimistic-locking.md)
-- [Telemetry](../performance/telemetry.md#transactions)
+- [Telemetry](../observability/telemetry.md#transactions)
 - [Configure TLS, Poolers, Timeouts and Transactions](../postgres-native/tls-and-poolers.md#transactions-isolation-and-savepoints)

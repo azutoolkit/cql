@@ -108,12 +108,12 @@ CQL::Telemetry.unsubscribe("count")
 count  # => 2
 ```
 
-The detector, its window and its severities are in [Profile Queries and Detect N+1](query-profiler.md).
+The detector, its window and its severities are in [Profile Queries and Detect N+1](../observability/query-profiler.md).
 
 ## See Also
 
 - [Optimize Queries](optimize-queries.md)
-- [Profile Queries and Detect N+1](query-profiler.md)
-- [Telemetry](telemetry.md)
+- [Profile Queries and Detect N+1](../observability/query-profiler.md)
+- [Telemetry](../observability/telemetry.md)
 - [Set Up Has Many](../relationships/has-many.md)
 - [Add Columns](../migrations/add-columns.md)

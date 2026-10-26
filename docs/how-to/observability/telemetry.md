@@ -134,5 +134,5 @@ end
 - [Monitor Performance](monitoring.md)
 - [Profile Queries and Detect N+1](query-profiler.md)
 - [What Monitoring Costs](query-profiler.md#what-monitoring-costs)
-- [Avoid N+1 Queries](n-plus-one.md)
+- [Avoid N+1 Queries](../performance/n-plus-one.md)
 - [Use Transactions](../data-operations/transactions.md)

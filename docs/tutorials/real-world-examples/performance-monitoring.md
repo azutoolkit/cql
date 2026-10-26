@@ -32,7 +32,7 @@ crystal src/perf.cr
 2026-10-26T02:30:12.700075Z  DEBUG - cql.telemetry: [select] 0.08ms SELECT COUNT(*) FROM posts WHERE posts.published = ? (1 params)
 ```
 
-Bound values stay out of the line, and out of events unless `CQL::Telemetry.capture_params = true`. Transactions publish `TransactionEvent`s to `subscribe_transactions` instead (see [Telemetry](../../how-to/performance/telemetry.md#transactions)).
+Bound values stay out of the line, and out of events unless `CQL::Telemetry.capture_params = true`. Transactions publish `TransactionEvent`s to `subscribe_transactions` instead (see [Telemetry](../../how-to/observability/telemetry.md#transactions)).
 
 ## Step 2: Collect queries in a monitor
 
@@ -268,5 +268,5 @@ Post.find_each(batch_size: 100) { |post| puts post.title }
 
 - [Optimizing Queries in CQL](../../how-to/performance/optimize-queries.md)
 - [Avoid N+1 Queries](../../how-to/performance/n-plus-one.md)
-- [Profile Queries and Detect N+1](../../how-to/performance/query-profiler.md)
+- [Profile Queries and Detect N+1](../../how-to/observability/query-profiler.md)
 - [Enable Query Caching](../../how-to/caching/query-cache.md)
