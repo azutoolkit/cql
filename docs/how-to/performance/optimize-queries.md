@@ -1,7 +1,8 @@
 # Optimizing Queries in CQL
 
-> [!TIP]
-> Optimize CQL database operations by minimizing network round trips (**`preload`**), reducing heap allocations (**`select`**), and offloading collection work to the database engine (**`exists?`**, **`count`**).
+{% hint style="success" %}
+Optimize CQL database operations by minimizing network round trips (**`preload`**), reducing heap allocations (**`select`**), and offloading collection work to the database engine (**`exists?`**, **`count`**).
+{% endhint %}
 
 ---
 
@@ -39,8 +40,9 @@ users = User.preload(:posts, :profile).all
 authors = User.query.joins(:posts) { posts.published == true }.distinct.all
 ```
 
-> [!NOTE]
-> **`preload`** runs only through `all` / `to_a`, ignores `many_to_many`, and raises `ArgumentError` after a partial `select`. A join filters rows but does not populate the association.
+{% hint style="info" %}
+**`preload`** runs only through `all` / `to_a`, ignores `many_to_many`, and raises `ArgumentError` after a partial `select`. A join filters rows but does not populate the association.
+{% endhint %}
 
 ---
 
@@ -141,8 +143,9 @@ class User
 end
 ```
 
-> [!NOTE]
-> Bulk writes skip validations and callbacks. Rows per statement default to `max_bind_params / columns`; pass `batch_size:` to change it. `delete_all` deletes record by record when the model has destroy callbacks, `dependent:` or `many_to_many`.
+{% hint style="info" %}
+Bulk writes skip validations and callbacks. Rows per statement default to `max_bind_params / columns`; pass `batch_size:` to change it. `delete_all` deletes record by record when the model has destroy callbacks, `dependent:` or `many_to_many`.
+{% endhint %}
 
 ---
 
@@ -212,8 +215,9 @@ CQL::Performance.enable_development_mode!       # profiler + N+1 detector
 CQL::Performance.critical_issues                # N+1 patterns appear as :n_plus_one issues
 ```
 
-> [!NOTE]
-> Keep SQL logging and the performance monitor off in production; each adds several microseconds per query.
+{% hint style="info" %}
+Keep SQL logging and the performance monitor off in production; each adds several microseconds per query.
+{% endhint %}
 
 ---
 
