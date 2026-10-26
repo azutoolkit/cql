@@ -132,7 +132,7 @@ The message quotes the server's wording only for SQLSTATE classes known not to c
 
 ## Observe Statements
 
-Statements go through `CQL::Execution`, so telemetry and performance tracking see them:
+Statements go through `CQL::Execution`, so telemetry and performance tracking see them. The exceptions are `engine.exec` and `engine.pipeline`, which pass `track: false`: telemetry sees them, the [performance monitor](../performance/query-profiler.md) does not.
 
 ```crystal
 CQL::Telemetry.subscribe("pg") do |event|

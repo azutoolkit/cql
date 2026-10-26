@@ -8,6 +8,8 @@ require "../compat"
 module CQL::Performance
   # Timing utilities
   module TimingUtils
+    extend self
+
     def measure_execution(&)
       start_time = Time.instant
       result = yield
@@ -102,6 +104,89 @@ module CQL::Performance
     end
   end
 
+  # Fixed-size log-linear histogram of durations: whole microseconds below `SUB_BUCKETS` get a
+  # bucket each, every power of two above splits into `SUB_BUCKETS`, sub-microsecond samples
+  # land in bucket 0 and samples of `RANGE` or more in `OVERFLOW_INDEX`.
+  struct LatencyHistogram
+    private SUB_BUCKET_BITS         = 2
+    private SUB_BUCKETS             = 1 << SUB_BUCKET_BITS
+    private RANGE_BITS              = 26
+    private RANGE                   = (1_i64 << RANGE_BITS).microseconds
+    private OVERFLOW_INDEX          = (RANGE_BITS - SUB_BUCKET_BITS + 1) * SUB_BUCKETS
+    private BUCKET_COUNT            = OVERFLOW_INDEX + 1
+    private MICROSECONDS_PER_SECOND = 1_000_000_i64
+
+    @counts = StaticArray(Int64, BUCKET_COUNT).new(0_i64)
+
+    # Counts *duration* in its bucket in O(1), without allocating.
+    def record(duration : Time::Span) : Nil
+      @counts[bucket_index(duration)] += 1
+    end
+
+    # Upper bound of the bucket holding rank `ceil(q * count)`, clamped to *min*..*max*.
+    def percentile(q : Float64, count : Int64, min : Time::Span, max : Time::Span) : Time::Span
+      raise ArgumentError.new("quantile must be in 0.0..1.0, got #{q}") unless (0.0..1.0).includes?(q)
+      return Time::Span.zero if count == 0
+      rank = Math.max(1_i64, (q * count).ceil.to_i64)
+      seen = 0_i64
+      @counts.each_with_index do |bucket_count, index|
+        seen += bucket_count
+        return upper_bound(index).clamp(min, max) if seen >= rank
+      end
+      max
+    end
+
+    # Clears every bucket.
+    def reset : Nil
+      @counts.fill(0_i64)
+    end
+
+    private def bucket_index(duration : Time::Span) : Int32
+      span = duration.clamp(Time::Span.zero, RANGE)
+      micros = span.to_i * MICROSECONDS_PER_SECOND + span.microseconds
+      octave = 63 - micros.leading_zeros_count
+      shift = Math.max(octave - SUB_BUCKET_BITS, 0)
+      ((shift << SUB_BUCKET_BITS) + (micros >> shift)).to_i
+    end
+
+    private def upper_bound(index : Int32) : Time::Span
+      return Time::Span::MAX if index == OVERFLOW_INDEX
+      shift = Math.max((index >> SUB_BUCKET_BITS) - 1, 0)
+      top = index - (shift << SUB_BUCKET_BITS)
+      ((top + 1).to_i64 << shift).microseconds
+    end
+  end
+
+  # The p50, p95 and p99 of one set of recorded durations.
+  record LatencyPercentiles, p50 : Time::Span, p95 : Time::Span, p99 : Time::Span do
+    def self.zero : self
+      new(Time::Span.zero, Time::Span.zero, Time::Span.zero)
+    end
+
+    # The three values in milliseconds, keyed `p50_ms`, `p95_ms` and `p99_ms`.
+    def to_ms_h : Hash(String, Float64)
+      {"p50_ms" => p50.total_milliseconds, "p95_ms" => p95.total_milliseconds, "p99_ms" => p99.total_milliseconds}
+    end
+  end
+
+  # What the monitor itself observed: statements it recorded, the estimated time spent recording them and
+  # the wait for a pooled connection of the statements `CQL::Execution.run` reported.
+  record MonitorCounters, observed_statements : Int64, overhead : Time::Span, pool_wait : LatencyPercentiles,
+    dropped_events : Int64 do
+    def self.zero : self
+      new(0_i64, Time::Span.zero, LatencyPercentiles.zero, 0_i64)
+    end
+
+    def to_h : Hash(String, Int64 | Float64)
+      {
+        "observed_statements" => observed_statements,
+        "overhead_ms"         => overhead.total_milliseconds,
+        "p95_pool_wait_ms"    => pool_wait.p95.total_milliseconds,
+        "dropped_events"      => dropped_events,
+      } of String => Int64 | Float64
+    end
+  end
+
   # Statistics tracking
   class StatsTracker
     property total_count : Int64 = 0
@@ -111,15 +196,27 @@ module CQL::Performance
     property errors : Int64 = 0
 
     @mutex : CQL::Compat::Mutex = CQL::Compat::Mutex.new
+    @histogram : LatencyHistogram = LatencyHistogram.new
 
     def record(duration : Time::Span, error : Bool = false)
       @mutex.synchronize do
         @total_count += 1
         @total_time += duration
-        @min_time = [@min_time, duration].min
-        @max_time = [@max_time, duration].max
+        @min_time = Math.min(@min_time, duration)
+        @max_time = Math.max(@max_time, duration)
         @errors += 1 if error
+        @histogram.record(duration)
       end
+    end
+
+    # Estimated *q* quantile of the recorded durations; zero when none are recorded. Raises ArgumentError outside 0.0..1.0.
+    def percentile(q : Float64) : Time::Span
+      @mutex.synchronize { unsafe_percentile(q) }
+    end
+
+    # p50, p95 and p99 read under one lock, so all three describe the same samples.
+    def percentiles : LatencyPercentiles
+      @mutex.synchronize { unsafe_percentiles }
     end
 
     def avg_time : Time::Span
@@ -137,11 +234,13 @@ module CQL::Performance
         @min_time = Time::Span::MAX
         @max_time = Time::Span.zero
         @errors = 0
+        @histogram.reset
       end
     end
 
     def to_h : Hash(String, String | Int64 | Float64)
       @mutex.synchronize do
+        latency = unsafe_percentiles
         {
           "total_count"   => @total_count,
           "total_time_ms" => @total_time.total_milliseconds,
@@ -150,8 +249,19 @@ module CQL::Performance
           "max_time_ms"   => @max_time.total_milliseconds,
           "error_count"   => @errors,
           "error_rate"    => unsafe_error_rate,
+          "p50_time_ms"   => latency.p50.total_milliseconds,
+          "p95_time_ms"   => latency.p95.total_milliseconds,
+          "p99_time_ms"   => latency.p99.total_milliseconds,
         } of String => String | Int64 | Float64
       end
+    end
+
+    private def unsafe_percentile(q : Float64) : Time::Span
+      @histogram.percentile(q, @total_count, @min_time, @max_time)
+    end
+
+    private def unsafe_percentiles : LatencyPercentiles
+      LatencyPercentiles.new(unsafe_percentile(0.5), unsafe_percentile(0.95), unsafe_percentile(0.99))
     end
 
     private def unsafe_avg_time : Time::Span

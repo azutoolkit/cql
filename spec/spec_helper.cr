@@ -42,6 +42,11 @@ def spec_sqlite_uri(name : String)
   CQLSpecSupport.sqlite_uri(name)
 end
 
+# A schema on its own SQLite file; *params* is appended to the URI (e.g. pool settings).
+def spec_sqlite_schema(name : String, params : String = "") : CQL::Schema
+  CQL::Schema.new(:spec_sqlite, spec_sqlite_uri(name) + params, CQL::Adapter::SQLite)
+end
+
 def postgres_available?
   CQLSpecSupport.postgres_available?
 end
@@ -72,6 +77,14 @@ def count_queries(operation : Symbol = :select, & : ->) : Array(String)
     CQL::Telemetry.unsubscribe(subscription)
   end
   statements
+end
+
+# Heap bytes allocated per call of the block, after a warm-up so one-time setup is not counted.
+def bytes_per_call(calls : Int32, & : ->) : Float64
+  100.times { yield }
+  before = GC.stats.total_bytes
+  calls.times { yield }
+  (GC.stats.total_bytes - before) / calls.to_f
 end
 
 require "./support/**"

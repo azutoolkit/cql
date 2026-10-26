@@ -21,6 +21,8 @@ module CQL::Performance
       types:     %w[INTEGER INT BIGINT VARCHAR TEXT BOOLEAN DATE TIMESTAMP JSON UUID],
     }
 
+    QUOTE_BYTES = {'\''.ord.to_u8, '"'.ord.to_u8}
+
     @colorize_enabled : Bool
     @pretty_format : Bool
     @max_sql_length : Int32
@@ -79,6 +81,14 @@ module CQL::Performance
       format_params(params) if @include_params && !params.empty?
     end
 
+    # A driver's error message as it may appear in a log line: everything from the
+    # first to the last quote becomes `'?'` / `"?"` unless `include_params` is on.
+    def loggable_error(message : String) : String
+      return message if @include_params
+
+      redact_quoted(message)
+    end
+
     # Configure formatter
     def configure(colorize : Bool? = nil, pretty : Bool? = nil,
                   max_sql : Int32? = nil, max_param : Int32? = nil,
@@ -88,6 +98,21 @@ module CQL::Performance
       @max_sql_length = max_sql unless max_sql.nil?
       @max_param_length = max_param unless max_param.nil?
       @include_params = include_params unless include_params.nil?
+    end
+
+    # Drivers print a bound value inside quotes without escaping the quotes it holds, so where
+    # it ends cannot be told: one span from the earliest to the latest quote of either kind, or to
+    # the end of the message when a kind occurs once. Quotes are ASCII, so byte offsets are safe.
+    private def redact_quoted(text : String) : String
+      bounds = QUOTE_BYTES.compact_map do |quote|
+        first = text.byte_index(quote)
+        {first, text.to_slice.rindex(quote) || first} if first
+      end
+      return text if bounds.empty?
+
+      opening = bounds.min_of(&.first)
+      closing = bounds.any? { |first, last| first == last } ? text.bytesize : bounds.max_of(&.last)
+      "#{text.byte_slice(0, opening + 1)}?#{text.byte_slice(closing)}"
     end
 
     private def pretty_format_sql(sql : String) : String

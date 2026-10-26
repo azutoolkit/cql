@@ -1,4 +1,5 @@
 require "./compat"
+require "./telemetry/event_queue"
 
 module CQL
   # Observability for every statement CQL runs: subscribers receive a `QueryEvent`
@@ -32,8 +33,13 @@ module CQL
       getter operation : Symbol
       getter rows_affected : Int64?
       getter context : String?
+      # Time spent waiting for a pooled connection; about zero on a pinned or
+      # transaction connection. Included in `duration`; measured by
+      # `CQL::Execution.run` (zero in events built by `Telemetry.observe`).
+      getter pool_wait : Time::Span
 
-      def initialize(@sql, @param_count, @params, @duration, @error, @adapter, @operation, @rows_affected, @context)
+      def initialize(@sql, @param_count, @params, @duration, @error, @adapter, @operation, @rows_affected, @context,
+                     @pool_wait = Time::Span.zero)
       end
 
       def success? : Bool
@@ -99,11 +105,19 @@ module CQL
     alias Subscriber = QueryEvent ->
     alias TransactionSubscriber = TransactionEvent ->
 
+    private DEFAULT_ASYNC_QUEUE_CAPACITY = 4096
+
+    # One FIFO for both event types, so a transaction's Begin is delivered before its Commit.
+    private alias AsyncQueue = EventQueue(QueryEvent | TransactionEvent)
+
     @@subscribers = {} of String => Subscriber
+    @@async_subscribers = {} of String => Subscriber
+    @@async_queue : AsyncQueue? = nil
     @@transaction_subscribers = {} of String => TransactionSubscriber
+    @@async_transaction_subscribers = {} of String => TransactionSubscriber
     @@transaction_ids = Atomic(Int64).new(0)
-    @@contexts = {} of Fiber => String
     @@mutex = CQL::Compat::Mutex.new
+    @@async_queue_capacity : Int32 = DEFAULT_ASYNC_QUEUE_CAPACITY
     @@capture_params = false
     @@tracer : Tracer? = nil
 
@@ -123,27 +137,95 @@ module CQL
       @@tracer = value
     end
 
-    # Registers (or replaces) the subscriber called *name*.
-    def self.subscribe(name : String, &block : QueryEvent ->) : Nil
-      @@mutex.synchronize { @@subscribers = @@subscribers.merge({name => block}) }
+    # Events the async queue holds before it drops new ones. Set it before the first async subscriber: the queue
+    # is built then and kept until `reset!`, which also restores the default.
+    def self.async_queue_capacity : Int32
+      @@async_queue_capacity
+    end
+
+    def self.async_queue_capacity=(value : Int32)
+      @@async_queue_capacity = AsyncQueue.checked_capacity(value)
+    end
+
+    # Registers (or replaces) the subscriber called *name*, by default called inline after each statement.
+    #
+    # An *async* subscriber runs on one background fiber after the statement returns, fed by a bounded
+    # queue that drops events when full (`dropped_events`). On a single Crystal thread this moves its work
+    # out of the query's latency, not out of the CPU; under multi-threading a push to a parked consumer
+    # can cost a scheduler wake.
+    def self.subscribe(name : String, *, async : Bool = false, &block : QueryEvent ->) : Nil
+      @@mutex.synchronize do
+        if async
+          start_async_queue
+          @@async_subscribers, @@subscribers = move(@@async_subscribers, @@subscribers, name, block)
+        else
+          @@subscribers, @@async_subscribers = move(@@subscribers, @@async_subscribers, name, block)
+        end
+      end
     end
 
     def self.unsubscribe(name : String) : Nil
-      @@mutex.synchronize { @@subscribers = @@subscribers.reject(name) }
+      @@mutex.synchronize do
+        @@subscribers = @@subscribers.reject(name)
+        @@async_subscribers = @@async_subscribers.reject(name)
+      end
     end
 
-    # Registers (or replaces) the transaction subscriber called *name*.
-    def self.subscribe_transactions(name : String, &block : TransactionEvent ->) : Nil
-      @@mutex.synchronize { @@transaction_subscribers = @@transaction_subscribers.merge({name => block}) }
+    # Waits until async subscribers have handled every event published before it; false on timeout, true without a queue.
+    def self.flush(timeout : Time::Span? = nil) : Bool
+      queue = @@async_queue
+      queue.nil? || queue.flush(timeout)
+    end
+
+    # Events the async queue dropped because it was full.
+    def self.dropped_events : Int64
+      @@async_queue.try(&.dropped) || 0_i64
+    end
+
+    # Registers (or replaces) the transaction subscriber called *name*; *async* works as in `subscribe`.
+    def self.subscribe_transactions(name : String, *, async : Bool = false, &block : TransactionEvent ->) : Nil
+      @@mutex.synchronize do
+        if async
+          start_async_queue
+          @@async_transaction_subscribers, @@transaction_subscribers =
+            move(@@async_transaction_subscribers, @@transaction_subscribers, name, block)
+        else
+          @@transaction_subscribers, @@async_transaction_subscribers =
+            move(@@transaction_subscribers, @@async_transaction_subscribers, name, block)
+        end
+      end
     end
 
     def self.unsubscribe_transactions(name : String) : Nil
-      @@mutex.synchronize { @@transaction_subscribers = @@transaction_subscribers.reject(name) }
+      @@mutex.synchronize do
+        @@transaction_subscribers = @@transaction_subscribers.reject(name)
+        @@async_transaction_subscribers = @@async_transaction_subscribers.reject(name)
+      end
     end
 
     # Whether a query or transaction subscriber is registered under *name*.
     def self.subscribed?(name : String) : Bool
-      @@subscribers.has_key?(name) || @@transaction_subscribers.has_key?(name)
+      @@subscribers.has_key?(name) || @@async_subscribers.has_key?(name) ||
+        @@transaction_subscribers.has_key?(name) || @@async_transaction_subscribers.has_key?(name)
+    end
+
+    # *to* with *name* bound to *subscriber*, and *from* without it. Assigned in that order, *name* is never missing
+    # from both maps; a reader that skips the lock can still see one event twice, or miss one, while it switches.
+    private def self.move(to, from, name, subscriber)
+      {to.merge({name => subscriber}), from.reject(name)}
+    end
+
+    # Builds the async queue once; callers hold `@@mutex`.
+    private def self.start_async_queue : Nil
+      @@async_queue ||= AsyncQueue.new(@@async_queue_capacity) { |event| deliver_async(event) }
+    end
+
+    private def self.deliver_async(event : QueryEvent) : Nil
+      notify(@@async_subscribers, event)
+    end
+
+    private def self.deliver_async(event : TransactionEvent) : Nil
+      notify(@@async_transaction_subscribers, event)
     end
 
     # Process-wide, strictly increasing transaction id.
@@ -154,7 +236,7 @@ module CQL
     # Publishes Begin and returns the observer that publishes the end of the
     # transaction, or nil (without allocating or reading the clock) when nobody subscribed.
     def self.begin_transaction(adapter : Adapter, nested : Bool) : TransactionObserver?
-      return if @@transaction_subscribers.empty?
+      return if @@transaction_subscribers.empty? && @@async_transaction_subscribers.empty?
 
       id = next_transaction_id
       emit_transaction(TransactionEvent.new(TransactionState::Begin, id, Time::Span.zero, nested, nil, adapter))
@@ -164,17 +246,21 @@ module CQL
     # :nodoc:
     def self.emit_transaction(event : TransactionEvent) : Nil
       notify(@@transaction_subscribers, event)
+      queue = @@async_queue
+      queue.push(event) if queue && !@@async_transaction_subscribers.empty?
     end
 
-    # Calls the block for statements that took at least *threshold*.
-    def self.alert_on_slow(threshold : Time::Span, name : String = "cql.slow_query", &block : QueryEvent ->) : Nil
-      subscribe(name) { |event| block.call(event) if event.duration >= threshold }
+    # Calls the block for statements that took at least *threshold*, off the query's path when *async* (see `subscribe`).
+    def self.alert_on_slow(threshold : Time::Span, name : String = "cql.slow_query", *, async : Bool = false,
+                           &block : QueryEvent ->) : Nil
+      subscribe(name, async: async) { |event| block.call(event) if event.duration >= threshold }
     end
 
-    # Logs one line per statement.
-    def self.log_queries(severity : ::Log::Severity = ::Log::Severity::Debug, name : String = "cql.log") : Nil
+    # Logs one line per statement, off the query's path when *async* (see `subscribe`).
+    def self.log_queries(severity : ::Log::Severity = ::Log::Severity::Debug, name : String = "cql.log", *,
+                         async : Bool = false) : Nil
       logger = ::Log.for("cql.telemetry")
-      subscribe(name) do |event|
+      subscribe(name, async: async) do |event|
         failure = " FAILED: #{event.error.class}" if event.error
         message = "[#{event.operation}] #{event.duration.total_milliseconds.round(2)}ms #{event.sql} (#{event.param_count} params)#{failure}"
         case severity
@@ -188,19 +274,27 @@ module CQL
 
     # Tags events emitted by the current fiber while the block runs.
     def self.with_context(context : String, &)
-      previous = @@mutex.synchronize { @@contexts.put(Fiber.current, context) { nil } }
+      previous = current_context
+      Fiber.current.cql_telemetry_context = context
       yield
     ensure
-      @@mutex.synchronize do
-        previous ? (@@contexts[Fiber.current] = previous) : @@contexts.delete(Fiber.current)
-      end
+      Fiber.current.cql_telemetry_context = previous
+    end
+
+    # The context set by `with_context` on the current fiber, if any.
+    def self.current_context : String?
+      Fiber.current.cql_telemetry_context
     end
 
     def self.reset! : Nil
       @@mutex.synchronize do
         @@subscribers = {} of String => Subscriber
+        @@async_subscribers = {} of String => Subscriber
         @@transaction_subscribers = {} of String => TransactionSubscriber
-        @@contexts.clear
+        @@async_transaction_subscribers = {} of String => TransactionSubscriber
+        @@async_queue.try &.close
+        @@async_queue = nil
+        @@async_queue_capacity = DEFAULT_ASYNC_QUEUE_CAPACITY
       end
       @@capture_params = false
       @@tracer = nil
@@ -209,20 +303,26 @@ module CQL
     # Runs the block as one observed statement: inside the tracer's span, then
     # reports the event to the subscribers.
     def self.observe(adapter : Adapter, operation : Symbol, sql : String, params : Array(DB::Any), & : -> T) : T forall T
-      return in_span(operation, sql) { yield } if @@subscribers.empty?
+      return in_span(operation, sql) { yield } unless observing?
 
       started = Time.instant
       begin
         result = in_span(operation, sql) { yield }
       rescue ex
-        emit(adapter, operation, sql, params, Time.instant - started, ex, nil)
+        publish(query_event(adapter, operation, sql, params, Time.instant - started, ex, nil))
         raise ex
       end
-      emit(adapter, operation, sql, params, Time.instant - started, nil, rows_affected(result))
+      publish(query_event(adapter, operation, sql, params, Time.instant - started, nil, result))
       result
     end
 
-    private def self.in_span(operation : Symbol, sql : String, & : -> T) : T forall T
+    # :nodoc:
+    def self.observing? : Bool
+      !@@subscribers.empty? || !@@async_subscribers.empty?
+    end
+
+    # :nodoc:
+    def self.in_span(operation : Symbol, sql : String, & : -> T) : T forall T
       if tracer = @@tracer
         result = uninitialized T
         completed = false
@@ -246,10 +346,17 @@ module CQL
       result.is_a?(DB::ExecResult) ? result.rows_affected : nil
     end
 
-    private def self.emit(adapter, operation, sql, params, duration, error, rows) : Nil
-      context = @@mutex.synchronize { @@contexts[Fiber.current]? }
-      event = QueryEvent.new(sql, params.size, (params.dup if @@capture_params), duration, error, adapter, operation, rows, context)
+    # :nodoc:
+    def self.query_event(adapter : Adapter, operation : Symbol, sql : String, params : Array(DB::Any),
+                         duration : Time::Span, error : Exception?, result, pool_wait : Time::Span = Time::Span.zero) : QueryEvent
+      QueryEvent.new(sql, params.size, (params.map(&.dup) if @@capture_params), duration, error, adapter, operation, rows_affected(result), current_context, pool_wait)
+    end
+
+    # :nodoc:
+    def self.publish(event : QueryEvent) : Nil
       notify(@@subscribers, event)
+      queue = @@async_queue
+      queue.push(event) if queue && !@@async_subscribers.empty?
     end
 
     private def self.notify(subscribers, event) : Nil
@@ -260,4 +367,9 @@ module CQL
       end
     end
   end
+end
+
+class ::Fiber
+  # :nodoc:
+  property cql_telemetry_context : String?
 end

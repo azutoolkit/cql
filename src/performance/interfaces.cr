@@ -1,5 +1,7 @@
 # Interface modules for performance monitoring components
 
+require "./utilities"
+
 module CQL::Performance
   module QueryProfilerInterface
     abstract def record_query(sql : String, params : Array(DB::Any),
@@ -12,6 +14,11 @@ module CQL::Performance
     abstract def stats_trackers : Hash(String, StatsTracker)
     abstract def issues : Array(Issue)
     abstract def clear : Void
+
+    # Zero unless the profiler keeps latency samples.
+    def latency_percentiles : LatencyPercentiles
+      LatencyPercentiles.zero
+    end
   end
 
   module NPlusOneDetectorInterface

@@ -16,10 +16,11 @@ module CQL::Performance
     getter issues : Array(Issue)
     getter stats : Hash(String, StatsTracker)
     getter metadata : Hash(String, String)
+    getter latency : LatencyPercentiles
 
     def initialize(@duration, @total_queries, @slow_queries, @errors,
                    @issues = [] of Issue, @stats = {} of String => StatsTracker,
-                   @metadata = {} of String => String)
+                   @metadata = {} of String => String, @latency = LatencyPercentiles.zero)
     end
 
     def to_h : Hash(String, JSON::Any)
@@ -32,6 +33,7 @@ module CQL::Performance
         "issues"        => JSON::Any.new(@issues.map { |i| JSON::Any.new(i.type.to_s) }),
         "stats"         => JSON::Any.new(@stats.transform_values { |v| JSON::Any.new(v.to_h.to_json) }),
         "metadata"      => JSON::Any.new(@metadata.transform_values { |v| JSON::Any.new(v) }),
+        "latency"       => JSON::Any.new(@latency.to_ms_h.transform_values { |milliseconds| JSON::Any.new(milliseconds) }),
       }
     end
 
@@ -79,6 +81,12 @@ module CQL::Performance
       end
     end
 
+    # Latencies are sub-second, so they use the millisecond formatting of `TimingUtils`.
+    protected def format_latency(latency : LatencyPercentiles) : String
+      "p50 #{TimingUtils.format_duration(latency.p50)} / p95 #{TimingUtils.format_duration(latency.p95)} / " \
+      "p99 #{TimingUtils.format_duration(latency.p99)}"
+    end
+
     protected def severity_emoji(severity : Symbol) : String
       case severity
       when :critical then "🔥"
@@ -101,6 +109,7 @@ module CQL::Performance
         str << "Generated: #{report.timestamp}\n"
         str << "Duration: #{format_duration(report.duration)}\n"
         str << "Total Queries: #{report.total_queries}\n"
+        str << "Latency: #{format_latency(report.latency)}\n"
         str << "Slow Queries: #{report.slow_queries}\n"
         str << "Errors: #{report.errors}\n\n"
 
@@ -148,7 +157,7 @@ module CQL::Performance
           "total_queries" => report.total_queries,
           "slow_queries"  => report.slow_queries,
           "errors"        => report.errors,
-        },
+        }.merge(report.latency.to_ms_h),
         "issues"   => issues,
         "stats"    => report.stats.transform_values(&.to_h),
         "metadata" => report.metadata,
@@ -201,6 +210,7 @@ module CQL::Performance
         # Metrics cards
         str << "<div class='metrics'>"
         str << metric_card("Total Queries", report.total_queries.to_s)
+        str << metric_card("p95 Latency", TimingUtils.format_duration(report.latency.p95))
         str << metric_card("Slow Queries", report.slow_queries.to_s)
         str << metric_card("Errors", report.errors.to_s)
         str << metric_card("Health Score", "#{health_score(report)}%")
@@ -276,6 +286,7 @@ module CQL::Performance
         str << "  ⏰ Generated: #{report.timestamp.to_s.colorize(:white).bold}\n"
         str << "  ⚡ Duration: #{format_duration(report.duration).colorize(:green)}\n"
         str << "  📈 Total Queries: #{report.total_queries.to_s.colorize(:white).bold}\n"
+        str << "  ⏱ Latency: #{format_latency(report.latency).colorize(:green)}\n"
         str << "  🐌 Slow Queries: #{report.slow_queries.to_s.colorize(:yellow)}\n"
         str << "  ❌ Errors: #{report.errors.to_s.colorize(:red)}\n"
 

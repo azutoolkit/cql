@@ -56,6 +56,8 @@ Predicate forms exist for the booleans: `auto_load?`, `auto_sync?`, `bootstrap?`
 
 Read-only objects: `pool`, `ssl`, `postgres`, `mysql`, `sqlite`, `cache`. Configure them through their own properties (`c.pool.checkout_timeout = 5.seconds`).
 
+The performance monitor has its own options, set with `CQL::Performance.configure`, not `CQL.config`: `monitoring.async` (`false`) with `monitoring.async_queue_capacity` (`4096`) records statements on a background fiber, and `profiling.max_tracked_statements` (`1000`) caps the statement shapes the profiler tracks. `CQL::Telemetry.async_queue_capacity` (`4096`) sizes the queue of async telemetry subscribers. See [Profile Queries](../how-to/performance/query-profiler.md) and [Telemetry](../how-to/performance/telemetry.md).
+
 ### Validation messages
 
 | Check | Message |
