@@ -202,7 +202,7 @@ module CQL
           Adapter::CockroachDB
         when .starts_with?("mysql://")
           Adapter::MySql
-        when .starts_with?("sqlite3://")
+        when .starts_with?("sqlite3:")
           Adapter::SQLite
         else
           raise ArgumentError.new("Unsupported database URL: #{db}")

@@ -87,6 +87,16 @@ describe "CQL.configure" do
       ENV.delete("CQL_NO_SQL_LOG")
     end
 
+    it "defaults the test environment to an in-memory SQLite URL that parses and opens" do
+      with_crystal_env("test") do
+        CQL.config.db.should eq("sqlite3::memory:")
+        url = CQL.config.full_db_url
+        URI.parse(url).scheme.should eq("sqlite3")
+        DB.open(url, &.scalar("SELECT 1").should(eq(1)))
+        File.exists?("[:memory:]").should be_false
+      end
+    end
+
     it "does not log SQL in production by default" do
       with_crystal_env("production") { CQL.config.sql_logging?.should be_false }
     end

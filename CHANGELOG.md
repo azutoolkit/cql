@@ -26,6 +26,7 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 - **Migrations.** On SQLite and PostgreSQL a `migrator.up`/`down` run is one transaction: a failing migration rolls the whole run back, and statements that cannot run in a transaction (`CREATE INDEX CONCURRENTLY`) fail inside a migration. On MySQL and CockroachDB, `schema.alter`, `schema.build`, a table's `create!`, `drop!` and `truncate!`, and the migrator (`pending_migrations` included) raise `CQL::DialectError` inside an open `schema.transaction`; run them outside it. On SQLite and PostgreSQL, `schema.build` and `create!` are atomic.
 - **Scopes.** A scope's body runs on the query it is chained to: its `limit` now replaces an earlier one (the smaller used to win), and a body that starts its own query (`Post.query...`) replaces the chain. SoftDeletable's `with_deleted` and `only_deleted` are class methods that start a query instead of scopes, so they no longer appear in `defined_scopes`; chained after another query method, `with_deleted` never compiled and `only_deleted` matched nothing.
 - **Finders and lists.** `first!`, `last!` and `Repository#find!` raise `DB::NoResultsError` (they raised `NilAssertionError` or `Exception`); an empty list in `where`/`in` matches no row on every dialect (PostgreSQL and MySQL raised a syntax error); `preload(:name)` raises `ArgumentError` for a name the model does not declare; `Repository#count` returns `Int64` (it returned the key type, so `Int32` for `Repository(T, Int32)`).
+- **Configuration.** `postgres:///app` (empty host) in `CQL::Schema` raises `InvalidURIError` unless `PGHOST` or `?host=` gives a host; the test environment's default database is `sqlite3::memory:`.
 - **NULL lookups.** `where(col: nil)`, `find_by`, `exists?`, `delete_by!` and `update_by` with a nil value match the rows whose column is NULL (`IS NULL`) instead of none, and so does `col == nil` in a schema query's `where { }` block (`!= nil` matches `IS NOT NULL`); reject a nil from untrusted input first.
 
 ### Added
@@ -173,6 +174,7 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Deprecated
 
+- `CQL::Performance::Config::Reporting#auto_generate`, `#auto_generate=`, `#interval` and `#interval=`: nothing ever read them, so they had no effect. They still compile, with a deprecation warning, and `Config#to_h` no longer lists them.
 - `cascade` parameter in relation collections (use `dependent: :destroy` instead)
   - Affects: `Collection` and `ManyCollection` classes
   - Migration: Replace `cascade: true` with `dependent: :destroy`
@@ -187,6 +189,9 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Fixed
 
+- The test environment's default `db` is `sqlite3::memory:`, which opens. It was `sqlite3://:memory:`, which `URI.parse` rejects (`bad port`), so `CQL.build_schema` raised `URI::Error`; its encoded form `sqlite3://%3Amemory%3A` created a file named `[:memory:]` with crystal-sqlite3 before 0.23. `CQL.configure` also accepts the opaque `sqlite3:` form.
+- A PostgreSQL or CockroachDB URI with an empty host (`postgres:///app`) raises `CQL::Schema::InvalidURIError` ("Missing host in PostgreSQL URI") unless `?host=` or `PGHOST` supplies one. Before, the PostgreSQL check passed for any empty host, and the CockroachDB check rejected the `?host=/socket/dir` form.
+- With `CRYSTAL_ENV=development`, `CQL_NO_SQL_LOG` also keeps the performance monitor's SQL log off. Before, only the `CQL.configure` default honored it, and the monitor's development defaults logged SQL anyway.
 - `CQL.fragment_cache` (and `config.build_fragment_cache`) compiles: `CacheConfig#create_cache_interface_config` called `fragment_versions?`/`fragment_tags?`, which do not exist, and `TransactionAwareInvalidation` did not inherit from `InvalidationStrategy`, so `create_invalidation_strategy` could not return it. `TransactionAwareInvalidation` is now an `InvalidationStrategy`, so `FragmentCache.new` accepts it too.
 - `FragmentCache#stats` compiles: it merged a `Bool` into a hash declared without one; `"fragment_cache_enabled"` is now `"true"`.
 - `CQL::Cache::Cache.set(key, rows, ttl)` with an `Array(DB::Any)` compiles: the array was serialized with `to_json`, which `Bytes` lacks. Values are written one by one, and a `Bytes` value raises `ArgumentError`. `Cache.get` reads `false` back as `false` (it returned `nil`) and an integer above `Int32::MAX` as `Int64` (it raised `OverflowError`); a `Time` reads back as its RFC 3339 `String`.

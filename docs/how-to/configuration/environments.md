@@ -42,7 +42,7 @@ CQL.config.pool_size # => 5
 ENV["CRYSTAL_ENV"] = "test"
 CQL.reset_config!
 CQL.config.env # => "test"
-CQL.config.db  # => "sqlite3://:memory:"
+CQL.config.db  # => "sqlite3::memory:"
 ```
 
 ## Check the effective settings

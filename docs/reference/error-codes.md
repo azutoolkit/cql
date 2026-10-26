@@ -77,7 +77,7 @@ end
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
 | **`CQL::Schema::Error`** | `schema.alter :name` for a table not in the schema | `"Table 'users' not found"` |
-| **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL URI with no host part, a MySQL or CockroachDB URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
+| **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL or CockroachDB URI with an empty host and no `?host=` or `PGHOST`, a MySQL URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
 | **`CQL::Migrator::Error`** | `update_schema_file` (run by `auto_sync`, `bootstrap_schema`, `up`, `down`) when the dump fails | `"Schema update failed: <cause>"` |
 | **`CQL::SchemaDump::Error`** | `SchemaDump` for an unknown adapter or a failed connection; reaches you wrapped in `Migrator::Error` | `"Failed to connect to database: ..."` |
 | `KeyError` | `schema.tables[:name]` for an unknown table | `"Missing hash key: :name"` |

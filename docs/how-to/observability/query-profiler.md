@@ -31,6 +31,7 @@ CRYSTAL_ENV=test             # off; slow threshold 10 ms, 100 recorded queries
 CRYSTAL_ENV=production       # off, as with any other value or none
 CQL_MONITORING_ENABLED=true  # overrides monitoring
 CQL_SQL_LOGGING=true         # overrides SQL logging, which logs only while monitoring is on
+CQL_NO_SQL_LOG=1             # keeps SQL logging off in development
 CQL_SLOW_QUERY_MS=200        # slow query threshold
 ```
 

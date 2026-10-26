@@ -166,7 +166,7 @@ puts "   end"
 
 puts "\n3. Testing Setup:"
 puts "   CQL.configure do |c|"
-puts "     c.db = \"sqlite3://:memory:\""
+puts "     c.db = \"sqlite3::memory:\""
 puts "     c.env = \"test\""
 puts "     c.cache.on = false  # Disable for tests"
 puts "   end"
