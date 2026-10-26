@@ -6,7 +6,7 @@ require "./cache/*"
 require "./configure/*"
 
 module CQL
-  # 🚀 Developer-friendly centralized configuration for CQL
+  # Centralized configuration for CQL.
   #
   # Quick setup for different environments:
   #
@@ -38,9 +38,8 @@ module CQL
     @@config_mutex = CQL::Compat::Mutex.new
     @@config_instance : Config? = nil
 
-    # 🎯 Main configuration class - optimized for developer experience
+    # The settings `CQL.configure` yields. Read them back with `CQL.config`.
     class Config
-      # === 🔌 DATABASE CONNECTION ===
       # Primary database connection URL
       property db : String = "sqlite3://./db/development.db"
 
@@ -61,14 +60,12 @@ module CQL
       # Custom database adapter settings
       property adapter_options : Hash(String, String) = Hash(String, String).new
 
-      # === 📋 LOGGING ===
       # Main application logger
       property logger : Log = Log.for("cql.*")
 
       # Shortcut for log level (maps to logger.level)
       property log_level : Log::Severity = Log::Severity::Info
 
-      # === 🗂️ SCHEMA & MIGRATIONS ===
       # Directory containing schema files
       property schema_dir : String = "src/schemas"
 
@@ -84,7 +81,6 @@ module CQL
       # Database table for tracking migrations
       property migrations_table : Symbol = :schema_migrations
 
-      # === ⚡ BEHAVIOR FLAGS ===
       # Auto-load model files on startup
       property auto_load : Bool = true
 
@@ -97,7 +93,6 @@ module CQL
       # Verify schema matches database on startup
       property verify_schema : Bool = false
 
-      # === 🎨 SQL LOGGING ===
       # Enable SQL logging (on by default when CRYSTAL_ENV=development or `env = "development"`)
       @sql_logging : Bool?
 
@@ -112,15 +107,12 @@ module CQL
       property sql_logging_colorize : Bool = true # Colorize SQL output
       property sql_logging_async : Bool = false   # Unused: kept for compatibility
 
-      # === 📊 PERFORMANCE MONITORING ===
       # Enable performance monitoring and tracking
       property monitor_performance : Bool = false
 
-      # === 💾 CACHE SYSTEM ===
       # Centralized cache configuration (use config.cache.* to configure)
       getter cache : CacheConfig = CacheConfig.new
 
-      # === 🔗 CONNECTION POOL ===
       # Number of database connections in pool
       getter pool_size : Int32 = 10
 
@@ -136,16 +128,13 @@ module CQL
       # Detailed connection pool settings
       getter pool : ConnectionPoolConfig = ConnectionPoolConfig.new
 
-      # === 🔐 SECURITY ===
       # SSL/TLS configuration
       getter ssl : SSLConfig = SSLConfig.new
 
-      # === 🗄️ DATABASE-SPECIFIC SETTINGS ===
       getter postgres : PostgreSQLConfig = PostgreSQLConfig.new
       getter mysql : MySQLConfig = MySQLConfig.new
       getter sqlite : SQLiteConfig = SQLiteConfig.new
 
-      # === 🛡️ VALIDATION ===
       @validators = [BasicConfigValidator.new] of ConfigValidator
 
       def initialize
@@ -153,8 +142,6 @@ module CQL
         sync_pool_size
         apply_environment_config
       end
-
-      # === 🔍 HELPER METHODS (more memorable syntax) ===
 
       # Check if auto-loading is enabled
       def auto_load? : Bool
@@ -190,8 +177,6 @@ module CQL
       def monitor_performance? : Bool
         @monitor_performance
       end
-
-      # === 🎯 SMART GETTERS ===
 
       # Get the database adapter type
       def adapter : Adapter
@@ -241,8 +226,6 @@ module CQL
           .build
       end
 
-      # === 🔧 VALIDATION ===
-
       def validate! : Nil
         @validators.each(&.validate!(self))
         pool.validate!
@@ -250,8 +233,6 @@ module CQL
         db_config.validate!
         cache.validate!
       end
-
-      # === 🏗️ FACTORY METHODS ===
 
       # Create migrator configuration
       def migrator_config(
@@ -318,8 +299,6 @@ module CQL
         migrator
       end
 
-      # === 🎨 SQL LOGGING SETUP ===
-
       def setup_sql_logging : Nil
         return unless sql_logging?
 
@@ -329,8 +308,6 @@ module CQL
 
         effective_logger.info { "✅ SQL logging ready" }
       end
-
-      # === 💾 CACHE SETUP ===
 
       def setup_cache_system : Nil
         return unless cache.on?
@@ -368,8 +345,6 @@ module CQL
         cache.reset_cache_statistics
       end
 
-      # === 🔧 UTILITIES ===
-
       # Add custom validator
       def add_validator(validator : ConfigValidator) : Nil
         @validators << validator
@@ -397,8 +372,6 @@ module CQL
       end
     end
 
-    # === 🔄 CONFIGURATION MANAGEMENT ===
-
     # Get the current configuration instance (thread-safe)
     def self.current : Config
       @@config_mutex.synchronize do
@@ -421,8 +394,6 @@ module CQL
     end
   end
 
-  # === 🎯 MAIN CONFIGURATION METHOD ===
-  #
   # **Minimal Development Setup**
   # ```
   # CQL.configure do |c|
@@ -467,8 +438,6 @@ module CQL
   def self.reset_config! : Nil
     Configure.reset!
   end
-
-  # === 🗂️ SCHEMA & MIGRATION HELPERS ===
 
   # Create a schema with smart defaults
   def self.build_schema(name : Symbol, &) : Schema
@@ -521,8 +490,6 @@ module CQL
     config.migrator_config_for(env)
   end
 
-  # === 💾 CACHE HELPERS ===
-
   # Quick cache enable/disable
   def self.cache_on(enabled : Bool = true) : Nil
     config.cache.on = enabled
@@ -558,8 +525,6 @@ module CQL
   def self.fragment_cache : CQL::Cache::FragmentCache
     config.build_fragment_cache
   end
-
-  # === 🌐 REQUEST-SCOPED CACHING ===
 
   # Start request-scoped caching
   def self.start_request_cache(request_id : String? = nil) : Nil

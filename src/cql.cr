@@ -76,8 +76,8 @@ module CQL
     JSON::Any    => "JSONB",
   }
 
-  # CockroachDB's INTEGER is 64-bit, so 32-bit columns are declared INT4 to read back as Int32.
   # :nodoc:
+  # CockroachDB's INTEGER is 64-bit, so 32-bit columns are declared INT4 to read back as Int32.
   COCKROACH_TYPES = POSTGRES_TYPES.merge({Int32 => "INT4", UInt32 => "BIGINT"})
 
   # :nodoc:

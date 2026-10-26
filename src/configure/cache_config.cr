@@ -2,10 +2,8 @@ require "log"
 
 module CQL
   module Configure
-    # 💾 Developer-friendly cache configuration for CQL
-    # Use short, memorable property names that developers can easily remember
+    # Cache settings, set through `config.cache` inside `CQL.configure`.
     class CacheConfig
-      # === 🎯 CORE CACHE SETTINGS ===
       # Main cache enable/disable switch
       property on : Bool = false
 
@@ -18,7 +16,6 @@ module CQL
       # Cache instance name
       property name : String = "cql"
 
-      # === 💭 MEMORY CACHE ===
       # Enable in-memory caching
       property memory : Bool = true
 
@@ -28,7 +25,6 @@ module CQL
       # Track memory cache statistics
       property memory_stats : Bool = true
 
-      # === 🌐 REQUEST CACHE ===
       # Enable per-request query caching (great for web apps)
       property request_cache : Bool = true
 
@@ -38,7 +34,6 @@ module CQL
       # Auto-clear request cache after each request
       property auto_clear : Bool = true
 
-      # === 🧩 FRAGMENT CACHE ===
       # Enable fragment/partial caching
       property fragments : Bool = false
 
@@ -48,14 +43,12 @@ module CQL
       # Enable tagging for fragments
       property fragment_tags : Bool = true
 
-      # === ♻️ INVALIDATION ===
       # Invalidation strategy: "timestamp", "version", "transaction_aware"
       property invalidation : String = "timestamp"
 
       # Maximum age before automatic invalidation
       property max_age : Time::Span = 1.hour
 
-      # === 📊 MONITORING ===
       # Enable cache statistics collection
       property stats : Bool = true
 
@@ -65,7 +58,6 @@ module CQL
       # Log level for cache operations
       property log_level : Log::Severity = Log::Severity::Debug
 
-      # === 🧹 MAINTENANCE ===
       # Auto-cleanup expired items
       property auto_cleanup : Bool = true
 
@@ -75,7 +67,6 @@ module CQL
       # Enable batch operations for better performance
       property batch_ops : Bool = true
 
-      # === 🌐 MIDDLEWARE ===
       # Enable web framework middleware integration
       property middleware : Bool = false
 
@@ -85,8 +76,6 @@ module CQL
       def initialize
         apply_smart_defaults
       end
-
-      # === 🔍 HELPER METHODS (memorable syntax) ===
 
       # Check if cache is enabled
       def on? : Bool
@@ -128,8 +117,6 @@ module CQL
         @middleware
       end
 
-      # === 🔧 VALIDATION ===
-
       def validate! : Nil
         if on?
           if memory_size && memory_size.not_nil! <= 0
@@ -149,8 +136,6 @@ module CQL
           end
         end
       end
-
-      # === 🏗️ FACTORY METHODS ===
 
       # Create CacheInterface configuration object
       def create_cache_interface_config : CQL::Cache::CacheConfig
@@ -179,8 +164,6 @@ module CQL
         end
       end
 
-      # === ⚙️ SYSTEM SETUP ===
-
       # Configure the global cache system
       def setup_cache_system : Nil
         return unless on?
@@ -198,8 +181,6 @@ module CQL
           # This would be used by web frameworks to automatically integrate caching
         end
       end
-
-      # === 📊 STATISTICS & MONITORING ===
 
       # Get comprehensive cache statistics
       def cache_statistics : Hash(String, String | Int32 | Int64 | Float64 | Bool)
