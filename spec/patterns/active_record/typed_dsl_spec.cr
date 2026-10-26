@@ -292,6 +292,26 @@ describe "Typed query DSL" do
     it "reports that a row with a NULL column exists" do
       DslAuthor.exists?(score: nil).should be_true
     end
+
+    it "deletes only the rows whose column is NULL with delete_by!" do
+      DslAuthor.delete_by!(score: nil)
+
+      DslAuthor.count.should eq(2)
+      DslAuthor.find_by(name: "Grace").should be_nil
+    end
+
+    it "deletes only the rows whose column is NULL with a where chain" do
+      DslAuthor.where(score: nil).delete_all
+
+      DslAuthor.count.should eq(2)
+      DslAuthor.find_by(name: "Grace").should be_nil
+    end
+
+    it "updates only the rows whose column is NULL with update_by" do
+      DslAuthor.update_by({:score => nil} of Symbol => DB::Any, {:name => "X"} of Symbol => DB::Any)
+
+      DslAuthor.all.map(&.name).sort!.should eq(["Ada", "Linus", "X"])
+    end
   end
 
   describe "the headline query" do
