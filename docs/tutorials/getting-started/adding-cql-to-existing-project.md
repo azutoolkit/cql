@@ -174,7 +174,7 @@ case ARGV[0]?
 when "up"
   migrator.up
 when "down"
-  migrator.rollback # the newest migration; migrator.down with no argument rolls back all
+  migrator.rollback # the newest migration file, if applied; migrator.down reverts all
 when "status"
   puts "Applied: #{migrator.applied_migrations.map(&.version)}"
   puts "Pending: #{migrator.pending_migrations.map(&.version)}"

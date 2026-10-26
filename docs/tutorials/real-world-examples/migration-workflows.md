@@ -18,7 +18,7 @@ case ARGV[0]?
 when "up"
   migrator.up
 when "down"
-  migrator.rollback # the newest migration; rollback(3) the newest three, down every one
+  migrator.rollback # reverts the newest migration file, if it is applied (see Step 3)
 when "status"
   puts "Applied: #{migrator.applied_migrations.map(&.version)}"
   puts "Pending: #{migrator.pending_migrations.map(&.version)}"
@@ -108,10 +108,10 @@ crystal src/migrate.cr up
 │   ✔    │ CreatePostTags │       6 │
 ```
 
-Running `down` and `up` locally proves the migration reverses. In code, `migrator.rollback(n)` undoes the newest `n` migrations and `migrator.down` all of them.
+Running `down` and `up` locally proves the migration reverses. `migrator.down` reverts every applied migration; to stop at a version, use the `rollback_to` helper from [Rollback Migrations](../../how-to/migrations/rollback.md).
 
 {% hint style="warning" %}
-`rollback` counts migration files, not applied migrations: if the newest file is pending, it rolls back nothing.
+`rollback(n)` looks only at the newest `n` migration files, applied or not, so with a pending newest file, or on a second `rollback` in a row, it reverts nothing. `down_to` reverts the wrong migrations.
 {% endhint %}
 
 ## Step 4: Map the new tables
