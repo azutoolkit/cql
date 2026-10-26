@@ -128,7 +128,7 @@ A count never exceeds `detection_window`, so with the default of 10 an N+1 issue
 ## Health and Metrics
 
 ```crystal
-CQL::Performance.healthy?              # => true while the health score is 80 or more
+CQL::Performance.healthy?              # => true while the health score is 80 (PerformanceMetrics::HEALTHY_SCORE) or more; reads only what it needs, so it suits a frequent health check
 CQL::Performance.critical_issues       # => Array(CQL::Performance::Issue)
 CQL::Performance.high_priority_issues  # critical and high
 CQL::Performance.metrics_summary
@@ -153,7 +153,7 @@ CQL::Performance.export_metrics_as_json  # metrics.to_json; slow queries carry p
 ```crystal
 puts CQL::Performance.report             # config.reporting.format: "text" ("logger" in the development preset)
 puts CQL::Performance.report("console")  # colored; "logger" is an alias
-File.write("tmp/perf.html", CQL::Performance.report("html"))
+File.write("tmp/perf.html", CQL::Performance.report("html"))  # escapes issue messages and details
 File.write("tmp/perf.json", CQL::Performance.report("json"))  # an unknown format falls back to text
 
 class CsvReportFormatter < CQL::Performance::ReportFormatter

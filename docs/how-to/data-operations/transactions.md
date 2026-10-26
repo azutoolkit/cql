@@ -77,7 +77,7 @@ An inner exception undoes the inner block. If the outer block rescues it, the ou
 propagates, everything rolls back.
 
 {% hint style="warning" %}
-On MySQL and CockroachDB, DDL commits implicitly, so `AppDB.alter` and building or running a migrator inside a transaction raise `CQL::DialectError`.
+On MySQL and CockroachDB, DDL commits implicitly, so schema changes inside a transaction raise `CQL::DialectError` before running any DDL: `AppDB.alter`, `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and building or running a migrator. On SQLite and PostgreSQL they nest as a SAVEPOINT.
 {% endhint %}
 
 ## Set Isolation Levels (Native PostgreSQL Engine)

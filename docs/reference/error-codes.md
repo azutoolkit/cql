@@ -50,7 +50,7 @@ end
 | `full(...)` join | MySQL | `DialectError` |
 | `Insert#get` / `get!` | SQLite, MySQL | `DialectError` (`INSERT ... RETURNING`) |
 | `dialect.structure_dump` | CockroachDB | `DialectError` |
-| `schema.alter`, `Migrator.new`, `up`, `down` inside an open transaction | MySQL, CockroachDB | `DialectError` (`schema changes inside a transaction`) |
+| `schema.alter`, `schema.build`, a table's `create!` / `drop!` / `truncate!`, `Migrator.new`, `up`, `down`, `pending_migrations` inside an open transaction | MySQL, CockroachDB | `DialectError` (`"MySQL does not support schema changes inside a transaction"`), raised before any DDL runs |
 | `back(...)` on insert, update, delete | SQLite | `SQLiteUnsupportedFeatureError` |
 | `change_column`, `drop_foreign_key` in `schema.alter` | SQLite | `SQLiteUnsupportedFeatureError` |
 | `foreign_key` in `schema.alter` | SQLite | `DB::Error` (`SQLite does not support adding foreign keys to an existing table ...`) |

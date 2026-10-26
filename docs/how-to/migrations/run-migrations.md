@@ -32,8 +32,8 @@ migrator.up_to(5_i64)   # every migration up to and including version 5; nothing
 
 On SQLite and PostgreSQL the whole run, migration records included, is one transaction on one connection: a failing
 migration rolls back everything the run did. On MySQL and CockroachDB each statement commits on its own, so a failure
-leaves the run's earlier migrations applied, and building a migrator or calling `up` inside an open transaction raises
-`CQL::DialectError`.
+leaves the run's earlier migrations applied, and building a migrator (before its `auto_sync` bootstrap writes the schema
+file), calling `up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`.
 
 {% hint style="warning" %}
 On PostgreSQL a run holds its DDL locks until the final commit, and `CREATE INDEX CONCURRENTLY` fails inside a migration. Use `up(steps)` or `up_to` to keep runs short.

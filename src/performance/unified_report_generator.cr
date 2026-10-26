@@ -1,6 +1,7 @@
 # Unified report generator with format strategies
 # Consolidates report generation logic to eliminate duplication
 
+require "html"
 require "json"
 require "./utilities"
 require "./sql_formatter"
@@ -52,6 +53,14 @@ module CQL::Performance
 
     def initialize(@type, @severity, @message, @details = {} of String => String,
                    @timestamp = Time.utc)
+    end
+
+    def critical? : Bool
+      severity == :critical
+    end
+
+    def high_priority? : Bool
+      severity.in?(:critical, :high)
     end
   end
 
@@ -224,11 +233,11 @@ module CQL::Performance
           report.issues.each do |issue|
             str << "<div class='issue issue-#{issue.severity}'>"
             str << "<h3>#{severity_emoji(issue.severity)} #{issue.type.to_s.gsub('_', ' ').split.map(&.capitalize).join(' ')}</h3>"
-            str << "<p>#{issue.message}</p>"
+            str << "<p>#{HTML.escape(issue.message)}</p>"
             unless issue.details.empty?
               str << "<ul>"
               issue.details.each do |key, value|
-                str << "<li><strong>#{key}:</strong> #{value}</li>"
+                str << "<li><strong>#{HTML.escape(key)}:</strong> #{HTML.escape(value)}</li>"
               end
               str << "</ul>"
             end

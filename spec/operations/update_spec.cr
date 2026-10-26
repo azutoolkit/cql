@@ -83,6 +83,15 @@ describe CQL::Update do
     update_query.should eq({"UPDATE users SET age = ? WHERE users.name IS NULL", [1]})
   end
 
+  it "matches NULL for == nil in a WHERE block" do
+    update_query = Northwind.update.table(:users)
+      .set(age: 1)
+      .where { users.name == nil }
+      .to_sql
+
+    update_query.should eq({"UPDATE users SET age = ? WHERE users.name IS NULL", [1]})
+  end
+
   it "binds a nil value in SET clause" do
     update_query = Northwind.update.table(:users)
       .set(name: nil)

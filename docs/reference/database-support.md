@@ -34,7 +34,7 @@ Only SQLite runs live in CQL's specs; the other dialects are checked through gen
 | Placeholders | `?` | `$1`, `$2`, ... | `?` | `$1`, `$2`, ... |
 | `max_bind_params` | 999 | 32767 | 32767 | 32767 |
 | `supports_returning?` (`create!` reads the row from its INSERT) | `false` | `true` | `false` | `true` |
-| `supports_transactional_ddl?` (`ddl_transaction` rolls DDL back) | `true` | `true` | `false` | `false` |
+| `supports_transactional_ddl?` (`ddl_transaction`, used by `alter`, `build`, `create!`/`drop!`/`truncate!` and the migrator, rolls DDL back) | `true` | `true` | `false` | `false` |
 | `current_timestamp` | `datetime('now')` | `CURRENT_TIMESTAMP` | `NOW(3)` | `CURRENT_TIMESTAMP` |
 | `structure_dump(uri)` | `""` | starts `pg_dump` but returns the pipe's description (`#<IO::FileDescriptor…>`), not the DDL | same, with `mysqldump` | raises |
 | Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |

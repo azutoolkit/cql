@@ -16,7 +16,7 @@ User.where(deleted_at: nil).all                    # ... WHERE users.deleted_at 
 ```
 
 {% hint style="warning" %}
-A `nil` value in `where`, `find_by`, `exists?`, `delete_by!` or `update_by` matches the rows whose column is NULL. Reject a `nil` that comes from untrusted input before you filter on it.
+A `nil` value in `where`, `find_by`, `exists?`, `delete_by!` or `update_by`, or compared with `==` in any `where` block (models, `AppDB.query`, `update.where`, `delete.where`, `eq(nil)`), matches the rows whose column is NULL; `!= nil` and `neq(nil)` emit `IS NOT NULL`. Reject a `nil` that comes from untrusted input before you filter on it.
 {% endhint %}
 
 ## Compare with a Block

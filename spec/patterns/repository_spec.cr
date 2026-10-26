@@ -43,6 +43,30 @@ describe CQL::Repository(User, Int32) do
     user.email.should eq("john.updated@example.com")
   end
 
+  it "updates a user by ID from a hash" do
+    id = Users.create(name: "John Doe", email: "john@example.com")
+    Users.update(id.to_i32, {:name => "John Updated"} of Symbol => DB::Any)
+
+    Users.find!(id.to_i32).name.should eq("John Updated")
+  end
+
+  it "updates the users matching the where attributes" do
+    john = Users.create(name: "John Doe", email: "john@example.com")
+    jane = Users.create(name: "Jane Doe", email: "jane@example.com")
+    Users.update_by({:email => "john@example.com"} of Symbol => DB::Any, {:name => "John Updated"} of Symbol => DB::Any)
+
+    Users.find!(john.to_i32).name.should eq("John Updated")
+    Users.find!(jane.to_i32).name.should eq("Jane Doe")
+  end
+
+  it "updates every user from a hash" do
+    Users.create(name: "John Doe", email: "john@example.com")
+    Users.create(name: "Jane Doe", email: "jane@example.com")
+    Users.update_all({:name => "Renamed"} of Symbol => DB::Any)
+
+    Users.all.map(&.name).should eq(["Renamed", "Renamed"])
+  end
+
   it "deletes a user by ID" do
     user_id = Users.create(name: "John Doe", email: "john@example.com")
     Users.delete(user_id.to_i32)

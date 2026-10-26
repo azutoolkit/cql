@@ -42,13 +42,13 @@ users.delete(id)
 | `exists?(**fields)` | `Bool` |
 | `count` | the count, read as `Pk` |
 | `create(**fields)`, `create(hash)` | the new key: `Int64` from `last_insert_id` on SQLite and MySQL, `Pk` from `RETURNING` on PostgreSQL and CockroachDB |
-| `update(id, **fields)`, `delete(id)`, `delete_by(**fields)`, `delete_all` | `DB::ExecResult` |
+| `update(id, **fields)`, `update(id, hash)`, `update_by(where_hash, attrs_hash)`, `update_all(hash)`, `delete(id)`, `delete_by(**fields)`, `delete_all` | `DB::ExecResult` |
 | `query`, `insert`, `update`, `delete` | a `CQL::Query`, `Insert`, `Update` or `Delete` already scoped to the table |
 
 CQL uses this class itself: the migrator stores its version rows through `CQL::Repository(CQL::MigrationRecord, Int32)`.
 
 {% hint style="warning" %}
-`count` reads `COUNT(*)` as the key type, so it raises `DB::ColumnTypeMismatchError` for a `String` key. `update(id, hash)`, `update_by`, `update_all` and `build` do not compile; use `update(id, **fields)` or the `update` builder.
+`count` reads `COUNT(*)` as the key type, so it raises `DB::ColumnTypeMismatchError` for a `String` key. `build(hash)` calls `T.new(hash)`, so it compiles only when `T` has an initializer that takes a `Hash(Symbol, DB::Any)`.
 {% endhint %}
 
 ## A Hand-Written Repository Keeps Model Features
