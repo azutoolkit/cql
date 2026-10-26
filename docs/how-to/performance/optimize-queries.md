@@ -45,7 +45,7 @@ authors = User.query.joins(:posts) { posts.published == true }.distinct.all
 ```
 
 {% hint style="info" %}
-**`preload`** runs only through `all` / `to_a`, ignores `many_to_many`, and raises `ArgumentError` after a partial `select`. A join filters rows but does not populate the association.
+**`preload`** runs only through `all` / `to_a`, ignores `many_to_many`, and raises `ArgumentError` after a partial `select` or for an association the model does not declare. A join filters rows but does not populate the association.
 {% endhint %}
 
 ---

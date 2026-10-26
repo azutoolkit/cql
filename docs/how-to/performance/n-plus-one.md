@@ -31,7 +31,7 @@ users.each { |user| puts user.posts.size }  # no query
 ```
 
 {% hint style="info" %}
-**`preload`** handles `has_many`, `belongs_to` and `has_one`, splits the `IN` list at the database's bind limit, and shares one instance per `belongs_to` target. It skips associations declared with `cache: false` and ignores `many_to_many`; [Optimize Queries](optimize-queries.md) lists its other limits.
+**`preload`** handles `has_many`, `belongs_to` and `has_one`, splits the `IN` list at the database's bind limit, and shares one instance per `belongs_to` target. It skips associations declared with `cache: false` and ignores `many_to_many`, and raises `ArgumentError` for a name the model does not declare; [Optimize Queries](optimize-queries.md) lists its other limits.
 {% endhint %}
 
 ## Filter Through a Join

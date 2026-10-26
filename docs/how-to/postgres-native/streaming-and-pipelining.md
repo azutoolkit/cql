@@ -12,8 +12,8 @@ engine.stream(AppDB.query.from(:users).select(:id, :name).where(active: true), f
   rows.each { puts "#{rows.read(Int64)} #{rows.read(String)}" }
 end
 
-# A model query: pass its CQL::Query with .query
-engine.stream(User.query.where(active: true).query) do |rows|
+# A model query
+engine.stream(User.query.where(active: true)) do |rows|
   rows.each { puts rows.read(Int64) } # the model's columns, id first; fetch_size defaults to 1000
 end
 
@@ -22,10 +22,6 @@ engine.stream("SELECT id FROM users WHERE name = $1", ["Ada".as(DB::Any)], fetch
   rows.each { puts rows.read(Int64) }
 end
 ```
-
-{% hint style="warning" %}
-`engine.stream(User.query.where(active: true))` does not compile: **`stream`** and **`pipeline`** destructure `to_sql` into SQL and parameters, and `QueryBuilder#to_sql` returns only the SQL string. Pass `.query`.
-{% endhint %}
 
 ### Rules
 
@@ -75,8 +71,8 @@ engine.with_connection do |connection|
     rows.peak_buffered            # => 3 (most rows held at once, never above fetch_size)
   end
 end
-# connection.stream(sql, args, fetch_size: 100) is the DB::ResultSet flavour engine.stream uses;
-# without arguments pass [] of DB::Any, since connection.stream(sql) does not compile.
+# connection.stream(sql, *args, fetch_size: 100) is the DB::ResultSet flavour engine.stream uses;
+# connection.stream("SELECT 1") takes no arguments at all.
 ```
 
 ## Pipeline Statements
@@ -85,7 +81,7 @@ end
 results = engine.pipeline([
   AppDB.query.from(:users).select(:name),
   AppDB.query.from(:posts).select(:id),
-]) # one round trip on one connection (two for statements not prepared yet)
+]) # one round trip on one connection (two for statements not prepared yet); model queries work too
 
 names = results[0].as(CQL::Postgres::PipelineResult).all(as: String)
 ids = results[1].as(CQL::Postgres::PipelineResult).all(as: Int64)

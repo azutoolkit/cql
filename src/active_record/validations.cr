@@ -1,3 +1,5 @@
+require "../exceptions"
+
 module CQL
   module ActiveRecord
     module Validations
@@ -199,14 +201,11 @@ module CQL
         abstract def valid? : Array(Error)
       end
 
-      class ValidationError < Exception
-        @errors : Array(Error)
-
-        def initialize(@errors : Array(Error) = [] of Error)
-        end
-
-        def message
-          @errors.map(&.message).join(",")
+      # Raised by `validate!`, and so by `save`, `save!` and the instance `create!`; `error_fields` and
+      # `error_messages` list each failed rule.
+      class ValidationError < CQL::RecordInvalid
+        def initialize(errors : Array(Validations::Error) = [] of Validations::Error)
+          super(errors.map(&.message).join(","), errors.map { |error| {field: error.field, message: error.message} })
         end
       end
 
@@ -223,7 +222,21 @@ module CQL
             {{ raise "CQL validation error in #{@type}: unsupported predicate `#{predicate}` for `#{attribute}`. Supported predicates: #{valid_predicates.join(", ")}." }}
           {% end %}
         {% end %}
-        {% SCHEMA_VALIDATIONS[attribute] = options %}
+        {% if options[:on] && !options[:on].is_a?(SymbolLiteral) %}
+          {{ raise "CQL validation error in #{@type}: `on:` for `#{attribute}` must be a symbol such as :create or :update, got #{options[:on]}." }}
+        {% end %}
+        {% SCHEMA_VALIDATIONS << {attribute, options} %}
+      end
+
+      # Whether a rule declared with `on: on` runs in *context*; a rule without `on:` runs in every context.
+      def self.applies?(on : Symbol?, context : Symbol?) : Bool
+        on.nil? || on == context
+      end
+
+      # Without persistence a record is neither created nor updated, so only rules without `on:` run.
+      # A module method, so a model's own definition (see `Persistence`) wins whatever the include order.
+      private def default_validation_context : Symbol?
+        nil
       end
 
       macro predicates
@@ -234,7 +247,9 @@ module CQL
 
       macro create_validator
         {% type_validator = @type %}
-        {% for name, options in type_validator.constant(:SCHEMA_VALIDATIONS) %}
+        {% for validation in type_validator.constant(:SCHEMA_VALIDATIONS) %}
+          {% name = validation[0] %}
+          {% options = validation[1] %}
           {% unless type_validator.methods.any? { |method| method.name == name.id.stringify } %}
             {{ raise "CQL validation error in #{type_validator}: unknown attribute `#{name}`. Define a readable property or getter for `#{name}` before calling `validate :#{name}`." }}
           {% end %}
@@ -248,8 +263,7 @@ module CQL
         {% end %}
 
         class Validator
-          def self.validate(instance : {{type_validator}}, context = nil)
-            errors = Array(Error).new
+          def self.validate(instance : {{type_validator}}, context : Symbol? = nil)
             rules = Array(Constraint | CustomValidator).new
             validations(rules, instance, context)
             rules.reduce([] of Error) do |errors, rule|
@@ -257,56 +271,16 @@ module CQL
             end
           end
 
-          private def self.validations(rules, instance, context = nil)
+          private def self.validations(rules, instance, context : Symbol?)
             {% for validtor in type_validator.constant(:SCHEMA_VALIDATORS) %}
             rules << {{validtor}}.new(instance)
             {% end %}
 
             rules << Constraint.new do |rule, errors|
-              {% for name, options in type_validator.constant(:SCHEMA_VALIDATIONS) %}
-                {% if options[:on] %}
-                  {% if options[:on] == context || context.nil? %}
-                    {% for predicate, expected_value in options %}
-                      {% if !["message", "on"].includes?(predicate.stringify) %}
-                        {% if predicate.stringify == "confirmation" %}
-                        unless rule.confirmation?(instance.{{name.id}}, instance.{{expected_value.id}})
-                          errors << Error.new(:{{name.id}}, {{options[:message] || "#{name.id} confirmation doesn't match"}})
-                        end
-                        {% else %}
-                        unless rule.{{predicate.id}}?(instance.{{name.id}}, {{expected_value}})
-                          {% default_msg = "Invalid #{name.id}" %}
-                          {% if predicate.stringify == "required" %}
-                            {% default_msg = "#{name.id} is required" %}
-                          {% elsif predicate.stringify == "eq" %}
-                            {% default_msg = "#{name.id} must be equal to #{expected_value}" %}
-                          {% elsif predicate.stringify == "gt" %}
-                            {% default_msg = "#{name.id} must be greater than #{expected_value}" %}
-                          {% elsif predicate.stringify == "gte" %}
-                            {% default_msg = "#{name.id} must be greater than or equal to #{expected_value}" %}
-                          {% elsif predicate.stringify == "lt" %}
-                            {% default_msg = "#{name.id} must be less than #{expected_value}" %}
-                          {% elsif predicate.stringify == "lte" %}
-                            {% default_msg = "#{name.id} must be less than or equal to #{expected_value}" %}
-                          {% elsif predicate.stringify == "in" %}
-                            {% default_msg = "#{name.id} must be included in #{expected_value}" %}
-                          {% elsif predicate.stringify == "exclude" %}
-                            {% default_msg = "#{name.id} must not be included in #{expected_value}" %}
-                          {% elsif predicate.stringify == "match" %}
-                            {% default_msg = "#{name.id} must match the pattern #{expected_value}" %}
-                          {% elsif predicate.stringify == "size" %}
-                            {% default_msg = "#{name.id} must have a size of #{expected_value}" %}
-                          {% elsif predicate.stringify == "presence" %}
-                            {% default_msg = "#{name.id} must be present" %}
-                          {% elsif predicate.stringify == "accept" %}
-                            {% default_msg = "#{name.id} must be accepted" %}
-                          {% end %}
-                          errors << Error.new(:{{name.id}}, {{options[:message] || default_msg}})
-                        end
-                        {% end %}
-                      {% end %}
-                    {% end %}
-                  {% end %}
-                {% else %}
+              {% for validation in type_validator.constant(:SCHEMA_VALIDATIONS) %}
+                {% name = validation[0] %}
+                {% options = validation[1] %}
+                if ::CQL::ActiveRecord::Validations.applies?({{options[:on]}}, context)
                   {% for predicate, expected_value in options %}
                     {% if !["message", "on"].includes?(predicate.stringify) %}
                       {% if predicate.stringify == "confirmation" %}
@@ -346,7 +320,7 @@ module CQL
                       {% end %}
                     {% end %}
                   {% end %}
-                {% end %}
+                end
               {% end %}
             end
           end
@@ -355,12 +329,12 @@ module CQL
 
       macro included
         SCHEMA_VALIDATORS  = [] of Nil
-        SCHEMA_VALIDATIONS = {} of Nil => Nil
+        SCHEMA_VALIDATIONS = [] of Nil
 
         # Check if the record is valid
         # @param context [Symbol?] Optional validation context
         # @return [Bool] True if valid, false otherwise
-        def valid?(context = nil)
+        def valid?(context : Symbol? = nil)
           errors(context).empty?
         end
 
@@ -368,16 +342,17 @@ module CQL
         # @param context [Symbol?] Optional validation context
         # @raise [ValidationError] If the record is invalid
         # @return [Bool] True if valid
-        def validate!(context = nil)
+        def validate!(context : Symbol? = nil)
           errs = errors(context)
           errs.empty? || raise ValidationError.new(errs)
         end
 
-        # Get validation errors
+        # Get validation errors. Rules declared with `on:` run only in that context; without a
+        # context, `default_validation_context` picks it.
         # @param context [Symbol?] Optional validation context
         # @return [Array(Error)] Array of validation errors
-        def errors(context = nil)
-          Validator.validate(self, context)
+        def errors(context : Symbol? = nil)
+          Validator.validate(self, context || default_validation_context)
         end
 
         macro finished

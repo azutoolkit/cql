@@ -67,7 +67,7 @@ module CQL
         # A record with nothing to save is not stamped, so its UPDATE can be skipped; a callback
         # that then changes it gets its stamp in `update!`.
         private def set_timestamps!
-          @stamp_on_update = persisted? && !changed?
+          @stamp_on_update = !new_record? && !changed?
           previous_def unless @stamp_on_update
         end
 

@@ -217,16 +217,13 @@ module CQL
           record.as({{@type.id}})
         end
 
-        # Create a new record with given attributes
-        # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
-        # - **@return** [PrimaryKey] The ID of the new record
+        # Validate this record as `:create` and insert it, with its timestamps set as `save` sets them
+        # (`set_timestamps!` comes from `Persistence`); no callbacks run.
+        # - **@return** [{{@type.id}}] The record, with its new id
         # - **@raise** [ValidationError] If validation fails
-        #
-        # **Example** Creating a new record
-        #
         def create!
-          # Validate before creating
-          validate!
+          set_timestamps!
+          validate!(:create)
 
           # Create the record using the class method
           {{@type.id}}.create!(self)

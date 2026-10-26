@@ -27,7 +27,7 @@ module CQL
     #   scope :by_role, ->(role : String) { where(role: role) }
     #
     #   # Complex scope with multiple conditions
-    #   scope :recent, ->(days : Int32 = 7) {
+    #   scope :recent, ->(days : Int32) {
     #     where("created_at > ?", Time.utc - days.days)
     #   }
     #
@@ -40,7 +40,7 @@ module CQL
     # User.by_role("admin")                    # Parameterized scope
     # User.active.by_role("admin")             # Chained scopes
     # User.recent(30)                          # Scope with parameter
-    # User.active.recent.order(:created_at)    # Mixed with query methods
+    # User.active.recent(7).order(:created_at) # Mixed with query methods
     # ```
     module Scopes
       macro included
@@ -55,7 +55,13 @@ module CQL
 
       # Define a scope with the given name and query logic
       #
-      # The scope_proc should return either:
+      # The body runs on the query the scope is called on, as if it were written there: chained after
+      # other query methods it adds to them, and `Model.name` runs it on `Model.query`. Call the
+      # builder's methods (`where`, `order`, ...) in it; a bare `query` is the receiver's `CQL::Query`,
+      # which `where` changes in place, and a body that starts its own query (`Post.query...`)
+      # replaces the chain.
+      #
+      # The body returns either:
       # - A QueryBuilder instance (recommended)
       # - A CQL::Query instance (will be wrapped in QueryBuilder)
       #
@@ -73,7 +79,7 @@ module CQL
       # scope :by_category, ->(category : String) { where(category: category) }
       #
       # # Scope with complex logic
-      # scope :recent_and_popular, ->(days : Int32 = 7) {
+      # scope :recent_and_popular, ->(days : Int32) {
       #   where("created_at > ?", Time.utc - days.days)
       #     .where("views > ?", 100)
       #     .order(views: :desc)
@@ -81,103 +87,55 @@ module CQL
       # ```
       macro scope(name, scope_proc)
         # Store scope definition for introspection
-        @@defined_scopes[{{name.stringify}}] = {{scope_proc.stringify}}
+        @@defined_scopes[{{name.id.stringify}}] = {{scope_proc.stringify}}
 
         # Define the class method (e.g., Post.published)
         def self.{{name.id}}(*args, **kwargs)
-          # Create the base query if we're starting fresh
-          base_query = query
+          query.{{name.id}}(*args, **kwargs)
+        end
 
-          # Execute the scope proc with provided arguments
-          scope_result = begin
-            # Handle different argument patterns
-            {% if scope_proc.args.size > 0 %}
-              # Scope expects arguments
-              ({{scope_proc}}).call(*args, **kwargs)
-            {% else %}
-              # Scope expects no arguments
-              if args.empty? && kwargs.empty?
-                ({{scope_proc}}).call
-              else
-                raise ArgumentError.new("Scope '{{name.id}}' expects no arguments, got #{args.size} positional and #{kwargs.size} keyword arguments")
-              end
-            {% end %}
-          rescue ex : ArgumentError
-            raise ex
-          rescue ex
-            raise ArgumentError.new("Error in scope '{{name.id}}': #{ex.message}")
+        # The scope's body run on *cql_builder*; `QueryBuilder#{{name.id}}` dispatches here.
+        def self._scope_{{name.id}}(cql_builder, {% if scope_proc.args.empty? %}*args, **kwargs{% else %}{{scope_proc.args.splat}}{% end %})
+          {% if scope_proc.args.empty? %}
+            CQL::ActiveRecord::Scopes.expect_no_arguments({{name.id.stringify}}, args, kwargs)
+          {% end %}
+          result = CQL::ActiveRecord::Scopes.evaluate({{name.id.stringify}}, cql_builder) do
+            {{scope_proc.body}}
           end
 
-          # Handle the result based on its type
-          case scope_result
+          case result
           when QueryBuilder({{@type.id}})
-            scope_result
+            result
           when CQL::Query
-            QueryBuilder({{@type.id}}).new(scope_result)
+            QueryBuilder({{@type.id}}).new(result)
           when Nil
             raise ArgumentError.new("Scope '{{name.id}}' returned nil - scopes must return a QueryBuilder or CQL::Query")
           else
-            raise ArgumentError.new("Scope '{{name.id}}' must return a QueryBuilder or CQL::Query, got #{scope_result.class}")
+            raise ArgumentError.new("Scope '{{name.id}}' must return a QueryBuilder or CQL::Query, got #{result.class}")
           end
         end
 
-        # Define the instance method for chaining on QueryBuilder
-        create_chainable_scope_method({{name}}, {{scope_proc}})
+        # Every model's builder gets the same method, which runs the scope of the builder's model
+        class ::CQL::ActiveRecord::Queryable::QueryBuilder(T)
+          def {{name.id}}(*args, **kwargs)
+            T._scope_{{name.id}}(self, *args, **kwargs)
+          end
+        end
       end
 
-      # Create a scope method that can be chained on QueryBuilder instances
-      macro create_chainable_scope_method(name, scope_proc)
-        # Add to QueryBuilder class to enable chaining
-        class ::CQL::ActiveRecord::Queryable::QueryBuilder(T)
-          def {{name.id}}(*args, **kwargs) : QueryBuilder(T) forall T
-            # We need to execute the scope in the context of the model class
-            # but merge it with the current query
+      def self.expect_no_arguments(name : String, args : Tuple, kwargs : NamedTuple) : Nil
+        return if args.empty? && kwargs.empty?
+        raise ArgumentError.new("Scope '#{name}' expects no arguments, got #{args.size} positional and #{kwargs.size} keyword arguments")
+      end
 
-            # Get the model class from the type parameter
-            model_class = T
-
-            # Create a fresh query to get the scope result
-            scope_query_builder = begin
-              # Execute scope proc with a clean query
-              fresh_query = QueryBuilder(T).from_model(model_class)
-
-              {% if scope_proc.args.size > 0 %}
-                scope_result = ({{scope_proc}}).call(*args, **kwargs)
-              {% else %}
-                if args.empty? && kwargs.empty?
-                  scope_result = ({{scope_proc}}).call
-                else
-                  raise ArgumentError.new("Scope '{{name.id}}' expects no arguments")
-                end
-              {% end %}
-
-              case scope_result
-              when QueryBuilder(T)
-                scope_result
-              when CQL::Query
-                QueryBuilder(T).new(scope_result)
-              else
-                raise ArgumentError.new("Scope '{{name.id}}' must return a QueryBuilder or CQL::Query")
-              end
-            rescue ex : ArgumentError
-              raise ex
-            rescue ex
-              raise ArgumentError.new("Error in scope '{{name.id}}': #{ex.message}")
-            end
-
-            # Merge the scope query with the current query
-            # This is where we'd need to implement query merging logic
-            # For now, we'll create a new QueryBuilder that combines both queries
-            merged_query = merge_queries(self.query, scope_query_builder.query)
-            QueryBuilder(T).new(merged_query, model_class)
-          end
-
-          # Helper method to merge two CQL::Query objects
-          private def merge_queries(base_query : CQL::Query, scope_query : CQL::Query) : CQL::Query
-            # Use the actual merge functionality from CQL::Query
-            base_query.merge(scope_query)
-          end
-        end
+      # Runs a scope's body with *builder* as the receiver of its unqualified calls; a call the
+      # builder does not answer goes to the model.
+      def self.evaluate(name : String, builder, &)
+        with builder yield
+      rescue ex : ArgumentError
+        raise ex
+      rescue ex
+        raise ArgumentError.new("Error in scope '#{name}': #{ex.message}")
       end
 
       # Utility methods for scope introspection and debugging

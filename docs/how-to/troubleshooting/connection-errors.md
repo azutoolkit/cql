@@ -27,7 +27,7 @@ A schema opens its first connection when it is built, so most of these raise fro
 DB::ConnectionRefused: cannot connect to localhost:5432: Error connecting to 'localhost:5432': Connection refused
 ```
 
-**Cause:** nothing listens on that host and port. A URL without a host (`postgres:///app`) means `PGHOST`, else `localhost`.
+**Cause:** nothing listens on that host and port. A URL without a host (`postgres:///app`) means `PGHOST`; `CQL::Schema` raises `Missing host in PostgreSQL URI` when neither it nor `?host=` is set.
 
 ```bash
 pg_isready -h localhost -p 5432   # is the server up?
@@ -114,7 +114,7 @@ ArgumentError: user cannot be set through the URL query
 ```text
 ArgumentError: Unsupported database URL: redis://localhost:6379         (CQL.configure)
 CQL::Schema::InvalidURIError: Unsupported database type: redis           (Schema.define)
-CQL::Schema::InvalidURIError: Missing host in CockroachDB URI            (also MySQL)
+CQL::Schema::InvalidURIError: Missing host in CockroachDB URI            (also MySQL, and PostgreSQL without PGHOST or ?host=)
 CQL::Schema::InvalidURIError: Invalid database URI format                (no scheme, e.g. localhost/app)
 URI::Error: Invalid URI: bad port at character 11                        (sqlite3://:memory:)
 ```

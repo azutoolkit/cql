@@ -102,6 +102,12 @@ describe CQL::Postgres::Config do
     config.startup_parameters.should eq({"search_path" => "public", "user" => "ada", "database" => "app", "client_encoding" => "UTF8", "application_name" => "svc"})
   end
 
+  it "drops auth_methods, written for the pg shard, instead of sending it as a startup parameter" do
+    config = CQL::Postgres::Config.parse("postgres://ada@h/app?auth_methods=cleartext,md5,scram-sha-256&search_path=public")
+    config.startup_parameters.has_key?("auth_methods").should be_false
+    config.startup_parameters["search_path"].should eq "public"
+  end
+
   it "decodes credentials once, so `+` and encoded percent signs survive" do
     CQL::Postgres::Config.parse("postgres://ada:a+b@h/db").password_for_authentication.should eq "a+b"
     CQL::Postgres::Config.parse("postgres://ada:p%2540x@h/db").password_for_authentication.should eq "p%40x"

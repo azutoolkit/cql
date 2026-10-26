@@ -69,18 +69,39 @@ module CQL::Performance
 
       def initialize
         # Auto-enable in development
-        if ENV["CRYSTAL_ENV"]? == "development"
-          @enabled = true
-        end
+        @enabled = true if ENV["CRYSTAL_ENV"]? == "development" && Logging.development_default?
+      end
+
+      # Whether development turns SQL logging on: unless `CQL_NO_SQL_LOG` is set, as for `CQL.configure`.
+      def self.development_default? : Bool
+        !ENV.has_key?("CQL_NO_SQL_LOG")
       end
     end
 
     # Reporting configuration
     class Reporting
       property format : String = "text"
-      property? auto_generate : Bool = false
-      property interval : Time::Span = 5.minutes
       property? include_stack_traces : Bool = false
+      @auto_generate = false
+      @interval : Time::Span = 5.minutes
+
+      @[Deprecated("Has no effect: nothing generates reports on a schedule. Call a reporter yourself.")]
+      def auto_generate? : Bool
+        @auto_generate
+      end
+
+      @[Deprecated("Has no effect: nothing generates reports on a schedule. Call a reporter yourself.")]
+      def auto_generate=(@auto_generate : Bool) : Bool
+      end
+
+      @[Deprecated("Has no effect: nothing generates reports on a schedule. Call a reporter yourself.")]
+      def interval : Time::Span
+        @interval
+      end
+
+      @[Deprecated("Has no effect: nothing generates reports on a schedule. Call a reporter yourself.")]
+      def interval=(@interval : Time::Span) : Time::Span
+      end
     end
 
     # Cache configuration
@@ -134,14 +155,12 @@ module CQL::Performance
       when development_mode?
         # Development optimizations
         monitoring.enabled = true
-        logging.enabled = true
-        reporting.auto_generate = false
+        logging.enabled = Logging.development_default?
         detection.strict_mode = false
       when test_mode?
         # Test optimizations
         monitoring.enabled = false
         logging.enabled = false
-        reporting.auto_generate = false
         profiling.slow_query_threshold = 10.milliseconds
       when production_mode?
         # Production optimizations
@@ -200,9 +219,7 @@ module CQL::Performance
           "pretty_format" => logging.pretty_format?,
         },
         "reporting" => {
-          "format"           => reporting.format,
-          "auto_generate"    => reporting.auto_generate?,
-          "interval_seconds" => reporting.interval.total_seconds,
+          "format" => reporting.format,
         },
       }
     end
@@ -244,8 +261,6 @@ module CQL::Performance
         config.detection.strict_mode = true
         config.logging.enabled = false
         config.cache.enabled = true
-        config.reporting.auto_generate = true
-        config.reporting.interval = 10.minutes
       end
     end
 

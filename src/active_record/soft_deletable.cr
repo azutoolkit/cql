@@ -8,7 +8,7 @@ module CQL
     #
     # - Mark records as deleted using `deleted_at` timestamp
     # - Automatic filtering of soft-deleted records from queries
-    # - `with_deleted`, `only_deleted` scopes for accessing soft-deleted records
+    # - `with_deleted`, `only_deleted` class methods for accessing soft-deleted records
     # - `restore` functionality to undelete records
     # - Integration with existing Active Record patterns
     #
@@ -58,17 +58,16 @@ module CQL
           end
         end
 
-        # Scope to include soft-deleted records
-        scope :with_deleted, -> {
+        # Every record, soft-deleted ones included. It starts a query: once `query` has filtered out
+        # the soft-deleted rows, no later call can bring them back.
+        def self.with_deleted
           query_without_soft_delete_filter
-        }
+        end
 
-        # Scope to show only soft-deleted records
-        scope :only_deleted, -> {
-          QueryBuilder({{@type.id}}).from_model({{@type.id}}).where {
-            {{@type.id}}.table_column(:deleted_at).not_null
-          }
-        }
+        # Only the soft-deleted records; like `with_deleted`, it starts a query.
+        def self.only_deleted
+          query_without_soft_delete_filter.where { {{@type.id}}.table_column(:deleted_at).not_null }
+        end
 
         # Helper method to get query without soft delete filter
         def self.query_without_soft_delete_filter
@@ -191,7 +190,7 @@ module CQL
             end
           end
 
-          DB::ExecResult.new(0_i64, rows_affected)
+          DB::ExecResult.new(rows_affected: rows_affected, last_insert_id: 0_i64)
         end
 
         # Force delete records matching specific fields

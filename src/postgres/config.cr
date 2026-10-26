@@ -41,6 +41,9 @@ module CQL::Postgres
     UNSUPPORTED_LIBPQ    = {"sslcert", "sslkey", "sslcrl", "sslcompression", "sslsni", "sslpassword", "channel_binding", "require_auth", "target_session_attrs", "passfile", "service", "gssencmode", "krbsrvname"}
     DEFAULT_CONNECT_WAIT = 10.0
 
+    # Accepted for configuration written for the `pg` shard (`CQL.configure` emits it); this driver negotiates SCRAM/MD5 itself.
+    COMPAT_IGNORED_KEYS = {"auth_methods"}
+
     getter host : String
     getter port : Int32
     getter user : String
@@ -101,11 +104,12 @@ module CQL::Postgres
     # For callers that only hold a parsed URI (crystal-db's driver interface).
     # `URI.parse` has already decoded the user info, and reads `+` as a space,
     # so write a literal plus as `%2B`. Query keys in *ignoring* belong to the
-    # caller and are not read as settings.
+    # caller and are not read as settings; `COMPAT_IGNORED_KEYS` are always dropped.
     def self.from_uri(uri : URI, user : String? = uri.user.presence, password : String? = uri.password, ignoring : Enumerable(String) = [] of String) : Config
       raise ArgumentError.new("expected a postgres:// URL, got scheme #{uri.scheme.inspect}") unless SCHEMES.includes?(uri.scheme)
       params = query_parameters(uri.query)
       ignoring.each { |key| params.delete(key) }
+      COMPAT_IGNORED_KEYS.each { |key| params.delete(key) }
       driver_options = DRIVER_OPTION_KEYS.each_with_object({} of String => String) do |key, options|
         pop(params, key).try { |value| options[key] = value }
       end

@@ -47,7 +47,7 @@ session.id!     # => UUID, raises if the record has no id yet; id= takes a UUID
 
 Session.find!(session.id!)
 Session.query.where { id == session.id! }.all            # binds the UUID as text
-Session.query.where_primary_key([session.id!, UUID.random]).all # id.in([...]) does not compile on a UUID key yet
+Session.query.where { id.in([session.id!, UUID.random]) }.all # each UUID bound as text
 Session.find_or_create_by(token: "abc")
 ```
 

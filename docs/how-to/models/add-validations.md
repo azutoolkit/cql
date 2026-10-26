@@ -29,9 +29,14 @@ end
 
 Every option (`presence`, `required`, `match`, `size`, `gt`, `in`, `confirmation`, `accept` and the rest), the value it takes and the message it adds are listed in the [Validation Options Reference](../../reference/api/validation-options.md); `message:` replaces the message. Any other option, or a property the model does not define, fails at compile time.
 
-{% hint style="warning" %}
-Rules are stored per property, so a second `validate :email, ...` replaces the first. Put all of a property's rules in one call.
-{% endhint %}
+Several `validate` calls on one property all apply. `on:` limits a call's rules to one kind of save:
+
+```crystal
+validate :password, presence: true, on: :create # only when save inserts the record
+validate :name, size: 2..50, on: :update        # only when save updates it
+```
+
+`save`, `valid?` and `errors` check a new record as `:create` and a saved one as `:update`; pass a context to choose (`user.valid?(:update)`).
 
 ## Check a Record
 
@@ -57,21 +62,14 @@ end
 ```crystal
 user = User.new("", "invalid")
 
-# ❌ save validates first and raises on an invalid record
-user.save                     # raises CQL::ActiveRecord::Validations::ValidationError
+puts user.errors.map(&.message).join(", ") unless user.save # save is false: nothing is written
+user.save!                    # raises CQL::RecordInvalid (a Validations::ValidationError)
 
-# ✅ Check first when invalid input is expected
-if user.valid?
-  user.save
-else
-  puts user.errors.map(&.message).join(", ")
-end
-
-User.new("Ada", "ada@example.com").create! # validates, then INSERT
+User.new("Ada", "ada@example.com").create! # validates (raising like save!), then INSERT
 User.create!(name: "", email: "x")         # no validation: INSERT as given
 ```
 
-`save`, `save!` and the instance `create!` validate. The class method `User.create!(...)` and `update!` do not, so use `save` to update with validation. A `before_*` callback that returns `false` makes `save` return `false` without raising (see [Use Callbacks](use-callbacks.md)).
+`save`, `save!` and the instance `create!` validate. The class method `User.create!(...)` and `update!` do not, so use `save` to update with validation. A `before_*` callback that returns `false` makes `save` return `false` too, and `save!` raise `CQL::RecordNotSaved` (see [Use Callbacks](use-callbacks.md)).
 
 ## Write a Custom Validator
 

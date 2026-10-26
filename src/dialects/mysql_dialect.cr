@@ -219,7 +219,8 @@ module Expression
       " LIMIT 18446744073709551615 OFFSET #{offset}"
     end
 
-    # MySQL doesn't support RETURNING clause in versions before 8.0.21
+    # MySQL has no RETURNING clause (MariaDB does), so `back(...)` is dropped here; callers check
+    # `supports_returning?` and read the row back themselves.
     def format_returning(columns : Array(String)) : String
       ""
     end

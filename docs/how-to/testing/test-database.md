@@ -168,12 +168,10 @@ post = Post.new("Hello World", "Content")
 post.save
 post.slug.should eq("hello-world")
 
-# ❌ save raises ValidationError for an invalid record; it never returns false
+# save returns false for an invalid record; save! raises
 User.new("John", "invalid-email").save.should be_false
-
-# ✅
-expect_raises(CQL::ActiveRecord::Validations::ValidationError) do
-  User.new("John", "invalid-email").save
+expect_raises(CQL::RecordInvalid) do
+  User.new("John", "invalid-email").save!
 end
 ```
 

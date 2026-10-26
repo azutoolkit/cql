@@ -222,16 +222,21 @@ module CQL
       when "sqlite3"
         # Valid SQLite URI
       when "postgres", "postgresql"
-        raise InvalidURIError.new("Missing host in PostgreSQL URI") unless uri.host
+        raise InvalidURIError.new("Missing host in PostgreSQL URI") unless postgres_host?(uri)
       when "mysql"
         raise InvalidURIError.new("Missing host in MySQL URI") unless uri.host.presence
       when "cockroachdb"
-        raise InvalidURIError.new("Missing host in CockroachDB URI") unless uri.host.presence
+        raise InvalidURIError.new("Missing host in CockroachDB URI") unless postgres_host?(uri)
       else
         raise InvalidURIError.new("Unsupported database type: #{uri.scheme}")
       end
     rescue URI::Error
       raise InvalidURIError.new("Invalid URI format")
+    end
+
+    # The PostgreSQL driver's fallbacks for an empty host: a Unix-socket directory in `?host=`, then PGHOST.
+    private def postgres_host?(uri : URI) : Bool
+      !!(uri.host.presence || uri.query_params["host"]?.presence || ENV["PGHOST"]?.presence)
     end
 
     # Builds the schema. This method creates the tables in the schema.

@@ -20,7 +20,7 @@ require "./blog_engine"
 User.delete_all
 Category.delete_all
 
-# new + save: runs validations and callbacks; returns false when a callback halts it
+# new + save: runs validations and callbacks; returns false when the record is invalid or a callback halts it
 alice = User.new(username: "alice", email: "alice@example.com", first_name: "Alice")
 alice.save
 
@@ -57,7 +57,7 @@ crystal src/crud.cr
 Created 3 users, 3 categories, 4 posts, 2 comments
 ```
 
-`save!` raises `CQL::RecordNotSaved` when a callback halts the save, and `CQL::ActiveRecord::Validations::ValidationError` for an invalid record. `create!` does not call your `initialize`, so pass every computed value, such as a slug, yourself; it also skips validations and callbacks.
+`save!` raises `CQL::RecordInvalid` for an invalid record, and `CQL::RecordNotSaved` when a callback halts the save. `create!` does not call your `initialize`, so pass every computed value, such as a slug, yourself; it also skips validations and callbacks.
 {% endstep %}
 
 {% step %}

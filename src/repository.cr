@@ -100,7 +100,7 @@ module CQL
     # user_repo.find!(1)
     # ```
     def find!(id : Pk)
-      query.where(id: id).first!(T)
+      query.where(id: id).first(T) || raise DB::NoResultsError.new("No records found with id=#{id}")
     end
 
     # Find a record by specific fields
@@ -241,8 +241,8 @@ module CQL
     # ```
     # user_repo.count
     # ```
-    def count
-      query.count.first!(Pk)
+    def count : Int64
+      query.count.get(Int64?) || 0_i64
     end
 
     # Check if records exist matching specific fields

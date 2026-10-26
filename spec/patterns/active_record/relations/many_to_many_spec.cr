@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 
 describe CQL::ActiveRecord::Relations::ManyToMany do
   before_each do
@@ -15,6 +16,16 @@ describe CQL::ActiveRecord::Relations::ManyToMany do
     UserDB.movies_actor.drop!
     UserDB.actors.drop!
     UserDB.movies.drop!
+  end
+
+  it "reads an association with dependent: :destroy without logging a deprecation warning" do
+    movie = Movie.new("The Matrix", 1999)
+    movie.create!
+
+    Log.capture("*", level: :warn) do |logs|
+      movie.actors.size.should eq(0)
+      logs.empty
+    end
   end
 
   it "returns the associated actors" do

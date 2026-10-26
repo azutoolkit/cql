@@ -135,7 +135,7 @@ module CQL
       def stats : Hash(String, String | Int32 | Int64 | Float64)
         base_stats = @cache.stats
         base_stats.merge({
-          "fragment_cache_enabled" => true,
+          "fragment_cache_enabled" => "true",
           "invalidation_strategy"  => @strategy.class.name.split("::").last,
         })
       end

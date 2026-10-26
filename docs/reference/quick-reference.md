@@ -159,7 +159,7 @@ ada = User.create!(name: "Ada", email: "ADA@example.com", age: 36) # INSERT; no 
 grace = User.new("Grace", "grace@example.com")
 grace.save                        # => true; validates, runs callbacks, sets id and timestamps
 grace.name = "Grace H."
-grace.save!                       # raises ValidationError if invalid, RecordNotSaved if a callback halts
+grace.save!                       # raises CQL::RecordInvalid if invalid, RecordNotSaved if a callback halts
 grace.valid?                      # => true
 grace.errors                      # => [] of CQL::ActiveRecord::Validations::Error
 

@@ -41,7 +41,7 @@ post.created_at   # => 2026-10-26 10:30:00Z (unchanged)
 post.updated_at   # => 2026-10-26 11:45:00Z
 ```
 
-`save` and `save!` set `created_at` on a new record and `updated_at` on every save, before the callbacks run, whenever the table has those columns. Other writes do not:
+`save`, `save!` and the instance `create!` set `created_at` on a new record and `updated_at` on every save, before validating, whenever the table has those columns. Other writes do not:
 
 ```crystal
 Post.create!(title: "Hello")   # INSERTs only title; the column defaults fill both timestamps,

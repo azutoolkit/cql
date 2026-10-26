@@ -76,7 +76,7 @@ module CQL
 
     # Transaction-aware invalidation strategy
     # Defers invalidation until after transaction commits
-    class TransactionAwareInvalidation
+    class TransactionAwareInvalidation < InvalidationStrategy
       @pending_invalidations = Set(String).new
       @pending_tag_invalidations = Set(String).new
       @mutex = CQL::Compat::Mutex.new

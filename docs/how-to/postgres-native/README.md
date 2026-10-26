@@ -64,9 +64,9 @@ crystal build -Dcql_postgres_driver_cockroachdb src/app.cr # also serve DB.open(
 ```crystal
 "postgres://app:secret@db/app?sslmode=verify-ca"  # ArgumentError: use disable, prefer, require or verify-full
 "postgres://app:secret@db/app?sslcert=client.pem" # ArgumentError: the sslcert option is not supported (sslkey too)
-"postgres://app:secret@db/app?auth_methods=md5"   # DB.open and CQL::Schema ignore it (SCRAM and MD5 are negotiated);
-                                                  # AsyncEngine.connect sends it to the server, which rejects it
+"postgres://app:secret@db/app?auth_methods=md5"   # ignored: SCRAM and MD5 are negotiated
 "postgres:///app"                                 # host, port, user and password from PGHOST, PGPORT, PGUSER, PGPASSWORD
+                                                  # (CQL::Schema needs PGHOST or ?host= for it)
 "postgres://app:p%2Bss@db/app"                    # a literal + in the user or password is %2B for DB.open and CQL::Schema
 
 DB.open(DATABASE_URL) do |db|

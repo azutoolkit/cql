@@ -248,7 +248,7 @@ describe CQL::ActiveRecord::Queryable do
     end
 
     it "raises an error when no records found" do
-      expect_raises(Exception) do
+      expect_raises(DB::NoResultsError, "No records found") do
         TestUser.where(name: "Nonexistent").first!
       end
     end
@@ -274,7 +274,7 @@ describe CQL::ActiveRecord::Queryable do
     end
 
     it "raises an error when no records found" do
-      expect_raises(Exception) do
+      expect_raises(DB::NoResultsError, "No records found") do
         TestUser.where(name: "Nonexistent").last!
       end
     end
