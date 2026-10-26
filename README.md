@@ -82,7 +82,7 @@ dependencies:
 
 > [!NOTE]
 > PostgreSQL and CockroachDB need nothing more, because CQL ships the driver. CQL needs Crystal 1.12.2 or later; CI
-> tests Crystal 1.19.1 and 1.22.0.
+> tests Crystal 1.19.1 and 1.22.1.
 
 ## Quick Start
 

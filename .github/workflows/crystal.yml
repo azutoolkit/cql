@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: crystallang/crystal:1.22.0
+      image: crystallang/crystal:1.22.1
 
     services:
       postgres:
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      image: crystallang/crystal:1.22.0
+      image: crystallang/crystal:1.22.1
     steps:
       - uses: actions/checkout@v4
       - name: Install Python and SQLite (tutorial steps marked run are executed)
@@ -165,7 +165,7 @@ jobs:
     needs: release
     if: ${{ needs.release.outputs.released == 'true' }}
     container:
-      image: crystallang/crystal:1.22.0
+      image: crystallang/crystal:1.22.1
     steps:
       - uses: actions/checkout@v4
         with:
