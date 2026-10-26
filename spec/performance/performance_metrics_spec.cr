@@ -4,39 +4,6 @@ require "../../src/performance/query_profiler"
 require "../../src/performance/n_plus_one_detector"
 require "../../src/cache/cache"
 
-private class SpyProfiler < CQL::Performance::QueryProfiler
-  getter calls = Hash(String, Int32).new(0)
-
-  def statistics
-    calls["statistics"] += 1
-    super
-  end
-
-  def slowest_queries(limit : Int32 = 10)
-    calls["slowest_queries"] += 1
-    super
-  end
-
-  def issues
-    calls["issues"] += 1
-    super
-  end
-end
-
-private class SpyDetector < CQL::Performance::NPlusOneDetector
-  getter calls = Hash(String, Int32).new(0)
-
-  def patterns
-    calls["patterns"] += 1
-    super
-  end
-
-  def issues
-    calls["issues"] += 1
-    super
-  end
-end
-
 describe "CQL::Performance::PerformanceMetrics" do
   describe "QueryMetrics struct" do
     it "initializes with correct values" do
@@ -591,9 +558,9 @@ describe "CQL::Performance::PerformanceMetrics" do
 
   describe ".from_components" do
     it "reads each profiler and detector source once per report" do
-      profiler = SpyProfiler.new
+      profiler = CallCountingProfiler.new
       3.times { |i| profiler.record_query("SELECT * FROM users WHERE id = ?", [i.as(DB::Any)], 1.hour) }
-      detector = SpyDetector.new
+      detector = CallCountingDetector.new
       detector.record_query("SELECT * FROM users")
       3.times { detector.record_query("SELECT * FROM posts WHERE user_id = ?") }
 
@@ -601,6 +568,17 @@ describe "CQL::Performance::PerformanceMetrics" do
 
       profiler.calls.should eq({"statistics" => 1, "slowest_queries" => 1, "issues" => 1})
       detector.calls.should eq({"patterns" => 1, "issues" => 1})
+    end
+
+    it "lists the most frequent queries in the order of the first ten query patterns" do
+      profiler = CQL::Performance::QueryProfiler.new
+      25.times { |i| (i + 1).times { profiler.record_query("SELECT * FROM t#{i}", [] of DB::Any, 1.millisecond) } }
+
+      metrics = CQL::Performance::PerformanceMetrics.from_components(profiler: profiler)
+
+      patterns = metrics.patterns.query_patterns
+      patterns.map(&.[:count]).should eq((6_i64..25_i64).to_a.reverse)
+      metrics.most_frequent_queries.map(&.[:sql]).should eq(patterns.first(10).map(&.[:pattern]))
     end
 
     it "surfaces the profiler's latency percentiles in query metrics, to_h and summary" do

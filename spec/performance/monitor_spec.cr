@@ -438,6 +438,57 @@ describe CQL::Performance::Monitor do
       # healthy? should match metrics.healthy?
       monitor.healthy?.should eq(monitor.metrics.healthy?)
     end
+
+    it "matches metrics.healthy? when N+1 patterns pull the score below 80" do
+      config = CQL::Performance::Config.new
+      config.logging.enabled = false
+      config.detection.detection_window = 100
+      monitor = CQL::Performance::Monitor.new(config: config)
+      2.times do |i|
+        monitor.detector.not_nil!.record_query("SELECT * FROM users#{i}")
+        51.times { monitor.detector.not_nil!.record_query("SELECT * FROM posts#{i} WHERE user_id = ?") }
+      end
+
+      monitor.healthy?.should be_false
+      monitor.metrics.healthy?.should be_false
+    end
+
+    it "reads only the profiler's statistics and slow queries and the detector's patterns" do
+      profiler = CallCountingProfiler.new
+      detector = CallCountingDetector.new
+      monitor = CQL::Performance::Monitor.new(config: CQL::Performance::Config.new, profiler: profiler, detector: detector)
+
+      monitor.healthy?
+
+      profiler.calls.should eq({"statistics" => 1, "slowest_queries" => 1})
+      detector.calls.should eq({"patterns" => 1})
+    end
+  end
+
+  describe "#critical_issues and #high_priority_issues" do
+    it "read only the profiler's and the detector's issues" do
+      profiler = CallCountingProfiler.new
+      detector = CallCountingDetector.new
+      monitor = CQL::Performance::Monitor.new(config: CQL::Performance::Config.new, profiler: profiler, detector: detector)
+
+      monitor.critical_issues
+      monitor.high_priority_issues
+
+      profiler.calls.should eq({"issues" => 2})
+      detector.calls.should eq({"issues" => 2})
+    end
+
+    it "keep the critical issues, and the critical and high ones" do
+      config = CQL::Performance::Config.new
+      config.profiling.log_slow_queries = false
+      monitor = CQL::Performance::Monitor.new(config: config)
+      profiler = monitor.profiler.not_nil!
+      profiler.record_query("SELECT * FROM reports", [] of DB::Any, 10.seconds)
+      101.times { profiler.record_query("SELECT * FROM users", [] of DB::Any, 60.milliseconds) }
+
+      monitor.critical_issues.map(&.type).should eq([:very_slow_queries])
+      monitor.high_priority_issues.map(&.type).sort_by!(&.to_s).should eq([:high_frequency_slow_query, :very_slow_queries])
+    end
   end
 
   describe "#clear" do

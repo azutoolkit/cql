@@ -14,7 +14,10 @@ module CQL::Performance
   class PerformanceMetrics
     include TimingUtils
 
-    private alias QueryStatistics = Hash(String, NamedTuple(count: Int32, total_ms: Float64, avg_ms: Float64, min_ms: Float64, max_ms: Float64))
+    private alias StatementStatistics = NamedTuple(count: Int32, total_ms: Float64, avg_ms: Float64, min_ms: Float64, max_ms: Float64)
+    private alias QueryStatistics = Hash(String, StatementStatistics)
+
+    HEALTHY_SCORE = 80
 
     # Helper method to convert values to JSON::Any recursively
     def self.to_json_any(value) : JSON::Any
@@ -305,6 +308,7 @@ module CQL::Performance
       latency = profiler.try(&.latency_percentiles) || LatencyPercentiles.zero
       n_plus_one_patterns = detector.try(&.patterns) || [] of NPlusOnePattern
       issues = collect_issues(profiler, detector)
+      most_frequent = most_frequent_statements(statistics)
 
       query_metrics = if profiler
                         build_query_metrics(statistics, slowest_queries, latency, collection_duration, error_count)
@@ -318,12 +322,22 @@ module CQL::Performance
         build_cache_metrics(cache),
         build_system_metrics(start_time),
         build_health_metrics(statistics, slowest_queries, n_plus_one_patterns, issues, cache),
-        build_top_queries(statistics, slowest_queries, config.try(&.logging.include_params?) || false),
-        build_performance_patterns(statistics, n_plus_one_patterns),
+        build_top_queries(statistics, most_frequent, slowest_queries, config.try(&.logging.include_params?) || false),
+        build_performance_patterns(most_frequent, n_plus_one_patterns),
         issues,
         collection_duration,
         monitor
       )
+    end
+
+    # Whether metrics built from these components would be `healthy?`, reading only what the health score needs: the
+    # profiler's statistics and slow queries and the detector's patterns.
+    def self.healthy?(profiler : QueryProfilerInterface? = nil, detector : NPlusOneDetectorInterface? = nil,
+                      cache : CQL::Cache::CacheInterface? = nil) : Bool
+      statistics = profiler.try(&.statistics) || QueryStatistics.new
+      slowest_queries = profiler.try(&.slowest_queries(1000)) || [] of QueryData
+      patterns = detector.try(&.patterns) || [] of NPlusOnePattern
+      health_scores(statistics, slowest_queries, patterns, cache)[:overall] >= HEALTHY_SCORE
     end
 
     # Export all metrics as a comprehensive hash
@@ -369,17 +383,17 @@ module CQL::Performance
 
     # Check if performance is healthy
     def healthy? : Bool
-      @health_metrics.overall_health_score >= 80
+      @health_metrics.overall_health_score >= HEALTHY_SCORE
     end
 
     # Get critical issues only
     def critical_issues : Array(Issue)
-      @issues.select(&.severity.== :critical)
+      @issues.select(&.critical?)
     end
 
     # Get high priority issues
     def high_priority_issues : Array(Issue)
-      @issues.select { |issue| [:critical, :high].includes?(issue.severity) }
+      @issues.select(&.high_priority?)
     end
 
     # Get issues by type
@@ -567,27 +581,14 @@ module CQL::Performance
       medium_issues = issues.count(&.severity.== :medium)
       low_issues = issues.count(&.severity.== :low)
       total_issues = issues.size
-
-      # Calculate health scores
-      query_health_score = calculate_query_health_score(stats, slowest_queries)
-      n_plus_one_health_score = calculate_n_plus_one_health_score(patterns)
-      cache_health_score = calculate_cache_health_score(cache)
-      system_health_score = 100 # Placeholder
-
-      # Overall health score
-      overall_health_score = ([
-        query_health_score,
-        n_plus_one_health_score,
-        cache_health_score,
-        system_health_score,
-      ].sum / 4).to_i
+      scores = health_scores(stats, slowest_queries, patterns, cache)
 
       HealthMetrics.new(
-        overall_health_score,
-        query_health_score,
-        n_plus_one_health_score,
-        cache_health_score,
-        system_health_score,
+        scores[:overall],
+        scores[:query],
+        scores[:n_plus_one],
+        scores[:cache],
+        scores[:system],
         critical_issues,
         high_issues,
         medium_issues,
@@ -596,15 +597,30 @@ module CQL::Performance
       )
     end
 
-    private def self.build_top_queries(stats : QueryStatistics, slowest_queries : Array(QueryData), include_params : Bool) : TopQueries
-      # Most frequent queries
-      most_frequent = stats.map do |sql, stat|
+    private def self.health_scores(stats : QueryStatistics, slowest_queries : Array(QueryData), patterns : Array(NPlusOnePattern),
+                                   cache : CQL::Cache::CacheInterface?)
+      query = calculate_query_health_score(stats, slowest_queries)
+      n_plus_one = calculate_n_plus_one_health_score(patterns)
+      cache_score = calculate_cache_health_score(cache)
+      system = 100 # Placeholder
+      overall = ((query + n_plus_one + cache_score + system) / 4).to_i
+      {overall: overall, query: query, n_plus_one: n_plus_one, cache: cache_score, system: system}
+    end
+
+    # Statement shapes by count, most frequent first: the query patterns, whose first ten are the most frequent queries.
+    private def self.most_frequent_statements(stats : QueryStatistics) : Array({String, StatementStatistics})
+      stats.to_a.sort_by!(&.[1][:count]).reverse!.first(20)
+    end
+
+    private def self.build_top_queries(stats : QueryStatistics, statements_by_count : Array({String, StatementStatistics}),
+                                       slowest_queries : Array(QueryData), include_params : Bool) : TopQueries
+      most_frequent = statements_by_count.first(10).map do |sql, stat|
         {
           sql:      sql,
           count:    stat[:count].to_i64,
           avg_time: stat[:avg_ms].milliseconds,
         }
-      end.sort_by!(&.[:count]).reverse!.first(10)
+      end
 
       # Highest error queries (placeholder)
       highest_error_queries = [] of NamedTuple(sql: String, errors: Int64, error_rate: Float64)
@@ -621,14 +637,15 @@ module CQL::Performance
       TopQueries.new(slowest_queries.first(10), most_frequent, highest_error_queries, most_expensive, include_params)
     end
 
-    private def self.build_performance_patterns(stats : QueryStatistics, n_plus_one_patterns : Array(NPlusOnePattern)) : PerformancePatterns
-      query_patterns = stats.map do |sql, stat|
+    private def self.build_performance_patterns(statements_by_count : Array({String, StatementStatistics}),
+                                                n_plus_one_patterns : Array(NPlusOnePattern)) : PerformancePatterns
+      query_patterns = statements_by_count.map do |sql, stat|
         {
           pattern:  sql,
           count:    stat[:count].to_i64,
           avg_time: stat[:avg_ms].milliseconds,
         }
-      end.sort_by!(&.[:count]).reverse!.first(20)
+      end
 
       # Time distribution
       time_distribution = {

@@ -36,6 +36,7 @@ module CQL::Performance
     @query_stats : Hash(String, StatsTracker) = {} of String => StatsTracker
     @slow_queries : Array(QueryData) = [] of QueryData
     @slow_queries_sorted : Array(QueryData)? = nil
+    @slow_queries_version = 0_u64
     @config : Config::Profiling
     @mutex : CQL::Compat::Mutex = CQL::Compat::Mutex.new
 
@@ -68,7 +69,7 @@ module CQL::Performance
         cleanup_old_queries if @queries.size > @config.max_recorded_queries
         if slow
           @slow_queries << query
-          @slow_queries_sorted = nil
+          invalidate_slow_queries_sort
           cleanup_slow_queries if @slow_queries.size > MAX_SLOW_QUERIES
         end
       end
@@ -116,15 +117,11 @@ module CQL::Performance
       @mutex.synchronize { @query_stats.dup }
     end
 
-    # Get slowest queries (cached sort)
+    # Slowest first. The sort is cached until a slow query is added, and runs outside the lock, so `record_query` waits
+    # only for a copy.
     def slowest_queries(limit : Int32 = 10) : Array(QueryData)
-      @mutex.synchronize do
-        sorted = @slow_queries_sorted ||= @slow_queries
-          .sort_by(&.execution_time.total_milliseconds)
-          .reverse!
-        @slow_queries_sorted = sorted
-        sorted.first(limit)
-      end
+      sorted = @mutex.synchronize { @slow_queries_sorted } || sort_slow_queries
+      sorted.first(limit)
     end
 
     # Clear all data
@@ -133,7 +130,7 @@ module CQL::Performance
         @queries.clear
         @query_stats.clear
         @slow_queries.clear
-        @slow_queries_sorted = nil
+        invalidate_slow_queries_sort
         reset
       end
     end
@@ -195,7 +192,24 @@ module CQL::Performance
     private def cleanup_slow_queries
       keep_count = (MAX_SLOW_QUERIES * 0.8).to_i
       @slow_queries = @slow_queries.last(keep_count)
+    end
+
+    # Caller holds the lock.
+    private def invalidate_slow_queries_sort
       @slow_queries_sorted = nil
+      @slow_queries_version &+= 1
+    end
+
+    # The sort is cached only if no slow query arrived meanwhile, so a stale sort never hides one.
+    private def sort_slow_queries : Array(QueryData)
+      snapshot, version = @mutex.synchronize { {@slow_queries.dup, @slow_queries_version} }
+      sorted = slowest_first(snapshot)
+      @mutex.synchronize { @slow_queries_sorted = sorted if version == @slow_queries_version }
+      sorted
+    end
+
+    private def slowest_first(queries : Array(QueryData)) : Array(QueryData)
+      queries.sort_by!(&.execution_time).reverse!
     end
 
     private def log_slow_query(query : QueryData)

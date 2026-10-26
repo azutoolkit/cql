@@ -155,19 +155,19 @@ module CQL::Performance
       metrics.summary
     end
 
-    # Check if performance is healthy
+    # Same answer as `metrics.healthy?`, without building the rest of the metrics
     def healthy? : Bool
-      metrics.healthy?
+      PerformanceMetrics.healthy?(@profiler, @detector, get_cache_instance)
     end
 
     # Get critical issues
     def critical_issues : Array(Issue)
-      metrics.critical_issues
+      issues.select(&.critical?)
     end
 
     # Get high priority issues
     def high_priority_issues : Array(Issue)
-      metrics.high_priority_issues
+      issues.select(&.high_priority?)
     end
 
     # Component access
@@ -335,11 +335,6 @@ module CQL::Performance
       total_queries = profiler_stats.values.sum(&.[:count])
       slow_queries = @profiler.try(&.slowest_queries(1000).size) || 0
 
-      # Collect issues from all components
-      all_issues = [] of Issue
-      all_issues.concat(@profiler.try(&.issues) || [] of Issue)
-      all_issues.concat(@detector.try(&.issues) || [] of Issue)
-
       # Get stats trackers from profiler
       stats = @profiler.try(&.stats_trackers) || {} of String => StatsTracker
 
@@ -348,7 +343,7 @@ module CQL::Performance
         total_queries: total_queries,
         slow_queries: slow_queries,
         errors: @error_count.get,
-        issues: all_issues,
+        issues: issues,
         stats: stats,
         latency: @profiler.try(&.latency_percentiles) || LatencyPercentiles.zero,
         metadata: {
@@ -367,6 +362,10 @@ module CQL::Performance
         max_param_length: @config.logging.max_param_length,
         include_params: @config.logging.include_params?
       )
+    end
+
+    private def issues : Array(Issue)
+      (@profiler.try(&.issues) || [] of Issue) + (@detector.try(&.issues) || [] of Issue)
     end
 
     private def get_cache_instance : CQL::Cache::CacheInterface?

@@ -172,7 +172,7 @@ The context is attached to log lines produced while SQL logging is on, and to th
 ## Health and Metrics
 
 ```crystal
-CQL::Performance.healthy?              # => true when the health score is 80 or higher
+CQL::Performance.healthy?              # => true when the health score is 80 (PerformanceMetrics::HEALTHY_SCORE) or higher
 CQL::Performance.critical_issues       # => Array(Issue)
 CQL::Performance.high_priority_issues
 CQL::Performance.metrics_summary
@@ -182,6 +182,8 @@ CQL::Performance.metrics_summary
 #     "observed_statements" => ..., "monitor_overhead_ms" => ..., "p95_pool_wait_ms" => ...,
 #     "monitor_dropped_events" => ...}
 ```
+
+`healthy?`, `critical_issues` and `high_priority_issues` read only the data their answer needs, so they suit a health check that runs often. `healthy?` reads the profiler's statistics and slow queries and the N+1 detector's patterns; it gives the same answer as `metrics.healthy?`, and `PerformanceMetrics.healthy?(profiler, detector, cache)` computes it for components of your own. The two issue methods read only the profiler's and the detector's issues, filtered with `Issue#critical?` and `Issue#high_priority?` (critical or high).
 
 `CQL::Performance.metrics` returns a `PerformanceMetrics` with the full breakdown (query, N+1, cache, system and health metrics, top queries and patterns). It also offers `to_json`, `issues_by_type(:n_plus_one)`, `issues_by_severity(:critical)`, `slowest_queries(limit)` and `most_frequent_queries(limit)`. The slow queries in `to_json` (and `CQL::Performance.export_metrics_as_json`) have no `params` key unless `config.logging.include_params` is on; `slowest_queries(limit)` still returns each `QueryData` with its `params`. In the query lists, `avg_time` and `total_time` are in milliseconds.
 
@@ -196,7 +198,7 @@ File.write("tmp/perf.html", CQL::Performance.report("html"))
 File.write("tmp/perf.json", CQL::Performance.report("json"))
 ```
 
-`UnifiedReportGenerator` renders a `PerformanceReport` with one formatter per format: `text`, `json`, `html`, `console` and `logger` (an alias of `console`). An unknown format falls back to `text`. Every format shows the overall latency: a `Latency: p50 … / p95 … / p99 …` line in `text` and `console`, a p95 card in `html`, and `p50_ms`, `p95_ms` and `p99_ms` under `metrics` in `json` (`PerformanceReport#latency`, and `"latency"` in its `to_h`). Each per-statement tracker in a report's `stats` adds `p50_time_ms`, `p95_time_ms` and `p99_time_ms`.
+`UnifiedReportGenerator` renders a `PerformanceReport` with one formatter per format: `text`, `json`, `html`, `console` and `logger` (an alias of `console`). An unknown format falls back to `text`. The `html` format escapes issue messages and details, so SQL in an issue's message or details shows as text instead of running as markup. Every format shows the overall latency: a `Latency: p50 … / p95 … / p99 …` line in `text` and `console`, a p95 card in `html`, and `p50_ms`, `p95_ms` and `p99_ms` under `metrics` in `json` (`PerformanceReport#latency`, and `"latency"` in its `to_h`). Each per-statement tracker in a report's `stats` adds `p50_time_ms`, `p95_time_ms` and `p99_time_ms`.
 
 ### Add Your Own Format
 
