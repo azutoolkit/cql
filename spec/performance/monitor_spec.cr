@@ -958,6 +958,53 @@ describe "CQL::Performance::MonitorCounters" do
     monitor.counters.should eq(CQL::Performance::MonitorCounters.zero)
   end
 
+  describe "pool wait percentiles" do
+    record_waits = ->(monitor : CQL::Performance::Monitor, count : Int32, pool_wait : Time::Span) do
+      count.times do
+        event = CQL::Telemetry.query_event(CQL::Adapter::SQLite, :select, "SELECT 1", [] of DB::Any, 1.millisecond, nil, nil, pool_wait)
+        monitor.record(event, [] of DB::Any)
+      end
+    end
+
+    it "counts waits under 1 microsecond as zero" do
+      monitor = tracking_monitor.call
+      record_waits.call(monitor, 100, 300.nanoseconds)
+
+      monitor.counters.pool_wait.should eq(CQL::Performance::LatencyPercentiles.zero)
+    end
+
+    it "gives the zero waits the lowest ranks and keeps the real waits in the upper percentiles" do
+      monitor = tracking_monitor.call
+      record_waits.call(monitor, 90, 300.nanoseconds)
+      record_waits.call(monitor, 10, 20.milliseconds)
+
+      pool_wait = monitor.counters.pool_wait
+      pool_wait.p50.should eq(Time::Span.zero)
+      (15.milliseconds..25.milliseconds).should contain(pool_wait.p95)
+      (15.milliseconds..25.milliseconds).should contain(pool_wait.p99)
+    end
+
+    it "treats 999 nanoseconds as free and 1 microsecond as a real wait" do
+      monitor = tracking_monitor.call
+      record_waits.call(monitor, 1, 999.nanoseconds)
+      record_waits.call(monitor, 1, 1.microsecond)
+
+      pool_wait = monitor.counters.pool_wait
+      pool_wait.p50.should eq(Time::Span.zero)
+      pool_wait.p95.should eq(1.microsecond)
+    end
+
+    it "resets the zero share with Monitor#clear" do
+      monitor = tracking_monitor.call
+      record_waits.call(monitor, 100, 300.nanoseconds)
+
+      monitor.clear
+      record_waits.call(monitor, 1, 20.milliseconds)
+
+      (15.milliseconds..25.milliseconds).should contain(monitor.counters.pool_wait.p50)
+    end
+  end
+
   it "is zero in PerformanceMetrics built without it" do
     CQL::Performance::PerformanceMetrics.from_components.monitor.should eq(CQL::Performance::MonitorCounters.zero)
   end

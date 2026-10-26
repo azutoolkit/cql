@@ -20,6 +20,7 @@ module CQL::Performance
     Log = ::Log.for(self)
 
     private OVERHEAD_SAMPLE_INTERVAL = 64
+    private FREE_CHECKOUT            = 1.microsecond
 
     @config : Config
     @profiler : QueryProfilerInterface?
@@ -32,6 +33,7 @@ module CQL::Performance
     @sampled_overhead_ns : Atomic(Int64) = Atomic(Int64).new(0)
     @overhead_samples : Atomic(Int64) = Atomic(Int64).new(0)
     @pool_wait : StatsTracker = StatsTracker.new
+    @free_checkouts : Atomic(Int64) = Atomic(Int64).new(0)
 
     def initialize(
       config : Config = Config.from_env,
@@ -113,10 +115,11 @@ module CQL::Performance
       )
     end
 
-    # What the monitor itself observed since it was built or last cleared; `overhead` is estimated from one statement in 64.
+    # What the monitor itself observed since it was built or last cleared; `overhead` is estimated from one statement in 64
+    # and `pool_wait` counts a wait under 1 µs (a free connection) as zero.
     def counters : MonitorCounters
       observed = @observed_statements.get
-      MonitorCounters.new(observed, estimated_overhead(observed), @pool_wait.percentiles)
+      MonitorCounters.new(observed, estimated_overhead(observed), pool_wait_percentiles)
     end
 
     # Get metrics summary
@@ -161,6 +164,7 @@ module CQL::Performance
       @sampled_overhead_ns.set(0)
       @overhead_samples.set(0)
       @pool_wait.reset
+      @free_checkouts.set(0)
     end
 
     # Check if monitoring is enabled
@@ -191,9 +195,29 @@ module CQL::Performance
       (@sampled_overhead_ns.get.to_f64 / samples * observed).nanoseconds
     end
 
+    private def record_pool_wait(wait : Time::Span) : Nil
+      wait < FREE_CHECKOUT ? @free_checkouts.add(1) : @pool_wait.record(wait)
+    end
+
+    private def pool_wait_percentiles : LatencyPercentiles
+      free = @free_checkouts.get
+      waited = @pool_wait.total_count
+      return LatencyPercentiles.zero if free + waited == 0
+
+      LatencyPercentiles.new(pool_wait_quantile(0.5, free, waited), pool_wait_quantile(0.95, free, waited),
+        pool_wait_quantile(0.99, free, waited))
+    end
+
+    # Free checkouts take the lowest ranks, so the quantile falls in the recorded waits only past them.
+    private def pool_wait_quantile(q : Float64, free : Int64, waited : Int64) : Time::Span
+      rank = (q * (free + waited)).ceil.to_i64
+      return Time::Span.zero if rank <= free
+      @pool_wait.percentile((rank - free).to_f64 / waited)
+    end
+
     private def record_safely(sql : String, params : Array(DB::Any), duration : Time::Span,
                               rows_affected : Int64?, error : Exception?, pool_wait : Time::Span?) : Nil
-      @pool_wait.record(pool_wait) if pool_wait
+      record_pool_wait(pool_wait) if pool_wait
       if error
         @error_count.add(1)
         record_execution(sql, params, duration, nil, error.message.to_s)
