@@ -10,7 +10,7 @@ migrator.rollback
 puts "Rolled back one migration"
 ```
 
-`rollback(steps = 1)` rolls back the newest applied migration. Note that `down(steps)` defaults to **all** migrations, so call `migrator.down` without an argument only when you mean to undo everything. On SQLite and PostgreSQL the whole rollback runs in one transaction; on MySQL and CockroachDB each statement commits on its own. It prints a table of the migrations it reverted.
+`rollback(steps = 1)` rolls back the newest applied migration, the one with the highest version. Pending migrations do not count towards `steps`. Note that `down(steps)` defaults to **all** migrations, so call `migrator.down` without an argument only when you mean to undo everything. On SQLite and PostgreSQL the whole rollback runs in one transaction; on MySQL and CockroachDB each statement commits on its own. It prints a table of the migrations it reverted.
 
 ## Rollback Multiple Migrations
 
@@ -21,15 +21,14 @@ migrator.rollback(3)
 
 ## Rollback to Specific Version
 
-Count the applied migrations newer than the target and roll back that many:
+`down_to(version)` rolls back every applied migration newer than `version`, newest first. The migration with that version stays applied:
 
 ```crystal
-target = 5_i64
-steps = migrator.applied_migrations.count { |record| record.version > target }
-migrator.rollback(steps) if steps > 0
+# With 1-4 applied, this reverts 4, 3 and 2
+migrator.down_to(1_i64)
 ```
 
-`migrator.down_to(version)` exists, but it rolls back `position + 1` migrations, where `position` is the index of `version` in the ordered list of all registered migrations. That only equals "roll back to `version`" for some layouts, so prefer the explicit count above.
+`down_to` raises `CQL::Migrator::Error` ("No migration with version ...") when no registered migration has that version, so a mistyped version reverts nothing. To undo everything, call `migrator.down`.
 
 ## Rollback All Migrations
 

@@ -329,17 +329,17 @@ migrator = schema.migrator(CQL::MigratorConfig.new(auto_sync: false))
 
 # Apply migrations (version order; one transaction on SQLite and PostgreSQL)
 migrator.up                    # Apply all pending
-migrator.up(1)                 # Run at most the first 1 migration in order
+migrator.up(1)                 # Apply the oldest pending migration
 
-# Rollback migrations (newest first; one transaction on SQLite and PostgreSQL)
+# Rollback migrations (newest applied first; one transaction on SQLite and PostgreSQL)
 migrator.down                  # Rollback ALL applied migrations
-migrator.down(1)               # Rollback 1 migration
+migrator.down(1)               # Rollback the newest applied migration
 migrator.rollback              # Alias for down(1)
 
 # Other operations
 migrator.redo                  # rollback (1) then up
-migrator.up_to(version)        # Apply up to and including version (Int64)
-migrator.down_to(version)      # See the caveat in the rollback guide
+migrator.up_to(version)        # Apply pending migrations up to and including version (Int64)
+migrator.down_to(version)      # Rollback applied migrations newer than version; version stays applied
 
 # Status
 migrator.applied_migrations    # Array(CQL::MigrationRecord): id, name, version
@@ -353,6 +353,8 @@ migrator.update_schema_file
 migrator.verify_schema_consistency   # Bool
 migrator.bootstrap_schema
 ```
+
+`up_to` and `down_to` raise `CQL::Migrator::Error` when no registered migration has `version`. Steps count only the migrations that can run: `up(n)` counts pending migrations and `down(n)` counts applied ones.
 
 `CQL::MigratorConfig` takes `schema_file_path`, `schema_name`, `schema_symbol`, `migration_table_name` (default `:cql_schema_migrations`) and `auto_sync`. With `auto_sync` on, the schema file is rewritten from the database when the migrator is created and after `up`/`down`.
 

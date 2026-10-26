@@ -28,7 +28,7 @@ migrator.up
 puts "Migrations complete"
 ```
 
-Pending migrations run in version order and are recorded as they succeed. On SQLite and PostgreSQL the whole run, `schema_migrations` records included, is one transaction on one connection, so a failing migration rolls back everything the run did. On MySQL and CockroachDB each statement commits on its own, so a failure leaves the earlier migrations of the run applied, and building a migrator (before its `auto_sync` bootstrap writes the schema file), calling `up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`. On PostgreSQL the run holds its DDL locks until the final commit and `CREATE INDEX CONCURRENTLY` fails inside a migration; `up(steps)` keeps runs short. `migrator.up(2)` runs at most the first 2 migrations in version order (already-applied ones count towards the 2). `up` prints a table of applied migrations when it finishes.
+Pending migrations run in version order and are recorded as they succeed. On SQLite and PostgreSQL the whole run, `schema_migrations` records included, is one transaction on one connection, so a failing migration rolls back everything the run did. On MySQL and CockroachDB each statement commits on its own, so a failure leaves the earlier migrations of the run applied, and building a migrator (before its `auto_sync` bootstrap writes the schema file), calling `up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`. On PostgreSQL the run holds its DDL locks until the final commit and `CREATE INDEX CONCURRENTLY` fails inside a migration; `up(steps)` keeps runs short. `migrator.up(2)` applies the 2 oldest pending migrations. `up` prints a table of applied migrations when it finishes.
 
 ## Check Migration Status
 
@@ -46,7 +46,7 @@ migrator.print_applied_migrations   # table of applied migrations
 migrator.up_to(5_i64)
 ```
 
-`up_to` does nothing if no registered migration has that version.
+`up_to` applies the pending migrations up to that version and skips the ones already applied. It raises `CQL::Migrator::Error` ("No migration with version 5") if no registered migration has that version.
 
 ## Create Migration Script
 

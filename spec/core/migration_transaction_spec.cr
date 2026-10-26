@@ -255,6 +255,23 @@ describe "CQL::Migrator transaction" do
     committed_versions.call.should eq([TxMigrationDropDOnDown.version])
   end
 
+  it "refuses to roll back to a version inside a caller's transaction without transactional DDL" do
+    statements = [] of String
+    with_migrator(uri, TxMigrationCreateA, TxMigrationDropDOnDown, schema_class: NonTransactionalDdlSchema) do |migrator|
+      migrator.up
+      CQL::Telemetry.subscribe("migration_tx_spec") { |event| statements << event.sql }
+      begin
+        expect_raises(CQL::DialectError, "MySQL") { migrator.schema.transaction { migrator.down_to(TxMigrationCreateA.version) } }
+      ensure
+        CQL::Telemetry.unsubscribe("migration_tx_spec")
+      end
+    end
+
+    statements.select(&.includes?("DROP")).should be_empty
+    committed_tables.call.should eq(["tx_migration_a", "tx_migration_d"])
+    committed_versions.call.should eq([TxMigrationCreateA.version, TxMigrationDropDOnDown.version])
+  end
+
   it "reverts every migration and its record on the single pooled connection" do
     pool_of_one = "#{uri}?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05"
 

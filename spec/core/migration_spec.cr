@@ -254,21 +254,19 @@ describe CQL::Migration do
   end
 
   describe "Edge cases and error handling" do
-    it "handles down_to with invalid version" do
+    it "raises on down_to with an unknown version" do
       migrator.up
       original_count = migrator.applied_migrations.size
 
-      # Non-existent version should not change anything
-      migrator.down_to(999999)
+      expect_raises(CQL::Migrator::Error, "No migration with version 999999") { migrator.down_to(999999) }
       migrator.applied_migrations.size.should eq(original_count)
     end
 
-    it "handles up_to with invalid version" do
+    it "raises on up_to with an unknown version" do
       migrator.down
       original_count = migrator.applied_migrations.size
 
-      # Non-existent version should not change anything
-      migrator.up_to(999999)
+      expect_raises(CQL::Migrator::Error, "No migration with version 999999") { migrator.up_to(999999) }
       migrator.applied_migrations.size.should eq(original_count)
     end
 

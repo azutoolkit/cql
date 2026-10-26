@@ -246,7 +246,7 @@ end
 crystal src/migrate.cr down
 ```
 
-In code, `migrator.rollback` undoes one migration, `migrator.rollback(3)` the last three, and `migrator.down` every applied migration.
+In code, `migrator.rollback` undoes the newest applied migration, `migrator.rollback(3)` the newest three, `migrator.down_to(version)` everything newer than `version`, and `migrator.down` every applied migration.
 
 ### When Rollback Isn't Possible
 
@@ -294,12 +294,12 @@ end
 puts "Pending migrations: #{pending.size}"
 puts ""
 
-# Apply the pending migrations one at a time
+# Apply the pending migrations one at a time, oldest first
 pending.each do |migration|
   puts "Running migration #{migration.version} (#{migration.name})..."
 
   begin
-    migrator.up_to(migration.version)
+    migrator.up(1)
     puts "  Success!"
   rescue ex
     puts "  FAILED: #{ex.message}"
