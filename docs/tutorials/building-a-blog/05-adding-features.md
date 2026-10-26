@@ -89,7 +89,7 @@ save raised: username must have a size of 3..50,email must match the pattern /\A
 Inside `class User`, below `use UniqueUserValidator`:
 
 ```crystal
-  # save runs: before_validation, after_validation, the validate rules, before_save,
+  # save runs: before_validation, the validate rules, after_validation, before_save,
   # before_create or before_update, after_create or after_update, after_save.
   # delete! runs before_destroy and after_destroy; create! runs none.
   before_validation :normalize_email

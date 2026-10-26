@@ -42,7 +42,7 @@ user.errors.each { |error| puts "#{error.field}: #{error.message}" }
 CQL::ActiveRecord::Validations::ValidationError: name must be present,email must match the pattern ...
 ```
 
-`save`, `save!` and the instance `create!` raise this on an invalid record; `save` does not return `false` for it. The message joins the error messages with commas.
+`save`, `save!` and the instance `create!` raise this on an invalid record; `save` does not return `false` for it. It is a `CQL::RecordInvalid`, so `rescue CQL::RecordInvalid` catches it too. The message joins the error messages with commas, and `error_fields` lists the failing attributes.
 
 ```crystal
 # ❌ Never reaches else: save raises before it can return false
@@ -61,8 +61,9 @@ end
 
 begin
   user.save!
-rescue ex : CQL::ActiveRecord::Validations::ValidationError
-  puts ex.message
+rescue ex : CQL::RecordInvalid
+  puts ex.message      # "name must be present,email must match the pattern ..."
+  puts ex.error_fields # [:name, :email]
 end
 ```
 

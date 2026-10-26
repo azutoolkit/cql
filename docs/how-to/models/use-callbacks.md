@@ -58,8 +58,8 @@ The macros are `before_validation`, `after_validation`, `before_save`, `after_sa
 ```text
 save, new record           save, persisted record     record.delete!
 1. before_validation       1. before_validation       1. before_destroy
-2. after_validation        2. after_validation        2. DELETE (soft delete: UPDATE deleted_at)
-3. validations             3. validations             3. after_destroy, if a row was deleted
+2. validations             2. validations             2. DELETE (soft delete: UPDATE deleted_at)
+3. after_validation        3. after_validation        3. after_destroy, if a row was deleted
 4. before_save             4. before_save
 5. before_create           5. before_update
 6. INSERT                  6. UPDATE
@@ -67,7 +67,7 @@ save, new record           save, persisted record     record.delete!
 8. after_save              8. after_save
 ```
 
-`after_validation` runs before the validations themselves. A value set in `before_save`, `before_create` or `before_update` is not validated, so set derived values in `before_validation`. `save` stamps `created_at`/`updated_at` before step 1.
+`after_validation` runs only once the validations pass; an invalid record raises before it. A value set in `before_save`, `before_create` or `before_update` is not validated, so set derived values in `before_validation`. `save` stamps `created_at`/`updated_at` before step 1.
 
 ## Halt a Save
 

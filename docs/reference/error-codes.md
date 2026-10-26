@@ -4,13 +4,14 @@ description: "Every error class CQL defines, what raises it, and its message."
 
 # Error Codes
 
-CQL's own classes inherit from `CQL::Error < Exception`, except `CQL::ActiveRecord::Validations::ValidationError`, which inherits from `Exception`.
+CQL's own classes inherit from `CQL::Error < Exception`.
 
 ```crystal
 begin
   user.save!
-rescue ex : CQL::ActiveRecord::Validations::ValidationError
+rescue ex : CQL::RecordInvalid  # an invalid record (a Validations::ValidationError)
   ex.message                    # => "name must be present,email must match the pattern /@/"
+  ex.error_fields               # => [:name, :email]
 rescue ex : CQL::RecordNotSaved # a before_* callback returned false
 rescue ex : CQL::Error          # anything else CQL raises
 end
@@ -21,8 +22,8 @@ end
 | Class | Raised by | Message and fields |
 | :--- | :--- | :--- |
 | **`CQL::Error`** | Raised directly for model and table misuse; see the next table | free text |
-| **`CQL::RecordInvalid`** | `save!` when `save` returned `false` and the record has validation errors (a `before_validation` / `after_validation` callback halted an invalid record) | `"Record invalid: name: name must be present, email: ..."`; `validation_errors`, `error_messages`, `error_fields` |
-| **`CQL::RecordNotSaved`** | `save!` when a callback halted and there are no validation errors | `"Failed to save the record"` |
+| **`CQL::RecordInvalid`** | An invalid record, always as its subclass `CQL::ActiveRecord::Validations::ValidationError` (see [Active Record errors](#active-record-errors)) | the error messages joined by `,`; `validation_errors`, `error_messages`, `error_fields` |
+| **`CQL::RecordNotSaved`** | `save!` when a callback halted the save | `"Failed to save the record"` |
 | **`CQL::OptimisticLockError`** | `update!` on a model with `optimistic_locking`, and `Update#with_optimistic_lock(...).commit`, when no row matched the version | `"Record has been modified by another process"`; `model_class`, `id`, `expected_version`, `actual_version` (CQL leaves them `nil`) |
 | **`CQL::DialectError`** | SQL generation for a feature the adapter lacks; see [Dialect errors](#dialect-errors) | `"SQLite does not support DISTINCT ON\n\nWorkaround:\n..."`; `dialect`, `feature`, `workaround` |
 | **`CQL::SQLiteUnsupportedFeatureError`** < `DialectError` | SQLite: `back(...)` on insert, update or delete; `change_column`; `drop_foreign_key` | `"SQLite does not support ALTER COLUMN syntax"` |
@@ -64,7 +65,7 @@ end
 
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
-| **`CQL::ActiveRecord::Validations::ValidationError`** < `Exception` | `validate!`, `save`, `save!` and the instance `create!` on an invalid record. Class-level `Model.create!(**attrs)` does not validate. | the error messages joined by `,` |
+| **`CQL::ActiveRecord::Validations::ValidationError`** < `CQL::RecordInvalid` | `validate!`, `save`, `save!` and the instance `create!` on an invalid record. Class-level `Model.create!(**attrs)` does not validate. | the error messages joined by `,`; `error_fields`, `error_messages` |
 | **`CQL::ActiveRecord::SchemaMappingError`** | `Model.schema` when no `CQL::Schema.define` block, or more than one, declares the inferred table; with `CQL_VALIDATE_SCHEMA_MAPPINGS=1`, after the program's other top-level code has run, when the table is missing, a getter type differs from the column type, or the primary key column differs | ``CQL schema mapping error in User: schema column `users.age` type Int32 does not match model getter `age` type Int64. ...`` |
 | **`CQL::ActiveRecord::Relations::BaseRelation::RelationError`** | Instance `delete!` / `force_delete!` with a `has_many ..., dependent: :restrict_with_error` that has records, or a `dependent: :destroy` child whose `delete!` returns `false`; a `DB::Error` inside an association operation | `"Cannot delete record because dependent posts exist"`, `"... could not be deleted"`, `"Database operation failed: ..."` |
 | **`...::AssociationNotFound`** < `RelationError` | `first` / `last` on an empty `has_many` collection; updating a missing `has_one` / `belongs_to` target | `"No records found in collection"`, `"No profile to update"` |

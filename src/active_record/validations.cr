@@ -1,3 +1,5 @@
+require "../exceptions"
+
 module CQL
   module ActiveRecord
     module Validations
@@ -199,14 +201,11 @@ module CQL
         abstract def valid? : Array(Error)
       end
 
-      class ValidationError < Exception
-        @errors : Array(Error)
-
-        def initialize(@errors : Array(Error) = [] of Error)
-        end
-
-        def message
-          @errors.map(&.message).join(",")
+      # Raised by `validate!`, and so by `save`, `save!` and the instance `create!`; `error_fields` and
+      # `error_messages` list each failed rule.
+      class ValidationError < CQL::RecordInvalid
+        def initialize(errors : Array(Validations::Error) = [] of Validations::Error)
+          super(errors.map(&.message).join(","), errors.map { |error| {field: error.field, message: error.message} })
         end
       end
 

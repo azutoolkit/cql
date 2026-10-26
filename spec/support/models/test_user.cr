@@ -51,7 +51,7 @@ class TestUser
 
   def do_after_validation
     CallbackTracker.add("after_validation")
-    true
+    @halt_on_callback != "after_validation"
   end
 
   def do_before_save

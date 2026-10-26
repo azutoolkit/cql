@@ -29,6 +29,24 @@ describe CQL::ActiveRecord::Callbacks do
     end
   end
 
+  describe "validation callbacks" do
+    it "runs after_validation only once the record is valid" do
+      invalid = TestUser.new("J", "bad", 0, "password123", "password123")
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError) { invalid.save }
+      CallbackTracker.order.should eq(["before_validation"])
+    end
+
+    it "halts the save when after_validation returns false" do
+      model = TestUser.new("Test Model", "test@example.com", 30, "password123", "password123")
+      model.halt_on_callback = "after_validation"
+
+      model.save.should be_false
+      CallbackTracker.order.should eq(["before_validation", "after_validation"])
+      expect_raises(CQL::RecordNotSaved, "Failed to save the record") { model.save! }
+      TestUser.count.should eq(0)
+    end
+  end
+
   describe "callback chain halting" do
     it "doesn't halt the chain when callbacks return true" do
       model = TestUser.new(

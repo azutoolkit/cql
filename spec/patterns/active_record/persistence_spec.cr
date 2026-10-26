@@ -81,6 +81,23 @@ class ContextValidatedUser
   end
 end
 
+# Leaves its timestamps nil until it is saved, unlike PersistenceUser
+class UnstampedUser
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: PersistenceTestDB, table: :persistence_users
+
+  property name : String = ""
+  property email : String = ""
+  property age : Int32? = nil
+  property active : Bool = true
+  property created_at : Time?
+  property updated_at : Time?
+
+  def initialize(@name : String = "", @email : String = "")
+  end
+end
+
 describe CQL::ActiveRecord::Persistence do
   before_each do
     begin
@@ -420,6 +437,18 @@ describe CQL::ActiveRecord::Persistence do
     end
   end
 
+  describe "create!" do
+    it "stamps created_at and updated_at, which the table declares NOT NULL" do
+      user = UnstampedUser.new("Ada", "ada@example.com")
+      user.create!
+
+      user.id.should_not be_nil
+      user.created_at.should_not be_nil
+      user.updated_at.should_not be_nil
+      UnstampedUser.find!(user.id!).created_at.should_not be_nil
+    end
+  end
+
   describe "validation contexts" do
     it "applies on: :create rules to a new record" do
       user = ContextValidatedUser.new("Ada")
@@ -478,12 +507,10 @@ describe CQL::ActiveRecord::Persistence do
     end
 
     it "raises RecordInvalid when validation fails" do
-      # This test would need actual validations to be meaningful
-      # For now, we'll test that save! returns true when save succeeds
-      user = PersistenceUser.new("John Doe", "john@example.com", 30)
+      error = expect_raises(CQL::RecordInvalid, "Email is required to sign up") { ContextValidatedUser.new("Ada").save! }
 
-      result = user.save!
-      result.should be_true
+      error.error_fields.should eq([:email])
+      ContextValidatedUser.count.should eq(0)
     end
 
     it "raises RecordNotSaved when save fails for other reasons" do

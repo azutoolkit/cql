@@ -183,12 +183,9 @@ module CQL
           # Set timestamps before running callbacks
           set_timestamps!
 
-          # Run validation callbacks first
           return false unless run_callbacks(:before_validation)
+          validate!
           return false unless run_callbacks(:after_validation)
-
-          # Validate the record
-          return false unless validate!
 
           # Run before save callbacks
           return false unless run_callbacks(:before_save)
@@ -229,8 +226,8 @@ module CQL
         # Save the record to the database or update it if it already exists
         # Raises an exception if the record cannot be saved
         # - **@return** [Bool] Always returns true when successful
-        # - **@raise** [CQL::RecordInvalid] If the record is invalid
-        # - **@raise** [CQL::RecordNotSaved] If the record cannot be saved for other reasons
+        # - **@raise** [CQL::RecordInvalid] If the record is invalid (as `Validations::ValidationError`)
+        # - **@raise** [CQL::RecordNotSaved] If a callback halts the save
         #
         # **Example** Saving a record with exception handling
         #
@@ -246,16 +243,7 @@ module CQL
         # end
         # ```
         def save!
-          return true if save
-          validation_errors = errors
-          if validation_errors.any?
-            error_summary = validation_errors.map { |e| "#{e.field}: #{e.message}" }.join(", ")
-            # Convert validation errors to NamedTuple format for exception
-            error_tuples = validation_errors.map { |e| {field: e.field, message: e.message} }
-            raise CQL::RecordInvalid.new("Record invalid: #{error_summary}", error_tuples)
-          else
-            raise CQL::RecordNotSaved.new("Failed to save the record")
-          end
+          save || raise CQL::RecordNotSaved.new("Failed to save the record")
         end
       end
     end
