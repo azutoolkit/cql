@@ -26,11 +26,32 @@ InferredContextDB = CQL::Schema.define(:inferred_context, adapter: CQL::Adapter:
     primary :id, Int64
     column :name, String
   end
+
+  table :gizmo_catalog do
+    primary :gizmo_no, Int64
+    column :name, String
+  end
+
+  table :inferred_gizmo_parts do
+    primary :id, Int64
+    column :name, String
+    column :gizmo_no, Int64, null: true
+  end
+
+  table :inferred_spindles do
+    primary :spindle_no, Int64
+    column :name, String
+  end
 end
 
 InferredMirrorDB = CQL::Schema.define(:inferred_mirror, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("inferred_mirror.db")) do
   table :inferred_twins do
     primary :id, Int64
+    column :name, String
+  end
+
+  table :inferred_bolts do
+    primary :bolt_no, Int64
     column :name, String
   end
 end
@@ -183,6 +204,49 @@ module InferredShop
   end
 end
 
+struct InferredGizmo
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context table: :gizmo_catalog, primary_key: :gizmo_no
+
+  property name : String
+
+  has_many :parts, InferredGizmoPart, foreign_key: :gizmo_no
+
+  def initialize(@name : String); end
+end
+
+struct InferredGizmoPart
+  include CQL::ActiveRecord::Model(Int64)
+
+  property name : String
+  property gizmo_no : Int64?
+
+  belongs_to :gizmo, InferredGizmo, :gizmo_no
+
+  def initialize(@name : String, @gizmo_no : Int64? = nil); end
+end
+
+struct InferredBolt
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: InferredMirrorDB, primary_key: :bolt_no
+
+  property name : String
+
+  def initialize(@name : String); end
+end
+
+struct InferredSpindle
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context primary_key: :spindle_no
+
+  property name : String
+
+  def initialize(@name : String); end
+end
+
 describe "Model without db_context" do
   describe ".table" do
     it "pluralizes and underscores the type name" do
@@ -307,6 +371,65 @@ describe "Model without db_context" do
     it "keeps the given schema and infers the table from the type name" do
       InferredSprocket.schema.should eq(InferredMirrorDB)
       InferredSprocket.table.should eq(:inferred_sprockets)
+    end
+  end
+
+  describe "custom primary key" do
+    it "combines primary_key with an explicit table and an inferred schema" do
+      InferredGizmo.primary_key_column.should eq(:gizmo_no)
+      InferredGizmo.table.should eq(:gizmo_catalog)
+      InferredGizmo.schema.should eq(InferredContextDB)
+    end
+
+    it "combines primary_key with an explicit schema and an inferred table" do
+      InferredBolt.primary_key_column.should eq(:bolt_no)
+      InferredBolt.table.should eq(:inferred_bolts)
+      InferredBolt.schema.should eq(InferredMirrorDB)
+    end
+
+    it "takes primary_key alone and infers both schema and table" do
+      InferredSpindle.primary_key_column.should eq(:spindle_no)
+      InferredSpindle.table.should eq(:inferred_spindles)
+      InferredSpindle.schema.should eq(InferredContextDB)
+    end
+
+    describe "against the database" do
+      before_each do
+        InferredContextDB.gizmo_catalog.create!
+        InferredContextDB.inferred_gizmo_parts.create!
+        InferredContextDB.inferred_spindles.create!
+        InferredMirrorDB.inferred_bolts.create!
+      end
+      after_each do
+        InferredContextDB.gizmo_catalog.drop!
+        InferredContextDB.inferred_gizmo_parts.drop!
+        InferredContextDB.inferred_spindles.drop!
+        InferredMirrorDB.inferred_bolts.drop!
+      end
+
+      it "round-trips records through the declared key" do
+        gizmo = InferredGizmo.create!(name: "Gizmo")
+        bolt = InferredBolt.create!(name: "Bolt")
+        spindle = InferredSpindle.create!(name: "Spindle")
+
+        InferredGizmo.find!(gizmo.id!).name.should eq("Gizmo")
+        InferredBolt.find!(bolt.id!).name.should eq("Bolt")
+        InferredSpindle.find!(spindle.id!).name.should eq("Spindle")
+      end
+
+      it "joins on the declared key in both directions" do
+        InferredGizmoPart.query.joins(:gizmo).query.to_sql.first
+          .should contain("INNER JOIN gizmo_catalog ON gizmo_catalog.gizmo_no = inferred_gizmo_parts.gizmo_no")
+        InferredGizmo.query.joins(:parts).query.to_sql.first
+          .should contain("INNER JOIN inferred_gizmo_parts ON inferred_gizmo_parts.gizmo_no = gizmo_catalog.gizmo_no")
+
+        InferredGizmo.create!(name: "Decoy") # keeps the joined key (2) apart from the part's own id (1)
+        catalog_entry = InferredGizmo.create!(name: "Gizmo")
+        InferredGizmoPart.create!(name: "Part", gizmo_no: catalog_entry.id!)
+
+        InferredGizmo.query.joins(:parts) { parts.name == "Part" }.all.size.should eq(1)
+        InferredGizmoPart.query.joins(:gizmo) { gizmo.name == "Gizmo" }.all.size.should eq(1)
+      end
     end
   end
 end
