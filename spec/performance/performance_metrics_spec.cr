@@ -4,6 +4,39 @@ require "../../src/performance/query_profiler"
 require "../../src/performance/n_plus_one_detector"
 require "../../src/cache/cache"
 
+private class SpyProfiler < CQL::Performance::QueryProfiler
+  getter calls = Hash(String, Int32).new(0)
+
+  def statistics
+    calls["statistics"] += 1
+    super
+  end
+
+  def slowest_queries(limit : Int32 = 10)
+    calls["slowest_queries"] += 1
+    super
+  end
+
+  def issues
+    calls["issues"] += 1
+    super
+  end
+end
+
+private class SpyDetector < CQL::Performance::NPlusOneDetector
+  getter calls = Hash(String, Int32).new(0)
+
+  def patterns
+    calls["patterns"] += 1
+    super
+  end
+
+  def issues
+    calls["issues"] += 1
+    super
+  end
+end
+
 describe "CQL::Performance::PerformanceMetrics" do
   describe "QueryMetrics struct" do
     it "initializes with correct values" do
@@ -553,6 +586,62 @@ describe "CQL::Performance::PerformanceMetrics" do
       issues = json["issues"].as_a
       issues.should_not be_empty
       issues.each(&.["details"].as_h.should_not(be_empty))
+    end
+  end
+
+  describe ".from_components" do
+    it "reads each profiler and detector source once per report" do
+      profiler = SpyProfiler.new
+      3.times { |i| profiler.record_query("SELECT * FROM users WHERE id = ?", [i.as(DB::Any)], 1.hour) }
+      detector = SpyDetector.new
+      detector.record_query("SELECT * FROM users")
+      3.times { detector.record_query("SELECT * FROM posts WHERE user_id = ?") }
+
+      CQL::Performance::PerformanceMetrics.from_components(profiler: profiler, detector: detector)
+
+      profiler.calls.should eq({"statistics" => 1, "slowest_queries" => 1, "issues" => 1})
+      detector.calls.should eq({"patterns" => 1, "issues" => 1})
+    end
+
+    it "surfaces the profiler's latency percentiles in query metrics, to_h and summary" do
+      profiler = CQL::Performance::QueryProfiler.new
+      (1..100).each { |i| profiler.record_query("SELECT 1", [] of DB::Any, i.milliseconds) }
+
+      metrics = CQL::Performance::PerformanceMetrics.from_components(profiler: profiler)
+
+      metrics.query_metrics.latency.should eq(profiler.latency_percentiles)
+      metrics.query_metrics.latency.p95.should be > Time::Span.zero
+      metrics.query_metrics.latency.p95.should be <= 100.milliseconds
+      ["p50_execution_time_ms", "p95_execution_time_ms", "p99_execution_time_ms"].each do |key|
+        metrics.query_metrics.to_h[key].raw.should be_a(Float64)
+      end
+      metrics.summary["p95_query_time_ms"].as(Float64).should be > 0.0
+    end
+
+    it "reports zero latency percentiles without a profiler" do
+      metrics = CQL::Performance::PerformanceMetrics.from_components
+
+      metrics.query_metrics.latency.should eq(CQL::Performance::LatencyPercentiles.zero)
+      metrics.summary["p95_query_time_ms"].should eq(0.0)
+    end
+
+    it "keeps zero query metrics without a profiler, unlike an empty one" do
+      missing = CQL::Performance::PerformanceMetrics.from_components(error_count: 2)
+      missing.query_metrics.error_rate.should eq(0.0)
+      missing.top_queries.slowest_queries.should be_empty
+      empty = CQL::Performance::PerformanceMetrics.from_components(profiler: CQL::Performance::QueryProfiler.new, error_count: 2)
+      empty.query_metrics.error_rate.should eq(100.0)
+    end
+  end
+
+  describe "CQL::Performance module readers" do
+    it "answers the health and issue queries against the global monitor" do
+      CQL::Performance.metrics.should be_a(CQL::Performance::PerformanceMetrics)
+      CQL::Performance.metrics_summary.has_key?("total_queries").should be_true
+      CQL::Performance.healthy?.should be_a(Bool)
+      CQL::Performance.is_healthy?.should eq(CQL::Performance.healthy?)
+      CQL::Performance.critical_issues.should be_a(Array(CQL::Performance::Issue))
+      CQL::Performance.high_priority_issues.should be_a(Array(CQL::Performance::Issue))
     end
   end
 end

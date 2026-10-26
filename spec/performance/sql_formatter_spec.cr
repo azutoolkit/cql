@@ -123,6 +123,73 @@ describe CQL::Performance::SQLFormatter do
     end
   end
 
+  describe "#loggable_error" do
+    redacting = CQL::Performance::SQLFormatter.new(colorize_enabled: false, include_params: false)
+
+    it "redacts single-quoted literals in a driver message when include_params is off" do
+      redacting.loggable_error("Duplicate entry 'secret@example.com' for key 'users.email'")
+        .should eq("Duplicate entry '?'")
+    end
+
+    it "redacts double-quoted literals in a driver message when include_params is off" do
+      redacting.loggable_error(%(invalid input syntax for type integer: "secret@example.com"))
+        .should eq(%(invalid input syntax for type integer: "?"))
+      redacting.loggable_error(%(relation "users" does not exist)).should eq(%(relation "?" does not exist))
+    end
+
+    it "redacts a value that holds its own quote, which drivers print unescaped" do
+      redacting.loggable_error("Duplicate entry 'o'brien@example.com' for key 'users.email'")
+        .should eq("Duplicate entry '?'")
+      redacting.loggable_error(%(invalid input syntax for type integer: "a"secret"))
+        .should eq(%(invalid input syntax for type integer: "?"))
+    end
+
+    it "redacts a value that follows an apostrophe in the driver's own wording" do
+      redacting.loggable_error("Variable 'sql_mode' can't be set to the value of 'secret'").should eq("Variable '?'")
+    end
+
+    it "redacts a value that holds the other kind of quote" do
+      {
+        {"hunter2", %(invalid input syntax for type uuid: "{"password":"hunter2'x"}"), %(invalid input syntax for type uuid: "?)},
+        {"secret", %(invalid input syntax for type integer: "x"secret' tail"), %(invalid input syntax for type integer: "?)},
+        {"secret", %(can't parse "abc'secret"), %(can'?")},
+      }.each do |secret, message, redacted|
+        redacting.loggable_error(message).should eq(redacted)
+        redacting.loggable_error(message).should_not contain(secret)
+      end
+    end
+
+    it "redacts from the first quote to the last one" do
+      redacting.loggable_error("empty '' value").should eq("empty '?' value")
+      redacting.loggable_error("keys 'a','b' end").should eq("keys '?' end")
+      redacting.loggable_error(%(near 'a "b" c' end)).should eq("near '?' end")
+    end
+
+    it "redacts a lone quote to the end of the message" do
+      redacting.loggable_error("near 'abc").should eq("near '?")
+      redacting.loggable_error("can't connect").should eq("can'?")
+    end
+
+    it "leaves a message without quotes unchanged" do
+      redacting.loggable_error("no such column: nope").should eq("no such column: nope")
+    end
+
+    it "redacts invalid UTF-8 inside a literal without raising" do
+      redacting.loggable_error(String.new(Bytes[0x6b, 0x20, 0x27, 0xff, 0xfe, 0x27])).should eq("k '?'")
+    end
+
+    it "redacts a very long value" do
+      redacting.loggable_error("x '" + "a" * 100_000 + "' y").should eq("x '?' y")
+      redacting.loggable_error("x '" + "a" * 100_000).should eq("x '?")
+    end
+
+    it "returns the message verbatim when include_params is on" do
+      formatter = CQL::Performance::SQLFormatter.new(colorize_enabled: false, include_params: true)
+      formatter.loggable_error("Duplicate entry 'secret@example.com' for key 'users.email'")
+        .should eq("Duplicate entry 'secret@example.com' for key 'users.email'")
+    end
+  end
+
   describe "#configure" do
     it "updates colorize setting" do
       formatter = CQL::Performance::SQLFormatter.new(colorize_enabled: false, pretty_format: false)

@@ -270,6 +270,56 @@ describe CQL::Performance::QueryProfiler do
     end
   end
 
+  describe "max_tracked_statements" do
+    it "aggregates new shapes under (other) once the cap is reached" do
+      config = CQL::Performance::Config::Profiling.new
+      config.max_tracked_statements = 3
+      profiler = CQL::Performance::QueryProfiler.new(config)
+      record_shapes(profiler, 1..5)
+
+      stats = profiler.statistics
+      stats.size.should eq(4)
+      stats.keys.sort!.should eq(["(other)", "SELECT ?1", "SELECT ?2", "SELECT ?3"])
+      stats["(other)"][:count].should eq(2)
+    end
+
+    it "keeps counting an already tracked shape under its own key after the cap" do
+      config = CQL::Performance::Config::Profiling.new
+      config.max_tracked_statements = 3
+      profiler = CQL::Performance::QueryProfiler.new(config)
+      record_shapes(profiler, 1..5)
+      record_shapes(profiler, 1..1)
+
+      stats = profiler.statistics
+      stats["SELECT ?1"][:count].should eq(2)
+      stats["(other)"][:count].should eq(2)
+    end
+
+    it "has no (other) key while the shapes stay below the default cap" do
+      profiler = CQL::Performance::QueryProfiler.new
+      record_shapes(profiler, 1..999)
+
+      profiler.statistics.has_key?("(other)").should be_false
+    end
+  end
+
+  describe "#healthy?" do
+    it "is false once failed queries exceed the 5% error threshold" do
+      profiler = CQL::Performance::QueryProfiler.new
+      9.times { profiler.record_query("SELECT 1", [] of DB::Any, 1.millisecond) }
+      profiler.record_query("SELECT 1", [] of DB::Any, 1.millisecond, error: "boom")
+
+      profiler.healthy?.should be_false
+    end
+
+    it "is true when every recorded query succeeds" do
+      profiler = CQL::Performance::QueryProfiler.new
+      100.times { profiler.record_query("SELECT 1", [] of DB::Any, 1.millisecond) }
+
+      profiler.healthy?.should be_true
+    end
+  end
+
   describe "#statistics" do
     it "returns correct aggregated statistics" do
       config = CQL::Performance::Config::Profiling.new
@@ -777,5 +827,11 @@ describe CQL::Performance::QueryProfiler do
       # The slowest query should be the last one recorded (highest execution time)
       slow.first.execution_time.should eq(1_009.milliseconds)
     end
+  end
+end
+
+private def record_shapes(profiler : CQL::Performance::QueryProfiler, shapes : Range(Int32, Int32))
+  shapes.each do |shape|
+    profiler.record_query("SELECT #{shape}", [] of DB::Any, 1.millisecond, normalized_sql: "SELECT ?#{shape}")
   end
 end

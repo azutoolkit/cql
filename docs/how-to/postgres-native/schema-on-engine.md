@@ -29,7 +29,7 @@ AppDB.close                            # closes the pool; waiting fibers get Poo
 - `Schema#transaction` still pins the fiber's statements to the transaction's connection and publishes
   `Telemetry` transaction events (`engine.transaction` does not publish them).
 - `Schema#pool_stats` reports the engine pool (`open` = in use + idle, `max` = `pool_size`).
-- Statements run through `CQL::Execution`, so telemetry and performance tracking see them.
+- Statements run through `CQL::Execution`, so telemetry and performance tracking see them. `Schema#exec`, `explain`, `engine.exec` and `engine.pipeline` pass `track: false`: telemetry sees them, the [performance monitor](../performance/query-profiler.md) does not.
 
 ## What differs from crystal-db's pool
 
