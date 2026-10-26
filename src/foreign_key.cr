@@ -2,25 +2,17 @@ require "./base_column"
 require "./table"
 
 module CQL
-  # A foreign key constraint
-  # This class represents a foreign key constraint
-  # It provides methods for setting the columns, table, and references
-  # It also provides methods for setting the on delete and on update actions
+  # A foreign key constraint: the local columns, the referenced table and columns,
+  # and the `ON DELETE` / `ON UPDATE` actions. Declare one with `Table#foreign_key`
+  # in a table block, or add one later with `AlterTable#foreign_key`.
   #
-  # **Example** Creating a new foreign key
+  # **Example** Declaring a foreign key
   #
   # ```
-  # Schema.define do
-  #   table :users do
-  #     column :id, Int32, primary: true
-  #     column :name, String
-  #   end
-  # end
-  #
-  # table :posts do
-  #   column :id, Int32, primary: true
-  #   column :user_id, Int32
-  #   foreign_key [:user_id], :users, [:id]
+  # schema.table :comments do
+  #   primary :id, Int64
+  #   column :post_id, Int64
+  #   foreign_key [:post_id], references: :posts, references_columns: [:id], on_delete: :cascade
   # end
   # ```
   class ForeignKey

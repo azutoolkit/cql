@@ -3,19 +3,16 @@ require "db"
 require "./table"
 
 module CQL
-  # A column in a table
-  # This class represents a column in a table
-  # It provides methods for setting the column type, default value, and constraints
-  # It also provides methods for building expressions
+  # A typed column in a table: its name, type, default value and constraints,
+  # and the expression used to reference it in queries.
   #
-  # **Example** Creating a new column
+  # **Example** Declaring columns
   #
   # ```
-  # schema.define do
-  #   table :users do
-  #     column :name, String, null: false, default: "John"
-  #     column :age, Int32, null: false
-  #   end
+  # schema.table :members do
+  #   primary :id, Int64
+  #   column :name, String, null: false, default: "John"
+  #   column :age, Int32, null: true
   # end
   # ```
   class Column(Type) < BaseColumn
@@ -40,9 +37,9 @@ module CQL
     # :nodoc:
     property? version_number : Bool = false
 
-    # Create a new column instance
+    # Create a new column instance; the type is the class's type argument (`Column(String)`).
+    # Tables add columns with `Table#column` instead.
     # - **@param** : name (Symbol) - The name of the column
-    # - **@param** : type (Any) - The data type of the column
     # - **@param** : as_name (String, nil) - An optional alias for the column
     # - **@param** : null (Bool) - Whether the column allows null values (default: false)
     # - **@param** : default (DB::Any) - The default value for the column (default: nil)
@@ -50,13 +47,11 @@ module CQL
     # - **@param** : size (Int32, nil) - The size of the column (default: nil)
     # - **@param** : index (Index, nil) - The index for the column (default: nil)
     # - **@param** : version_number (Bool) - Whether this column is used for optimistic locking (default: false)
-    # - **@return** : Nil
-    # - **@raise** : CQL::Error if the column type is not valid
     #
     # **Example**
     #
     # ```
-    # column = CQL::Column.new(:name, String)
+    # column = CQL::Column(String).new(:name)
     # ```
     def initialize(
       @name : Symbol,
@@ -76,7 +71,7 @@ module CQL
     # **Example**
     #
     # ```
-    # column = CQL::Column.new(:name, String)
+    # column = schema.users.name
     # column.expression.eq("John")
     # ```
     def expression : Expression::BaseColumn

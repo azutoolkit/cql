@@ -1,18 +1,15 @@
 module CQL
-  # An index on a table
-  # This class represents an index on a table
-  # It provides methods for setting the columns and unique constraint
-  # It also provides methods for generating the index name
+  # An index on a table: its columns, whether it is unique, and its name.
+  # Declare one with `Table#index` (or `Table#add_index`) in a table block.
   #
-  # **Example** Creating a new index
+  # **Example** Declaring an index
   #
   # ```
-  # schema.define do
-  #   table :users do
-  #     column :name, String
-  #     column :email, String
-  #     index [:name, :email], unique: true
-  #   end
+  # schema.table :members do
+  #   primary :id, Int64
+  #   column :name, String
+  #   column :email, String
+  #   index [:name, :email], unique: true
   # end
   # ```
   class Index
@@ -28,14 +25,11 @@ module CQL
     # - **@param** : columns (Array(Symbol)) - The columns to index
     # - **@param** : unique (Bool) - Whether the index should be unique (default: false)
     # - **@param** : name (String, nil) - The name of the index (default: nil)
-    # - **@return** : Nil
-    # - **@raise** : CQL::Error if the table does not exist
-    # - **@raise** : CQL::Error if the column does not exist
     #
     # **Example**
     #
     # ```
-    # index = CQL::Index.new(table, [:name, :email], unique: true)
+    # index = CQL::Index.new(schema.users, [:name, :email], unique: true)
     # ```
     def initialize(@table : Table, @columns : Array(Symbol), @unique : Bool = false, @name : String? = nil)
     end
@@ -46,7 +40,7 @@ module CQL
     # **Example**
     #
     # ```
-    # CQL::Index.new(users, [:name, :email]).index_name # => "idx_users_name_email"
+    # CQL::Index.new(schema.users, [:name, :email]).index_name # => "idx_users_name_email"
     # ```
     def index_name : String
       @name || "idx_#{table.table_name}_#{columns.join("_")}"
