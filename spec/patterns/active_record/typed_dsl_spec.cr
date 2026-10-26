@@ -272,6 +272,48 @@ describe "Typed query DSL" do
     end
   end
 
+  describe "hash where with a nil value" do
+    before_each do
+      DSL_DB.authors.create!
+      DslAuthor.new("Ada", 36, "active", 1.5).save!
+      DslAuthor.new("Grace", 45).save!
+      DslAuthor.new("Linus", 28, "active", 2.5).save!
+    end
+    after_each { DSL_DB.authors.drop! }
+
+    it "counts only the rows whose column is NULL" do
+      DslAuthor.where(score: nil).count.should eq(1)
+    end
+
+    it "finds the row whose column is NULL" do
+      DslAuthor.find_by(score: nil).try(&.name).should eq("Grace")
+    end
+
+    it "reports that a row with a NULL column exists" do
+      DslAuthor.exists?(score: nil).should be_true
+    end
+
+    it "deletes only the rows whose column is NULL with delete_by!" do
+      DslAuthor.delete_by!(score: nil)
+
+      DslAuthor.count.should eq(2)
+      DslAuthor.find_by(name: "Grace").should be_nil
+    end
+
+    it "deletes only the rows whose column is NULL with a where chain" do
+      DslAuthor.where(score: nil).delete_all
+
+      DslAuthor.count.should eq(2)
+      DslAuthor.find_by(name: "Grace").should be_nil
+    end
+
+    it "updates only the rows whose column is NULL with update_by" do
+      DslAuthor.update_by({:score => nil} of Symbol => DB::Any, {:name => "X"} of Symbol => DB::Any)
+
+      DslAuthor.all.map(&.name).sort!.should eq(["Ada", "Linus", "X"])
+    end
+  end
+
   describe "the headline query" do
     it "composes where, joins, select, order_by, limit and to_a" do
       DSL_DB.authors.create!

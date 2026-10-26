@@ -1094,6 +1094,7 @@ module CQL
       col_alias_str = find_alias_for_table(column.table.not_nil!)
       # Create Expression::Column with String alias
       col_expr = Expression::Column.new(column, alias_name: col_alias_str)
+      return Expression::IsNull.new(col_expr) if value.nil?
 
       # Explicitly handle Range types for BETWEEN
       case value

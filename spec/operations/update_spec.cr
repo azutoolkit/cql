@@ -64,4 +64,31 @@ describe CQL::Update do
       SQL
     update_query.should eq({output, ["Updated", "updated@example.com", 1, 2, 3, 25]})
   end
+
+  it "matches NULL for a nil keyword value in WHERE clause" do
+    update_query = Northwind.update.table(:users)
+      .set(age: 1)
+      .where(name: nil)
+      .to_sql
+
+    update_query.should eq({"UPDATE users SET age = ? WHERE users.name IS NULL", [1]})
+  end
+
+  it "matches NULL for a nil hash value in WHERE clause" do
+    update_query = Northwind.update.table(:users)
+      .set(age: 1)
+      .where({:name => nil} of Symbol => DB::Any)
+      .to_sql
+
+    update_query.should eq({"UPDATE users SET age = ? WHERE users.name IS NULL", [1]})
+  end
+
+  it "binds a nil value in SET clause" do
+    update_query = Northwind.update.table(:users)
+      .set(name: nil)
+      .where(id: 1)
+      .to_sql
+
+    update_query.should eq({"UPDATE users SET name = ? WHERE users.id = ?", [nil, 1]})
+  end
 end

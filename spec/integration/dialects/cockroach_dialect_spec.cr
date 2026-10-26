@@ -25,6 +25,13 @@ describe "CockroachDB adapter" do
     CQL::Adapter::MySql.dialect.supports_returning?.should be_false
   end
 
+  it "rolls back DDL with its transaction, as PostgreSQL and SQLite do and MySQL and CockroachDB do not" do
+    cockroach.dialect.supports_transactional_ddl?.should be_false
+    CQL::Adapter::Postgres.dialect.supports_transactional_ddl?.should be_true
+    CQL::Adapter::SQLite.dialect.supports_transactional_ddl?.should be_true
+    CQL::Adapter::MySql.dialect.supports_transactional_ddl?.should be_false
+  end
+
   it "allows 32767 bound parameters, the most every driver accepts" do
     cockroach.dialect.max_bind_params.should eq(32767)
   end

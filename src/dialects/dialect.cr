@@ -26,6 +26,13 @@ module Expression
       false
     end
 
+    # Whether DDL rolls back with its transaction, so a schema change can nest as a savepoint
+    # without committing the enclosing transaction's work. Off unless a dialect opts in, so an
+    # engine that commits DDL implicitly is never treated as atomic.
+    def supports_transactional_ddl? : Bool
+      false
+    end
+
     # Dumps only the DB structure (no data) to a string
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String

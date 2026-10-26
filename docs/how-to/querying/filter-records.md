@@ -76,8 +76,8 @@ Post.where { published_at.between(start_date, end_date) }.all
 ## NULL Checks
 
 ```crystal
-# Where null (use block; the hash form `where(deleted_at: nil)` binds NULL to `= ?`, which matches no row)
-User.where { deleted_at == nil }.all
+# Where null: a nil value emits `deleted_at IS NULL`
+User.where(deleted_at: nil).all
 
 # Where not null (use block)
 User.where { deleted_at != nil }.all
@@ -86,6 +86,8 @@ User.where { deleted_at != nil }.all
 User.where { deleted_at.null }.all
 User.where { deleted_at.not_null }.all
 ```
+
+A nil value in `where`, `find_by`, `exists?`, `delete_by!` or `update_by` matches the rows whose column is NULL, so reject a nil that comes from untrusted input before using it as a filter. An index on the column serves `IS NULL`; a partial index declared `WHERE col IS NOT NULL` does not.
 
 ## LIKE Queries
 

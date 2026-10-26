@@ -260,6 +260,7 @@ module CQL
 
     private def get_expression(field, value)
       column = find_column(field)
+      return Expression::IsNull.new(Expression::Column.new(column)) if value.nil?
       # Handle array values for IN conditions
       if value.is_a?(Array)
         Expression::InCondition.new(Expression::Column.new(column), value)

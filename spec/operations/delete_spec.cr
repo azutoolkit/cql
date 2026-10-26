@@ -78,4 +78,35 @@ describe CQL::Delete do
 
     delete_query.should eq({output, [1]})
   end
+
+  it "matches NULL for a nil keyword value in WHERE clause" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where(name: nil)
+      .to_sql
+
+    delete_query.should eq({"DELETE FROM users WHERE users.name IS NULL", [] of DB::Any})
+  end
+
+  it "matches NULL for a nil hash value in WHERE clause" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where({:name => nil} of Symbol => DB::Any)
+      .to_sql
+
+    delete_query.should eq({"DELETE FROM users WHERE users.name IS NULL", [] of DB::Any})
+  end
+
+  it "binds only the non-nil values next to a nil value in WHERE clause" do
+    delete_query = Northwind.delete
+      .from(:users)
+      .where(name: nil, id: 1)
+      .to_sql
+
+    output = <<-SQL.gsub(/\n/, " ").strip
+      DELETE FROM users WHERE (users.name IS NULL) AND (users.id = ?)
+      SQL
+
+    delete_query.should eq({output, [1]})
+  end
 end

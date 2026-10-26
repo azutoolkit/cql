@@ -113,7 +113,7 @@ The native PostgreSQL/CockroachDB driver raises subclasses of `CQL::Postgres::Er
 
 ### Dialect errors
 
-`CQL::DialectError` (with `dialect`, `feature` and an optional `workaround`) is raised when the adapter cannot express a feature. `CQL::SQLiteUnsupportedFeatureError` and `CQL::MySqlUnsupportedFeatureError` are its subclasses, for example `change_column` or adding a foreign key to an existing SQLite table.
+`CQL::DialectError` (with `dialect`, `feature` and an optional `workaround`) is raised when the adapter cannot express a feature. `CQL::SQLiteUnsupportedFeatureError` and `CQL::MySqlUnsupportedFeatureError` are its subclasses, for example `change_column` or adding a foreign key to an existing SQLite table. On MySQL and CockroachDB (`Dialect#supports_transactional_ddl?` is false) `schema.alter`, `Migrator.new`, `migrator.up` and `migrator.down` raise it when a transaction is open.
 
 ### QueryError, TransactionError, PersistenceError, AttributeError, CallbackError, ConnectionError
 
@@ -131,7 +131,7 @@ Raised by `schema.alter :table` when the table is not registered in the schema (
 
 ### Database errors during a migration
 
-A failing statement in `up` or `down` raises the driver's exception. Earlier migrations of the run stay applied, because migration statements run outside the migrator's transaction.
+A failing statement in `up` or `down` raises the driver's exception and rolls back the whole `migrator.up`/`migrator.down` run on SQLite and PostgreSQL; on MySQL and CockroachDB each statement commits on its own.
 
 **Common causes:**
 - Table already exists (only for tables created outside CQL; `create!` uses `IF NOT EXISTS`)

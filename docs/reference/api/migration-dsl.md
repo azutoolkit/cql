@@ -327,11 +327,11 @@ end
 migrator = schema.migrator                                      # auto_sync: true by default
 migrator = schema.migrator(CQL::MigratorConfig.new(auto_sync: false))
 
-# Apply migrations (version order; each migration commits on its own pooled connection)
+# Apply migrations (version order; one transaction on SQLite and PostgreSQL)
 migrator.up                    # Apply all pending
 migrator.up(1)                 # Run at most the first 1 migration in order
 
-# Rollback migrations (newest first; same caveat)
+# Rollback migrations (newest first; one transaction on SQLite and PostgreSQL)
 migrator.down                  # Rollback ALL applied migrations
 migrator.down(1)               # Rollback 1 migration
 migrator.rollback              # Alias for down(1)

@@ -183,7 +183,7 @@ module CQL
 
     def initialize(@schema : Schema, @config = MigratorConfig.new)
       bootstrap_schema if @config.auto_sync?
-      ensure_schema_migrations_table
+      schema.ddl_transaction { ensure_schema_migrations_table }
       @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
 
@@ -194,13 +194,11 @@ module CQL
     # migrator.up
     # ```
     def up(steps : Int32 = Migrator.migrations.size)
-      schema.exec_query do |conn|
-        conn.transaction do
-          sorted_migrations[0, steps].each do |migration_class|
-            unless migration_applied?(migration_class.version)
-              migration_class.new(schema).up
-              record_migration(migration_class)
-            end
+      schema.ddl_transaction do
+        sorted_migrations[0, steps].each do |migration_class|
+          unless migration_applied?(migration_class.version)
+            migration_class.new(schema).up
+            record_migration(migration_class)
           end
         end
       end
@@ -218,14 +216,12 @@ module CQL
     # ```
     def down(steps : Int32 = Migrator.migrations.size)
       rolled_back_migrations = [] of BaseMigration.class
-      schema.exec_query do |conn|
-        conn.transaction do
-          sorted_migrations.reverse[0, steps].each do |migration_class|
-            if migration_applied?(migration_class.version)
-              migration_class.new(schema).down
-              remove_migration_record(migration_class)
-              rolled_back_migrations << migration_class
-            end
+      schema.ddl_transaction do
+        sorted_migrations.reverse[0, steps].each do |migration_class|
+          if migration_applied?(migration_class.version)
+            migration_class.new(schema).down
+            remove_migration_record(migration_class)
+            rolled_back_migrations << migration_class
           end
         end
       end

@@ -28,7 +28,7 @@ migrator.up
 puts "Migrations complete"
 ```
 
-Pending migrations run in version order, and each is recorded once it succeeds. The migrator opens a transaction, but each migration's statements (and its recorded version) run on another pooled connection and commit on their own: a failing migration does not undo the ones before it, and a pool of size 1 deadlocks. `migrator.up(2)` runs at most the first 2 migrations in version order (already-applied ones count towards the 2). `up` prints a table of applied migrations when it finishes.
+Pending migrations run in version order and are recorded as they succeed. On SQLite and PostgreSQL the whole run, `schema_migrations` records included, is one transaction on one connection, so a failing migration rolls back everything the run did. On MySQL and CockroachDB each statement commits on its own, so a failure leaves the earlier migrations of the run applied, and building a migrator or calling `up` inside an open transaction raises `CQL::DialectError`. On PostgreSQL the run holds its DDL locks until the final commit and `CREATE INDEX CONCURRENTLY` fails inside a migration; `up(steps)` keeps runs short. `migrator.up(2)` runs at most the first 2 migrations in version order (already-applied ones count towards the 2). `up` prints a table of applied migrations when it finishes.
 
 ## Check Migration Status
 

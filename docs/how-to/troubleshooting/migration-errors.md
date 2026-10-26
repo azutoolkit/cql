@@ -174,7 +174,7 @@ end
 
 ## Migration Raised Mid-Run
 
-Each migration's statements, and its recorded version, commit on a separate pooled connection, outside the migrator's transaction. A failing migration leaves the earlier migrations of the run applied and recorded, and may leave its own partial changes, on every adapter; follow the steps below.
+On SQLite and PostgreSQL, `migrator.up` and `migrator.down` run all migrations in one database transaction, so a failing migration rolls back everything that run did (including the recorded versions). MySQL and CockroachDB commit each statement on its own, so a failure there leaves the earlier migrations of the run applied and recorded; follow the steps below.
 
 ## Stuck Migration
 
