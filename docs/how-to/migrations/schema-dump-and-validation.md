@@ -71,7 +71,7 @@ config = CQL::MigratorConfig.new(
   schema_symbol: :app_schema,
   auto_sync: true
 )
-migrator = AppDB.migrator(config)  # writes the file now
+migrator = AppDB.migrator(config)  # writes the file now if it is missing
 migrator.up                        # and again after every up and down
 migrator.update_schema_file        # on demand; bootstrap_schema does the same
 ```
@@ -79,22 +79,16 @@ migrator.update_schema_file        # on demand; bootstrap_schema does the same
 ## Check the File for Drift
 
 ```crystal
-# ❌ auto_sync: true rewrites the file when the migrator is built, so a stale file passes
-AppDB.migrator(config).verify_schema_consistency  # => true
-
-# ✅ Check with a migrator that leaves the file alone
-check = AppDB.migrator(CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  auto_sync: false
-))
+check = AppDB.migrator(config)  # leaves an existing file alone, even with auto_sync: true
 abort "src/schemas/app_schema.cr is out of date" unless check.verify_schema_consistency
+
+CQL.verify_schema(AppDB)                 # the same check, configured from CQL.configure
+CQL.verify_schema(AppDB, auto_fix: true) # with auto_sync on, rewrites a stale file and returns true
 ```
 
 `verify_schema_consistency` regenerates the text and compares it exactly, so hand edits count as drift. It returns
-`false` when the file is missing, differs, or the database cannot be read. `CQL.verify_schema(AppDB)` builds its
-migrator from `CQL.configure`, so it only detects drift with `auto_sync = false`, and then `auto_fix: true` has
-nothing to fix with.
+`false` when the file is missing, differs, or the database cannot be read. Check before `up` or `down`: with
+`auto_sync: true` they rewrite the file.
 
 ## Dump Raw DDL
 

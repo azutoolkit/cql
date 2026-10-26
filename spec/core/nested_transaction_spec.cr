@@ -33,6 +33,8 @@ describe "CQL::Schema#transaction nesting" do
   committed_columns = -> do
     DB.open("sqlite3://#{db_file}", &.query_all("SELECT name FROM pragma_table_info('nested_alters')", as: String))
   end
+  # The columns the schema declares for the table, which `alter` changes in memory.
+  declared_columns = -> { schema.tables[:nested_alters].columns.keys }
   # Reads through a separate connection, so it sees only committed schema changes.
   committed_probe_tables = -> do
     DB.open("sqlite3://#{db_file}", &.query_all("SELECT name FROM sqlite_master WHERE name = 'ddl_tx_probe'", as: String))
@@ -321,6 +323,81 @@ describe "CQL::Schema#transaction nesting" do
     end
 
     committed_columns.call.should_not contain "added_then_rolled_back"
+    declared_columns.call.should_not contain :added_then_rolled_back
+  end
+
+  it "restores the declaration of an alter committed by a savepoint when the outer block raises" do
+    expect_raises(Exception, "boom") do
+      schema.transaction do
+        schema.transaction { schema.alter(:nested_alters) { add_column :added_in_savepoint, String } }
+        raise "boom"
+      end
+    end
+
+    committed_columns.call.should_not contain "added_in_savepoint"
+    declared_columns.call.should_not contain :added_in_savepoint
+  end
+
+  it "restores a renamed column's declaration when the transaction rolls back on DB::Rollback" do
+    declared_before = declared_columns.call
+
+    schema.transaction do
+      schema.alter(:nested_alters) { rename_column :label, :title }
+      raise DB::Rollback.new
+    end
+
+    committed_columns.call.should contain "label"
+    declared_columns.call.should eq declared_before
+    schema.tables[:nested_alters].columns[:label].name.should eq :label
+  end
+
+  it "restores only the savepoint's alter when the savepoint rolls back and the outer one commits" do
+    schema.transaction do
+      schema.alter(:nested_alters) { add_column :kept_by_outer, String }
+      schema.transaction do
+        schema.alter(:nested_alters) { add_column :undone_by_savepoint, String }
+        raise DB::Rollback.new
+      end
+    end
+
+    committed_columns.call.should contain "kept_by_outer"
+    committed_columns.call.should_not contain "undone_by_savepoint"
+    declared_columns.call.should contain :kept_by_outer
+    declared_columns.call.should_not contain :undone_by_savepoint
+  end
+
+  it "restores the declaration of an alter run under the existing-transaction overload when the owner rolls back" do
+    schema.transaction do |tx|
+      schema.transaction(tx) { schema.alter(:nested_alters) { add_column :added_under_overload, String } }
+      raise DB::Rollback.new
+    end
+
+    committed_columns.call.should_not contain "added_under_overload"
+    declared_columns.call.should_not contain :added_under_overload
+  end
+
+  it "restores the declaration when the alter block raises before any SQL runs" do
+    expect_raises(Exception, "boom") do
+      schema.alter(:nested_alters) do
+        add_column :declared_before_failure, String
+        raise "boom"
+      end
+    end
+
+    declared_columns.call.should_not contain :declared_before_failure
+  end
+
+  it "restores a renamed table's declaration when the transaction rolls back" do
+    table = schema.tables[:nested_alters]
+
+    schema.transaction do
+      schema.alter(:nested_alters) { rename_table :nested_renamed }
+      raise DB::Rollback.new
+    end
+
+    schema.tables[:nested_alters]?.should be(table)
+    schema.tables.has_key?(:nested_renamed).should be_false
+    table.table_name.should eq :nested_alters
   end
 
   it "alters a table outside a transaction" do

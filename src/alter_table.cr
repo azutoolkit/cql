@@ -91,11 +91,12 @@ module CQL
     # ````
     def rename_column(old_name : Symbol, new_name : Symbol)
       column = @table.columns[old_name]
-      column.table = @table
-      @actions << Expression::RenameColumn.new(column.dup, new_name.to_s)
-      column.name = new_name
+      @actions << Expression::RenameColumn.new(column, new_name.to_s)
+      # A renamed copy, so the declaration captured before the alter keeps the column as it was.
+      renamed = column.dup
+      renamed.name = new_name
       @table.columns.delete(old_name)
-      @table.columns[new_name] = column
+      @table.columns[new_name] = renamed
       @table.columns_changed!
     end
 

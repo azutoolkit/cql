@@ -177,7 +177,7 @@ AppDB.users.create_sql
 
 ## `schema.alter`
 
-Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`.
+Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`. On SQLite and PostgreSQL, a rollback of that transaction or of an enclosing one also restores the table's declared name, columns and indexes.
 
 | Method | Defaults | Notes |
 | :--- | :--- | :--- |
@@ -252,13 +252,13 @@ migrator.up_to(20250125001401_i64)  # apply up to and including this version
 
 | Method | Behavior |
 | :--- | :--- |
-| `schema.migrator`, `schema.migrator(config)`, `CQL::Migrator.new(schema, config = MigratorConfig.new)` | Builds the migrator: with `auto_sync` dumps the schema file, then creates the migrations table (`ddl_transaction`). |
-| **`up(steps = all)`** | Takes the first `steps` migrations in version order and applies the pending ones, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints the applied list. |
-| **`down(steps = all)`** | Takes the newest `steps` *defined* migrations and reverts the applied ones, in one `ddl_transaction`; then rewrites the schema file and prints what was rolled back. |
-| **`rollback(steps = 1)`** | `down(steps)`. When the newest defined migration is pending, it does nothing. |
+| `schema.migrator`, `schema.migrator(config)`, `CQL::Migrator.new(schema, config = MigratorConfig.new)` | Builds the migrator: creates the migrations table (`ddl_transaction`), then with `auto_sync` writes the schema file if it is missing. |
+| **`up(steps = all)`** | Applies the `steps` oldest pending migrations in version order, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints the applied list. |
+| **`down(steps = all)`** | Reverts the `steps` newest applied migrations, newest first, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints what was rolled back. |
+| **`rollback(steps = 1)`** | `down(steps)`. |
 | `redo` | `rollback`, then `up`. |
-| `up_to(version : Int64)` | `up(position + 1)` where `position` is the index of `version` in all migrations: applies up to and including it. Unknown versions do nothing. |
-| `down_to(version : Int64)` | `down(position + 1)`: reverts `position + 1` migrations from the newest, so `down_to(first)` reverts only the newest and `down_to(newest)` reverts all. Prefer `down(n)`. |
+| `up_to(version : Int64)` | Applies every pending migration up to and including `version`. Unknown versions do nothing. |
+| `down_to(version : Int64)` | Reverts every applied migration newer than `version`; `version` stays applied. `down_to(0_i64)` reverts every migration; other unknown versions do nothing. |
 | `pending_migrations` | `Array(BaseMigration.class)` in version order. |
 | `applied_migrations` | `Array(CQL::MigrationRecord)` (`id`, `name`, `version`). |
 | `last` | The newest applied migration class, or `nil`. |
@@ -276,7 +276,7 @@ migrator.up_to(20250125001401_i64)  # apply up to and including this version
 | `schema_name` | `Symbol` | `:AppSchema` (constant in the generated file) |
 | `schema_symbol` | `Symbol` | `:app_schema` |
 | `migration_table_name` | `Symbol` | `:cql_schema_migrations` |
-| `auto_sync?` | `Bool` | `true`: rewrite the schema file when the migrator is built and after `up` / `down` |
+| `auto_sync?` | `Bool` | `true`: write the schema file when the migrator is built and it is missing, and rewrite it after `up` / `down` |
 
 `CQL.build_migrator(schema)` builds the config from `CQL.configure` instead (table `:schema_migrations`); see the [Configuration Reference](../configuration.md#helpers).
 

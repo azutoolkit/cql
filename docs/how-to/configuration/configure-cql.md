@@ -98,10 +98,10 @@ AppDB.migrator             # ignores CQL.config; a migration applied here is inv
 # Only the migrator differs; skips the bootstrap / verify_schema step
 CQL.build_migrator(AppDB, CQL.migrator_config(migrations_table: :my_migrations))
 
-# With auto_sync on, a migrator writes the schema file when constructed and after each up/down.
-# bootstrap = true dumps the file from the live database. verify_schema = true (development and
-# production) compares it and logs "Schema file is out of sync with database"; with auto_sync on,
-# the file was already rewritten when the migrator was built, so the comparison always passes.
+# With auto_sync on, a migrator writes the schema file when constructed if it is missing, and after
+# each up/down. bootstrap = true dumps the file from the live database. verify_schema = true
+# (development and production) compares it and logs "Schema file is out of sync with database";
+# with auto_sync on, it then rewrites the file.
 ```
 
 <details>
