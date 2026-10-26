@@ -14,7 +14,7 @@ Every callback names an instance method; there are no block, `if:`, `unless:` or
 | **`after_validation :method`** | After the rules pass; an invalid record raises `ValidationError` before it runs | `save` returns `false` |
 | **`before_save :method`** | After validation passes, for inserts and updates | `save` returns `false` |
 | **`before_create :method`** | After `before_save`, new records only | `save` returns `false` |
-| **`before_update :method`** | After `before_save`, persisted records only | `save` returns `false` |
+| **`before_update :method`** | After `before_save`, records with an id only | `save` returns `false` |
 | **`after_create :method`** | After the INSERT | later `after_create` callbacks only |
 | **`after_update :method`** | After the UPDATE | later `after_update` callbacks only |
 | **`after_save :method`** | Last in `save`, after `after_create` / `after_update` | later `after_save` callbacks only |
@@ -104,7 +104,7 @@ end
 
 ## Order
 
-| Step | `save` on a new record | `save` on a persisted record | `delete!` |
+| Step | `save` on a new record | `save` on a record with an id | `delete!` |
 | :--- | :--- | :--- | :--- |
 | 0 | timestamps set | timestamps set | `dependent: :restrict_with_error` check (raises `RelationError`) |
 | 1 | `before_validation` | `before_validation` | `before_destroy` |

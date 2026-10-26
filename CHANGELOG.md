@@ -184,6 +184,8 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Fixed
 
+- SoftDeletable `delete_by!` returns a `DB::ExecResult` whose `rows_affected` is the number of records it soft deleted. Before, the count went into `last_insert_id` and `rows_affected` was always 0.
+- `save` on a soft-deleted record updates its row (which stays soft deleted) instead of inserting a copy. `save`, its timestamps and optimistic locking decide between INSERT and UPDATE by whether the record has an id (`new_record?`), not by `persisted?`, which stays `false` for a soft-deleted record.
 - `save!` on an invalid record raises a `CQL::RecordInvalid`, as its doc comment says: `CQL::ActiveRecord::Validations::ValidationError` is now a subclass of `CQL::RecordInvalid` (and so of `CQL::Error`) with `error_fields` and `error_messages`, and its message is unchanged. Before, it inherited from `Exception`, so `rescue CQL::RecordInvalid` never caught a failed validation. `save!` raises `CQL::RecordNotSaved` when a callback halts the save and no longer validates a second time.
 - `after_validation` callbacks run after the validation rules pass. Before, they ran right after `before_validation`, before any rule was checked.
 - The instance `create!` sets `created_at` and `updated_at` as `save` does. Before, it sent them as NULL, so on a table built with `timestamps` (NOT NULL) it failed with a NOT NULL constraint error.

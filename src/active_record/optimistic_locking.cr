@@ -60,7 +60,7 @@ module CQL
 
         # Update a record using optimistic locking
         def self.update_with_lock!(record : {{@type.id}})
-          raise CQL::Error.new("Record must be persisted for optimistic locking") unless record.persisted?
+          raise CQL::Error.new("Record must be persisted for optimistic locking") if record.new_record?
           if record.responds_to?(:stamp_deferred_update)
             return record unless record.changed?
             record.stamp_deferred_update(record.changed_columns)

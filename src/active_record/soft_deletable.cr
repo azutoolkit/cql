@@ -191,7 +191,7 @@ module CQL
             end
           end
 
-          DB::ExecResult.new(0_i64, rows_affected)
+          DB::ExecResult.new(rows_affected: rows_affected, last_insert_id: 0_i64)
         end
 
         # Force delete records matching specific fields

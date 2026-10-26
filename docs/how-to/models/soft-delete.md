@@ -40,7 +40,7 @@ user.deleted?      # => false
 
 User.delete!(1)                            # => Bool, through the instance delete!
 User.delete_by!(email: "spam@example.com") # each match's delete!, in one transaction;
-                                           # its DB::ExecResult reports rows_affected = 0
+                                           # rows_affected counts the records it soft deleted
 User.delete_all                            # => Int64, active rows soft deleted
 User.restore!(1)                           # => Bool
 User.restore_all                           # => Int64, no callbacks
@@ -50,8 +50,8 @@ The instance, `delete!(id)` and `delete_by!` run `before_destroy`/`after_destroy
 
 Rows already soft deleted keep their first `deleted_at` and are not counted, also through `with_deleted.delete_all` and `delete_ids`.
 
-{% hint style="warning" %}
-A soft-deleted record reports `persisted? == false`, so `save` on it inserts a new row. Call `restore!` before changing and saving it.
+{% hint style="info" %}
+A soft-deleted record reports `persisted? == false`. `save` on it still updates its row, which stays deleted; call `restore!` to bring it back.
 {% endhint %}
 
 ## Query Around Deleted Rows

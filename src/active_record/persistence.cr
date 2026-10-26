@@ -190,8 +190,8 @@ module CQL
           # Run before save callbacks
           return false unless run_callbacks(:before_save)
 
-          # Save the record
-          success = if !persisted?
+          # A record with an id is updated, even a soft-deleted one, whose `persisted?` is false
+          success = if new_record?
             # Create path
             return false unless run_callbacks(:before_create)
             # Already validated above; the instance create! would validate again
@@ -219,7 +219,7 @@ module CQL
         # Sets created_at on create and updated_at on both create and update
         # Uses TimestampManager module for consistent timestamp handling
         private def set_timestamps!
-          timestamp_attrs = prepare_timestamps(!persisted?)
+          timestamp_attrs = prepare_timestamps(new_record?)
           apply_timestamps(timestamp_attrs)
         end
 
