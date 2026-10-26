@@ -27,7 +27,9 @@ module CQL::Postgres
   # startup parameters (`?search_path=app`). `user`, `database`,
   # `client_encoding` and `replication` cannot be set that way, and libpq-only
   # options the driver does not honour are rejected instead of ignored, so a
-  # typo can never silently weaken a connection.
+  # typo can never silently weaken a connection. crystal-db's pool keys, which
+  # `CQL.configure` adds, are read too: `max_pool_size` and `initial_pool_size`
+  # as `pool_size` and `pool_min_size`, and the rest are ignored.
   #
   # `sslmode=prefer` and `require` encrypt without verifying the server, like
   # libpq, so `sslrootcert` is only accepted with `verify-full`, where it adds a
@@ -41,8 +43,11 @@ module CQL::Postgres
     UNSUPPORTED_LIBPQ    = {"sslcert", "sslkey", "sslcrl", "sslcompression", "sslsni", "sslpassword", "channel_binding", "require_auth", "target_session_attrs", "passfile", "service", "gssencmode", "krbsrvname"}
     DEFAULT_CONNECT_WAIT = 10.0
 
-    # Accepted for configuration written for the `pg` shard (`CQL.configure` emits it); this driver negotiates SCRAM/MD5 itself.
-    COMPAT_IGNORED_KEYS = {"auth_methods"}
+    # Accepted for configuration written for the `pg` shard or crystal-db's pool (`CQL.configure` emits both):
+    # this driver negotiates SCRAM/MD5 itself, and its pool has no idle cap, connect retries or unprepared mode.
+    COMPAT_IGNORED_KEYS = {"auth_methods", "max_idle_pool_size", "retry_attempts", "retry_delay", "prepared_statements", "prepared_statements_cache"}
+    # crystal-db pool keys with an equivalent here; the native key wins when the URL names both.
+    CRYSTAL_DB_POOL_KEYS = {"max_pool_size" => "pool_size", "initial_pool_size" => "pool_min_size"}
 
     getter host : String
     getter port : Int32
@@ -110,6 +115,7 @@ module CQL::Postgres
       params = query_parameters(uri.query)
       ignoring.each { |key| params.delete(key) }
       COMPAT_IGNORED_KEYS.each { |key| params.delete(key) }
+      CRYSTAL_DB_POOL_KEYS.each { |crystal_db_key, key| pop(params, crystal_db_key).try { |value| params[key] ||= value } }
       driver_options = DRIVER_OPTION_KEYS.each_with_object({} of String => String) do |key, options|
         pop(params, key).try { |value| options[key] = value }
       end

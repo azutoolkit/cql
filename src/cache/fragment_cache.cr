@@ -1,5 +1,6 @@
 require "./cache_interface"
 require "./invalidation_strategies"
+require "./cache"
 require "digest/md5"
 require "json"
 require "db"
@@ -97,19 +98,7 @@ module CQL
         if cached_json = get_cached(cache_key)
           begin
             parsed_result = JSON.parse(cached_json).as_a.map do |item|
-              item.as_h.transform_values do |v|
-                case v
-                when .as_s?    then v.as_s
-                when .as_i?    then v.as_i.to_i32
-                when .as_i64?  then v.as_i64
-                when .as_f?    then v.as_f
-                when .as_f32?  then v.as_f32
-                when .as_bool? then v.as_bool
-                when .nil?     then nil
-                else
-                  v.to_s
-                end.as(DB::Any)
-              end
+              item.as_h.transform_values { |v| Cache.cached_db_value(v) }
             end
             return parsed_result
           rescue JSON::ParseException

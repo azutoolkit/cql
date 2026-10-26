@@ -57,11 +57,12 @@ Statements run through `CQL::Execution`, so telemetry and the [performance monit
 ## What Differs from crystal-db's Pool
 
 ```crystal
-# ❌ crystal-db keys are not pool options here: they reach the server as startup parameters
-CQL::Postgres::EngineSource.connect("postgres://app:secret@db.internal/app?max_pool_size=20&pool_min_size=1") # raises SyntaxOrAccessError (SQLSTATE 42704)
-
-# ✅ the engine's names: pool_size, pool_min_size, checkout_timeout, max_queries, max_idle_lifetime
+# The engine's names: pool_size, pool_min_size, checkout_timeout, max_queries, max_idle_lifetime
 CQL::Postgres::EngineSource.connect("postgres://app:secret@db.internal/app?pool_size=20")
+
+# crystal-db's names, as CQL.config.full_db_url writes them, also work: max_pool_size is read as pool_size and
+# initial_pool_size as pool_min_size; when the URL names both, the engine's key wins
+CQL::Postgres::EngineSource.connect("postgres://app:secret@db.internal/app?max_pool_size=20&initial_pool_size=1")
 
 # Schema#uri drops the engine's pool options and keeps sslmode, max_protocol_version and binary_params,
 # because SchemaDump (migrations with auto_sync) opens its own crystal-db connection from it.
@@ -74,6 +75,8 @@ AppDB.uri # => "postgres://app:secret@db.internal/app?sslmode=verify-full"
 | Pool saturated | `DB::PoolTimeout` | `DB::PoolTimeout`, `cause` is `CQL::Postgres::PoolTimeout` |
 | Server or TLS error | `CQL::Postgres::ServerError` subclass, `TLSRefused` | the same |
 | Connect retries | `retry_attempts`, `retry_delay` | none |
+
+The engine ignores `max_idle_pool_size`, `retry_attempts`, `retry_delay`, `prepared_statements` and `prepared_statements_cache`. `prepared_statements=false` has no effect on the engine: it still prepares statements and caches them up to `statement_cache_size`; set `statement_cache_size=0` to turn the cache off. Any other key it does not know is still sent to the server as a startup parameter.
 
 {% hint style="warning" %}
 `Schema#uri` must name the same server and database as the engine; the schema validates it but does not compare it.

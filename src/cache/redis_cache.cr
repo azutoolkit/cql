@@ -264,32 +264,32 @@ module CQL
 
       # Statistics and monitoring
       def stats : Hash(String, String | Int32 | Int64 | Float64)
-        @mutex.synchronize do
-          hit_rate = @stats["hits"] + @stats["misses"] > 0 ? (@stats["hits"].to_f / (@stats["hits"] + @stats["misses"]).to_f * 100.0) : 0.0
+        counters = @mutex.synchronize { @stats.dup }
+        lookups = counters["hits"] + counters["misses"]
+        hit_rate = lookups > 0 ? counters["hits"].to_f / lookups.to_f * 100.0 : 0.0
 
-          base_stats = {} of String => String | Int32 | Int64 | Float64
-          base_stats["type"] = "redis"
-          base_stats["hits"] = @stats["hits"]
-          base_stats["misses"] = @stats["misses"]
-          base_stats["hit_rate_percent"] = hit_rate
-          base_stats["sets"] = @stats["sets"]
-          base_stats["deletes"] = @stats["deletes"]
-          base_stats["evictions"] = @stats["evictions"]
-          base_stats["key_prefix"] = @key_prefix
+        base_stats = {} of String => String | Int32 | Int64 | Float64
+        base_stats["type"] = "redis"
+        base_stats["hits"] = counters["hits"]
+        base_stats["misses"] = counters["misses"]
+        base_stats["hit_rate_percent"] = hit_rate
+        base_stats["sets"] = counters["sets"]
+        base_stats["deletes"] = counters["deletes"]
+        base_stats["evictions"] = counters["evictions"]
+        base_stats["key_prefix"] = @key_prefix
+        add_server_stats(base_stats)
+        base_stats
+      end
 
-          # Try to get Redis info
-          begin
-            redis_info = @redis.info
-            base_stats["redis_memory_usage_bytes"] = redis_info["used_memory"]?.try(&.to_i64?) || 0_i64
-            base_stats["redis_connected_clients"] = redis_info["connected_clients"]?.try(&.to_i32?) || 0
-            base_stats["redis_keyspace_hits"] = redis_info["keyspace_hits"]?.try(&.to_i64?) || 0_i64
-            base_stats["redis_keyspace_misses"] = redis_info["keyspace_misses"]?.try(&.to_i64?) || 0_i64
-          rescue Redis::Error
-            # Redis info not available, continue with basic stats
-          end
-
-          base_stats
-        end
+      # INFO is a network round trip, so it runs outside `@mutex`.
+      private def add_server_stats(base_stats : Hash(String, String | Int32 | Int64 | Float64)) : Nil
+        redis_info = @redis.info
+        base_stats["redis_memory_usage_bytes"] = redis_info["used_memory"]?.try(&.to_i64?) || 0_i64
+        base_stats["redis_connected_clients"] = redis_info["connected_clients"]?.try(&.to_i32?) || 0
+        base_stats["redis_keyspace_hits"] = redis_info["keyspace_hits"]?.try(&.to_i64?) || 0_i64
+        base_stats["redis_keyspace_misses"] = redis_info["keyspace_misses"]?.try(&.to_i64?) || 0_i64
+      rescue Redis::Error
+        # Redis info not available, keep the basic stats
       end
 
       def size : Int32
