@@ -1,189 +1,85 @@
 # Paginate Results
 
-This guide shows you how to paginate query results for display in pages.
+Split results into numbered pages with `limit` and `offset`, or with the built-in `page` helpers.
 
-## Basic Pagination
-
-Use `limit` and `offset`:
+## Page a Query
 
 ```crystal
-page = 1
-per_page = 10
+page, per_page = 2, 10
 
-posts = Post.order(created_at: :desc)
-            .limit(per_page)
-            .offset((page - 1) * per_page)
-            .all
+Post.where(published: true)
+  .order(created_at: :desc, id: :desc) # a unique last key keeps pages stable
+  .limit(per_page)
+  .offset((page - 1) * per_page)
+  .all
+# ... WHERE posts.published = ? ORDER BY posts.created_at DESC, posts.id DESC LIMIT ? OFFSET ?
+# params: [true, 10, 10]
 ```
 
-## Built-in Helpers
-
-Every model has `page` and `per_page` class methods. They return an `Array` of records (1-based page numbers, default 10 per page):
+## Use the Built-in Helpers
 
 ```crystal
-Post.page(2)                # records 11-20
-Post.page(3, per_page: 25)  # records 51-75
-Post.per_page(5)            # first 5 records
+Post.page(2)                # => Array(Post): rows 11-20 (1-based pages, 10 per page)
+Post.page(3, per_page: 25)  # rows 51-75; SELECT ... FROM posts LIMIT ? OFFSET ?
+Post.per_page(5)            # the first 5 rows; SELECT ... FROM posts LIMIT ?
 ```
 
-They run on the whole table. To paginate a filtered or ordered query, use `limit`/`offset` on the query as shown next. For keyset navigation by id, see [Use Cursor Pagination](cursor-pagination.md).
+They read the whole table with no `WHERE` and no `ORDER BY`. To page a filtered or ordered query, use `limit` and `offset` as above.
 
-## Pagination Helper
-
-Create a reusable pagination method:
+## Return Page Metadata
 
 ```crystal
 def paginate(query, page : Int32 = 1, per_page : Int32 = 10)
-  offset = (page - 1) * per_page
-  query.limit(per_page).offset(offset).all
-end
-
-# Usage
-posts = paginate(Post.where(published: true), page: 2, per_page: 20)
-```
-
-## Pagination Info
-
-Get total count for pagination UI:
-
-```crystal
-def paginated_results(query, page : Int32 = 1, per_page : Int32 = 10)
-  total = query.count
-  total_pages = (total / per_page.to_f).ceil.to_i
-  offset = (page - 1) * per_page
-
+  total = query.count # SELECT COUNT(*) ..., without the ORDER BY
   {
-    items: query.limit(per_page).offset(offset).all,
-    page: page,
-    per_page: per_page,
-    total: total,
-    total_pages: total_pages,
-    has_next: page < total_pages,
-    has_prev: page > 1
+    items:       query.limit(per_page).offset((page - 1) * per_page).all,
+    page:        page,
+    total:       total,
+    total_pages: (total / per_page).ceil.to_i,
   }
 end
 
-# Usage (published is a scope, see Create Query Scopes)
-result = paginated_results(Post.published, page: 2)
-puts "Page #{result[:page]} of #{result[:total_pages]}"
-puts "Showing #{result[:items].size} of #{result[:total]} items"
+# With 25 posts, ids 1-20 published:
+result = paginate(Post.where(published: true).order(id: :asc), page: 2, per_page: 8)
+result[:items].map(&.id)  # => [9, 10, 11, 12, 13, 14, 15, 16]
+result[:total]            # => 20
+result[:total_pages]      # => 3
+result[:page] < result[:total_pages] # => true: there is a next page
 ```
 
-## Cursor-Based Pagination
-
-For better performance with large datasets:
+## Read Page Parameters Safely
 
 ```crystal
-def cursor_paginate(last_id : Int64?, limit : Int32 = 10)
-  query = Post.order(id: :desc).limit(limit)
-
-  if last_id
-    query = query.where { id < last_id }
-  end
-
-  items = query.all
-  next_cursor = items.last?.try(&.id)
-
-  {items: items, next_cursor: next_cursor}
-end
-
-# First page
-result = cursor_paginate(nil)
-
-# Next page
-result = cursor_paginate(result[:next_cursor])
-```
-
-## Timestamp-Based Pagination
-
-For chronological data:
-
-```crystal
-def paginate_by_time(before : Time?, limit : Int32 = 10)
-  query = Post.order(created_at: :desc).limit(limit)
-
-  if before
-    query = query.where { created_at < before }
-  end
-
-  items = query.all
-  next_cursor = items.last?.try(&.created_at)
-
-  {items: items, next_cursor: next_cursor}
-end
-```
-
-## Keyset Pagination
-
-More efficient for large datasets:
-
-```crystal
-def keyset_paginate(after_id : Int64?, limit : Int32 = 10)
-  query = Post.where(published: true)
-              .order(views_count: :desc, id: :desc)
-              .limit(limit)
-
-  if after_id
-    # Get the reference record
-    ref = Post.find(after_id)
-    if ref
-      query = query.where {
-        (views_count < ref.views_count) |
-        ((views_count == ref.views_count) & (id < after_id))
-      }
-    end
-  end
-
-  query.all
-end
-```
-
-## Web API Example
-
-```crystal
-def list_posts(params)
-  page = (params["page"]? || "1").to_i
-  per_page = [(params["per_page"]? || "10").to_i, 100].min  # Max 100
-
-  query = Post.published.order(created_at: :desc)
-  result = paginated_results(query, page, per_page)
+def list_posts(params : Hash(String, String))
+  # to_i raises ArgumentError on text that is not a number; use to_i? with a default to avoid it
+  page = (params["page"]? || "1").to_i.clamp(1, nil)
+  per_page = (params["per_page"]? || "10").to_i.clamp(1, 100)
+  result = paginate(Post.where(published: true).order(created_at: :desc, id: :desc), page, per_page)
 
   {
-    posts: result[:items].map(&.to_json),
-    meta: {
-      page: result[:page],
-      per_page: result[:per_page],
-      total: result[:total],
-      total_pages: result[:total_pages]
-    }
+    posts: result[:items].map(&.title),
+    meta:  {page: page, per_page: per_page, total: result[:total], total_pages: result[:total_pages]},
   }
 end
+
+list_posts({"page" => "2", "per_page" => "500"})[:meta]
+# => {page: 2, per_page: 100, total: 20, total_pages: 1}
 ```
 
-## Verify Pagination Works
+## Switch to a Cursor for Deep Pages
+
+`OFFSET n` makes the database read and skip `n` rows on every page. For large tables or feeds that change while users page, filter past the last row seen instead:
 
 ```crystal
-# Create 25 posts
-25.times do |i|
-  Post.create!(title: "Post #{i + 1}", body: "...", published: true)
-end
-
-# Test pagination
-page1 = Post.order(id: :asc).limit(10).offset(0).all
-page2 = Post.order(id: :asc).limit(10).offset(10).all
-page3 = Post.order(id: :asc).limit(10).offset(20).all
-
-page1.size  # => 10
-page2.size  # => 10
-page3.size  # => 5
-
-page1.first.title  # => "Post 1"
-page2.first.title  # => "Post 11"
-page3.first.title  # => "Post 21"
+Post.where(published: true).where { id < last_seen_id }.order(id: :desc).limit(20).all
+# ... WHERE (posts.published = ?) AND (posts.id < ?) ORDER BY posts.id DESC LIMIT ?
 ```
 
-## Related
+See [Use Cursor Pagination](cursor-pagination.md) for `has_more`, compound keys and the built-in cursor helpers.
 
+## See Also
+
+- [Use Cursor Pagination](cursor-pagination.md)
 - [Filter with Where Clauses](filter-records.md)
 - [Build Complex Queries](complex-queries.md)
 - [Create Query Scopes](scopes.md)

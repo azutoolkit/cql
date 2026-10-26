@@ -1,13 +1,13 @@
 # Upsert Records
 
-This guide shows you how to insert a row or update the existing one when it conflicts with a unique key, using `Insert#on_conflict` and `Insert#upsert`.
+Insert a row, or update the existing one when it collides with a unique key, with `Insert#on_conflict` and `Insert#upsert`.
 
-The examples use an `accounts` table with a unique `email`, plus `name` and `visits` columns.
+The examples use an `accounts` table with a unique `email`:
 
 ```crystal
-AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
   table :accounts do
-    primary :id, Int32
+    primary :id, Int64, auto_increment: true
     column :email, String, unique: true
     column :name, String
     column :visits, Int32, default: 0
@@ -15,7 +15,7 @@ AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::SQLite, uri: "sqlite3://
 end
 ```
 
-## Update on conflict
+## Update on Conflict
 
 `on_conflict(*columns)` names the unique key; `do_update` says what to change:
 
@@ -25,21 +25,16 @@ AppDB.insert.into(:accounts)
   .on_conflict(:email)
   .do_update(:name)
   .commit
+# PostgreSQL: INSERT INTO accounts (email, name) VALUES ($1, $2) ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+
+insert = AppDB.insert.into(:accounts).values(email: "a@x.io", name: "Ada")
+insert.on_conflict(:email).do_update(:name, visits: 9) # positional: incoming value; keyword: bound value
+# ... DO UPDATE SET name = EXCLUDED.name, visits = $3   params: ["a@x.io", "Ada", 9]
+insert.on_conflict(:email).do_update                   # no arguments: every column outside the target
+# ... DO UPDATE SET name = EXCLUDED.name
 ```
 
-On PostgreSQL this renders (values stay bound as `$1`, `$2`):
-
-```sql
-INSERT INTO accounts (email, name) VALUES ($1, $2) ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
-```
-
-Arguments to `do_update`:
-
-- **Positional columns** (`do_update(:name)`) take the incoming row's value.
-- **Keyword arguments** (`do_update(:name, visits: 9)`) set explicit values. They are bound as parameters after the row values: `DO UPDATE SET name = EXCLUDED.name, visits = $3`, with params `["a@x.io", "Ada", 9]`.
-- **No arguments** (`do_update`) refreshes every column that is not part of the conflict target.
-
-## Keep the existing row
+## Keep the Existing Row
 
 ```crystal
 AppDB.insert.into(:accounts)
@@ -47,22 +42,12 @@ AppDB.insert.into(:accounts)
   .on_conflict(:email)
   .do_nothing
   .commit
+# ... ON CONFLICT (email) DO NOTHING
+
+insert.on_conflict(:email, :name).do_nothing # composite key: ON CONFLICT (email, name) DO NOTHING
 ```
 
-```sql
-... ON CONFLICT (email) DO NOTHING
-```
-
-## Composite keys
-
-```crystal
-insert.on_conflict(:email, :name).do_nothing
-# ... ON CONFLICT (email, name) DO NOTHING
-```
-
-## Upsert many rows
-
-`upsert(rows, conflict:, update:)` inserts every row in one statement and updates the `update` columns of rows that already exist:
+## Upsert Many Rows
 
 ```crystal
 rows = [
@@ -70,52 +55,60 @@ rows = [
   {:email => "g@x.io", :name => "Grace"} of Symbol => DB::Any,
 ]
 
-AppDB.insert.into(:accounts)
-  .upsert(rows, conflict: [:email], update: [:name])
-  .commit
+AppDB.insert.into(:accounts).upsert(rows, conflict: [:email], update: [:name]).commit
+# INSERT INTO accounts (email, name) VALUES ($1, $2), ($3, $4) ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+
+AppDB.insert.into(:accounts).upsert(rows, conflict: [:email])                       # every non-target column
+AppDB.insert.into(:accounts).upsert(rows, conflict: [:email], update: [] of Symbol) # DO NOTHING
 ```
 
-```sql
-INSERT INTO accounts (email, name) VALUES ($1, $2), ($3, $4) ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
-```
+For models, `Model.upsert_all(rows, on_conflict: :email)` batches the rows and keeps `id` and `created_at`; see [Create Records](../data-operations/create.md).
 
-Omit `update:` to refresh every non-target column. An empty `update: [] of Symbol` means "update nothing" and renders `DO NOTHING`.
-
-## Get the row back
-
-`back` keeps working with a conflict clause; `RETURNING` comes after it (PostgreSQL):
+## Get the Row Back
 
 ```crystal
-insert.on_conflict(:email).do_update(:name).back(:id)
+insert.on_conflict(:email).do_update(:name).back(:id) # RETURNING comes after the conflict clause
 # ... DO UPDATE SET name = EXCLUDED.name RETURNING accounts.id
 ```
 
-## Dialect differences
+## Check Each Dialect
 
-| Dialect | `do_update(:name, visits: 9)` | `do_nothing` |
-| --- | --- | --- |
-| PostgreSQL, CockroachDB, SQLite | `ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, visits = $3` (`?` on SQLite) | `ON CONFLICT (email) DO NOTHING` |
-| MySQL | `ON DUPLICATE KEY UPDATE name = VALUES(name), visits = ?` | `ON DUPLICATE KEY UPDATE email = email` |
+```crystal
+upsert = AppDB.insert.into(:accounts).values(email: "a@x.io", name: "Ada")
+  .on_conflict(:email).do_update(:name, visits: 9)
 
-- On MySQL the conflict target is ignored: any unique key that collides triggers `ON DUPLICATE KEY UPDATE`.
-- SQLite needs 3.24+.
-- Identifiers are quoted when `quote_identifiers: true` (`ON CONFLICT ("email") DO UPDATE SET "name" = EXCLUDED."name"`, `` `name` = VALUES(`name`) `` on MySQL).
+upsert.to_sql(Expression::Generator.new(CQL::Adapter::Postgres)) # also CockroachDB; SQLite (3.24+) binds ?
+# ... ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, visits = $3
+upsert.to_sql(Expression::Generator.new(CQL::Adapter::MySql))
+# ... ON DUPLICATE KEY UPDATE name = VALUES(name), visits = ?
+# MySQL do_nothing: ... ON DUPLICATE KEY UPDATE email = email
 
-To see the SQL for another dialect, pass a generator: `insert.to_sql(Expression::Generator.new(CQL::Adapter::MySql))`.
+upsert.to_sql(Expression::Generator.new(CQL::Adapter::Postgres, quote_identifiers: true))
+# INSERT INTO "accounts" ("email", "name") ... ON CONFLICT ("email") DO UPDATE SET "name" = EXCLUDED."name", "visits" = $3
+```
 
-## Errors
+{% hint style="warning" %}
+MySQL ignores the conflict target: any unique key that collides triggers `ON DUPLICATE KEY UPDATE`.
+{% endhint %}
 
-| Mistake | Result |
-| --- | --- |
-| `do_nothing` / `do_update` before `on_conflict` | `ArgumentError` mentioning `on_conflict` |
-| `on_conflict` without `do_nothing` or `do_update` when building SQL | `ArgumentError` "do_nothing or do_update" |
-| Unknown column | `ArgumentError` "Column nope not found in accounts" |
-| `.query(select)` (INSERT ... SELECT) with a conflict clause | `ArgumentError`; upsert is not supported with INSERT ... SELECT |
+## Avoid These Errors
 
-Calling `do_update` again after building a statement does not change the statement you already built.
+```crystal
+AppDB.insert.into(:accounts).values(email: "x", name: "y").do_nothing
+# ArgumentError: Call on_conflict(...) before do_nothing (do_update likewise)
+AppDB.insert.into(:accounts).values(email: "x", name: "y").on_conflict(:email).to_sql
+# ArgumentError: on_conflict needs do_nothing or do_update
+insert.on_conflict(:nope)
+# ArgumentError: Column nope not found in accounts
+AppDB.insert.into(:accounts).query(AppDB.query.from(:users).select(:email, :name)).on_conflict(:email).do_nothing.to_sql
+# ArgumentError: ON CONFLICT is not supported with INSERT ... SELECT
+```
 
-## Related
+A statement from `build` is a snapshot: a later `do_update` on the same `Insert` does not change it.
+
+## See Also
 
 - [Create Records](../data-operations/create.md)
 - [Use Transactions](../data-operations/transactions.md)
+- [Inspect Queries with to_sql and explain](explain-and-to-sql.md)
 - [The query DSL: before and after](../../explanation/dsl-before-after.md)

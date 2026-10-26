@@ -1,93 +1,17 @@
 # Repository Pattern
 
-The Repository pattern provides an alternative to Active Record by separating data persistence from domain objects. While CQL primarily uses Active Record, you can implement Repository patterns for specific use cases.
+A repository puts all database access for one kind of record behind one object, so domain code works with plain objects that know nothing about storage. CQL ships a generic repository, `CQL::Repository(T, Pk)`, and works well with repositories you write around a model.
 
-## What is the Repository Pattern?
-
-In the Repository pattern:
-- Domain objects (entities) hold data and business logic
-- Repositories handle all database operations
-- The domain layer doesn't know about persistence
-
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Domain     │────>│  Repository  │────>│   Database   │
-│   Objects    │<────│              │<────│              │
-└──────────────┘     └──────────────┘     └──────────────┘
+```text
+┌──────────────┐  find / save   ┌──────────────┐   SQL    ┌──────────────┐
+│ Domain code  │ ─────────────> │  Repository  │ ───────> │   Database   │
+│  (entities)  │ <───────────── │              │ <─────── │              │
+└──────────────┘    entities    └──────────────┘   rows   └──────────────┘
 ```
 
-## Why Use Repository Pattern?
+## CQL::Repository Maps a Table to a Plain Record Type
 
-### Separation of Concerns
-
-Domain objects focus on business logic, not database operations:
-
-```crystal
-# Entity - no database knowledge
-class User
-  property id : Int64?
-  property name : String
-  property email : String
-
-  def initialize(@name : String, @email : String)
-  end
-
-  def full_name
-    name.split.map(&.capitalize).join(" ")
-  end
-end
-
-# Repository - handles persistence
-class UserRepository
-  def find(id : Int64) : User?
-    # Database query
-  end
-
-  def save(user : User) : Bool
-    # Insert or update
-  end
-end
-```
-
-### Testability
-
-Easily mock repositories for testing:
-
-```crystal
-class MockUserRepository
-  def find(id : Int64) : User?
-    User.new("Test User", "test@example.com")
-  end
-end
-
-# In tests
-service = UserService.new(MockUserRepository.new)
-```
-
-### Flexibility
-
-Switch data sources without changing domain logic:
-
-```crystal
-abstract class UserRepository
-  abstract def find(id : Int64) : User?
-  abstract def save(user : User) : Bool
-end
-
-class PostgresUserRepository < UserRepository
-  # PostgreSQL implementation
-end
-
-class ApiUserRepository < UserRepository
-  # REST API implementation
-end
-```
-
-## Implementing Repository with CQL
-
-### Built-in: `CQL::Repository`
-
-For plain records that include `DB::Serializable`, CQL ships a generic repository. It is built from a schema and a table, and returns your own type:
+The built-in repository is built from a schema and a table, and returns records of your own `DB::Serializable` type. No model, validations or callbacks are involved:
 
 ```crystal
 struct UserRow
@@ -99,172 +23,164 @@ struct UserRow
   getter email : String
 end
 
-users = CQL::Repository(UserRow, Int64).new(MyDB, :users)
+users = CQL::Repository(UserRow, Int64).new(AppDB, :users)
 
-id = users.create(name: "Alice", email: "alice@example.com") # => the new primary key
-users.find(id)                       # => UserRow? (nil when missing)
-users.find_by(email: "alice@example.com")
-users.all
-users.update(id, name: "Alice B.")
-users.exists?(name: "Alice B.")
-users.count
+id = users.create(name: "Ada", email: "ada@example.com") # => 1, the new primary key
+users.find(id)                          # => UserRow? (nil when missing)
+users.find_by(email: "ada@example.com") # => UserRow?
+users.update(id, name: "Ada L.")
+users.exists?(name: "Ada L.")           # => true
+users.count                             # => 1
 users.delete(id)
 ```
 
-The rest of this page builds a hand-written repository around an Active Record model, which gives you validations and callbacks while keeping the domain entity free of persistence code.
+| Method | Returns |
+| :--- | :--- |
+| `find(id)`, `find_by(**fields)`, `first`, `last` | `T?`; `first` and `last` order by `id` |
+| `find!(id)` | `T`, or raises `NilAssertionError` when missing |
+| `all`, `find_all_by(**fields)`, `page(number, per_page = 10)`, `per_page(n)` | `Array(T)` |
+| `exists?(**fields)` | `Bool` |
+| `count` | the count, read as `Pk` |
+| `create(**fields)`, `create(hash)` | the new key: `Int64` from `last_insert_id` on SQLite and MySQL, `Pk` from `RETURNING` on PostgreSQL and CockroachDB |
+| `update(id, **fields)`, `delete(id)`, `delete_by(**fields)`, `delete_all` | `DB::ExecResult` |
+| `query`, `insert`, `update`, `delete` | a `CQL::Query`, `Insert`, `Update` or `Delete` already scoped to the table |
 
-### Step 1: Define Your Entity
+CQL uses this class itself: the migrator stores its version rows through `CQL::Repository(CQL::MigrationRecord, Int32)`.
+
+{% hint style="warning" %}
+`count` reads `COUNT(*)` as the key type, so it raises `DB::ColumnTypeMismatchError` for a `String` key. `update(id, hash)`, `update_by`, `update_all` and `build` do not compile; use `update(id, **fields)` or the `update` builder.
+{% endhint %}
+
+## A Hand-Written Repository Keeps Model Features
+
+Wrapping an Active Record model in your own repository keeps validations, callbacks and associations while the domain entity stays free of persistence code:
 
 ```crystal
+# The domain entity: plain Crystal
 class User
   property id : Int64?
   property name : String
   property email : String
-  property created_at : Time?
 
-  def initialize(@name : String, @email : String)
-  end
-
-  def valid? : Bool
-    !name.empty? && email.includes?("@")
+  def initialize(@name : String, @email : String, @id : Int64? = nil)
   end
 end
-```
 
-### Step 2: Create a CQL Model (Internal)
-
-```crystal
-# This is internal to the repository. `id` comes from Model(Int64).
+# The persistence model, used only by the repository
 class UserRecord
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
+  db_context AppDB, :users
 
   property name : String
   property email : String
   property active : Bool = true
-  property created_at : Time?
+
+  validate :email, presence: true, match: /@/
 
   def initialize(@name : String, @email : String)
   end
 
   def to_entity : User
-    user = User.new(@name, @email)
-    user.id = id
-    user.created_at = @created_at
-    user
-  end
-
-  def self.from_entity(user : User) : UserRecord
-    record = new(user.name, user.email)
-    user.id.try { |existing_id| record.id = existing_id }
-    record
+    User.new(name, email, id)
   end
 end
-```
 
-### Step 3: Implement the Repository
-
-```crystal
 class UserRepository
   def find(id : Int64) : User?
-    record = UserRecord.find(id)
-    record.try(&.to_entity)
+    UserRecord.find(id).try(&.to_entity)
   end
 
-  def find_by_email(email : String) : User?
-    record = UserRecord.find_by(email: email)
-    record.try(&.to_entity)
+  def active : Array(User)
+    UserRecord.where(active: true).all.map(&.to_entity)
   end
 
-  def all : Array(User)
-    UserRecord.all.map(&.to_entity)
-  end
-
-  # Returns false when a callback halts the save; invalid records raise
-  # CQL::ActiveRecord::Validations::ValidationError
+  # Raises CQL::ActiveRecord::Validations::ValidationError when the user is invalid
   def save(user : User) : Bool
-    record = UserRecord.from_entity(user)
+    record = user.id.try { |id| UserRecord.find(id) } || UserRecord.new(user.name, user.email)
+    record.name = user.name
+    record.email = user.email
     saved = record.save
-    user.id = record.id if saved
+    user.id = record.id
     saved
   end
 
   def delete(user : User) : Bool
-    return false unless id = user.id
-    record = UserRecord.find(id)
-    record.try(&.delete!) || false
-  end
-
-  def active_users : Array(User)
-    UserRecord.where(active: true).all.map(&.to_entity)
+    record = user.id.try { |id| UserRecord.find(id) }
+    record ? record.delete! : false
   end
 end
-```
 
-### Step 4: Use the Repository
-
-```crystal
 repo = UserRepository.new
-
-# Create
 user = User.new("John", "john@example.com")
-repo.save(user)
-
-# Find
-found = repo.find(user.id.not_nil!)
-
-# Query
-active = repo.active_users
-
-# Delete
-repo.delete(user)
+repo.save(user) # => true; INSERT, and user.id is set
+user.name = "Johnny"
+repo.save(user) # SELECT the record, then UPDATE users SET name = ?, email = ?, active = ? WHERE users.id = ?
+repo.active.map(&.name) # => ["Johnny"]
 ```
 
-## When to Use Repository Pattern
+`save` loads the stored record before changing it, so columns the entity does not carry (`active` here) keep their values instead of being reset to defaults.
 
-### Good Use Cases
+## Repositories Make the Domain Testable Without a Database
 
-1. **Complex domain logic** - Keep business rules separate from persistence
-2. **Multiple data sources** - Same domain, different storage
-3. **Heavy testing** - Easy to mock repositories
-4. **Large teams** - Clear boundaries between concerns
-
-### Not Ideal For
-
-1. **Simple CRUD apps** - Overkill for basic operations
-2. **Rapid prototyping** - Slows initial development
-3. **Small projects** - Adds unnecessary complexity
-
-## Comparison: Active Record vs Repository
+Domain services depend on an abstract store, and tests pass an in-memory one:
 
 ```crystal
-# Active Record
-user = User.find(1)
-user.name = "Updated"
-user.save
+abstract class UserStore
+  abstract def find(id : Int64) : User?
+  abstract def save(user : User) : Bool
+end
 
-# Repository
-user = user_repo.find(1)
-user.name = "Updated"
-user_repo.save(user)
+class InMemoryUserStore < UserStore
+  @users = {} of Int64 => User
+
+  def find(id : Int64) : User?
+    @users[id]?
+  end
+
+  def save(user : User) : Bool
+    user.id ||= @users.size.to_i64 + 1
+    @users[user.id.not_nil!] = user
+    true
+  end
+end
+
+class SignupService
+  def initialize(@store : UserStore)
+  end
+
+  def sign_up(name : String, email : String) : User
+    User.new(name, email).tap { |user| @store.save(user) }
+  end
+end
+
+SignupService.new(InMemoryUserStore.new).sign_up("Test", "test@example.com").id # => 1
 ```
 
-The difference is subtle in simple cases but significant for complex domains.
+In production, a `UserRepository < UserStore` like the one above implements the same two methods with CQL.
 
-## Hybrid Approach
+## When to Use It
 
-You can mix both patterns:
+| Good fit | Poor fit |
+| :--- | :--- |
+| Business rules that must not depend on storage | Simple CRUD, where the extra layer only adds code |
+| Data from more than one source behind one interface | Prototypes, where Active Record is faster to write |
+| Domain tests that should run without a database | Small projects with one data source |
+| Large teams that want a clear boundary | |
+
+The difference is small for one record and grows with the domain:
 
 ```crystal
-# Simple entities use Active Record directly
-post = Post.find(1)
-post.title = "Updated"
-post.save
+id = user.id.not_nil!
 
-# Complex domain uses Repository
-order = order_repo.find(1)
-order.add_item(product, quantity)
-order_repo.save(order)
+# Active Record: the object saves itself
+record = UserRecord.find!(id)
+record.name = "Updated"
+record.save
+
+# Repository: the domain object is handed to the repository
+entity = repo.find(id).not_nil!
+entity.name = "Updated"
+repo.save(entity)
 ```
 
-This gives you the best of both worlds: simplicity for CRUD and separation for complex logic.
+The two patterns mix well: use models directly for plain CRUD, and a repository where the domain is complex. See [Active Record Pattern](active-record.md) for the model side.

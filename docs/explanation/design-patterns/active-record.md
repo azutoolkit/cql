@@ -1,248 +1,129 @@
 # Active Record Pattern
 
-The Active Record pattern is the primary pattern used in CQL. Understanding it helps you write better models and make informed architectural decisions.
+In the Active Record pattern a class wraps a table and each instance wraps one row, carrying both the data and the code that saves it. It is the pattern CQL's models follow.
 
-## What is Active Record?
-
-Active Record is a design pattern where an object wraps a row in a database table, encapsulating both the data and the database access logic.
-
-In Active Record:
-- A model class represents a database table
-- A model instance represents a row in that table
-- The model knows how to save itself
-- Business logic lives inside the model
-
-## Active Record in CQL
+## The Model Holds Data, Rules and Persistence
 
 ```crystal
 class User
-  include CQL::ActiveRecord::Model(Int64) # provides `id : Int64?`
-  db_context MyDB, :users
+  include CQL::ActiveRecord::Model(Int64) # adds id : Int64?
+  db_context AppDB, :users
 
   property name : String
   property email : String
   property active : Bool = true
 
+  validate :name, presence: true
+  validate :email, presence: true, match: /@/
+
+  before_save :normalize_email
+
   def initialize(@name : String, @email : String)
   end
 
-  # Business logic in the model
-  def activate!
-    @active = true
-    save
-  end
-
+  # Business logic and persistence side by side
   def deactivate!
     @active = false
     save
   end
-end
-
-# Usage - the model handles its own persistence
-user = User.new("John", "john@example.com")
-user.save      # Model saves itself
-user.activate! # Business logic + persistence together
-```
-
-## Key Characteristics
-
-### 1. Self-Aware Persistence
-
-Models know how to persist themselves:
-
-```crystal
-user = User.new("John", "john@example.com")
-user.save   # INSERT
-user.name = "Jane"
-user.save   # UPDATE
-user.delete! # DELETE
-```
-
-Models are classes, not structs: `save` assigns the generated `id` to the instance you hold.
-
-### 2. Class Methods for Queries
-
-The model class provides query methods:
-
-```crystal
-User.find(1)                 # => User?
-User.where(active: true).all # => Array(User)
-User.count
-User.all
-```
-
-### 3. Built-in Validations
-
-Validation logic lives in the model:
-
-```crystal
-class User
-  validate :email, presence: true, match: /@/
-  validate :name, presence: true
-end
-
-user = User.new("", "invalid")
-user.valid?  # false
-user.errors.map(&.message) # => ["email must match the pattern /@/", "name must be present"]
-user.save    # raises CQL::ActiveRecord::Validations::ValidationError; nothing is written
-```
-
-### 4. Lifecycle Callbacks
-
-Models respond to persistence events:
-
-```crystal
-class User
-  before_save :normalize_email
-  after_create :send_welcome_email
 
   private def normalize_email
     @email = @email.downcase.strip
     true
   end
-
-  private def send_welcome_email
-    # Send the welcome email
-    true
-  end
 end
 ```
 
-## Benefits
+One class answers every question about a user: which columns it has, which values are valid, what happens before it is written, and what the business operations are.
 
-### Simplicity
-
-Active Record is intuitive. The code reads naturally:
+## An Instance Saves, Updates and Deletes Itself
 
 ```crystal
-# Create a user, save it, find it, update it
-user = User.create!(name: "John", email: "john@example.com")
-found = User.find!(user.id!)
-found.name = "Jane"
-found.save
+user = User.new("Ada", "ADA@example.com")
+user.save        # INSERT INTO users (name, email, active) VALUES (?, ?, ?); assigns user.id
+user.email       # => "ada@example.com" (normalized by before_save)
+user.name = "Ada L."
+user.save        # UPDATE users SET name = ?, email = ?, active = ? WHERE users.id = ?
+user.deactivate! # => true
+user.delete!     # DELETE FROM users WHERE users.id = ?; user.id is nil again
 ```
 
-### Rapid Development
+Models are classes, not structs: `save` assigns the generated `id` to the very instance you hold, which a struct copy would not see.
 
-Everything you need is in one place:
+## The Class Is the Query Entry Point
+
+```crystal
+User.find(1)                           # User?, nil when missing
+User.find!(1)                          # User, raises DB::NoResultsError when missing
+User.find_by(email: "ada@example.com") # User?
+User.where(active: true).all           # Array(User)
+User.count                             # Int64 | Int32
+```
+
+## Validations and Callbacks Guard Each Write
+
+```crystal
+draft = User.new("", "invalid")
+draft.valid?                # => false
+draft.errors.map(&.message) # => ["name must be present", "email must match the pattern /@/"]
+draft.save                  # raises CQL::ActiveRecord::Validations::ValidationError; nothing is written
+```
+
+| Call | Invalid record | A `before_*` callback returns `false` |
+| :--- | :--- | :--- |
+| `user.save` | raises `CQL::ActiveRecord::Validations::ValidationError` | returns `false` |
+| `user.save!` | raises `ValidationError` | raises `CQL::RecordNotSaved` |
+| `user.create!` | raises `ValidationError` | callbacks do not run |
+| `User.create!(name: "", email: "x")` | inserts without validating | callbacks do not run |
+
+`save` validates once, before `before_save`, so a value a callback sets is not validated. A callback halts the save only by returning `false`; any other value, including `nil`, lets it continue. See [Add Validations](../../how-to/models/add-validations.md) and [Use Callbacks](../../how-to/models/use-callbacks.md).
+
+## Associations Are Declared on the Model
 
 ```crystal
 class Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :posts
+  db_context AppDB, :posts
 
-  property title : String
-  property body : String
   property user_id : Int64
+  property title : String
   property slug : String = ""
 
   belongs_to :user, User, :user_id
   has_many :comments, Comment, :post_id
 
   validate :title, presence: true
-
   before_save :update_slug
 
-  def initialize(@title : String, @body : String, @user_id : Int64)
+  def initialize(@title : String, @user_id : Int64)
   end
 
   private def update_slug
-    @slug = @title.downcase.gsub(/[^a-z0-9]+/, "-").strip("-")
+    @slug = @title.downcase.gsub(/[^a-z0-9]+/, "-").strip('-')
+    true
   end
 end
+
+author = User.create!(name: "Grace", email: "grace@example.com")
+post = Post.new("Hello, World!", author.id!)
+post.save
+post.slug                 # => "hello-world"
+post.user                 # User?, one SELECT on first access
+post.comments.all         # Array(Comment); the post must be saved first
 ```
-
-### Discoverability
-
-Looking at a model tells you everything about that entity: its data, validations, relationships, and behavior.
 
 ## Trade-offs
 
-### Coupling
+| Strength | Cost |
+| :--- | :--- |
+| Code reads like the domain: `user.save`, `post.comments` | Domain logic is coupled to the table layout; a schema change can ripple into business code |
+| Everything about an entity is in one class | Models in a large domain grow into long classes |
+| Little setup: no mapper or repository layer | Testing a model usually needs a database (an in-memory SQLite file works well) |
 
-Active Record couples your domain logic to the database structure. Changes to the database schema may require changes to business logic.
+Active Record fits CRUD-heavy applications, prototypes, and domains whose objects look like their tables. When business rules must not know about storage, data comes from more than one source, or tests must run without a database, consider the [Repository pattern](repository.md).
 
-### Testing
-
-Models are harder to test in isolation because they depend on the database.
-
-### Complexity
-
-For complex domains, models can become bloated with too much logic.
-
-## When Active Record Works Best
-
-- CRUD-heavy applications
-- Rapid prototyping
-- Small to medium applications
-- When database schema closely matches domain model
-
-## When to Consider Alternatives
-
-- Complex business logic
-- Multiple data sources
-- Need for database-agnostic domain
-- Heavy testing requirements
-
-## Comparison with Other Patterns
-
-| Pattern | Data | Persistence Logic | Business Logic |
-|---------|------|-------------------|----------------|
-| Active Record | In model | In model | In model |
-| Repository | In model | In repository | In model |
-| Data Mapper | In entity | In mapper | In entity |
-
-## Example: Complex Active Record Model
-
-```crystal
-class Order
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :orders
-
-  property user_id : Int64
-  property status : String = "pending"
-  property total : Float64 = 0.0
-
-  def initialize(@user_id : Int64)
-  end
-
-  belongs_to :user, User, :user_id
-  has_many :order_items, OrderItem, :order_id
-
-  validate :status, in: ["pending", "paid", "shipped", "completed", "cancelled"]
-
-  before_save :calculate_total
-  after_save :notify_status_change
-
-  def pay!
-    @status = "paid"
-    save
-  end
-
-  def ship!
-    raise "Cannot ship unpaid order" unless status == "paid"
-    @status = "shipped"
-    save
-  end
-
-  private def calculate_total
-    # Associations can only be read once the record has an id
-    @total = order_items.all.sum(&.subtotal) if persisted? # subtotal : Float64 on OrderItem
-    true
-  end
-
-  private def notify_status_change
-    # Send notification
-    true
-  end
-end
-```
-
-This model:
-- Defines data (properties)
-- Handles its own persistence (save, validations)
-- Contains business logic (pay!, ship!)
-- Manages relationships (belongs_to, has_many)
-- Responds to lifecycle events (callbacks)
-
-All in one cohesive unit - that's the Active Record pattern.
+| Pattern | Holds the data | Talks to the database | In CQL |
+| :--- | :--- | :--- | :--- |
+| Active Record | the model | the model | `include CQL::ActiveRecord::Model(Int64)` |
+| Repository | a plain entity | the repository | `CQL::Repository(T, Pk)`, or your own class around a model |
+| Data Mapper | a plain entity | a mapper that knows both | not provided |

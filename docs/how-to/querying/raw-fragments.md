@@ -1,126 +1,98 @@
 # Use Raw SQL Fragments Safely
 
-This guide shows you how to write a piece of SQL by hand inside a query (`lower(name) = ?`, a database function, a JSON operator) while every value is still bound as a parameter.
+Write a piece of SQL by hand inside a query (`lower(name) = ?`, a database function, a JSON operator) while every value stays a bound parameter.
 
-## Add a fragment to where
+## Add a Fragment to where
 
 ```crystal
-AppDB.query.from(:customers).select(:name)
-  .where("lower(customers.name) = ? AND customers.balance > ?", "ada", 10)
-  .to_sql
+def customer_names # a fresh query for each example
+  AppDB.query.from(:customers).select(:name)
+end
+
+customer_names.where("lower(customers.name) = ? AND customers.balance > ?", "ada", 10).to_sql
+# => {"SELECT customers.name FROM customers WHERE lower(customers.name) = ? AND customers.balance > ?", ["ada", 10]}
+
+# A hostile value stays a value: the SQL text is unchanged
+customer_names.where("customers.name = ?", "x'; DROP TABLE customers; --")
+# ... WHERE customers.name = ?   params: ["x'; DROP TABLE customers; --"]
 ```
 
+{% hint style="danger" %}
+The fragment itself must be a literal you wrote. Never build it from user input with `#{}` or `+`; pass user input as a bound value.
+{% endhint %}
+
+## Bind Values
+
 ```crystal
-# => {"SELECT customers.name FROM customers WHERE lower(customers.name) = ? AND customers.balance > ?",
-#     ["ada", 10]}
+# Positional ?: values in order; an Array expands for IN (?)
+customer_names.where("customers.id IN (?)", [1, 2, 3])
+# ... WHERE customers.id IN (?, ?, ?)   params: [1, 2, 3]
+
+# Named :name: a name used twice is bound twice
+customer_names.where("balance BETWEEN :min AND :max OR balance > :min", min: 5, max: 9)
+# ... WHERE balance BETWEEN ? AND ? OR balance > ?   params: [5, 9, 5]
+customer_names.where("id IN (:ids)", ids: [4, 5])     # ... WHERE id IN (?, ?)
+
+# Left alone: ?? is a literal ? (PostgreSQL jsonb), :: is a cast,
+# and quoted strings, quoted identifiers and comments are never placeholders
+customer_names.where("data ?? 'key' AND id = ?", 1)   # PostgreSQL: ... WHERE data ? 'key' AND id = $1
+customer_names.where("customers.id::text = :id", id: "7")
+customer_names.where("name = 'what? :not_a_bind' AND id = ? -- really? :x", 1) # params: [1]
 ```
 
-The values travel in the parameter array, never in the SQL text. A hostile value stays a value:
+## Combine with Other Conditions
 
 ```crystal
-query.where("customers.name = ?", "x'; DROP TABLE customers; --")
-# SQL text unchanged, params: ["x'; DROP TABLE customers; --"]
-```
-
-**The fragment itself must be a literal that you wrote.** Never build it from user input with `#{}` or `+`; pass user input as a bound value.
-
-## Placeholders
-
-### Positional `?`
-
-Values are matched in order. An array expands to a comma-separated list, which is what `IN (?)` needs:
-
-```crystal
-query.where("customers.id IN (?)", [1, 2, 3])
-# WHERE customers.id IN (?, ?, ?)   params: [1, 2, 3]
-```
-
-### Named `:name`
-
-Pass named arguments. A name used twice is bound twice:
-
-```crystal
-query.where("balance BETWEEN :min AND :max OR credit > :min", min: 5, max: 9)
-# WHERE balance BETWEEN ? AND ? OR credit > ?   params: [5, 9, 5]
-
-query.where("id IN (:ids)", ids: [4, 5])
-# WHERE id IN (?, ?)
-```
-
-Do not mix `?` and `:name` in one fragment.
-
-### What is left alone
-
-- `??` is a literal `?` (for PostgreSQL's jsonb operator): `where("data ?? 'key' AND id = ?", 1)` renders `data ? 'key' AND id = $1` on PostgreSQL.
-- `::` is a cast: `where("customers.id::text = :id", id: "7")`.
-- Text inside quoted strings, quoted identifiers and comments (`-- ...`, `/* ... */`) is never treated as a placeholder.
-
-## Combine with other conditions
-
-Fragments are ANDed with the rest of the `where` and numbered correctly on PostgreSQL:
-
-```crystal
-query.where(city: "Tulum").where("balance > ? AND balance < ?", 1, 9).to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
+# Fragments are ANDed with the rest and numbered in order on PostgreSQL
+customer_names.where(city: "Tulum").where("balance > ? AND balance < ?", 1, 9).to_sql(for: CQL::Adapter::Postgres)
 # ... WHERE (customers.city = $1) AND (balance > $2 AND balance < $3)
+
+# Inside where { }, raw builds a condition for & and | (on a model's typed block, write CQL.raw)
+customer_names.where { raw("lower(customers.name) = ?", "ada") | (customers.id == 1) }
+# ... WHERE (lower(customers.name) = ?) OR (customers.id = ?)   params: ["ada", 1]
+
+customer_names.where(CQL.raw("balance > :b", b: 3))  # CQL.raw(sql, *positional, **named) outside a block
 ```
 
-## Use a fragment inside a where block
-
-Inside `where { }`, `raw(...)` builds a fragment you can combine with `&`, `|` and the typed conditions:
-
-```crystal
-query.where { raw("lower(customers.name) = ?", "ada") | (customers.id == 1) }
-# WHERE (lower(customers.name) = ?) OR (customers.id = ?)   params: ["ada", 1]
-```
-
-Outside a block, `CQL.raw(sql, *positional, **named)` returns the same condition, and `where(condition)` accepts it:
-
-```crystal
-query.where(CQL.raw("balance > :b", b: 3))
-```
-
-## Models, Update and Delete
-
-The same string form works on model queries, query builders, `Update` and `Delete`:
+## Use Fragments on Models, Update and Delete
 
 ```crystal
 User.where("age > ?", 18).all
-User.query.where("age > :a", a: 18).where("name = ?", "x")
+User.query.where("age > :a", a: 18).where("name = ?", "x")  # ... WHERE (age > ?) AND (name = ?)
 User.where("name IN (?)", ["ada", "grace"]).all
 
-AppDB.update.table(:customers).set(city: "X").where("balance > :b", b: 3)
+AppDB.update.table(:customers).set(city: "X").where("balance > :b", b: 3) # params: ["X", 3], SET first
 AppDB.delete.from(:customers).where("balance > ?", 3)
 ```
 
-Update parameters are ordered `SET` values first, then the fragment's (`["X", 3]`).
-
-## NULL
-
-In a raw fragment `nil` binds as `NULL`, so `name = ?` never matches it (the hash form `where(city: nil)` emits `IS NULL` for you). Use the null-safe comparison:
+## Match NULL
 
 ```crystal
-query.where("customers.city IS NOT DISTINCT FROM ?", nil)
+customer_names.where("customers.city = ?", nil)                    # binds NULL, so it never matches
+customer_names.where("customers.city IS NOT DISTINCT FROM ?", nil) # null-safe; the hash form where(city: nil) emits IS NULL
 ```
 
-## Mistakes are errors, not silent
+## Avoid These Errors
 
-| Mistake | Result |
-| --- | --- |
-| Too few or too many positional values | `ArgumentError` "expects 2 value(s), got 1" |
-| Missing or unused named value | `ArgumentError` "Missing value for :max" / "Unused named value(s): :extra" |
-| Named values for a fragment without `:name` placeholders, or positional values for a `:name` fragment | `ArgumentError` naming the style mismatch |
-| Mixing `?` and `:name` | `ArgumentError` |
-| An empty array | `ArgumentError` ("Cannot bind an empty array"); guard the condition instead |
-| A NUL byte in the fragment | `ArgumentError` |
-| A value type that cannot be a parameter | compile-time error listing the bindable types |
+```crystal
+customer_names.where("a = ? AND b = ?", 1)            # ArgumentError: Fragment expects 2 value(s), got 1
+customer_names.where("a < :max", min: 1)              # ArgumentError: Missing value for :max
+customer_names.where("a < :max", max: 1, extra: 2)    # ArgumentError: Unused named value(s): :extra
+customer_names.where("a = 1", tenant: 5)              # ArgumentError: Fragment has no :name placeholders but got named value(s): :tenant
+customer_names.where("a = :x", 5, x: 1)               # ArgumentError: Fragment uses :name placeholders but got 1 positional value(s)
+customer_names.where("a = ? AND b = :b", 1, b: 2)     # ArgumentError: Cannot mix ? and :name placeholders in one fragment
+customer_names.where("id IN (?)", [] of Int32)        # ArgumentError: Cannot bind an empty array; guard the condition instead
+customer_names.where("a = ?\0", 1)                    # ArgumentError: A SQL fragment cannot contain a NUL byte
+# A value type that cannot be a parameter fails to compile
+```
 
-## Limits
+{% hint style="warning" %}
+Only `where` accepts fragments, not `having`. The placeholder scanner does not understand PostgreSQL `$$...$$` strings, MySQL backslash escapes or array slices such as `a[1:n]`.
+{% endhint %}
 
-- Only `where` accepts fragments (not `having`).
-- PostgreSQL `$$...$$` strings, MySQL backslash escapes and array slices such as `a[1:n]` are not understood by the placeholder scanner.
-- A column literally named `sql` still works with `where(sql: "abc")`.
+A column literally named `sql` still filters with `where(sql: "abc")`.
 
-## Related
+## See Also
 
 - [Filter with Where Clauses](filter-records.md)
 - [Write Typed Queries](typed-where-dsl.md)

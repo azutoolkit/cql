@@ -1,355 +1,159 @@
 # Callback Hooks Reference
 
-Complete reference for lifecycle callbacks in CQL Active Record models.
+The ten lifecycle callback macros, the order they run in, and which persistence calls run them. Every callback names an instance method; there are no block, `if:`, `unless:` or `around_*` forms.
 
-## Overview
+## Macros
 
-Callbacks allow you to trigger logic at specific points in a record's lifecycle:
-
-```
-┌───────────────────┐
-│ before_validation │ ─── Runs first
-├───────────────────┤
-│ after_validation  │ ─── Runs before the validation rules are evaluated
-├───────────────────┤
-│    validations    │ ─── Raise ValidationError when invalid
-├───────────────────┤
-│    before_save    │ ─── Runs before INSERT or UPDATE
-├───────────────────┤
-│       save        │ ─── Database operation
-├───────────────────┤
-│    after_save     │ ─── Runs after INSERT or UPDATE
-└───────────────────┘
-```
-
-Each callback is registered with a macro that takes a method name as a symbol (`before_save :normalize_email`). There are no block, `if:` or `unless:` forms. Callbacks run for `save`, `save!` and the instance `delete!`; `create!`, `update!`, `touch` and the class-level `delete!`, `delete_all`, `delete_by!` and `update_all` skip them; `delete_all` on a query runs each record's destroy callbacks, in one transaction, when the model declares any (or declares `dependent:` associations), and otherwise deletes in bulk. Several callbacks for one event run in the order they were declared.
-
-## Available Callbacks
-
-### before_validation
-
-Runs first when saving, before anything else.
+| Macro | Runs | `false` halts |
+| :--- | :--- | :--- |
+| **`before_validation :method`** | First in every `save` | `save` returns `false` before validating |
+| **`after_validation :method`** | Right after `before_validation`, before the rules are evaluated, so it cannot see the result | `save` returns `false` before validating |
+| **`before_save :method`** | After validation passes, for inserts and updates | `save` returns `false` |
+| **`before_create :method`** | After `before_save`, new records only | `save` returns `false` |
+| **`before_update :method`** | After `before_save`, persisted records only | `save` returns `false` |
+| **`after_create :method`** | After the INSERT | later `after_create` callbacks only |
+| **`after_update :method`** | After the UPDATE | later `after_update` callbacks only |
+| **`after_save :method`** | Last in `save`, after `after_create` / `after_update` | later `after_save` callbacks only |
+| **`before_destroy :method`** | First in the instance `delete!` (and soft-delete `delete!` / `force_delete!`) | `delete!` returns `false`; nothing is deleted |
+| **`after_destroy :method`** | After a DELETE that removed a row, before `id` is cleared | later `after_destroy` callbacks only |
 
 ```crystal
-struct User
+class Post
   include CQL::ActiveRecord::Model(Int64)
 
-  before_validation :strip_name
-
-  private def strip_name
-    @name = @name.strip
-    true
-  end
-end
-```
-
-**Use cases:**
-- Normalizing input before validation rules look at it
-
-### after_validation
-
-Runs right after `before_validation` and before the validation rules are evaluated, so it cannot see the validation result. Use `before_save` for logic that must only run on valid records.
-
-```crystal
-struct User
-  after_validation :log_attempt
-
-  private def log_attempt
-    Log.debug { "validating #{@email}" }
-    true
-  end
-end
-```
-
-### before_save
-
-Runs before any save operation (create or update).
-
-```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-
-  before_save :normalize_email
-
-  private def normalize_email
-    @email = @email.downcase.strip
-    true  # Return anything but false to continue
-  end
-end
-```
-
-**Use cases:**
-- Data normalization
-- Setting computed fields
-- Guarding the save with a database lookup (return `false` to halt)
-
-### after_save
-
-Runs after any successful save operation.
-
-```crystal
-struct Order
-  after_save :update_inventory
-
-  private def update_inventory
-    order_items.each do |item|
-      item.product.decrement_stock!(item.quantity)
-    end
-    true
-  end
-end
-```
-
-**Use cases:**
-- Triggering side effects
-- Updating related records
-- Sending notifications
-- Cache invalidation
-
-### before_create
-
-Runs only before INSERT operations (new records).
-
-```crystal
-struct User
-  before_create :set_defaults
-
-  private def set_defaults
-    @role ||= "member"
-    @api_token = Random::Secure.hex(16)
-    true
-  end
-end
-```
-
-**Use cases:**
-- Setting default values
-- Generating tokens or UUIDs
-- Recording creation metadata
-
-### after_create
-
-Runs only after successful INSERT operations.
-
-```crystal
-struct User
-  after_create :send_welcome_email
-
-  private def send_welcome_email
-    Mailer.welcome(@email).deliver
-    true
-  end
-end
-```
-
-**Use cases:**
-- Sending welcome emails
-- Creating related records
-- Notifying other systems
-
-### before_update
-
-Runs only before UPDATE operations (existing records).
-
-```crystal
-struct Post
-  before_update :stamp_edit
-
-  private def stamp_edit
-    @edited_at = Time.utc
-    true
-  end
-end
-```
-
-**Use cases:**
-- Recording edit metadata
-- Validating state transitions
-- Incrementing counters
-
-Include the opt-in [`CQL::ActiveRecord::DirtyTracking`](../../how-to/models/dirty-tracking.md) (after `Model`) for `changed?`, `changes` (`{old, new}` per attribute) and `attribute_changed?(name)`; there are no `*_was` readers. Without it, load the stored row with `Post.find(id)` inside the callback.
-
-### after_update
-
-Runs only after successful UPDATE operations.
-
-```crystal
-struct Post
-  after_update :notify_subscribers
-
-  private def notify_subscribers
-    if @published
-      subscribers.each do |sub|
-        Mailer.new_post(sub, self).deliver
-      end
-    end
-    true
-  end
-end
-```
-
-**Use cases:**
-- Change notifications
-- Audit logging
-- Syncing with external systems
-
-### before_destroy
-
-Runs before DELETE operations. It fires from the instance `delete!` (and from the soft-delete `delete!` and `force_delete!`); returning `false` makes `delete!` return `false` without deleting.
-
-```crystal
-struct User
-  before_destroy :check_can_delete
-
-  private def check_can_delete
-    if posts_any?
-      return false  # Halts - the row is kept
-    end
-    true
-  end
-end
-```
-
-**Use cases:**
-- Validation before deletion
-- Checking dependencies
-- Preventing deletion of protected records
-
-### after_destroy
-
-Runs after a successful DELETE (at least one row removed). The record's `id` is cleared afterwards, so capture it in `before_destroy` if you need it later.
-
-```crystal
-struct User
-  after_destroy :cleanup_files
-
-  private def cleanup_files
-    FileUtils.rm_rf("/uploads/users/#{@name}")
-    true
-  end
-end
-```
-
-**Use cases:**
-- Cleaning up files
-- Removing from search indexes
-- Cascade deletes not handled by database
-
-## Return Values
-
-A callback halts the operation only when it returns `false`. Any other value, including `nil` and `true`, lets the chain continue, but return `true` explicitly so a stray `false` from your last expression cannot halt it by accident.
-
-```crystal
-# Stops the save operation
-private def check_something
-  if some_condition_fails
-    return false  # Halts operation
-  end
-  true  # Continues operation
-end
-```
-
-When a `before_*` callback halts, `save` returns `false` and `save!` raises `CQL::RecordNotSaved`. Halting does not add anything to `errors`; `errors` only holds validation rule results. A `false` from an `after_*` callback stops the remaining callbacks for that event but does not undo the database change.
-
-## Callback Order
-
-When saving a new record:
-1. `before_validation`
-2. `after_validation`
-3. validation rules
-4. `before_save`
-5. `before_create`
-6. (database INSERT)
-7. `after_create`
-8. `after_save`
-
-When updating an existing record:
-1. `before_validation`
-2. `after_validation`
-3. validation rules
-4. `before_save`
-5. `before_update`
-6. (database UPDATE)
-7. `after_update`
-8. `after_save`
-
-When deleting with `record.delete!`:
-1. `before_destroy`
-2. (database DELETE)
-3. `after_destroy`
-
-## Complete Example
-
-```crystal
-struct Article
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :articles
-
-  property id : Int64?
-  property title : String
-  property slug : String?
-  property body : String
+  property title : String = ""
+  property slug : String = ""
   property published : Bool = false
   property published_at : Time?
-  property view_count : Int32 = 0
 
-  # Before any save
-  before_save :generate_slug
+  before_validation :strip_title      # @title = @title.strip
+  after_validation :log_attempt       # runs before the rules
+  before_save :set_slug               # inserts and updates
+  before_create :default_title        # inserts only
+  before_update :stamp_publish        # updates only
+  after_create :log_created
+  after_update :log_updated
+  after_save :log_saved
+  before_destroy :keep_published      # false keeps the row
+  after_destroy :log_destroyed
 
-  # Only on create
-  before_create :set_defaults
-  after_create :notify_admin
+  def initialize(@title : String = "")
+  end
 
-  # Only on update
-  before_update :check_publish_state
-  after_update :invalidate_cache
+  private def strip_title
+    @title = @title.strip
+    true
+  end
 
-  # On destroy
-  before_destroy :archive_content
-  after_destroy :cleanup
+  private def log_attempt
+    Log.debug { "validating post #{@title}" }
+    true
+  end
 
-  private def generate_slug
+  private def set_slug
     @slug = @title.downcase.gsub(/[^a-z0-9]+/, "-")
     true
   end
 
-  private def set_defaults
-    @view_count = 0
+  private def default_title
+    @title = "Untitled" if @title.empty?
     true
   end
 
-  private def notify_admin
-    AdminMailer.new_article(self).deliver
+  private def stamp_publish
+    @published_at ||= Time.utc if @published
     true
   end
 
-  private def check_publish_state
-    if @published && @published_at.nil?
-      @published_at = Time.utc
-    end
+  private def log_created
+    Log.info { "created post #{@id}" }
     true
   end
 
-  private def invalidate_cache
-    Cache.delete("article:#{@id}")
-    Cache.delete("articles:list")
+  private def log_updated
+    Log.info { "updated post #{@id}" }
     true
   end
 
-  private def archive_content
-    Archive.create!(content: @body, type: "Article")
+  private def log_saved
+    Log.info { "saved post #{@id}" }
     true
   end
 
-  private def cleanup
-    Cache.delete("article:#{@id}")
+  private def keep_published
+    !@published
+  end
+
+  private def log_destroyed
+    Log.info { "deleted post #{@id}" }
     true
   end
 end
+```
+
+Several callbacks for one event run in the order they are declared.
+
+## Order
+
+| Step | `save` on a new record | `save` on a persisted record | `delete!` |
+| :--- | :--- | :--- | :--- |
+| 0 | timestamps set | timestamps set | `dependent: :restrict_with_error` check (raises `RelationError`) |
+| 1 | `before_validation` | `before_validation` | `before_destroy` |
+| 2 | `after_validation` | `after_validation` | `DELETE` (with `dependent:` handling) |
+| 3 | validation rules (raise `ValidationError` when invalid) | validation rules | `after_destroy` |
+| 4 | `before_save` | `before_save` | `id` cleared |
+| 5 | `before_create` | `before_update` | |
+| 6 | `INSERT` | `UPDATE` | |
+| 7 | `after_create` | `after_update` | |
+| 8 | `after_save` | `after_save` | |
+
+```crystal
+post = Post.new("  Hello  ")
+post.save    # before_validation, after_validation, before_save, before_create, after_create, after_save
+post.save    # before_validation, after_validation, before_save, before_update, after_update, after_save
+post.delete! # before_destroy, after_destroy
+```
+
+## Which calls run callbacks
+
+| Call | Callbacks | Validates |
+| :--- | :--- | :--- |
+| `record.save`, `record.save!` | save callbacks | yes (raises `ValidationError`) |
+| `record.delete!`; soft-delete `delete!`, `force_delete!` | destroy callbacks | no |
+| `Post.where(...).delete_all` when the model declares destroy callbacks, `dependent:` or `many_to_many` | each record's destroy callbacks, in one transaction | no |
+| `has_many` / `has_one ..., dependent: :destroy` | the child's destroy callbacks | no |
+| `record.create!`, `collection.create(**attrs)` | none | yes |
+| `Model.create!(**attrs)`, `Model.create!(record)`, `collection.create(record)` | none | no |
+| `record.update!`, `Model.update!(id, attrs)`, `Model.update_by`, `Model.update_all` | none | no |
+| `Model.delete!(id)`, `Model.delete_by!`, `Model.delete_all`, `Post.where(...).delete_all` otherwise | none | no |
+| `record.touch`, `restore!`, `insert_all`, `upsert_all` | none | no |
+
+## Return values
+
+| Callback returns | Effect |
+| :--- | :--- |
+| `false` from a `before_*` | `save` returns `false` and `save!` raises `CQL::RecordNotSaved` (`CQL::RecordInvalid` if the record is also invalid); `delete!` returns `false`. Nothing is added to `errors`. |
+| `false` from an `after_*` | The remaining callbacks of that event are skipped; the next event still runs (`after_save` follows a halted `after_create`). The database change stays. |
+| anything else, including `nil` | The chain continues. Return `true` explicitly so a trailing `false` cannot halt by accident. |
+
+## Helper methods
+
+| Method | Returns | Behavior |
+| :--- | :--- | :--- |
+| `record.run_callbacks(type : Symbol)` | `Bool` | Runs the callbacks for one event (`:before_save`, ...); `false` when one returned `false`. |
+| `record.run_save_callbacks(create = true)` | `Bool` | `before_validation`, `after_validation`, `before_save`, then `before_create` or `before_update`. Not used by `save`. |
+| `record.run_after_save_callbacks(create = true)` | `Bool` | `after_create` or `after_update`, then `after_save`. Not used by `save`. |
+| `record.run_destroy_callbacks`, `record.run_after_destroy_callbacks` | `Bool` | `before_destroy` / `after_destroy`. |
+| `Model.destroy_callbacks?` | `Bool` | `true` when the model declares `before_destroy` or `after_destroy`. |
+
+```crystal
+post.run_callbacks(:before_save) # => true
+Post.destroy_callbacks?          # => true
 ```
 
 ## See Also
 
 - [Use Callbacks](../../how-to/models/use-callbacks.md)
-- [Define a Model](../../how-to/models/define-model.md)
-- [Add Validations](../../how-to/models/add-validations.md)
+- [Track Changes (DirtyTracking)](../../how-to/models/dirty-tracking.md)
+- [Validation Options](validation-options.md)
+- [Error Codes](../error-codes.md)

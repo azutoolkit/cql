@@ -1,206 +1,106 @@
 # Validation Options Reference
 
-Complete reference for all validation options available in CQL models.
-
-## Validation Macro
+Every predicate the `validate` macro accepts, the value it takes, when it passes and its default message. The message is what `errors.map(&.message)` returns.
 
 ```crystal
-validate :field_name, option: value, option2: value2
+validate :name, presence: true, size: 2..50, message: "Name is invalid"
 ```
 
-## Supported Options
+`validate attribute, **options` stores the options per attribute: a second `validate` for the same attribute replaces the first, so put every rule for one attribute in one call. An unknown option or an attribute without a getter is a compile-time error (`CQL validation error in User: ...`).
 
-`eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `match`, `size`, `presence`, `required`, `confirmation`, `accept`, plus `message` (and an `on` context option that the macro accepts but that no spec exercises, so do not rely on it). Any other option is a compile-time error that lists the supported ones. There are no `format`, `uniqueness`, `length`, `numericality` or `inclusion` options. A `validate` on a property the model does not define is also a compile-time error.
+## Predicates
 
-When a rule fails, CQL adds an error with the default message below, or your `message:` if you gave one. The default messages are what `errors.map(&.message)` returns.
+| Option | Value | Passes when | Default message |
+| :--- | :--- | :--- | :--- |
+| **`presence`** | `true` | not `nil` and not `empty?` (value must respond to `empty?`, so not on numbers) | `name must be present` |
+| **`required`** | `true` | not `nil`; `""` passes | `nick is required` |
+| **`match`** | `Regex` | the `String` matches (the getter must be `String`, not `String?`) | `email must match the pattern /@/` |
+| **`size`** | `Int32` or `Range` | `value.size` equals it, or is in the range (strings, arrays) | `code must have a size of 5`, `tags must have a size of 1..3` |
+| **`gt`** | number or `Time` | `value > x` | `age must be greater than 0` |
+| **`gte`** | number or `Time` | `value >= x` | `starts_at must be greater than or equal to Time.utc(2020, 1, 1)` |
+| **`lt`** | number or `Time` | `value < x` | `age must be less than 150` |
+| **`lte`** | number or `Time` | `value <= x` | `age must be less than or equal to 150` |
+| **`eq`** | any | `value == x` | `priority must be equal to 1` |
+| **`in`** | `Array` or `Range` | the value is included | `role must be included in ["admin", "user"]`, `rating must be included in 1..5` |
+| **`exclude`** | `Array` or `Range` | the value is not included | `password must not be included in ["password", "123456"]` |
+| **`confirmation`** | `Symbol` (another getter) | the two getters are equal | `password_confirmation confirmation doesn't match` |
+| **`accept`** | `true`, a value, or an `Array` | `true`: one of `true "true" "1" "on" "yes"`; otherwise equal to the value or in the array | `terms must be accepted` |
+| **`message`** | `String` | | Replaces the default message of every failing rule in that call |
+| **`on`** | `Symbol` | | Do not use: the macro accepts it, but the model then fails to compile (`undefined macro variable 'context'`). |
 
-### presence
-
-Validates that a field is not nil and not empty.
-
-```crystal
-validate :name, presence: true
-validate :email, presence: true
-```
-
-**Error:** "field_name must be present"
-
-### required
-
-Validates that a field is not nil (an empty string passes).
-
-```crystal
-validate :user_id, required: true
-```
-
-**Error:** "field_name is required"
-
-### match
-
-Validates that a string field matches a regular expression.
+A `nil` value fails every predicate, so rules on a nilable getter also reject `nil`. Messages interpolate the option's source text, as in `Time.utc(2020, 1, 1)`.
 
 ```crystal
-validate :email, match: /@/
-validate :phone, match: /^\d{10}$/
-validate :slug, match: /^[a-z0-9-]+$/
-```
-
-The property must be a non-nilable `String`; `match` has no overload for `String?`.
-
-**Error:** "field_name must match the pattern /regex/"
-
-### size
-
-Validates the length of a string or the size of a collection. An integer means exactly that size, a range means between.
-
-```crystal
-validate :zip_code, size: 5               # Exactly 5
-validate :password, size: 8..128          # Range
-validate :username, size: 3..20
-validate :tags, size: 1..5                # Array size
-```
-
-**Error:** "field_name must have a size of X"
-
-### gt / gte / lt / lte
-
-Validates numeric values are within bounds.
-
-```crystal
-validate :age, gte: 0                # Greater than or equal to 0
-validate :age, lte: 150              # Less than or equal to 150
-validate :quantity, gte: 1, lte: 100 # Between 1 and 100
-validate :price, gt: 0               # Greater than 0
-```
-
-The same comparisons work on `Time` values. `eq` checks equality.
-
-```crystal
-validate :priority, eq: 1
-```
-
-**Error:** "field_name must be greater than X", "field_name must be greater than or equal to X", "field_name must be less than X", "field_name must be less than or equal to X", "field_name must be equal to X"
-
-### in
-
-Validates that a value is in a list of allowed values.
-
-```crystal
-validate :status, in: ["pending", "active", "cancelled"]
-validate :role, in: ["admin", "moderator", "user"]
-validate :priority, in: [1, 2, 3, 4, 5]
-```
-
-Ranges work too: `validate :rating, in: 1..5`.
-
-**Error:** "field_name must be included in X"
-
-### exclude
-
-Validates that a value is not in a list of excluded values.
-
-```crystal
-validate :username, exclude: ["admin", "root", "system"]
-validate :status, exclude: ["deleted"]
-```
-
-**Error:** "field_name must not be included in X"
-
-### confirmation
-
-Validates that a field equals another property, such as a password and its confirmation. The value is the name of the other property.
-
-```crystal
-validate :password_confirmation, confirmation: :password
-```
-
-**Error:** "field_name confirmation doesn't match"
-
-### accept
-
-Validates that a field holds an accepted value: `true`, `"true"`, `"1"`, `"on"` or `"yes"`.
-
-```crystal
-validate :terms_accepted, accept: true
-```
-
-**Error:** "field_name must be accepted"
-
-### message
-
-Overrides the default error message for every rule in that `validate` call.
-
-```crystal
-validate :age, gt: 0, message: "Age must be a positive number"
-```
-
-## Combining Validations
-
-Multiple rules can be applied to a single field in one `validate` call. Use one call per field: the validations are stored per property, so a second `validate :email, ...` replaces the first one instead of adding to it.
-
-```crystal
-validate :email, presence: true, match: /@/
-validate :username, presence: true, size: 3..20, match: /^[a-z0-9_]+$/
-validate :age, presence: true, gte: 0, lte: 150
-```
-
-## Model Example
-
-```crystal
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
 
-  property id : Int64?
-  property email : String
-  property username : String
-  property password : String
-  property age : Int32?
+  property name : String = ""
+  property email : String = ""
+  property age : Int32 = 0
   property role : String = "user"
+  @[DB::Field(ignore: true)]
+  property nick : String? = nil
+  @[DB::Field(ignore: true)]
+  property code : String = "12345"
+  @[DB::Field(ignore: true)]
+  property tags : Array(String) = [] of String
+  @[DB::Field(ignore: true)]
+  property priority : Int32 = 1
+  @[DB::Field(ignore: true)]
+  property starts_at : Time = Time.utc
+  @[DB::Field(ignore: true)]
+  property rating : Int32 = 3
+  @[DB::Field(ignore: true)]
+  property password : String? = nil
+  @[DB::Field(ignore: true)]
+  property password_confirmation : String? = nil
+  @[DB::Field(ignore: true)]
+  property terms : String? = nil
 
-  # One validate call per property: a second call for the same property
-  # replaces the first, so combine all rules for a property in one call.
-  validate :email, presence: true, match: /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-  validate :username, presence: true, size: 3..20, match: /^[a-z0-9_]+$/
-  validate :password, presence: true, size: 8..128
+  validate :name, presence: true, size: 2..50
+  validate :nick, required: true
+  validate :email, match: /@/
+  validate :code, size: 5
+  validate :tags, size: 1..3
+  validate :age, gt: 0, lte: 150
+  validate :priority, eq: 1
+  validate :starts_at, gte: Time.utc(2020, 1, 1)
+  validate :role, in: ["admin", "user"]
+  validate :rating, in: 1..5
+  validate :password, exclude: ["password", "123456"]
+  validate :password_confirmation, confirmation: :password
+  validate :terms, accept: true
 
-  # Numeric constraints
-  validate :age, gte: 0, lte: 150
-
-  # Allowed values
-  validate :role, in: ["admin", "moderator", "user"]
-
-  def initialize(@email : String, @username : String, @password : String)
+  def initialize
   end
 end
 ```
 
-## Checking Validation
+## Methods
+
+| Method | Returns | Behavior |
+| :--- | :--- | :--- |
+| **`record.errors`** | `Array(CQL::ActiveRecord::Validations::Error)` | Runs every rule and custom validator; rebuilt on each call. Each `Error` has `field : Symbol` and `message : String`. |
+| **`record.valid?`** | `Bool` | `errors.empty?`. |
+| **`record.validate!`** | `Bool` | `true`, or raises `CQL::ActiveRecord::Validations::ValidationError`, whose `message` joins the error messages with `,`. |
+| `save`, `save!`, instance `create!`, `collection.create(**attrs)` | | Call `validate!`, so an invalid record raises instead of returning `false`. |
+| `Model.create!(**attrs)`, `update!`, `insert_all`, `upsert_all` | | Do not validate. |
+
+`errors`, `valid?` and `validate!` take an optional context argument; with `on:` unusable it has no effect.
 
 ```crystal
-user = User.new("test@example.com", "test", "password123")
-
-if user.valid?
-  user.save
-else
-  user.errors.each do |error|
-    puts "#{error.field}: #{error.message}"
-  end
-end
-
-# validate! raises when invalid
-begin
-  user.validate!
-rescue e : CQL::ActiveRecord::Validations::ValidationError
-  puts "Validation failed: #{e.message}"
-end
+user = User.new
+user.valid?                                  # => false
+user.errors.map { |e| {e.field, e.message} } # => [{:name, "name must be present"}, ...]
+user.validate!                               # raises ValidationError: "name must be present,name must have a size of 2..50,..."
 ```
 
-`save`, `save!` and `create!` run the same validations and raise `CQL::ActiveRecord::Validations::ValidationError` for an invalid record. `errors` returns an `Array(CQL::ActiveRecord::Validations::Error)` rebuilt on each call (each error has `field` and `message`).
+## Custom validators
 
-## Custom Validations
-
-For complex validations, subclass `CQL::ActiveRecord::Validations::CustomValidator` and register it with `use`:
+| API | Meaning |
+| :--- | :--- |
+| `class V < CQL::ActiveRecord::Validations::CustomValidator` | Subclass with `initialize(@record : Model)` and `valid? : Array(CQL::ActiveRecord::Validations::Error)`. Includes the predicate helpers (`gt?`, `presence?`, `match?`, ...). |
+| `use V, ...` | Registers one or more validators on the model; their errors come before the `validate` rules' errors. |
 
 ```crystal
 class DiscountValidator < CQL::ActiveRecord::Validations::CustomValidator
@@ -208,33 +108,31 @@ class DiscountValidator < CQL::ActiveRecord::Validations::CustomValidator
   end
 
   def valid? : Array(CQL::ActiveRecord::Validations::Error)
-    if @record.discount > @record.total
-      [CQL::ActiveRecord::Validations::Error.new(:discount, "cannot exceed total")]
-    else
-      [] of CQL::ActiveRecord::Validations::Error
-    end
+    return [] of CQL::ActiveRecord::Validations::Error if @record.discount <= @record.total
+    [CQL::ActiveRecord::Validations::Error.new(:discount, "cannot exceed total")]
   end
 end
 
-struct Order
+class Order
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :orders
 
-  property id : Int64?
-  property total : Float64
+  property total : Float64 = 0.0
   property discount : Float64 = 0.0
 
   use DiscountValidator
 
-  def initialize(@total : Float64, @discount : Float64 = 0.0)
+  def initialize(@total : Float64 = 0.0, @discount : Float64 = 0.0)
   end
 end
+
+Order.new(10.0, 20.0).errors.map(&.message) # => ["cannot exceed total"]
 ```
 
-A `before_save` callback that returns `false` can also stop a save, but it does not produce validation errors.
+There are no `format`, `uniqueness`, `length`, `numericality` or `inclusion` options. A `before_save` callback that returns `false` also stops a save, without adding errors.
 
 ## See Also
 
 - [Add Validations](../../how-to/models/add-validations.md)
 - [Fix Validation Errors](../../how-to/troubleshooting/validation-errors.md)
 - [Callback Hooks Reference](callback-hooks.md)
+- [Error Codes](../error-codes.md)

@@ -1,159 +1,124 @@
 # Write Typed Queries
 
-This guide shows you how to filter and order model queries with bare column names that the compiler checks: `where { (age >= 18) & (status == "active") }`.
+Filter, order and join model queries with bare column names that the compiler checks: `where { (age >= 18) & (status == "active") }`.
 
-The examples use these models:
+The examples use a `User` with `name`, `email`, `role`, `status : String`, `age : Int32`, `score : Float64?` and `created_at : Time?`, which `has_one :profile` (`country : String`) and `has_many :posts`.
 
-```crystal
-class Author
-  include CQL::ActiveRecord::Model(Int64)
-  db_context AppDB, :authors
-
-  property name : String
-  property age : Int32
-  property status : String
-  property score : Float64?
-  property created_at : Time?
-
-  has_one :profile, Profile, foreign_key: :author_id
-  has_many :books, Book, foreign_key: :author_id
-
-  def initialize(@name, @age, @status = "active", @score = nil)
-  end
-end
-```
-
-`Profile` has `country : String` and `Book` has `title`, `pages`, both with an `author_id` foreign key.
-
-## Filter with bare column names
-
-Start from `Model.query` and use `where { }`. Inside the block, each column name is a typed accessor of the model:
+## Filter with Bare Column Names
 
 ```crystal
-Author.query.where { (age >= 18) & (status == "active") }
+User.query.where { (age >= 18) & (status == "active") }
+# ... WHERE (users.age >= ?) AND (users.status = ?)   params: [18, "active"]
+
+User.query.where { (age < 18) | (age > 65) }   # ... WHERE (users.age < ?) OR (users.age > ?)
+User.query.where { (status == "banned").not }  # ... WHERE NOT (users.status = ?)
+User.query.where { age > 1 }.where { status == "x" } # ... WHERE (users.age > ?) AND (users.status = ?)
+
+User.query.where { |user| user.age < 30 }      # the block may take the columns as a parameter
+User.where { age > 1 }                         # the model class has where { } too
 ```
 
-```sql
-... WHERE (authors.age >= ?) AND (authors.status = ?)    -- params: [18, "active"]
-```
+Parenthesise each comparison: `&` and `|` bind tighter than `>=` and `==` in Crystal.
 
-Combine with `&` (AND), `|` (OR) and `.not`. Parenthesise each comparison, because `&` and `|` bind tighter than `>=` or `==` in Crystal:
+## Use the Operators
 
 ```crystal
-Author.query.where { (age < 18) | (age > 65) }
-# WHERE (authors.age < ?) OR (authors.age > ?)
+# ==, !=, <, <=, >, >= and eq, neq, lt, lte, gt, gte: every column
+User.query.where { age.eq(3) | age.gte(9) }
+# == nil, != nil, null, not_null: every column
+User.query.where { score == nil }              # ... WHERE users.score IS NULL
+User.query.where { score.not_null }            # ... WHERE users.score IS NOT NULL
+# in, not_in (an Array), between: every column
+User.query.where { age.in([1, 2, 3]) & age.between(1, 9) }
+# like, not_like, ilike, not_ilike: String columns
+User.query.where { name.like("A%") }           # ... WHERE users.name LIKE ?
+# json_eq, json_contains: JSON::Any columns; see Query JSON and Geospatial Columns
 
-Author.query.where { (status == "banned").not }
-# WHERE NOT (authors.status = ?)
+User.query.where { id == 7 }                   # an integer literal fits an Int64 column
+User.query.where { score > 1 }                 # and a Float64 column: bound as 1.0
+Post.query.where { views_count > id }          # another column of the same type: posts.views_count > posts.id
 ```
 
-Chained `where` calls are ANDed: `where { age > 1 }.where { status == "x" }` gives `WHERE (authors.age > ?) AND (authors.status = ?)`.
-
-The block can take a parameter if you prefer: `where { |author| author.age < 30 }`. The model class also has `Author.where { age > 1 }`.
-
-## Operators
-
-| Operator | Columns | Example |
-| --- | --- | --- |
-| `==`, `!=`, `<`, `<=`, `>`, `>=` (and `eq`, `neq`, `lt`, `lte`, `gt`, `gte`) | all | `age >= 18` |
-| `== nil`, `!= nil`, `null`, `not_null` | all | `score == nil` is `IS NULL` |
-| `in`, `not_in` | all | `age.in([1, 2, 3])` |
-| `between(min, max)` | all | `age.between(1, 9)` |
-| `like`, `not_like`, `ilike`, `not_ilike` | `String` only | `name.like("A%")` |
-| `json_eq`, `json_contains` | `JSON::Any` only | `data.json_eq("k", "v")` |
+## Let the Compiler Catch Mistakes
 
 ```crystal
-Author.query.where { age.in([1, 2, 3]) & age.between(1, 9) & name.like("A%") }
-Author.query.where { score.null }
-# WHERE authors.score IS NULL
+# ❌ Compile errors
+User.query.where { agee > 1 }                  # undefined local variable or method 'agee' for User::Columns
+User.query.where { age > "old" }               # CQL: cannot compare a Int32 column with String using `>`
+User.query.order_by(nope: :asc)                # CQL order_by: User has no column `nope`. Columns: id, name, ...
+User.query.joins(:posts) { posts.nope == 1 }   # undefined method 'nope' for Post::Columns
+
+# ❌ Runtime ArgumentError
+User.query.joins(:nope)             # User has no association :nope. Associations: posts, profile
+User.query.select(:name, :nope)     # User has no column :nope in table users. Columns: id, name, ...
+User.query.where { age == 3_000_000_000 } # 3000000000 does not fit a Int32 column
 ```
-
-Values are always bound as parameters. Comparing two columns of the same type works too: `lt(other_column)`.
-
-Integer literals fit wider or narrower integer columns, and an integer literal can compare against a float column: `id == 7` on an `Int64` column, `score > 1` on `Float64` (bound as `1.0`). A literal that does not fit raises `ArgumentError` naming the column ("3000000000 does not fit a Int32").
-
-## What the compiler rejects
-
-| Mistake | Result |
-| --- | --- |
-| `where { agee > 1 }` (unknown column) | compile error naming the model and the column |
-| `where { age > "old" }` | compile error: cannot compare a Int32 column with String |
-| `order_by(nope: :asc)` | compile error listing the model's columns |
-| `joins(:books) { name_of_book == 1 }` | compile error: no such column |
-| `joins(:nope)` | runtime `ArgumentError` listing the valid associations |
-
-Because the checks happen at compile time, a typo never reaches the database.
 
 ## Order with order_by
 
 ```crystal
-Author.query.order_by(created_at: :desc, name: :asc)
-# ORDER BY authors.created_at DESC, authors.name ASC
+User.query.order_by(created_at: :desc, name: :asc)
+# ... ORDER BY users.created_at DESC, users.name ASC
 ```
 
-Column names are checked at compile time. The untyped `order(name: :asc)` keeps working too.
+The untyped `order(name: :asc)` works too, without the compile-time check.
 
-## Join associations
+## Join Associations
 
-`joins(:assoc)` and `left_joins(:assoc)` use the association declared on the model. The optional block adds typed conditions to the join and can reach the association's columns by name:
+`joins(:assoc)` and `left_joins(:assoc)` take a `has_one`, `has_many` or `belongs_to` association. The optional block adds typed conditions to the `ON` clause and reaches the association's columns by name:
 
 ```crystal
-Author.query.joins(:profile) { profile.country == "US" }
-# INNER JOIN profiles ON (profiles.author_id = authors.id) AND (profiles.country = ?)
+User.query.joins(:profile) { profile.country == "US" }
+# INNER JOIN profiles ON (profiles.user_id = users.id) AND (profiles.country = ?)
 
-Author.query.joins(:books)
-# INNER JOIN books ON books.author_id = authors.id
+User.query.joins(:posts)  # INNER JOIN posts ON posts.user_id = users.id
+Post.query.joins(:user)   # INNER JOIN users ON users.id = posts.user_id
 
-Book.query.joins(:author)
-# INNER JOIN authors ON authors.id = books.author_id
+User.query.left_joins(:profile) { (profile.country == "US") & (age > 1) }
+# LEFT JOIN profiles ON (profiles.user_id = users.id) AND ((profiles.country = ?) AND (users.age > ?))
 
-Author.query.left_joins(:profile) { (profile.country == "US") & (age > 1) }
-# LEFT JOIN profiles ON (profiles.author_id = authors.id) AND ((profiles.country = ?) AND (authors.age > ?))
+User.query.joins(:posts).count               # counts joined rows: one per post
+User.query.joins(:profile).pluck(:name, as: String)
+User.query.joins(:posts).find_each { |user| } # yields each user once per batch
 ```
 
-`has_one`, `has_many` and `belongs_to` associations can be joined. Counts, `pluck` and `find_each` keep working across a join.
-
-## Select columns and fetch
-
-`to_a` is `all`. A partial `select` returns lightweight `Model::Row` records in which the unselected columns are `nil`, and keeps the chain:
+## Select Columns
 
 ```crystal
-rows = Author.query
+rows = User.query
   .where { (age >= 18) & (status == "active") }
   .joins(:profile) { profile.country == "US" }
-  .select(:id, :name)
+  .select(:id, :name) # keeps the chain; returns User::Row records
   .order_by(age: :desc)
   .limit(20)
-  .to_a
+  .to_a               # to_a is all
+# SELECT users.id, users.name FROM users INNER JOIN profiles ON ... WHERE ... ORDER BY users.age DESC LIMIT ?
 
-rows.first.name # String?
-rows.first.age  # nil, because it was not selected
+rows.first.name # => "Ada" (String?)
+rows.first.age  # => nil: not selected
+User.query.select(:name).preload(:posts) # ArgumentError: preload is not supported after a partial select
 ```
 
-`select` with an unknown column raises `ArgumentError` naming the model and its columns. `preload` after a partial `select` is refused.
-
-## The metadata behind it
-
-For every model, CQL generates:
-
-- `Author::Columns`: one typed accessor per scalar getter, and one per association returning the target model's `Columns`.
-- `Author.cql_columns`: the `Columns` proxy for the model's table (what the `where` block runs on).
-- `Author.cql_association(:profile)`: the joined table name and a proc that builds the `ON` condition; it raises with the valid association names for an unknown one.
-- `Author.cql_column(:name)` and `Author.cql_column_names`: the schema column, or an error naming the available columns; and the list of column names. Computed methods such as a `shout` helper are not columns.
-- `Author::Row`: the record type for partial selects.
-
-## Mix in raw SQL
-
-Typed blocks combine with raw fragments: use `CQL.raw` inside the block, or the string form of `where`:
+## Mix in Raw SQL
 
 ```crystal
-Author.query.where { (age >= 18) & CQL.raw("lower(name) = ?", "ada") }
-Author.query.where("lower(name) = :name", name: "ada")
+User.query.where { (age >= 18) & CQL.raw("lower(name) = ?", "ada") } # raw alone does not compile here
+# ... WHERE (users.age >= ?) AND (lower(name) = ?)   params: [18, "ada"]
+User.query.where("lower(name) = :name", name: "ada")                  # ... WHERE lower(name) = ?
 ```
 
-See [Use Raw SQL Fragments Safely](raw-fragments.md).
+## Inspect the Generated Metadata
 
-## Related
+```crystal
+User::Columns               # one typed accessor per column getter, one per association
+User.cql_columns            # the User::Columns that where { } runs on
+User.cql_column(:name)      # the schema column; ArgumentError listing the columns when unknown
+User.cql_column_names       # => [:id, :name, :email, ...]; computed methods are not columns
+User.cql_association(:profile) # => {:profiles, ON-condition proc}; ArgumentError when unknown
+User::Row                   # the record type of a partial select
+```
+
+## See Also
 
 - [Filter with Where Clauses](filter-records.md)
 - [Build Complex Queries](complex-queries.md)

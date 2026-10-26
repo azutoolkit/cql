@@ -1,96 +1,94 @@
 # Lock Rows
 
-This guide shows you how to lock the rows a query reads with `lock`, for example to claim jobs from a queue or to update a balance safely.
+Lock the rows a query reads with `CQL::Query#lock`, for example to claim jobs from a queue or to update a balance safely. Row locks work on PostgreSQL, MySQL and CockroachDB, not on SQLite.
 
-## Lock for update
+## Lock for Update
 
-`lock` appends `FOR UPDATE` after the rest of the query, including `LIMIT`:
-
-```crystal
-AppDB.query.from(:orders).select(:id).limit(1).lock
-```
-
-PostgreSQL:
-
-```sql
-SELECT orders.id FROM orders LIMIT $1 FOR UPDATE
-```
-
-Parameters keep their text order: `where(customer_id: 3).limit(2).lock` ends with `orders.customer_id = $1 LIMIT $2 FOR UPDATE`.
-
-## Signature
+`lock` appends `FOR UPDATE` after the rest of the query, `LIMIT` included:
 
 ```crystal
-query.lock(mode : Symbol = :update, skip_locked : Bool = false, nowait : Bool = false)
+AppDB.query.from(:orders).select(:id).limit(1).lock.to_sql(for: CQL::Adapter::Postgres)
+# => {"SELECT orders.id FROM orders LIMIT $1 FOR UPDATE", [1]}
+
+AppDB.query.from(:orders).select(:id).where(customer_id: 3).limit(2).lock.to_sql(for: CQL::Adapter::Postgres)
+# => {"... WHERE orders.customer_id = $1 LIMIT $2 FOR UPDATE", [3, 2]}   params keep their text order
 ```
 
-| Call | Clause appended |
-| --- | --- |
-| `lock` / `lock(:update)` | `FOR UPDATE` |
-| `lock(:share)` | `FOR SHARE` |
-| `lock(skip_locked: true)` | `FOR UPDATE SKIP LOCKED` |
-| `lock(:update, nowait: true)` | `FOR UPDATE NOWAIT` |
-
-`skip_locked:` skips rows another transaction holds, which is the usual way to let several workers take jobs without waiting for each other. `nowait:` fails immediately instead of waiting.
-
-## Lock inside a transaction
-
-A lock only lasts until the transaction ends, so read and write inside one. Queries run inside `transaction` use the transaction's connection:
+## Choose the Lock
 
 ```crystal
-AppDB.transaction do |tx|
+query = AppDB.query.from(:orders).select(:id)
+
+query.lock                          # FOR UPDATE (mode defaults to :update)
+query.lock(:share)                  # FOR SHARE
+query.lock(skip_locked: true)       # FOR UPDATE SKIP LOCKED: skip rows another transaction holds
+query.lock(:update, nowait: true)   # FOR UPDATE NOWAIT: fail at once instead of waiting
+query.lock(:share, skip_locked: true) # FOR SHARE SKIP LOCKED
+
+query.lock(:exclusive)                       # ArgumentError: Unknown lock mode :exclusive (use :update or :share)
+query.lock(skip_locked: true, nowait: true)  # ArgumentError: Use skip_locked or nowait, not both
+```
+
+## Claim a Job Inside a Transaction
+
+A lock lasts until the transaction ends, so read and write inside one. Queries run inside `transaction` use its connection:
+
+```crystal
+AppDB.transaction do
   id = AppDB.query.from(:jobs).select(:id)
     .where(status: "pending")
     .order(id: :asc)
     .limit(1)
-    .lock(skip_locked: true)
+    .lock(skip_locked: true) # another worker's row is skipped, not waited for
     .get(as: Int64)
+  # SELECT jobs.id FROM jobs WHERE jobs.status = $1 ORDER BY jobs.id ASC LIMIT $2 FOR UPDATE SKIP LOCKED
 
-  if id
-    AppDB.update.table(:jobs).set(status: "running").where(id: id).commit
-  end
+  AppDB.update.table(:jobs).set(status: "running").where(id: id).commit if id
 end
 ```
 
-If another worker already holds the first pending row, `SKIP LOCKED` moves on to the next one.
+## Lock Model Queries
 
-## Lock model queries
-
-Model query builders do not have `lock` themselves. Apply it to the underlying query with `with_query`, which returns a new builder:
+`QueryBuilder` has no `lock`. Apply it to the underlying `CQL::Query` with `with_query`, which returns a new builder:
 
 ```crystal
-Job.query
+job = Job.query
   .where { status == "pending" }
   .with_query { |query| query.limit(1).lock(skip_locked: true) }
-  .to_a
+  .first
+# SELECT jobs.id, jobs.status FROM jobs WHERE jobs.status = $1 LIMIT $2 FOR UPDATE SKIP LOCKED
 ```
 
-For optimistic concurrency without database locks see [Add Optimistic Locking](../models/optimistic-locking.md).
+For optimistic concurrency without database locks, see [Add Optimistic Locking](../models/optimistic-locking.md).
 
-## Merging
-
-`merge` carries a row lock along. If the other query has none, the current query keeps its own:
+## Merge Locked Queries
 
 ```crystal
-AppDB.query.from(:orders).select(:id).merge(other.lock(skip_locked: true))
-# ... FOR UPDATE SKIP LOCKED
+locked = AppDB.query.from(:orders).select(:customer_id).lock(skip_locked: true)
+unlocked = AppDB.query.from(:orders).select(:customer_id)
+
+# merge carries the other query's lock; when the other has none, the current one is kept
+AppDB.query.from(:orders).select(:id).merge(locked)        # ... FOR UPDATE SKIP LOCKED
+AppDB.query.from(:orders).select(:id).lock.merge(unlocked) # ... FOR UPDATE
 ```
 
-## Errors
+## Check Each Dialect
 
-| Mistake | Result |
-| --- | --- |
-| `lock(:exclusive)` | `ArgumentError` "Unknown lock mode" (use `:update` or `:share`) |
-| `lock(skip_locked: true, nowait: true)` | `ArgumentError` "Use skip_locked or nowait, not both" |
-| Generating SQL for SQLite | `CQL::DialectError` "SQLite does not support row locking" |
+```crystal
+query.lock(:update, nowait: true).to_sql(for: CQL::Adapter::MySql)  # ... FOR UPDATE NOWAIT
+query.lock.to_sql(for: CQL::Adapter::CockroachDB)                    # ... FOR UPDATE
+query.lock.to_sql # on a SQLite schema: CQL::DialectError "SQLite does not support row locking (FOR UPDATE / FOR SHARE)"
+```
 
-## Dialect notes
+{% hint style="warning" %}
+SQLite has no row locks (it serializes writers), so use a plain transaction there. The error is raised when SQL is generated, so `to_sql`, `all` and `first` raise it too.
+{% endhint %}
 
-- PostgreSQL, MySQL and CockroachDB support `lock`. Examples in the specs: `FOR UPDATE NOWAIT` on MySQL, plain `FOR UPDATE` on CockroachDB.
-- SQLite has no row locks (it serializes writers). The error surfaces when SQL is generated, so `to_sql` raises too. Use a transaction instead.
-- `FOR SHARE`, `SKIP LOCKED` and `NOWAIT` availability depends on your server version (MySQL has them from 8.0).
+{% hint style="info" %}
+`FOR SHARE`, `SKIP LOCKED` and `NOWAIT` depend on the server version; MySQL has them from 8.0.
+{% endhint %}
 
-## Related
+## See Also
 
 - [Use Transactions](../data-operations/transactions.md)
 - [Add Optimistic Locking](../models/optimistic-locking.md)

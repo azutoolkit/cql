@@ -1,193 +1,92 @@
 # What is an ORM?
 
-An Object-Relational Mapping (ORM) is a programming technique that lets you interact with a relational database using your programming language's native objects, rather than writing raw SQL queries.
+An object-relational mapper (ORM) maps tables to classes and rows to objects, so application code reads and writes typed objects instead of SQL strings and result-set columns. CQL is an ORM for Crystal.
 
-## The Problem ORMs Solve
-
-Without an ORM, you would write code like this:
+## Without an ORM, Every Query Is SQL Text Plus a Tuple
 
 ```crystal
-# Raw SQL approach
-user_id, user_name, user_email = db.query_one(
-  "SELECT id, name, email FROM users WHERE id = ?", 1,
-  as: {Int64, String, String}
-)
+# crystal-db alone: you write the SQL and name each column's type
+name, email = AppDB.exec_query do |conn|
+  conn.query_one("SELECT name, email FROM users WHERE id = ?", 1, as: {String, String})
+end
+
+# CQL: a typed object
+user = User.find!(1) # User; User.find(1) returns User? (nil when the row is missing)
+user.email
 ```
 
-With an ORM like CQL:
+The raw version works, but the SQL, the column order and the types are repeated at every call site. Rename a column and the compiler cannot point you to them.
+
+## A Model Maps One Table
 
 ```crystal
-# ORM approach
-user = User.find(1)
-puts user.name
-puts user.email
-```
+class User
+  include CQL::ActiveRecord::Model(Int64) # adds id : Int64?, nil until saved
+  db_context AppDB, :users                # the schema and table
 
-The ORM handles:
-- Translating method calls into SQL queries
-- Mapping database columns to object properties
-- Type conversions between database and Crystal types
-- Connection management
-
-## Key Concepts
-
-### Models
-
-A model is a Crystal class that represents a database table. Each instance of the model represents a row in that table.
-
-```crystal
-class User                            # Represents the 'users' table
-  include CQL::ActiveRecord::Model(Int64) # Provides `id : Int64?` (column: id)
-  db_context MyDB, :users
-
-  property name : String              # Column: name
-  property email : String             # Column: email
+  property name : String                  # column users.name
+  property email : String                 # column users.email
 
   def initialize(@name : String, @email : String)
   end
 end
 ```
 
-### Queries
+The class stands for the table and each instance for one row. CQL decodes rows into `User` with `DB::Serializable` and writes the properties back when you save.
 
-The ORM provides methods that translate to SQL:
+## Method Calls Become SQL With Bound Values
 
-| ORM Method | SQL Equivalent |
-|------------|---------------|
-| `User.find(1)` | `SELECT ... FROM users WHERE id = ? LIMIT 1` |
-| `User.where(active: true).all` | `SELECT ... FROM users WHERE active = ?` |
+| Call | SQL CQL sends (SQLite) |
+| :--- | :--- |
+| `User.find(1)` | `SELECT users.id, users.name, users.email FROM users WHERE users.id = ? LIMIT ?` |
+| `User.where(name: "Ada").all` | `SELECT users.id, users.name, users.email FROM users WHERE users.name = ?` |
 | `User.count` | `SELECT COUNT(*) FROM users` |
-| `user.save` | `INSERT INTO users ...` or `UPDATE users ...` |
+| `user.save` on a new record | `INSERT INTO users (name, email) VALUES (?, ?)` |
+| `user.save` on a saved record | `UPDATE users SET name = ?, email = ? WHERE users.id = ?` |
+| `post.user` (a `belongs_to`) | `SELECT users.id, users.name, users.email FROM users WHERE users.id = ? LIMIT ?` |
 
-### Relationships
+Associations replace hand-written joins: a `posts.user_id` column becomes `belongs_to :user, User, :user_id` on `Post`, and `post.user` returns `User?`. See [Set Up Belongs To](../../how-to/relationships/belongs-to.md).
 
-ORMs express table relationships as object associations:
+## What the Mapping Buys You
+
+| Benefit | How CQL provides it |
+| :--- | :--- |
+| Type safety | Assigning an `Int32` to `user.name` is a compile error, and so is `User.query.where { name == 1 }`. See [Safety Guardrails](../safety-guardrails.md). |
+| Injection safety | Every value is sent as a bound parameter, never spliced into the SQL text. |
+| Portability | The same query renders `?` placeholders for SQLite and MySQL and `$1` for PostgreSQL and CockroachDB. |
+| One place to change | A new column is one property on the model plus one migration. |
 
 ```crystal
-# Database: posts table has a user_id column
-# ORM: Post belongs_to User
-
-post = Post.find(1)
-author = post.user  # No SQL needed in your code!
+query = User.where(email: "ada@example.com").query
+query.to_sql                              # => {"SELECT ... WHERE users.email = ?", ["ada@example.com"]}
+query.to_sql(for: CQL::Adapter::Postgres) # => {"SELECT ... WHERE users.email = $1", ["ada@example.com"]}
 ```
 
-## Benefits of Using an ORM
+## Where an ORM Gets in the Way, CQL Has Exits
 
-### 1. Type Safety
+Mapping every row to an object is not always the right tool:
 
-CQL leverages Crystal's type system to catch errors at compile time:
-
-```crystal
-user.name = 123      # Compile error: expected String, got Int32
-user.age = "thirty"  # Compile error: expected Int32, got String
-```
-
-### 2. Security
-
-ORMs automatically parameterize queries, preventing SQL injection:
+| Situation | Exit |
+| :--- | :--- |
+| Reports and analytics | A raw fragment (`User.where("lower(email) = ?", email)`) or a whole statement on the pooled connection, shown below |
+| Bulk writes | `User.insert_all(rows)` sends multi-row `INSERT`s and skips per-record validations and callbacks |
+| Reading a few columns | `User.pluck(:email, as: String)` or `User.select(:id, :email)` instead of full models |
+| Database-specific features | Generated SQL for each dialect, plus `Schema#exec` for DDL you write yourself |
 
 ```crystal
-# Safe - CQL parameterizes the value
-User.where(email: user_input)
-
-# Dangerous raw SQL
-db.exec("SELECT * FROM users WHERE email = '#{user_input}'")
-```
-
-### 3. Productivity
-
-Write less code and focus on business logic:
-
-```crystal
-# Create user with validation
-user = User.create!(
-  name: "John",
-  email: "john@example.com"
-)
-
-# Instead of:
-# 1. Write INSERT SQL
-# 2. Handle errors
-# 3. Get the inserted ID
-# 4. Validate before insert
-# etc.
-```
-
-### 4. Database Portability
-
-The same model code works with different databases:
-
-```crystal
-# Works with PostgreSQL, MySQL, SQLite, or CockroachDB
-User.where(active: true).order(created_at: :desc).all
-```
-
-### 5. Maintainability
-
-Changes to your data model are centralized:
-
-```crystal
-# Add a new field - one place to change
-class User
-  property phone : String?  # Add property (and a column in a migration)
-end
-
-# All code using User automatically has access to phone
-```
-
-## When NOT to Use an ORM
-
-ORMs aren't always the best choice:
-
-- **Complex analytical queries**: Raw SQL may be clearer
-- **Performance-critical operations**: Direct SQL might be faster
-- **Bulk operations**: ORM overhead can add up
-- **Database-specific features**: Some features don't translate
-
-CQL lets you drop to raw SQL when needed:
-
-```crystal
-rows = MyDB.exec_query do |conn|
-  conn.query_all(<<-SQL, as: {String, Int64})
+rows = AppDB.exec_query do |conn|
+  conn.query_all(<<-SQL, 10, as: {String, Int64})
     SELECT u.name, COUNT(p.id) AS post_count
     FROM users u
     LEFT JOIN posts p ON p.user_id = u.id
     GROUP BY u.id, u.name
-    HAVING COUNT(p.id) > 10
-  SQL
+    HAVING COUNT(p.id) > ?
+    SQL
 end
 ```
 
-`exec_query` hands you the schema's pooled `DB::Connection` (or the current transaction's), so raw statements and model calls can share a transaction. Where possible, prefer bound parameters over string interpolation.
+`exec_query` yields the schema's pooled `DB::Connection`, or the fiber's transaction connection, so raw statements and model calls can share a transaction. Bind values with `?` there too, never with string interpolation. See [Use Raw SQL Fragments Safely](../../how-to/querying/raw-fragments.md) and [Optimize Queries](../../how-to/performance/optimize-queries.md).
 
-## ORM Patterns
+## Two Patterns: Active Record and Repository
 
-### Active Record
-
-CQL primarily uses the Active Record pattern, where:
-- Objects carry both data and behavior
-- Models know how to persist themselves
-- Business logic lives in the model
-
-```crystal
-user = User.new("John", "john@example.com")
-user.save  # The user object saves itself
-```
-
-### Other Patterns
-
-CQL also supports:
-- **Repository Pattern**: `CQL::Repository(T, Pk)` separates persistence from plain domain objects
-
-See [Design Patterns](../design-patterns/active-record.md) for more details.
-
-## Summary
-
-An ORM like CQL:
-- Maps database tables to Crystal objects
-- Translates method calls to SQL
-- Provides type safety and security
-- Increases productivity
-- Makes code more maintainable
-
-While ORMs have overhead, they're excellent for most application development tasks, especially CRUD operations and working with relationships.
+CQL's models follow the [Active Record pattern](../design-patterns/active-record.md): an object carries its data and saves itself (`user.save`). For domain code that must not know about the database, CQL also supports the [Repository pattern](../design-patterns/repository.md), through the generic `CQL::Repository(T, Pk)` or a repository you write around a model.

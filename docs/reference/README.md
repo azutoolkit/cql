@@ -1,28 +1,14 @@
 # Reference
 
-**Information-oriented** technical descriptions of CQL's APIs, configuration options, and database-specific features. Use this section when you need to look up exact syntax, method signatures, or configuration values.
+Exact signatures, options, defaults and error classes. For step-by-step tasks see the [How-to Guides](../how-to/README.md); for the reasons behind the design see [Explanation](../explanation/README.md).
 
-## API Reference
-
-Comprehensive documentation of CQL's classes and methods:
-
-- [Migration DSL](api/migration-dsl.md) - Migration definition language reference
-- [Validation Options](api/validation-options.md) - All available validation types and options
-- [Callback Hooks](api/callback-hooks.md) - Lifecycle callbacks reference
-
-## Database Support
-
-Database-specific features and considerations:
-
-- [Database Support Matrix](database-support.md) - Feature support across SQLite, PostgreSQL, MySQL and CockroachDB
-
-## Quick Reference
-
-- [Quick Reference Card](quick-reference.md) - Common operations at a glance
-- [Configuration Reference](configuration.md) - Every `CQL.configure` setting, default and validation rule
-- [Glossary](glossary.md) - CQL terminology and definitions
-- [Error Codes](error-codes.md) - Common errors and their meanings
-
----
-
-**Want to understand why things work this way?** Visit the [Explanation](../explanation/README.md) section for conceptual discussions.
+| Page | Lists |
+| :--- | :--- |
+| [Quick Reference](quick-reference.md) | The most used calls, one line each |
+| [Configuration Reference](configuration.md) | Every `CQL.configure` setting, its default per environment, URL parameter and validation message, and the environment variables CQL reads |
+| [Migration DSL](api/migration-dsl.md) | Table and alter-table builder methods, column options and types, `Migrator` and `MigratorConfig` |
+| [Validation Options](api/validation-options.md) | Every `validate` predicate with its default message, plus custom validators |
+| [Callback Hooks](api/callback-hooks.md) | The ten lifecycle callbacks, their order, and which calls run them |
+| [Database Support](database-support.md) | Feature and SQL differences across SQLite, PostgreSQL, MySQL and CockroachDB |
+| [Error Codes](error-codes.md) | Every error class CQL defines or raises, and when |
+| [Glossary](glossary.md) | CQL terms and the API each one names |

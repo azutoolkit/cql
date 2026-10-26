@@ -1,169 +1,86 @@
 # Create Query Scopes
 
-This guide shows you how to create reusable query scopes for common filtering patterns.
+Name reusable query fragments on a model with `scope`, then chain them like any query method.
 
-## Define a Scope
-
-Use the `scope` macro with a lambda that returns a query:
+## Define Scopes
 
 ```crystal
-struct Post
+class Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :posts
+  db_context AppDB, :posts
 
-  property id : Int64?
-  property title : String
+  property title : String = ""
+  property user_id : Int64?
   property published : Bool = false
   property views_count : Int64 = 0
+  property deleted_at : Time?
   property created_at : Time?
 
-  # Scopes
   scope :published, -> { where(published: true) }
   scope :draft, -> { where(published: false) }
   scope :popular, ->(min_views : Int32) { where { views_count >= min_views } }
   scope :recent, ->(days : Int32) { where { created_at > days.days.ago } }
+  scope :by_author, ->(user_id : Int64) { where(user_id: user_id) }
+  scope :newest_first, -> { order(created_at: :desc) }
+  scope :featured, -> { where(published: true).where { views_count > 1000 }.order(views_count: :desc) }
+  scope :active, -> { where { deleted_at == nil }.where(published: true) } # a "default" to start from
 end
 ```
 
-`scope` defines a class method (`Post.published`) and a method on the query builder, so scopes chain with each other and with `where`, `order`, `limit` and the rest. Crystal lambdas have no default argument values, so pass every argument, and use the exact argument type (integer literals are `Int32`).
+`scope` defines a class method (`Post.published`) and a `QueryBuilder` method, so scopes chain with each other and with `where`, `order` and `limit`. Lambdas have no default values: pass every argument, with the exact type (integer literals are `Int32`).
 
 ## Use Scopes
 
 ```crystal
-# Single scope
-Post.published.all
+Post.published.count                      # SELECT COUNT(*) FROM posts WHERE posts.published = ?
+Post.popular(100).count                   # ... WHERE posts.views_count >= ?
 
-# Chain scopes
-Post.published.popular(100).recent(7).all
+Post.published.popular(100).recent(7).all # chain in any order; conditions are ANDed
+Post.recent(7).published.popular(100).all
+Post.published.newest_first.limit(10).all
+Post.featured.limit(5).all                # ... ORDER BY posts.views_count DESC LIMIT ?
+Post.active.order(created_at: :desc).all  # ... WHERE (posts.deleted_at IS NULL) AND (posts.published = ?)
 
-# With other methods
-Post.published.order(created_at: :desc).limit(10).all
+# After other query methods. user.posts is a Collection without scopes, so start from the model:
+Post.where(user_id: user.id!).published.all
+Post.by_author(user.id!).draft.count
 ```
 
-## Scope with Parameters
+## Choose a Scope at Runtime
 
 ```crystal
-struct User
-  scope :by_role, ->(role : String) { where(role: role) }
-  scope :created_after, ->(date : Time) { where { created_at > date } }
-  scope :age_between, ->(min : Int32, max : Int32) { where { age.between(min, max) } }
-end
-
-# Usage
-User.by_role("admin").all
-User.created_after(1.month.ago).all
-User.age_between(18, 65).all
-```
-
-## Conditional Scopes
-
-A scope must return a query, so apply conditions in your calling code, or return an unfiltered `query` from a plain class method:
-
-```crystal
-struct Post
+class Post
   def self.published_if(condition : Bool)
-    condition ? published : query
+    condition ? published : query # query is the unfiltered QueryBuilder
   end
 end
 
-# Usage - only filter if condition is true
-show_published = params["published"]? == "true"
-Post.published_if(show_published).all
+Post.published_if(params["published"]? == "true").order(created_at: :desc).all
 ```
 
-Plain class methods like this work as the first call in a chain (`Post.published_if(true).order(...)`) but cannot be chained after other query methods; use `scope` for that.
+A plain class method like this starts a chain but cannot follow other query methods; use `scope` for that.
 
-## Default Scope Pattern
-
-Create a scope for commonly used conditions:
+## List a Model's Scopes
 
 ```crystal
-struct Post
-  scope :active, -> { where { deleted_at == nil }.where(published: true) }
-end
-
-# Always start queries from active scope
-Post.active.order(created_at: :desc).all
+Post.defined_scopes.keys  # => [":published", ":draft", ":popular", ":recent", ...]
 ```
 
-## Scope Chaining
+{% hint style="warning" %}
+Scope methods are added to the `QueryBuilder` class that every model shares, so the last model to define a scope name wins. Give scopes distinct names across models (for example `published` on one model only, or `post_published`).
+{% endhint %}
 
-Scopes can be chained in any order:
+{% hint style="warning" %}
+Once the program calls `pluck`, `pick` or `select(:column)` on the model, `Post.published.order(...).all` is typed `Array(Post) | Array(Post::Row)`. Start the chain with `Post.query.published` to keep `Array(Post)`.
+{% endhint %}
 
-```crystal
-# All these work
-Post.published.popular(100).recent(7).all
-Post.recent(7).published.popular(100).all
-Post.popular(100).published.all
-```
+{% hint style="info" %}
+A scope chained after another query method repeats that query's conditions in its `WHERE` (`(posts.user_id = ?) AND ((posts.user_id = ?) AND (posts.published = ?))`). The rows are the same; the SQL grows with each chained scope.
+{% endhint %}
 
-## Scope with Ordering
-
-```crystal
-struct Post
-  scope :newest_first, -> { order(created_at: :desc) }
-  scope :most_popular, -> { order(views_count: :desc) }
-end
-
-Post.published.newest_first.limit(10).all
-Post.published.most_popular.limit(10).all
-```
-
-## Complex Scopes
-
-```crystal
-struct Post
-  scope :featured, -> {
-    where(published: true)
-      .where { views_count > 1000 }
-      .order(views_count: :desc)
-  }
-
-  scope :by_author, ->(user_id : Int64) { where(user_id: user_id) }
-  scope :in_category, ->(category_id : Int64) { where(category_id: category_id) }
-end
-
-# Usage
-Post.featured.limit(5).all
-Post.by_author(current_user.id!).published.all
-Post.in_category(tech_category.id!).recent(7).all
-```
-
-## Scope in Related Queries
-
-`user.posts` is a `Collection`, which does not know your scopes. Start from the model and filter on the foreign key instead:
-
-```crystal
-user = User.find!(1)
-
-# Use scopes on associated records
-Post.where(user_id: user.id!).published.all
-Post.where(user_id: user.id!).recent(30).popular(50).all
-```
-
-## Inspect Scopes
-
-```crystal
-Post.defined_scopes.keys   # => ["published", "draft", "popular", "recent", ...]
-```
-
-Scope names are also registered as methods on the shared query builder, so give scopes distinct names across models (for example `published` on only one model, or `post_published`) when you chain them.
-
-## Verify Scopes Work
-
-```crystal
-Post.create!(title: "Draft", body: "...", published: false, views_count: 10)
-Post.create!(title: "Published", body: "...", published: true, views_count: 200)
-Post.create!(title: "Popular", body: "...", published: true, views_count: 500)
-
-Post.published.count         # => 2
-Post.draft.count             # => 1
-Post.popular(100).count  # => 2
-Post.popular(300).count  # => 1
-```
-
-## Related
+## See Also
 
 - [Filter with Where Clauses](filter-records.md)
+- [Write Typed Queries](typed-where-dsl.md)
 - [Build Complex Queries](complex-queries.md)
 - [Paginate Results](pagination.md)
