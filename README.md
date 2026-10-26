@@ -56,7 +56,7 @@ dependencies:
 shards install
 ```
 
-CQL needs Crystal 1.12.2 or later (`shard.yml`); CI builds with Crystal 1.22.0.
+CQL needs Crystal 1.12.2 or later (`shard.yml`); CI builds with Crystal 1.22.1.
 
 ## Quick Start
 

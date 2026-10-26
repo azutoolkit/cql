@@ -27,7 +27,7 @@ Without a MySQL client, one spec errors because `mysqldump` is not installed (`s
 
 ## What CI Runs
 
-`.github/workflows/crystal.yml` runs on every push and pull request to `master`, in the `crystallang/crystal:1.22.0` image:
+`.github/workflows/crystal.yml` runs on every push and pull request to `master`, in the `crystallang/crystal:1.22.1` image:
 
 - installs SQLite, the PostgreSQL client and the MySQL client;
 - `shards install --ignore-crystal-version`;
