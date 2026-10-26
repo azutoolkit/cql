@@ -1,18 +1,10 @@
+---
+description: "Find the error your migration raised, then apply its fix."
+---
+
 # Fix Migration Errors
 
-Find the error your migration raised, then apply its fix. SQLite messages come from SQLite; PostgreSQL errors go through CQL's native driver, which prints a fixed title for SQLSTATE classes whose server text can quote values. Read the server's own wording from `ex.server_message`.
-
-## Check migration state first
-
-```crystal
-migrator = CQL.build_migrator(AppDB)     # tracking table schema_migrations (test_migrations in test)
-# migrator = AppDB.migrator              # tracking table cql_schema_migrations
-
-migrator.applied_migrations.map(&.version) # => [1]
-migrator.pending_migrations.map(&.version) # => [2]
-migrator.last                              # => CreateUsers (class of the last recorded migration), or nil
-migrator.print_pending_migrations          # table of pending migrations
-```
+SQLite messages come from SQLite; PostgreSQL errors go through CQL's native driver, which prints a fixed title for SQLSTATE classes whose server text can quote values. Read the server's own wording from `ex.server_message`. Check which migrations have run first, as in [Check Status](../migrations/run-migrations.md#check-status).
 
 ## Table already exists
 
@@ -53,24 +45,13 @@ SQLite3::Exception: Cannot add a NOT NULL column with default value NULL
 CQL::Postgres::NotNullViolation: ERROR: column "name" of relation "users" contains null values (SQLSTATE 23502)
 ```
 
-**Cause:** `add_column` ignores `default:`, so `null: false` on a table with rows has nothing to fill them with.
-
 ```crystal
-# ❌ Emits ALTER TABLE users ADD COLUMN name TEXT NOT NULL (no DEFAULT)
-schema.alter :users do
-  add_column :name, String, null: false, default: "Unknown"
-end
-
-# ✅ Add it nullable, backfill, then add the constraint (PostgreSQL / CockroachDB)
-schema.alter :users do
-  add_column :name, String, null: true
-end
-schema.exec("UPDATE users SET name = 'Unknown' WHERE name IS NULL")
-schema.exec("ALTER TABLE users ALTER COLUMN name SET NOT NULL") # change_column takes only a name and a type
-
-# ✅ Or write the column in SQL, with its default
+# ✅ add_column ignores default:, so write the column in SQL with its default
 schema.exec("ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT 'Unknown'")
 ```
+
+[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) explains the cause and the
+nullable-then-backfill alternative.
 
 ## Column cannot be dropped
 
@@ -85,7 +66,7 @@ CQL::SQLiteUnsupportedFeatureError: SQLite does not support dropping foreign key
 schema.alter :posts do
   drop_foreign_key :fk_posts_user_id # name CQL gives a key added with alter; a key declared in a
                                      # table block is named by the database (PostgreSQL: posts_user_id_fkey)
-  drop_index :idx_posts_user_id      # default index name: idx_<table>_<columns>
+  drop_index :idx_posts_user_id      # the default name for index [:user_id] on posts
   drop_column :user_id
 end
 # ALTER TABLE posts DROP CONSTRAINT fk_posts_user_id; DROP INDEX IF EXISTS idx_posts_user_id; ALTER TABLE posts DROP COLUMN user_id;
@@ -117,7 +98,13 @@ CQL.configure { |c| c.pool_size = 2 } # or migrate with CQL::MigratorConfig.new(
 
 ## A migration raised mid-run
 
-On SQLite and PostgreSQL, one `migrator.up` or `migrator.down` runs in a single transaction: a failure rolls back the whole run, recorded versions included, so fix the migration and run `up` again. MySQL and CockroachDB commit each statement, so earlier migrations of the run stay applied. Recover by hand there:
+{% tabs %}
+{% tab title="SQLite and PostgreSQL" %}
+One `migrator.up` or `migrator.down` runs in a single transaction: a failure rolls back the whole run, recorded versions included, so fix the migration and run `up` again.
+{% endtab %}
+
+{% tab title="MySQL and CockroachDB" %}
+Each statement commits, so earlier migrations of the run stay applied. Recover by hand:
 
 ```crystal
 schema.tables.keys                                        # tables the schema declares (not the live database)
@@ -125,13 +112,10 @@ schema.exec("DELETE FROM schema_migrations WHERE version = 5") # table: migrator
 schema.partial_table.drop!                                # DROP TABLE IF EXISTS partial_table
 migrator.up
 ```
+{% endtab %}
+{% endtabs %}
 
-## Reset a development database
-
-```crystal
-migrator.down # no argument: rolls back every applied migration (rollback undoes one)
-migrator.up
-```
+To start a development database over, see [Refresh a Development Database](../migrations/rollback.md#refresh-a-development-database).
 
 ## See Also
 
