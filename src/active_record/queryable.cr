@@ -67,13 +67,16 @@ module CQL
           query.select(*columns)
         end
 
-        # Create a QueryBuilder and execute select with hash syntax
-        # - **@param** fields [Hash] The fields to select using hash syntax
-        # - **@return** [QueryBuilder(T)] The query builder instance
+        # Select only these columns; the result rows are `Model::Row` records whose unselected columns are nil.
+        # - **@param** columns [Symbol*] The columns to select
+        # - **@return** [PartialBuilder(T)] The query builder for the partial rows
         def self.select(*columns : Symbol)
           query.select(*columns)
         end
 
+        # Create a QueryBuilder and execute select with hash syntax
+        # - **@param** fields [Hash] The fields to select using hash syntax
+        # - **@return** [QueryBuilder(T)] The query builder instance
         def self.select(**fields)
           query.select(**fields)
         end

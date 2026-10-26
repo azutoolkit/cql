@@ -58,8 +58,11 @@ module CQL
       execute { |conn, sql, params| conn.query_one?(sql, args: params, as: kind) }
     end
 
+    # Like `get`, but raises `DB::NoResultsError` when there is no row.
     def get!(as kind)
-      get(kind).not_nil!
+      result = get(kind)
+      raise DB::NoResultsError.new("The query returned no row") if result.nil?
+      result
     end
 
     # Whether the statement returns at least *count* rows. Steps through at most

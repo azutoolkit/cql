@@ -134,10 +134,8 @@ module CQL
       # - **return** : Target - The associated (and possibly created) record
       # - **raise** : RelationError on creation failure
       def create(record : Target)
-        # Save the target record if it's not persisted
-        unless record.persisted?
-          safe_db_operation { record.create! }
-        end
+        # A soft-deleted record has an id but is not `persisted?`; only a new one is inserted
+        safe_db_operation { record.create! } if record.new_record?
 
         target_id = safe_id(record, Pk)
 
@@ -146,8 +144,8 @@ module CQL
           Through.find_or_create_by({@key => bound_id(@id), @target_key => bound_id(target_id)})
         end
 
-        # Add to internal array only if already loaded and not already present
-        if @loaded && !includes?(record)
+        # Add to the loaded records unless a reload would hide it (a soft-deleted record)
+        if @loaded && record.persisted? && !includes?(record)
           @records << record
         end
 

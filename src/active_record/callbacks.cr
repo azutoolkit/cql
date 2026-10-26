@@ -252,45 +252,6 @@ module CQL
           true
         end
 
-        # Run the save callbacks in order
-        # - **@param** create [Bool] Whether this is a create or update operation
-        # - **@return** [Bool] Whether all callbacks completed successfully
-        def run_save_callbacks(create : Bool = true) : Bool
-          # Common validation callbacks
-          return false unless run_callbacks(:before_validation)
-          return false unless run_callbacks(:after_validation)
-
-          # Common save callbacks
-          return false unless run_callbacks(:before_save)
-
-          # Create or update specific callbacks
-          if create
-            return false unless run_callbacks(:before_create)
-          else
-            return false unless run_callbacks(:before_update)
-          end
-
-          # Return true to continue with the save operation
-          true
-        end
-
-        # Run the after save callbacks in order
-        # - **@param** create [Bool] Whether this is a create or update operation
-        # - **@return** [Bool] Whether all callbacks completed successfully
-        def run_after_save_callbacks(create : Bool = true) : Bool
-          # Create or update specific callbacks
-          if create
-            return false unless run_callbacks(:after_create)
-          else
-            return false unless run_callbacks(:after_update)
-          end
-
-          # Common after save callbacks
-          return false unless run_callbacks(:after_save)
-
-          true
-        end
-
         # Run the destroy callbacks in order
         # - **@return** [Bool] Whether all callbacks completed successfully
         def run_destroy_callbacks : Bool

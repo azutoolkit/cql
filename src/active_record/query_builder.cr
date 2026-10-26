@@ -422,7 +422,7 @@ module CQL
         # - **@param** other [QueryBuilder(T)] The other query builder to merge
         # - **@return** [QueryBuilder(T)] A new merged query builder
         def merge(other : QueryBuilder(T))
-          merged_query = @query.merge(other.query)
+          merged_query = @query.clone.merge(other.query)
           self.class.new(merged_query, @model_class)
         end
 

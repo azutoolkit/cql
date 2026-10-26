@@ -16,7 +16,7 @@ module CQL::ActiveRecord::Relations
     # The collection can be used to add and remove records from the join table.
     #
     # - **param** : name (Symbol) - The name of the association
-    # - **param** : type (Class) - The target model class
+    # - **param** : klass (Class) - The target model class
     # - **param** : join_through (Symbol | Class) - The join table model or table name
     # - **param** : foreign_key (Symbol) - Foreign key for this model in join table (optional)
     # - **param** : association_foreign_key (Symbol) - Foreign key for target model in join table (optional)

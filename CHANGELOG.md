@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- Code that relied on `QueryBuilder#merge` changing its receiver should use the builder it returns.
+- Code that rescued `NilAssertionError` from `Query#get!` should rescue `DB::NoResultsError`.
+- `touch` on a soft-deleted record now stamps its row and returns `true`; before, it raised `CQL::Error`.
+- Code that called `record.run_save_callbacks` or `record.run_after_save_callbacks` can call `run_callbacks(:before_save)` and the other events directly.
+
+### Removed
+
+- `run_save_callbacks` and `run_after_save_callbacks`. `save` never called them, nothing else did, and the docs no longer list them.
+
+### Fixed
+
+- `QueryBuilder#merge` returns a new builder and leaves the receiver unchanged; before, it added the other builder's conditions to the receiver's query too. `Query#merge` still merges in place, as documented.
+- `get!(as:)` on a `Query` (and on other executable statements) raises `DB::NoResultsError` ("The query returned no row") when there is no row, like `first!`, instead of `NilAssertionError`.
+- `collection.create(record)` on a `many_to_many` association adds the join row for a soft-deleted record instead of inserting a second copy of it. It now inserts only a new record (`new_record?`), as `save` does.
+- `touch` updates a soft-deleted record instead of raising "Cannot touch on a new record object". It raises only for a record that has no id.
+- `CQL::Repository` can be subclassed outside the `CQL` module (`class UserRepository < CQL::Repository(User, Int64)`). Before, the subclass failed to compile with "undefined constant Schema".
+
 ## [0.0.907] - 2026-10-26
 
 ### Upgrade notes

@@ -466,6 +466,16 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       merged = builder1.merge(builder2)
       merged.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
+
+    it "leaves the receiver unchanged" do
+      base = TestUser.where(age: 30)
+      before = base.to_sql_with_params
+
+      merged = base.merge(TestUser.where(name: "Test"))
+
+      base.to_sql_with_params.should eq(before)
+      merged.to_sql_with_params[1].should eq([30, "Test"])
+    end
   end
 
   describe "#all" do

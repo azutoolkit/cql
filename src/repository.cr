@@ -23,23 +23,23 @@ module CQL
     # ```
     # user_repo = CQL::Repository(User, Int64).new(AcmeDB, :users)
     # ```
-    def initialize(@schema : Schema, @table : Symbol)
+    def initialize(@schema : CQL::Schema, @table : Symbol)
     end
 
     def query
-      Query.new(@schema).from(@table)
+      CQL::Query.new(@schema).from(@table)
     end
 
     def insert
-      Insert.new(@schema).into(@table)
+      CQL::Insert.new(@schema).into(@table)
     end
 
     def update
-      Update.new(@schema).table(@table)
+      CQL::Update.new(@schema).table(@table)
     end
 
     def delete
-      Delete.new(@schema).from(@table)
+      CQL::Delete.new(@schema).from(@table)
     end
 
     # Build a new object of type T with the given attributes. It calls `T.new(attrs)`, so it

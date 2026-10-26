@@ -460,6 +460,17 @@ describe CQL::ActiveRecord::SoftDeletable do
       stored.deleted?.should be_true
     end
 
+    it "touches a soft-deleted record's row" do
+      user = SoftDeletableUser.new("Touched After Delete", "touched@example.com", 25)
+      user.create!
+      user.delete!.should be_true
+      touched_at = Time.utc(2024, 1, 1)
+
+      user.touch(time: touched_at).should be_true
+
+      SoftDeletableDB.query.from(:users).select(:updated_at).where(id: user.id!).get!(as: Time).should eq(touched_at)
+    end
+
     it "handles nil deleted_at properly" do
       user = SoftDeletableUser.new("Nil Test", "nil@example.com", 25)
       user.create!

@@ -53,7 +53,7 @@ module CQL
         # - **@param** *fields [Symbol] The timestamp fields to update (defaults to :updated_at)
         # - **@param** time [Time] The time to set (defaults to Time.utc)
         # - **@return** [Bool] True if the touch operation was successful
-        # - **@raise** [CQL::Error] If the record is not persisted
+        # - **@raise** [CQL::Error] If the record is new (has no id)
         #
         # **Example** Touch the updated_at timestamp
         #
@@ -73,7 +73,7 @@ module CQL
         # user.touch(:updated_at, time: Time.utc - 1.hour)
         # ```
         def touch(*fields, time : Time = Time.utc)
-          raise CQL::Error.new("Cannot touch on a new record object") unless persisted?
+          raise CQL::Error.new("Cannot touch on a new record object") if new_record?
 
           # Default to :updated_at if no fields specified
           touch_fields = fields.empty? ? [:updated_at] : fields.to_a

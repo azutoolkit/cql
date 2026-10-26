@@ -96,7 +96,7 @@ module CQL
         end
 
         # Build a new object of type T with the given attributes
-        # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
+        # - **@param** fields [NamedTuple] The attributes to use, as named arguments
         # - **@return** [T] The new object
         #
         # **Example** Building a new user object
