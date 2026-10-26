@@ -109,4 +109,9 @@ describe CQL::Delete do
 
     delete_query.should eq({output, [1]})
   end
+
+  it "raises ArgumentError for a table the schema does not know" do
+    expect_raises(ArgumentError, "Table nope not found") { Northwind.delete.from(:nope) }
+    expect_raises(ArgumentError, "Table nope not found") { Northwind.delete.from(:users).using(:nope) }
+  end
 end

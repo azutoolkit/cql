@@ -723,7 +723,7 @@ module CQL
     # => nil
     # ```
     def create!
-      schema.tables[table_name] = self if schema.tables[table_name].nil?
+      schema.tables[table_name] ||= self
       Log.debug { "Creating table #{table_name}" }
       create_statements.each { |sql| schema.exec sql }
     end

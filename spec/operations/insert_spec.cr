@@ -100,4 +100,8 @@ describe CQL::Insert do
 
     Northwind.users.drop!
   end
+
+  it "raises ArgumentError for a table the schema does not know" do
+    expect_raises(ArgumentError, "Table nope not found") { Northwind.insert.into(:nope) }
+  end
 end

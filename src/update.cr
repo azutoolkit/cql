@@ -119,7 +119,7 @@ module CQL
     # Sets the table to update.
     # - **@param** table [Symbol] the name of the table
     # - **@return** [self] the current instance
-    # - **@raise** [Exception] if the table does not exist
+    # - **@raise** [ArgumentError] if the table does not exist
     #
     # **Example**
     # ```
@@ -349,7 +349,7 @@ module CQL
     end
 
     private def find_table(name : Symbol) : Table
-      @schema.tables[name] || raise "Table #{name} not found"
+      @schema.tables[name]? || raise ArgumentError.new("Table #{name} not found")
     end
 
     private def find_column(name : Symbol) : BaseColumn
