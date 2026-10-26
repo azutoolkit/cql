@@ -1,259 +1,132 @@
 # Add Validations
 
-This guide shows you how to add validations to your CQL models to ensure data integrity.
+Declare rules with `validate` so CQL checks a record before it saves it.
 
-## Basic Validation Syntax
-
-Use the `validate` macro to define validations:
+## Declare Rules
 
 ```crystal
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
 
-  property id : Int64?
-  property name : String
-  property email : String
-  property age : Int32 = 0
+  property name : String = ""
+  property email : String = ""
+  property age : Int32 = 30
+  property password : String?
 
   validate :name, presence: true
   validate :email, required: true, match: /@/
-  validate :age, gt: 0, lt: 120
+  validate :age, gt: 0, lt: 120, message: "Age must be between 1 and 119"
 
-  def initialize(@name : String, @email : String, @age : Int32 = 0)
+  def initialize
+  end
+
+  def initialize(@name : String, @email : String, @age : Int32 = 30)
   end
 end
 ```
 
-## Available Validators
-
-### Presence and Required
+Each option, with the message it adds when it fails (`message:` replaces it):
 
 ```crystal
-validate :name, presence: true      # Not nil AND not empty
-validate :user_id, required: true   # Not nil (can be empty)
+validate :name, presence: true                  # "name must be present": nil or empty fails
+validate :user_id, required: true               # "user_id is required": only nil fails
+validate :email, match: /@/                     # "email must match the pattern /@/"; needs a String property, not String?
+validate :username, size: 3..20                 # "username must have a size of 3..20"; size: 5 means exactly 5
+validate :age, gt: 0, lte: 120                  # "age must be greater than 0"; also gte:, lt:, eq:
+validate :status, in: ["active", "pending"]     # "status must be included in [\"active\", \"pending\"]"; Array or Range
+validate :role, exclude: ["admin", "root"]      # "role must not be included in [\"admin\", \"root\"]"
+validate :password_confirmation, confirmation: :password # "password_confirmation confirmation doesn't match"; nil fails
+validate :terms, accept: true                   # "terms must be accepted"; passes for true, "true", "1", "on", "yes"
 ```
 
-### Size
+Any other option, or a property the model does not define, fails at compile time.
 
-```crystal
-validate :username, size: 3..20     # Between 3 and 20 characters
-validate :zip_code, size: 5         # Exactly 5 characters
-```
+{% hint style="warning" %}
+Rules are stored per property, so a second `validate :email, ...` replaces the first. Put all of a property's rules in one call.
+{% endhint %}
 
-### Numeric Comparisons
-
-```crystal
-validate :age, gt: 0                # Greater than 0
-validate :age, gte: 18              # Greater than or equal to 18
-validate :score, lt: 100            # Less than 100
-validate :score, lte: 100           # Less than or equal to 100
-validate :priority, eq: 1           # Exactly 1
-```
-
-### Pattern Matching
-
-```crystal
-validate :email, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
-validate :phone, match: /\A\d{3}-\d{3}-\d{4}\z/
-```
-
-### Confirmation and Acceptance
-
-```crystal
-validate :password_confirmation, confirmation: :password   # Must equal the value of #password
-validate :terms_accepted, accept: true                     # true, "true", "1", "on" or "yes"
-```
-
-`confirmation:` takes the name of another property on the model. `accept: true` treats `true`, `"true"`, `"1"`, `"on"` and `"yes"` as accepted.
-
-### Inclusion and Exclusion
-
-```crystal
-validate :status, in: ["active", "inactive", "pending"]
-validate :rating, in: 1..5
-validate :username, exclude: ["admin", "root", "system"]
-```
-
-## Custom Error Messages
-
-Add the `message` parameter:
-
-```crystal
-validate :name, presence: true, message: "Name cannot be blank"
-validate :email, match: /@/, message: "Please enter a valid email address"
-validate :age, gt: 0, message: "Age must be a positive number"
-```
-
-### One Call Per Property
-
-Validations are stored per property, so a second `validate :email, ...` replaces the first. Put every rule for a property in a single call: `validate :email, presence: true, match: /@/`.
-
-### Unknown Options
-
-Only these options are accepted: `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `match`, `size`, `presence`, `required`, `confirmation`, `accept`, plus `message` and `on` (the validation context). Any other option, or a `validate` for a property that does not exist, fails at compile time.
-
-## Checking Validity
-
-### Check if Valid
-
-```crystal
-user = User.new("", "invalid-email", -5)
-
-if user.valid?
-  puts "User is valid"
-else
-  puts "User has errors"
-end
-```
-
-### Access Errors
-
-```crystal
-user = User.new("", "invalid-email", -5)
-
-unless user.valid?
-  user.errors.each do |error|
-    puts "#{error.field}: #{error.message}"
-  end
-end
-```
-
-`errors` re-runs the validations on every call and returns an `Array(CQL::ActiveRecord::Validations::Error)`; there is no `errors.add`. Each error has `field` (a `Symbol`) and `message`.
-
-### Validate and Raise
+## Check a Record
 
 ```crystal
 user = User.new("", "invalid", -5)
 
+user.valid?                   # => false
+user.errors.map(&.message)    # => ["name must be present", "email must match the pattern /@/",
+                              #     "Age must be between 1 and 119"]
+user.errors.first.field       # => :name
+
 begin
   user.validate!
 rescue ex : CQL::ActiveRecord::Validations::ValidationError
-  puts "Validation failed: #{ex.message}"   # messages joined with ","
+  ex.message                  # => "name must be present,email must match the pattern /@/,Age must be between 1 and 119"
 end
 ```
 
-## Custom Validators
+`errors` runs the rules again on every call and returns an `Array(CQL::ActiveRecord::Validations::Error)`, each with a `field` (`Symbol`) and a `message`. There is no `errors.add`.
 
-For complex validation logic, subclass `CustomValidator`. It receives the record in its constructor (type it in your subclass) and returns an array of errors from `valid?`:
-
-```crystal
-class PasswordValidator < CQL::ActiveRecord::Validations::CustomValidator
-  def initialize(@record : User)
-  end
-
-  def valid? : Array(CQL::ActiveRecord::Validations::Error)
-    errors = [] of CQL::ActiveRecord::Validations::Error
-    password = @record.password
-
-    unless password && password.size >= 8
-      errors << CQL::ActiveRecord::Validations::Error.new(:password, "must be at least 8 characters")
-    end
-
-    unless password && password.matches?(/[A-Z]/)
-      errors << CQL::ActiveRecord::Validations::Error.new(:password, "must contain an uppercase letter")
-    end
-
-    unless password && password.matches?(/\d/)
-      errors << CQL::ActiveRecord::Validations::Error.new(:password, "must contain a number")
-    end
-
-    errors
-  end
-end
-
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
-
-  property id : Int64?
-  property name : String
-  property password : String?
-
-  use PasswordValidator
-
-  def initialize(@name : String, @password : String? = nil)
-  end
-end
-```
-
-Custom validators also include the built-in predicates (`presence?`, `gt?`, `match?` and so on), so you can reuse them inside `valid?`.
-
-## Uniqueness Validation
-
-There is no built-in `uniqueness` option. Check it in a custom validator, and back it with a unique index in the schema:
-
-```crystal
-class UniqueEmailValidator < CQL::ActiveRecord::Validations::CustomValidator
-  def initialize(@record : User)
-  end
-
-  def valid? : Array(CQL::ActiveRecord::Validations::Error)
-    existing = User.find_by(email: @record.email)
-    if existing && existing.id != @record.id
-      [CQL::ActiveRecord::Validations::Error.new(:email, "has already been taken")]
-    else
-      [] of CQL::ActiveRecord::Validations::Error
-    end
-  end
-end
-
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
-
-  property id : Int64?
-  property email : String
-
-  validate :email, presence: true
-  use UniqueEmailValidator
-
-  def initialize(@email : String)
-  end
-end
-```
-
-## Validations and Save
-
-`save`, `save!` and the instance `record.create!` run validations before touching the database (the class method `Model.create!(...)` and `update!` do not; use `save` to update with validation). An invalid record raises `CQL::ActiveRecord::Validations::ValidationError`:
+## Save With Validation
 
 ```crystal
 user = User.new("", "invalid")
 
-begin
-  user.save!
-rescue ex : CQL::ActiveRecord::Validations::ValidationError
-  puts "Error: #{ex.message}"
-end
-```
+# ❌ save validates first and raises on an invalid record
+user.save                     # raises CQL::ActiveRecord::Validations::ValidationError
 
-To avoid exceptions, check `valid?` first:
-
-```crystal
+# ✅ Check first when invalid input is expected
 if user.valid?
   user.save
 else
-  puts "Failed: #{user.errors.map(&.message).join(", ")}"
+  puts user.errors.map(&.message).join(", ")
+end
+
+User.new("Ada", "ada@example.com").create! # validates, then INSERT
+User.create!(name: "", email: "x")         # no validation: INSERT as given
+```
+
+`save`, `save!` and the instance `create!` validate. The class method `User.create!(...)` and `update!` do not, so use `save` to update with validation. A `before_*` callback that returns `false` makes `save` return `false` without raising (see [Use Callbacks](use-callbacks.md)).
+
+## Write a Custom Validator
+
+Subclass `CustomValidator`, type the record in `initialize`, return errors from `valid?`, and register it with `use`:
+
+```crystal
+alias Error = CQL::ActiveRecord::Validations::Error
+
+class PasswordValidator < CQL::ActiveRecord::Validations::CustomValidator
+  def initialize(@record : User)
+  end
+
+  def valid? : Array(Error)
+    password = @record.password || ""
+    errors = [] of Error
+    errors << Error.new(:password, "must be at least 8 characters") if password.size < 8
+    # The built-in predicates (presence?, gt?, match? ...) are available here
+    errors << Error.new(:password, "must contain a digit") unless match?(password, /\d/)
+    errors
+  end
+end
+
+# There is no uniqueness option: check it here and back it with a unique index
+class UniqueEmailValidator < CQL::ActiveRecord::Validations::CustomValidator
+  def initialize(@record : User)
+  end
+
+  def valid? : Array(Error)
+    existing = User.find_by(email: @record.email)
+    return [] of Error unless existing && existing.id != @record.id
+    [Error.new(:email, "has already been taken")]
+  end
+end
+
+class User
+  use PasswordValidator, UniqueEmailValidator
 end
 ```
 
-A `before_*` callback that returns `false` makes `save` return `false` without raising. See [Use Callbacks](use-callbacks.md).
+## See Also
 
-## Verify It Works
-
-```crystal
-# Test valid data
-user = User.new("John Doe", "john@example.com", 30)
-user.valid?  # => true
-
-# Test invalid data
-bad_user = User.new("", "invalid", -5)
-bad_user.valid?  # => false
-bad_user.errors.size  # => 3
-```
-
-## Related
-
-- [Define a Model](define-model.md)
-- [Use Callbacks](use-callbacks.md)
 - [Validation Options Reference](../../reference/api/validation-options.md)
+- [Use Callbacks](use-callbacks.md)
+- [Define a Model](define-model.md)
+- [Fix Validation Errors](../troubleshooting/validation-errors.md)
+- [Create Indexes](../migrations/indexes.md)
