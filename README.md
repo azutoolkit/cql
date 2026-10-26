@@ -143,8 +143,8 @@ compile with `-Dcql_no_postgres_driver` to keep CQL's driver out of crystal-db's
 `using`:
 
 ```crystal
-url = "postgres://app:secret@db.internal/app?sslmode=verify-full&pool_size=10"
-engine = CQL::Postgres::AsyncEngine.connect(url)
+DATABASE_URL = "postgres://app:secret@db.internal/app?sslmode=verify-full&pool_size=10"
+engine = CQL::Postgres::AsyncEngine.connect(DATABASE_URL)
 
 User.query.where(name: "Ada").using(engine).to_a                                         # ... WHERE users.name = $1
 AppDB.query.from(:users).select(:name).where("id > ?", 10).using(engine).all(as: String) # ... WHERE id > $1
@@ -164,7 +164,7 @@ results = engine.pipeline([AppDB.query.from(:users).select(:name), AppDB.query.f
 results[0].as(CQL::Postgres::PipelineResult).all(as: String)
 
 # A whole schema (models, migrations, transactions) on the engine's pool
-ShopDB = CQL::Schema.new(:shop, url, CQL::Adapter::Postgres, source: CQL::Postgres::EngineSource.connect(url))
+ShopDB = CQL::Schema.new(:shop, DATABASE_URL, CQL::Adapter::Postgres, source: CQL::Postgres::EngineSource.connect(DATABASE_URL))
 ```
 
 | Guide | Covers |

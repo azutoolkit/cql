@@ -83,7 +83,7 @@ end
 A cancel request carries the session's secret key over a new, **unencrypted** connection, even under `sslmode=require`, as libpq does before version 17.
 {% endhint %}
 
-Pool health checks ping idle connections for at most 5 seconds (`Session::PING_TIMEOUT`) and share one `checkout_timeout` budget per checkout, so dead connections delay a checkout by about one timeout, not one each. A dropped connection closes its socket without a TLS close_notify, which could block on a dead path.
+`Session#ping(timeout)` closes a connection that does not answer in time. Pool health checks ping idle connections for at most 5 seconds (`Session::PING_TIMEOUT`) and share one `checkout_timeout` budget per checkout, so dead connections delay a checkout by about one timeout, not one each. A dropped connection closes its socket without a TLS close_notify, which could block on a dead path.
 
 ## LISTEN and NOTIFY
 
