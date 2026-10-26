@@ -317,6 +317,24 @@ describe CQL::Table do
         TableDB.exec_query(&.query_one(check_query, as: String))
       end
     end
+
+    it "registers a table built outside the schema on create!" do
+      table = CQL::Table.new(:unregistered_widgets, TableDB)
+      table.primary(:id, Int32)
+      table.column(:name, String)
+      table.drop! rescue nil
+
+      begin
+        table.create!
+
+        TableDB.tables[:unregistered_widgets].should be(table)
+        TableDB.insert.into(:unregistered_widgets).values(name: "gear").commit
+        TableDB.query.from(:unregistered_widgets).count.first!(as: Int64).should eq 1
+      ensure
+        table.drop!
+        TableDB.tables.delete(:unregistered_widgets)
+      end
+    end
   end
 
   describe "SQL generation" do

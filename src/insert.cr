@@ -155,6 +155,7 @@ module CQL
     # Set the table to insert into
     # - **@param** table [Symbol] The table to insert into
     # - **@return** [Insert] The insert object
+    # - **@raise** [ArgumentError] If the table does not exist
     #
     # **Example** Inserting a record
     #
@@ -415,7 +416,7 @@ module CQL
     end
 
     private def find_table(table : Symbol) : Table
-      @schema.tables[table] || raise "Table #{table} not found"
+      @schema.tables[table]? || raise ArgumentError.new("Table #{table} not found")
     end
 
     private def find_column(column : Symbol) : BaseColumn

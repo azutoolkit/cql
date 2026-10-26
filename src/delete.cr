@@ -78,7 +78,7 @@ module CQL
     # Sets the table to delete from
     # - **@param** table [Symbol] The name of the table
     # - **@return** [self] The current instance
-    # - **@raise** [Exception] If the table does not exist
+    # - **@raise** [ArgumentError] If the table does not exist
     #
     # **Example** Setting the table
     #
@@ -94,7 +94,7 @@ module CQL
     # Sets the table to use in the using clause
     # - **@param** table [Symbol] The name of the table
     # - **@return** [self] The current instance
-    # - **@raise** [Exception] If the table does not exist
+    # - **@raise** [ArgumentError] If the table does not exist
     #
     # **Example** Setting the using table
     # ```
@@ -276,7 +276,7 @@ module CQL
     end
 
     private def find_table(name : Symbol) : Table
-      @schema.tables[name] || raise "Table #{name} not found"
+      @schema.tables[name]? || raise ArgumentError.new("Table #{name} not found")
     end
 
     private def find_column(name : Symbol) : BaseColumn

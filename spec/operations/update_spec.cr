@@ -91,4 +91,8 @@ describe CQL::Update do
 
     update_query.should eq({"UPDATE users SET name = ? WHERE users.id = ?", [nil, 1]})
   end
+
+  it "raises ArgumentError for a table the schema does not know" do
+    expect_raises(ArgumentError, "Table nope not found") { Northwind.update.table(:nope) }
+  end
 end

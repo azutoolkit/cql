@@ -175,7 +175,7 @@ CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
 
 ### Unknown tables and columns
 
-There are no `TableNotFound` or `ColumnNotFound` classes. A table or column missing from the database surfaces as the driver's error (`CQL::Postgres::UndefinedTable` / `UndefinedColumn` on the native driver). A table missing from the *schema definition* raises `KeyError` from `schema.tables[...]`, or `CQL::Schema::Error` from `schema.alter`.
+There are no `TableNotFound` or `ColumnNotFound` classes. A table or column missing from the database surfaces as the driver's error (`CQL::Postgres::UndefinedTable` / `UndefinedColumn` on the native driver). A table missing from the *schema definition* raises `KeyError` from `schema.tables[...]`, `ArgumentError` ("Table users not found") from `insert.into`, `update.table`, `delete.from` and `delete.using`, or `CQL::Schema::Error` from `schema.alter`.
 
 **Solution:** Ensure migrations have run, check spelling, and keep the schema definition in sync.
 
