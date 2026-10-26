@@ -57,7 +57,7 @@ engine.pool.stats.to_s # => "0 in use, 2 idle, 20 max"
 #   connect_timeout=10        seconds for each connecting step; 0 waits forever
 #   application_name=cql
 #   statement_cache_size=256  prepared statements kept per connection; 0 turns the cache off
-#   binary_params=false       see copy-and-binary-params.md
+#   binary_params=false       send parameters in binary; see the COPY and binary parameters guide
 #   search_path=app           any other key is sent to the server as a startup parameter
 ```
 
