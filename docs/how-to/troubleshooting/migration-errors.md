@@ -16,6 +16,7 @@ CQL::Postgres::SyntaxOrAccessError: ERROR: syntax error or access rule violation
 **Cause:** a raw `CREATE TABLE` ran on a table that exists. `Table#create!` emits `CREATE TABLE IF NOT EXISTS`, so it never raises this. If the table is correct and only the record is missing, record the version by hand (CQL has no helper):
 
 ```crystal
+# CQL.build_migrator records in schema_migrations (test_migrations in test), AppDB.migrator in cql_schema_migrations
 AppDB.exec("INSERT INTO schema_migrations (name, version) VALUES ('CreateUsers', 1)")
 ```
 
