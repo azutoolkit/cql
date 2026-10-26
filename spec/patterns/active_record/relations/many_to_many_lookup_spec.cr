@@ -118,6 +118,28 @@ describe "many_to_many lookups" do
     LookupRoster.count.should eq(1)
   end
 
+  it "associates a soft-deleted target with << without inserting it again" do
+    team = LookupTeam.create!(name: "Greens")
+    gone = LookupPlayer.create!(name: "Gone")
+    gone.delete!
+
+    team.players << gone
+
+    LookupPlayer.with_deleted.count.should eq(1)
+    LookupRoster.count.should eq(1)
+  end
+
+  it "keeps a soft-deleted target out of a loaded collection, as a reload would" do
+    team = LookupTeam.create!(name: "Greys")
+    gone = LookupPlayer.create!(name: "Gone")
+    gone.delete!
+    team.players.size.should eq(0)
+
+    team.players << gone
+
+    team.players.size.should eq(0)
+  end
+
   it "returns a target once when it is associated twice" do
     team = LookupTeam.create!(name: "Blues")
     player = LookupPlayer.create!(name: "Twice")

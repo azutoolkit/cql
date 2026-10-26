@@ -83,6 +83,7 @@ user = User.create!(name: "Ada")   # the parent must be saved, or UnsavedRecord 
 user.posts.create(title: "First")  # Post.new(title: "First"), user_id set, validated INSERT
 user.posts.build(title: "Draft")   # same, not saved
 user.posts << Post.new("Second")   # sets user_id and INSERTs without validation
+user.posts << post                 # a saved post: sets user_id and UPDATEs it, with validations and callbacks
 user.create_posts([Post.new("Third")])
 
 # One multi-row INSERT per chunk; no validations or callbacks; returns the row count

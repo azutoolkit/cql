@@ -98,11 +98,11 @@ module CQL
 
       # Adds an existing record to the association.
       # Creates the association in the join table.
-      # Raises an error if the target record is not persisted.
+      # Raises an error if the target record is a new record.
       # - **param** : record (Target)
       # - **return** : self
       def <<(record : Target)
-        ensure_persisted(record)
+        ensure_saved(record)
         target_id = safe_id(record, Pk)
 
         # Create join table record to establish association
@@ -110,8 +110,8 @@ module CQL
           Through.find_or_create_by({@key => bound_id(@id), @target_key => bound_id(target_id)})
         end
 
-        # Add to internal array only if already loaded and not already present
-        if @loaded && !includes?(record)
+        # Add to the loaded records unless a reload would hide it (a soft-deleted record)
+        if @loaded && record.persisted? && !includes?(record)
           @records << record
         end
 

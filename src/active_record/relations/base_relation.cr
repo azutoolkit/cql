@@ -40,11 +40,9 @@ module CQL::ActiveRecord::Relations
       {{class_name}}.gsub(/([A-Z])/, "_\\1").downcase.lstrip('_')
     end
 
-    # Common validation for persisted records
-    # - **param** : record (T) - The record to validate
-    # - **raise** : UnsavedRecord if record is not persisted
-    macro ensure_persisted(record)
-      unless {{record}}.persisted?
+    # Raises UnsavedRecord unless *record* has a row; a soft-deleted record keeps its row, so it may be associated
+    macro ensure_saved(record)
+      if {{record}}.new_record?
         raise UnsavedRecord.new("Record must be saved before association operations")
       end
     end

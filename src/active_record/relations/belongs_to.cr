@@ -116,12 +116,12 @@ module CQL::ActiveRecord::Relations
           if record.nil?
             @{{foreign_key.id}} = nil
           else
-            ensure_persisted(record)
+            ensure_saved(record)
             @{{foreign_key.id}} = safe_id(record, typeof(record.id!))
           end
         {% else %}
           # For non-optional associations, record cannot be nil
-          ensure_persisted(record)
+          ensure_saved(record)
           @{{foreign_key.id}} = safe_id(record, typeof(record.id!))
         {% end %}
 

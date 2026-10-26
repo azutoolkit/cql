@@ -158,9 +158,10 @@ module CQL::ActiveRecord::Relations
       @records.compact_map(&.id).map(&.as(Pk))
     end
 
-    # Adds a record to the collection and saves it to the database
+    # Adds a record to the collection, as `create(record)` does.
     # - **param** : record (Target)
     # - **return** : Array(Target)
+    # - **raise** : CQL::RecordInvalid when a saved record fails its validations
     #
     # **Example**
     #
@@ -170,7 +171,8 @@ module CQL::ActiveRecord::Relations
     def <<(record : Target)
       load_records unless @loaded
       created_record = create(record)
-      @records << created_record unless @records.includes?(created_record)
+      # a reload hides a soft-deleted record
+      @records << created_record if created_record.persisted? && !includes?(created_record)
       @records
     end
 
@@ -315,14 +317,15 @@ module CQL::ActiveRecord::Relations
       end
     end
 
-    # Create and associate an existing record with the parent record
+    # Associates *record* with the parent: a new record is inserted without validations, a saved
+    # one (soft-deleted included) gets its foreign key updated with `save!`.
     # - **param** : record (Target)
     # - **return** : Target
-    # - **raise** : RelationError
+    # - **raise** : RelationError, or CQL::RecordInvalid when a saved record fails its validations
     def create(record : Target)
       record.attributes({@key => @id})
       safe_db_operation do
-        Target.create!(record)
+        record.new_record? ? Target.create!(record) : record.save!
         record
       end
     end
@@ -615,7 +618,7 @@ module CQL::ActiveRecord::Relations
         next if includes?(record)
         record.attributes({@key => @id})
         safe_db_operation { record.save! }
-        @records << record
+        @records << record if record.persisted? # a reload hides a soft-deleted record
       end
 
       @records

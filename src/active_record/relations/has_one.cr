@@ -99,7 +99,7 @@ module CQL::ActiveRecord::Relations
           end
         else
           # Don't require the record to be persisted when setting association
-          # ensure_persisted(record)
+          # ensure_saved(record)
           parent_id = safe_id(self, Pk)
 
           # Clear any existing association first
