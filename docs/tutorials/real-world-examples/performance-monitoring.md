@@ -17,7 +17,7 @@ This tutorial shows you how to track and optimize query performance in your CQL 
 
 ## Step 1: Enable Query Logging
 
-CQL publishes every statement it runs (selects, inserts, DDL, transactions) to `CQL::Telemetry`. Turn on one log line per statement:
+CQL publishes every statement it runs (selects, inserts, updates, deletes, DDL) to `CQL::Telemetry` as a `QueryEvent`. Transactions are not queries: `Schema#transaction` publishes `TransactionEvent`s to `CQL::Telemetry.subscribe_transactions` (see [Telemetry](../../how-to/performance/telemetry.md#transactions)). Turn on one log line per statement:
 
 ```crystal
 # src/database.cr

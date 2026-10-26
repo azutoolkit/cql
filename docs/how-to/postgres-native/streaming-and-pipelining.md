@@ -76,7 +76,7 @@ end
 ## Pipeline Statements
 
 `engine.pipeline` sends many statements in one network round trip on one connection. Each statement still reaches
-telemetry, and failures stay isolated.
+telemetry (not the performance monitor: it passes `track: false`), and failures stay isolated.
 
 ```crystal
 results = engine.pipeline([

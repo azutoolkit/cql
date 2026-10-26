@@ -2,11 +2,11 @@
 
 This guide shows you how to use CQL's built-in performance monitor: the query profiler, the N+1 detector, health metrics and reports.
 
-It lives in `CQL::Performance`. Every select, insert, update and delete CQL runs is timed once in `CQL::Execution.run` and recorded by the monitor (DDL and `explain` are not), so once monitoring is enabled you get data without wrapping your queries; a failed statement is recorded with its real duration. A profiler or detector that raises while recording is logged at error and never changes the statement's outcome. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
+It lives in `CQL::Performance`. Every select, insert, update and delete CQL runs is timed once in `CQL::Execution.run` and recorded by the monitor, so once monitoring is enabled you get data without wrapping your queries; `Schema#exec` (DDL and any other raw SQL), `explain` and the native engine's `exec` and `pipeline` pass `track: false`, so [Telemetry](telemetry.md) sees them but the monitor does not (wrap one in `CQL::Performance.track` to profile it); a failed statement is recorded with its real duration. A profiler or detector that raises while recording is logged at error and never changes the statement's outcome. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
 
 ## Turn It On
 
-Monitoring is opt-in: it runs several regex passes and takes two global locks per query, so it is off unless you enable it. Any of these turns it on:
+Monitoring is opt-in and off unless you enable it; [What monitoring costs](#what-monitoring-costs) says what it adds to a statement. Any of these turns it on:
 
 ```crystal
 CQL.configure { |c| c.monitor_performance = true } # when the configure block finishes
@@ -252,6 +252,28 @@ CQL::Performance.monitor.clear   # profiler data, detector patterns and the erro
 ```
 
 Call it in `before_each` of specs that assert on the profile. Use `CQL::Performance.monitor = CQL::Performance::Monitor.new(CQL::Performance.test_config)` to switch monitoring off for a spec suite.
+
+## What monitoring costs
+
+What telemetry and monitoring add to one statement, measured by `benchmarks/telemetry_overhead_bench.cr` (`find` by id and `create!` on in-memory SQLite, one thread; see `benchmarks/README.md`). Compare each row with "all off": bytes per iteration is the reliable column, and time differences under about 10% are within noise.
+
+| Configuration | `find` | `create!` |
+| --- | --- | --- |
+| all off | 0.83 µs, 336 B | 3.28 µs, 2.58 kB |
+| one synchronous subscriber | +80 ns, +0 B | +130 ns, +0 B |
+| one `async: true` subscriber¹ | +45 ns, +0 B | about 0, +0 B |
+| no-op tracer | about 0, +0 B | about 0, +0 B |
+| production monitor (`enable_production_mode!`) | +340 ns, +0 B | +260 ns, +0 B |
+| production monitor with `monitoring.async`¹ | +35 ns, +0 B | about 0, +0 B |
+| SQL logging, filtered out by the log level | +40 ns, +0 B | about 0, +0 B |
+
+Measured with `--release` on a 4-core VM (Crystal 1.22), the mean of two runs; absolute numbers depend on the machine. Before these changes the production monitor added about 0.8 µs and 600 B to each statement. ¹ The benchmark never yields, so the consumer seldom runs: these rows show what the statement pays (the hand-off, or the drop when the queue is full), not the background work, which costs about as much as the synchronous version.
+
+- With everything off, and with one synchronous subscriber, a statement allocates no extra bytes (`spec/performance/overhead_spec.cr` asserts it).
+- The production monitor (`enable_production_mode!`) adds no bytes in steady state: the profiler, the N+1 detector and the counters record without allocating. A statement slow enough to be kept (or any statement with `profiling.log_all_queries`) still allocates its `QueryData`, and SQL logging allocates its lines. The benchmark repeats one statement, so the N+1 detector takes its full pattern path every time: read it as a worst case.
+- Async delivery, for subscribers (`subscribe(name, async: true)`) and for the monitor (`monitoring.async`), moves work out of query latency, not out of CPU. On one thread the consumer runs only when the application yields.
+- Under `-Dpreview_mt`, handing an event to a parked consumer costs a scheduler wake, about half a microsecond.
+- The overhead counter is sampled (one statement in 64) and a free connection's pool wait takes no lock; see [Health and Metrics](#health-and-metrics).
 
 ## Related
 
