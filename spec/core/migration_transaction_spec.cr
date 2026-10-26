@@ -164,6 +164,22 @@ describe "CQL::Migrator transaction" do
     statements.select(&.includes?("CREATE")).should be_empty
   end
 
+  it "lists pending migrations inside a caller's transaction without running DDL" do
+    with_migrator(uri, TxMigrationCreateA, schema_class: TxNonTransactionalDdlSchema) do |migrator|
+      count_queries(:ddl) do
+        migrator.schema.transaction { migrator.pending_migrations.should eq([TxMigrationCreateA]) }
+      end.should be_empty
+    end
+  end
+
+  it "checks and records each migration without re-creating the migrations table" do
+    with_migrator(uri, TxMigrationCreateA, TxMigrationCreateC) do |migrator|
+      count_queries(:ddl) { migrator.up }.should eq(["CREATE TABLE tx_migration_a (id INTEGER)", "CREATE TABLE tx_migration_c (id INTEGER)"])
+    end
+
+    committed_versions.call.should eq([TxMigrationCreateA.version, TxMigrationCreateC.version])
+  end
+
   it "runs every migration and its record on the single pooled connection" do
     pool_of_one = "#{uri}?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05"
 

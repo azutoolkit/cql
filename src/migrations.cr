@@ -464,14 +464,7 @@ module CQL
     end
 
     private def migration_applied?(version)
-      # Ensure the schema_migrations table exists before checking
-      ensure_schema_migrations_table
-
-      begin
-        repo.exists?(version: version)
-      rescue DB::NoResultsError | CQL::Schema::ConnectionError
-        false
-      end
+      repo.exists?(version: version)
     end
 
     private def record_migration(migration : BaseMigration.class)
