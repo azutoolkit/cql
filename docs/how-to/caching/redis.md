@@ -21,7 +21,7 @@ CQL::Cache::Cache.cache_store.class  # => CQL::Cache::RedisCache
 CQL::Cache::Cache.default_ttl = 10.minutes
 ```
 
-Configure before the first cache call; `Cache.configure` drops the store built from the previous config. The config's `default_ttl` (1 hour) is kept on the config only: set `Cache.default_ttl` yourself.
+`Cache.configure` replaces the store, so values cached before it stay in the old one. The config's `default_ttl` (1 hour) stays on the config: set `Cache.default_ttl` yourself.
 
 ## Configure From the Environment
 

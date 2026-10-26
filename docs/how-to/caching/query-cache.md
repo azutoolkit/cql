@@ -71,8 +71,8 @@ class Post
   include CQL::ActiveRecord::Model(Int64)
   db_context schema: AppDB, table: :posts
   # ...
-  after_save :expire_cache
-  after_destroy :expire_cache
+  after_save :expire_cache     # runs on save and save!; create! and update! skip callbacks
+  after_destroy :expire_cache  # runs on delete!
 
   private def expire_cache
     CQL::Cache::Cache.cache_store.delete("homepage_titles")

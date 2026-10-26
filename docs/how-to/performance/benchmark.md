@@ -1,60 +1,60 @@
 # Benchmark CQL
 
-This guide shows you how to measure CQL's speed with the benchmarks in the repository, and how to compare two versions without fooling yourself.
-
-## Prerequisites
-
-- Crystal and the dependencies installed (`shards install --ignore-crystal-version`)
-- For the PostgreSQL benchmarks: a disposable database you can write to, in `DATABASE_URL`
+Measure CQL's speed with the repository's benchmarks, and compare two versions without fooling yourself.
 
 ## Pick a Benchmark
 
-| Script | Measures | Needs |
-| --- | --- | --- |
-| `benchmarks/sqlite_bench.cr` | Query building and SQL generation (`to_sql`), then ActiveRecord operations (`find`, `where.order.first`, `last`, `exists?`, `find_each`, associations and preload, `create!`, `update!`) on in-memory SQLite | Nothing |
-| `benchmarks/pg_wire_bench.cr` | CQL's native PostgreSQL driver against the `pg` shard: scalar selects, 100-row selects, inserts and a DSL lookup, on one fiber and several | `DATABASE_URL` |
-| `benchmarks/pg_binary_params_bench.cr` | Text against binary bind parameters through the native driver | `DATABASE_URL` |
-
-[benchmarks/README.md](../../../benchmarks/README.md) lists every workload and setting.
-
-## Run One
-
-Always build with `--release`; a debug build measures the compiler, not CQL:
-
 ```bash
+shards install --ignore-crystal-version   # once, from the repository root
+
+# Query building and to_sql, then ActiveRecord on in-memory SQLite (find, where.order.first, last,
+# exists?, find_each, associations and preload, create!, update!). Needs nothing.
 crystal run --release benchmarks/sqlite_bench.cr
-BENCH_ONLY=join crystal run --release benchmarks/sqlite_bench.cr      # workloads whose name contains "join"
+
+# What telemetry and the performance monitor add to one find and one create!. Needs nothing.
+crystal run --release benchmarks/telemetry_overhead_bench.cr
+
+# The native PostgreSQL driver against the pg shard: scalar and 100-row selects, inserts and a DSL lookup,
+# on one fiber and several. Needs a disposable database it can write to.
 DATABASE_URL=postgres://user:pass@localhost/db crystal run --release benchmarks/pg_wire_bench.cr
+
+# Text against binary bind parameters through the native driver.
+DATABASE_URL=postgres://user:pass@localhost/db crystal run --release benchmarks/pg_binary_params_bench.cr
 ```
 
-`sqlite_bench.cr` prints, per workload, iterations per second, time per iteration and bytes allocated per iteration. Bytes per iteration is the steadier number: it does not move with machine load.
+[benchmarks/README.md](../../../benchmarks/README.md) lists every workload and setting (`BENCH_OPS`, `BENCH_CONCURRENCY`, `BENCH_ROUNDS` and more).
+
+## Run One Workload
+
+```bash
+BENCH_ONLY=join crystal run --release benchmarks/sqlite_bench.cr                 # names containing "join", any case
+BENCH_ONLY=tracer crystal run --release benchmarks/telemetry_overhead_bench.cr   # one configuration
+```
+
+In these two scripts a `BENCH_ONLY` that matches nothing exits with an error; `pg_binary_params_bench.cr` matches case-sensitively. Both print, per workload, iterations per second, time per iteration and bytes allocated per iteration. Bytes per iteration is the steadier number: it does not move with machine load.
+
+{% hint style="warning" %}
+Always build with `--release`: a debug build is unoptimized, so its timings say little about CQL.
+{% endhint %}
 
 ## Compare Two Versions
 
-Timings drift by several percent between runs on the same machine. To compare a change with a baseline:
+```bash
+# 1. Build both versions into separate binaries, instead of calling crystal run twice
+git worktree add ../cql-base master
+(cd ../cql-base && shards install --ignore-crystal-version && crystal build --release -o /tmp/bench_base benchmarks/sqlite_bench.cr)
+crystal build --release -o /tmp/bench_new benchmarks/sqlite_bench.cr
 
-1. Build both versions into separate binaries instead of using `crystal run` twice:
+# 2. Run them alternately, at least twice each, so both see the same machine conditions
+for i in 1 2; do
+  BENCH_ONLY=join /tmp/bench_base
+  BENCH_ONLY=join /tmp/bench_new
+done
+```
 
-   ```bash
-   git worktree add ../cql-base master
-   (cd ../cql-base && crystal build --release -o /tmp/bench_base benchmarks/sqlite_bench.cr)
-   crystal build --release -o /tmp/bench_new benchmarks/sqlite_bench.cr
-   ```
-
-2. Run them alternately, at least twice each, so both see the same machine conditions:
-
-   ```bash
-   for i in 1 2; do
-     BENCH_ONLY=join /tmp/bench_base
-     BENCH_ONLY=join /tmp/bench_new
-   done
-   ```
-
-3. Trust a difference that shows up in every round, and in bytes per iteration where it applies. Treat a few percent on one round as noise.
+Timings drift by several percent between runs on one machine. Trust a difference that shows up in every round, and in bytes per iteration where it applies; treat a few percent in one round as noise.
 
 ## Measure Your Own Workload
-
-To time a query from your application, use Crystal's `Benchmark`:
 
 ```crystal
 require "benchmark"
@@ -63,12 +63,15 @@ Benchmark.ips do |x|
   x.report("find") { User.find(42) }
   x.report("to_sql") { User.where(active: true).order(name: :asc).limit(10).to_sql }
 end
+# find     1.21M (826.45ns) (± 2.10%)  336B/op        fastest
+# to_sql 486.12k (  2.06µs) (± 1.35%)  2.3kB/op  2.49× slower
 ```
 
-Run it with the configuration you deploy with: SQL logging or the performance monitor, when enabled, cost several microseconds per query (see [How CQL Keeps Queries Fast](../../explanation/performance-design.md#what-is-off-by-default)).
+Run it with the configuration you deploy. SQL logging and the performance monitor, when on, add to every statement: [What monitoring costs](query-profiler.md#what-monitoring-costs) has the numbers.
 
 ## See Also
 
 - [How CQL Keeps Queries Fast](../../explanation/performance-design.md)
 - [Optimize Queries](optimize-queries.md)
 - [Profile Queries and Detect N+1](query-profiler.md)
+- [Monitor Performance](monitoring.md)
