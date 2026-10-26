@@ -79,7 +79,8 @@ module CQL
 
         begin
           if ttl
-            @redis.setex(prefixed_key, ttl.total_seconds.to_i, value)
+            # Milliseconds, so sub-second TTLs keep; PX must be at least 1
+            @redis.set(prefixed_key, value, px: Math.max(ttl.total_milliseconds.ceil.to_i64, 1_i64))
           else
             @redis.set(prefixed_key, value)
           end
@@ -279,23 +280,10 @@ module CQL
           # Try to get Redis info
           begin
             redis_info = @redis.info
-            # Parse useful Redis stats
-            if redis_info.is_a?(String)
-              redis_info.each_line do |line|
-                next unless line.includes?(":")
-                key, value = line.split(":", 2)
-                case key.strip
-                when "used_memory"
-                  base_stats["redis_memory_usage_bytes"] = value.strip.to_i64? || 0_i64
-                when "connected_clients"
-                  base_stats["redis_connected_clients"] = value.strip.to_i32? || 0
-                when "keyspace_hits"
-                  base_stats["redis_keyspace_hits"] = value.strip.to_i64? || 0_i64
-                when "keyspace_misses"
-                  base_stats["redis_keyspace_misses"] = value.strip.to_i64? || 0_i64
-                end
-              end
-            end
+            base_stats["redis_memory_usage_bytes"] = redis_info["used_memory"]?.try(&.to_i64?) || 0_i64
+            base_stats["redis_connected_clients"] = redis_info["connected_clients"]?.try(&.to_i32?) || 0
+            base_stats["redis_keyspace_hits"] = redis_info["keyspace_hits"]?.try(&.to_i64?) || 0_i64
+            base_stats["redis_keyspace_misses"] = redis_info["keyspace_misses"]?.try(&.to_i64?) || 0_i64
           rescue Redis::Error
             # Redis info not available, continue with basic stats
           end

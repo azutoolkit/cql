@@ -45,6 +45,12 @@ describe "saving runs validations once" do
     CountingValidator.runs.should eq(1)
   end
 
+  it "validates once in save! too" do
+    CountedWidget.new("bang").save!.should be_true
+
+    CountingValidator.runs.should eq(1)
+  end
+
   it "keeps validating a persisted record once when it is saved" do
     widget = CountedWidget.new("old")
     widget.save

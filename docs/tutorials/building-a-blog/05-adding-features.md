@@ -61,10 +61,12 @@ user = User.new(username: "ab", email: "invalid")
 puts "valid? #{user.valid?}"
 user.errors.each { |error| puts "  #{error.field}: #{error.message}" }
 
+puts "saved? #{user.save}"
+
 begin
-  user.save
-rescue ex : CQL::ActiveRecord::Validations::ValidationError
-  puts "save raised: #{ex.message}"
+  user.save!
+rescue ex : CQL::RecordInvalid
+  puts "save! raised: #{ex.message}"
 end
 ```
 {% endcode %}
@@ -77,10 +79,11 @@ crystal src/features.cr
 valid? false
   username: username must have a size of 3..50
   email: email must match the pattern /\A[^@\s]+@[^@\s]+\z/
-save raised: username must have a size of 3..50,email must match the pattern /\A[^@\s]+@[^@\s]+\z/
+saved? false
+save! raised: username must have a size of 3..50,email must match the pattern /\A[^@\s]+@[^@\s]+\z/
 ```
 
-`save` and `save!` raise on an invalid record, so call `valid?` first to report errors. `create!` skips validations.
+`save` returns `false` on an invalid record and `save!` raises `CQL::RecordInvalid`; `errors` lists what failed. `create!` skips validations.
 {% endstep %}
 
 {% step %}
@@ -89,7 +92,7 @@ save raised: username must have a size of 3..50,email must match the pattern /\A
 Inside `class User`, below `use UniqueUserValidator`:
 
 ```crystal
-  # save runs: before_validation, after_validation, the validate rules, before_save,
+  # save runs: before_validation, the validate rules, after_validation, before_save,
   # before_create or before_update, after_create or after_update, after_save.
   # delete! runs before_destroy and after_destroy; create! runs none.
   before_validation :normalize_email

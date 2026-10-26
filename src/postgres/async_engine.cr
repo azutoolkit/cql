@@ -88,11 +88,11 @@ module CQL::Postgres
     # unaffected and appears as its `ServerError` in the returned array.
     #
     # ```
-    # users, orders = engine.pipeline([User.query_sql, Order.query_sql])
+    # users, orders = engine.pipeline([User.query.where(active: true), Order.query])
     # users.as(CQL::Postgres::PipelineResult).all(as: User)
     # ```
     def pipeline(queries : Array(Q)) : Array(PipelineResult | ServerError) forall Q
-      pipeline(queries.map { |query| sql, params = query.to_sql; {sql, params} })
+      pipeline(queries.map { |query| sql_and_params(query) })
     end
 
     def pipeline(statements : Array({String, Array(::DB::Any)})) : Array(PipelineResult | ServerError)

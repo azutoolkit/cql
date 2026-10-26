@@ -87,6 +87,16 @@ describe "CQL.configure" do
       ENV.delete("CQL_NO_SQL_LOG")
     end
 
+    it "defaults the test environment to an in-memory SQLite URL that parses and opens" do
+      with_crystal_env("test") do
+        CQL.config.db.should eq("sqlite3::memory:")
+        url = CQL.config.full_db_url
+        URI.parse(url).scheme.should eq("sqlite3")
+        DB.open(url, &.scalar("SELECT 1").should(eq(1)))
+        File.exists?("[:memory:]").should be_false
+      end
+    end
+
     it "does not log SQL in production by default" do
       with_crystal_env("production") { CQL.config.sql_logging?.should be_false }
     end
@@ -117,6 +127,15 @@ describe "CQL.configure" do
     end
   end
 
+  describe "fragment_cache" do
+    it "builds a FragmentCache with each invalidation strategy" do
+      {"timestamp" => "TimestampInvalidation", "version" => "VersionInvalidation", "transaction_aware" => "TransactionAwareInvalidation"}.each do |strategy, name|
+        CQL.configure(&.cache.invalidation=(strategy))
+        CQL.fragment_cache.stats["invalidation_strategy"].should eq(name)
+      end
+    end
+  end
+
   describe "full_db_url" do
     it "opens through the native PostgreSQL driver without unknown startup parameters" do
       {"postgres://u@localhost/app", "cockroachdb://root@localhost:26257/defaultdb"}.each do |url|
@@ -124,7 +143,7 @@ describe "CQL.configure" do
 
         driver_config = CQL::Postgres::Config.from_uri(
           URI.parse(CQL.config.full_db_url),
-          ignoring: CQL::Postgres::Driver::DB_OWNED_KEYS + CQL::Postgres::Driver::COMPAT_IGNORED_KEYS)
+          ignoring: CQL::Postgres::Driver::DB_OWNED_KEYS)
         driver_config.startup_options.should be_empty
       end
     end

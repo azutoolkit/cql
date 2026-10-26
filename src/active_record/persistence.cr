@@ -41,6 +41,11 @@ module CQL
           id.nil?
         end
 
+        # `valid?` and `errors` check a record as `save` will: one without an id as `:create`, others as `:update`.
+        private def default_validation_context : Symbol?
+          new_record? ? :create : :update
+        end
+
         # Touch one or more timestamp attributes without triggering callbacks
         # Updates the specified timestamp fields to the current time and saves
         # directly to the database without running validations or callbacks.
@@ -167,29 +172,31 @@ module CQL
         end
 
         # Save the record to the database or update it if it already exists
-        # - **@return** [Bool] True if saved successfully, false otherwise
+        # - **@return** [Bool] True if saved; false if the record is invalid (see `errors`) or a callback halted
         #
         # **Example** Saving a record
         #
         # ```
-        # user.save
+        # user.save || puts(user.errors.map(&.message).join(", "))
         # ```
-        def save
+        def save : Bool
+          save_record { valid? }
+        end
+
+        # Shared body of `save` and `save!`; the block validates the record (`valid?` or `validate!`).
+        private def save_record(& : -> Bool) : Bool
           # Set timestamps before running callbacks
           set_timestamps!
 
-          # Run validation callbacks first
           return false unless run_callbacks(:before_validation)
+          return false unless yield
           return false unless run_callbacks(:after_validation)
-
-          # Validate the record
-          return false unless validate!
 
           # Run before save callbacks
           return false unless run_callbacks(:before_save)
 
-          # Save the record
-          success = if !persisted?
+          # A record with an id is updated, even a soft-deleted one, whose `persisted?` is false
+          success = if new_record?
             # Create path
             return false unless run_callbacks(:before_create)
             # Already validated above; the instance create! would validate again
@@ -217,15 +224,15 @@ module CQL
         # Sets created_at on create and updated_at on both create and update
         # Uses TimestampManager module for consistent timestamp handling
         private def set_timestamps!
-          timestamp_attrs = prepare_timestamps(!persisted?)
+          timestamp_attrs = prepare_timestamps(new_record?)
           apply_timestamps(timestamp_attrs)
         end
 
         # Save the record to the database or update it if it already exists
         # Raises an exception if the record cannot be saved
         # - **@return** [Bool] Always returns true when successful
-        # - **@raise** [CQL::RecordInvalid] If the record is invalid
-        # - **@raise** [CQL::RecordNotSaved] If the record cannot be saved for other reasons
+        # - **@raise** [CQL::RecordInvalid] If the record is invalid (as `Validations::ValidationError`)
+        # - **@raise** [CQL::RecordNotSaved] If a callback halts the save
         #
         # **Example** Saving a record with exception handling
         #
@@ -241,16 +248,7 @@ module CQL
         # end
         # ```
         def save!
-          return true if save
-          validation_errors = errors
-          if validation_errors.any?
-            error_summary = validation_errors.map { |e| "#{e.field}: #{e.message}" }.join(", ")
-            # Convert validation errors to NamedTuple format for exception
-            error_tuples = validation_errors.map { |e| {field: e.field, message: e.message} }
-            raise CQL::RecordInvalid.new("Record invalid: #{error_summary}", error_tuples)
-          else
-            raise CQL::RecordNotSaved.new("Failed to save the record")
-          end
+          save_record { validate! } || raise CQL::RecordNotSaved.new("Failed to save the record")
         end
       end
     end

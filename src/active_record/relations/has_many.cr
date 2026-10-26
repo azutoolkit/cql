@@ -101,7 +101,6 @@ module CQL::ActiveRecord::Relations
         @{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
           key: :{{fk}},
           id: parent_id,
-          cascade: ({{strategy}} == :destroy || {{strategy}} == :delete_all),
           query: scoped_query,
           dependent: {{strategy}},
           auto_load: false
@@ -134,7 +133,6 @@ module CQL::ActiveRecord::Relations
         @{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
           key: :{{fk}},
           id: parent_id,
-          cascade: ({{strategy}} == :destroy || {{strategy}} == :delete_all),
           dependent: {{strategy}},
           auto_load: false
         )

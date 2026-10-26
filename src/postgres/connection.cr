@@ -88,8 +88,8 @@ module CQL::Postgres
       translating_lost { @session.copy_in_binary(sql, types) { |rows| yield rows } }
     end
 
-    def copy_out_binary(sql : String, types : Array(UInt32), & : Array(Types::Value) ->) : Int64
-      translating_lost { @session.copy_out_binary(sql, types) { |row| yield row } }
+    def copy_out_binary(sql : String, types : Array(UInt32), &on_row : Array(Types::Value) ->) : Int64
+      translating_lost { @session.copy_out_binary(sql, types, &on_row) }
     end
 
     # Runs a query and yields a result set that reads rows from the server
@@ -107,7 +107,9 @@ module CQL::Postgres
     end
 
     def stream(sql : String, args : Enumerable, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
-      params = args.map { |arg| @session.encode(arg) }.to_a
+      # Built element by element, so no arguments (an empty Tuple's `to_a`) still types as params
+      params = [] of Types::Param
+      args.each { |arg| params << @session.encode(arg) }
       translating_lost do
         @session.stream(sql, params, fetch_size, timeout: timeout) do |rows|
           yield ResultSet.new(Statement.new(self, sql, prepared: true), rows)

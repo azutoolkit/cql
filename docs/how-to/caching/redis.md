@@ -64,7 +64,7 @@ cache = CQL::Cache::RedisCache.new(config)  # command_timeout and reconnect_atte
 ```crystal
 cache = CQL::Cache::Cache.cache_store
 
-cache.set("report", report_json, 1.hour)  # SETEX with whole seconds; a TTL under 1 second fails (false)
+cache.set("report", report_json, 1.hour)  # SET ... PX, so a TTL under a second works too
 cache.set("flag", "on")                   # no TTL: kept until deleted or evicted by Redis
 cache.get("report")                       # => String?
 cache.exists?("report")                   # => true
@@ -105,7 +105,8 @@ cache = CQL::Cache::RedisCache.new(ENV["REDIS_URL"])
 cache.ping                       # => true; false when Redis cannot be reached
 cache.set("probe", "ok", 1.minute)
 cache.get("probe")               # => "ok"
-cache.stats                      # type, key_prefix, hits, misses, hit_rate_percent, sets, deletes, evictions
+cache.stats                      # type, key_prefix, hits, misses, hit_rate_percent, sets, deletes, evictions,
+                                 # and redis_memory_usage_bytes, redis_connected_clients, redis_keyspace_hits and redis_keyspace_misses from INFO
 ```
 
 Redis errors are rescued: reads return `nil`, writes `false`, `size` 0. The hit and miss counters live in your process.

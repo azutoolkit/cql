@@ -237,6 +237,19 @@ describe "CQL Advanced Caching" do
     end
   end
 
+  describe "Cache.set and Cache.get" do
+    it "stores and reads back an array of database values" do
+      CQL::Cache::Cache.set("cql:rows", ["Ada", 36_i64, 5_000_000_000_i64, 1.5, true, false, nil] of DB::Any, 1.minute)
+      CQL::Cache::Cache.get("cql:rows").should eq(["Ada", 36, 5_000_000_000_i64, 1.5, true, false, nil] of DB::Any)
+    end
+
+    it "refuses Bytes, which have no JSON form" do
+      expect_raises(ArgumentError, /Bytes/) do
+        CQL::Cache::Cache.set("cql:bytes", ["x".to_slice] of DB::Any, 1.minute)
+      end
+    end
+  end
+
   describe "TransactionAwareInvalidation" do
     cache = CQL::Cache::MemoryCache.new
     base_strategy = CQL::Cache::TimestampInvalidation.new
@@ -305,6 +318,15 @@ describe "CQL Advanced Caching" do
 
     before_each do
       cache.clear
+    end
+
+    describe "#stats" do
+      it "merges its own entries into the store's" do
+        stats = fragment_cache.stats
+        stats["fragment_cache_enabled"].should eq("true")
+        stats["invalidation_strategy"].should eq("TimestampInvalidation")
+        stats.has_key?("hits").should be_true
+      end
     end
 
     describe "fragment caching" do

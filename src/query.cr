@@ -162,7 +162,7 @@ module CQL
     end
 
     def first!(as kind)
-      first(kind).not_nil!
+      first(kind) || raise DB::NoResultsError.new("No records found")
     end
 
     # Specifies the columns to select.

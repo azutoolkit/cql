@@ -19,6 +19,23 @@ describe "CQL compile-time safety" do
     error.should contain("unsupported predicate `typo`")
   end
 
+  it "raises a clear error for an on: context that is not a symbol" do
+    success, _output, error = Snippets.compile <<-CRYSTAL
+      require "./src/cql"
+
+      class BrokenContext
+        include CQL::ActiveRecord::Validations
+
+        property name : String?
+
+        validate :name, presence: true, on: "create"
+      end
+      CRYSTAL
+
+    success.should be_false
+    error.should contain("CQL validation error in BrokenContext: `on:` for `:name` must be a symbol")
+  end
+
   it "raises a clear error for malformed belongs_to declarations" do
     success, _output, error = Snippets.compile <<-CRYSTAL
       require "./src/cql"

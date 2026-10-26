@@ -308,7 +308,7 @@ describe CQL::ActiveRecord::SoftDeletable do
       user2.create!
 
       # Delete by email
-      SoftDeletableUser.delete_by!(email: "delete_by@example.com")
+      SoftDeletableUser.delete_by!(email: "delete_by@example.com").rows_affected.should eq(2)
 
       SoftDeletableUser.count_with_deleted.should eq(2)
       # Users should be soft-deleted
@@ -445,6 +445,21 @@ describe CQL::ActiveRecord::SoftDeletable do
   end
 
   describe "edge cases" do
+    it "updates its row when a soft-deleted record is saved, without inserting another" do
+      user = SoftDeletableUser.new("Saved After Delete", "saved@example.com", 25)
+      user.create!
+      user.delete!.should be_true
+      user.persisted?.should be_false
+
+      user.name = "Renamed"
+      user.save.should be_true
+
+      SoftDeletableUser.count_with_deleted.should eq(1)
+      stored = SoftDeletableUser.with_deleted.find!(user.id!)
+      stored.name.should eq("Renamed")
+      stored.deleted?.should be_true
+    end
+
     it "handles nil deleted_at properly" do
       user = SoftDeletableUser.new("Nil Test", "nil@example.com", 25)
       user.create!

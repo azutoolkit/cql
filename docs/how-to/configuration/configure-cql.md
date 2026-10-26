@@ -174,8 +174,8 @@ puts "table=#{migrator.config.migration_table_name} file=#{migrator.config.schem
 
 </details>
 
-{% hint style="warning" %}
-The test environment's default `db` is `sqlite3://:memory:`, which `CQL.build_schema` rejects with `URI::Error: Invalid URI: bad port at character 11`. Assign a file URL, as the complete example does.
+{% hint style="info" %}
+The test environment's default `db` is `sqlite3::memory:`, an in-memory database per connection. The migrator needs two connections, so assign a file URL when tests run migrations, as the complete example does.
 {% endhint %}
 
 ## Read the config anywhere

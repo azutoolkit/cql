@@ -19,14 +19,14 @@ post.views_count += 1
 post.save!
 ```
 
-`save` validates, runs the save and update callbacks, sets `updated_at` and writes every column. An invalid record
-raises, as on create:
+`save` validates, runs the save and update callbacks, sets `updated_at` and writes every column. As on create, an
+invalid record makes `save` return `false` and `save!` raise:
 
 ```crystal
 user.email = "invalid"
 user.valid?                               # => false
 user.errors.map(&.message).join(", ")     # => "is not an email"
-user.save                                 # raises CQL::ActiveRecord::Validations::ValidationError
+user.save                                 # => false; nothing is written
 ```
 
 ## Write Columns Without Validations or Callbacks

@@ -21,7 +21,6 @@ class TestUser
   validate :name, presence: true, size: 2..50, message: "Name is invalid"
   validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i, message: "Email format is invalid"
   validate :age, gt: 1, lt: 120, message: "Age must be between a reasonable range"
-  validate :password_confirmation, presence: true, message: "Password confirmation is required"
   validate :password_confirmation, confirmation: :password, message: "doesn't match Password"
 
   # Define callbacks
@@ -38,6 +37,8 @@ class TestUser
   before_destroy :check_halt_destroy
   after_destroy :do_after_destroy
 
+  scope :adults, -> { where { age >= 18 } }
+
   has_one :profile, UserProfile
   has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
 
@@ -52,7 +53,7 @@ class TestUser
 
   def do_after_validation
     CallbackTracker.add("after_validation")
-    true
+    @halt_on_callback != "after_validation"
   end
 
   def do_before_save

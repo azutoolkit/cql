@@ -22,6 +22,13 @@ OPTIMISTIC_LOCKING_TEST_SCHEMA = CQL::Schema.define(
     lock_version :version
     timestamps
   end
+
+  table :soft_products do
+    primary :id, Int32, auto_increment: true
+    varchar :name
+    lock_version :version
+    timestamp :deleted_at, null: true
+  end
 end
 
 # Define our test class using Active Record
@@ -73,6 +80,23 @@ class Int64Product
   optimistic_locking version_column: :version
 end
 
+# Optimistic locking together with soft deletes
+class SoftLockedProduct
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::SoftDeletable
+  include CQL::ActiveRecord::OptimisticLocking
+
+  db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :soft_products
+
+  property name : String
+  property version : Int32
+
+  def initialize(@name = "", @version = 1)
+  end
+
+  optimistic_locking version_column: :version
+end
+
 module CQL::ActiveRecord::OptimisticLockingSpec
   describe "Optimistic Locking" do
     before_each do
@@ -86,6 +110,18 @@ module CQL::ActiveRecord::OptimisticLockingSpec
       # Clean up after all tests
       OPTIMISTIC_LOCKING_TEST_SCHEMA.products.drop!
       OPTIMISTIC_LOCKING_TEST_SCHEMA.int64_products.drop!
+    end
+
+    it "saves a soft-deleted record under the lock, updating its row" do
+      product = SoftLockedProduct.create!(name: "Old")
+      product.delete!.should be_true
+
+      product.name = "New"
+      product.save.should be_true
+
+      product.version.should eq(2)
+      SoftLockedProduct.count_with_deleted.should eq(1)
+      SoftLockedProduct.with_deleted.find!(product.id!).name.should eq("New")
     end
 
     it "should create a product with version 1" do

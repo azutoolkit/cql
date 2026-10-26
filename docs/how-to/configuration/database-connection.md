@@ -133,7 +133,7 @@ CQL.configure { |config| config.db = "sqlite3://#{db_path}" }
 ```
 
 {% hint style="warning" %}
-`sqlite3://:memory:` does not parse: `CQL.build_schema` raises `URI::Error` and `Schema.define` raises `CQL::Schema::InvalidURIError`. Use a file URL.
+Write an in-memory database as `sqlite3::memory:`; `sqlite3://:memory:` does not parse. Each connection gets its own in-memory database, so keep the pool at one connection or use a file URL.
 {% endhint %}
 
 ## Test the connection
@@ -186,7 +186,8 @@ end
 
 # A malformed URI raises CQL::Schema::InvalidURIError before connecting:
 #   "redis://localhost"   -> Unsupported database type: redis
-#   "cockroachdb:///app"  -> Missing host in CockroachDB URI (same for MySQL)
+#   "cockroachdb:///app"  -> Missing host in CockroachDB URI (same for MySQL, and for PostgreSQL
+#                            unless PGHOST or ?host=/socket/dir supplies one)
 #   "localhost/app"       -> Invalid database URI format
 ```
 

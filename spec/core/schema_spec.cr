@@ -34,7 +34,9 @@ describe CQL::Schema do
     end
 
     it "raises error for invalid PostgreSQL URI without host" do
-      expect_raises(DB::ConnectionRefused) do
+      previous = ENV["PGHOST"]?
+      ENV.delete("PGHOST")
+      expect_raises(CQL::Schema::InvalidURIError, "Missing host in PostgreSQL URI") do
         CQL::Schema.define(:test_db, adapter: CQL::Adapter::Postgres, uri: "postgresql:///testdb") do
           table :users do
             primary :id, Int32
@@ -42,6 +44,23 @@ describe CQL::Schema do
           end
         end
       end
+    ensure
+      previous ? (ENV["PGHOST"] = previous) : ENV.delete("PGHOST")
+    end
+
+    it "takes the PostgreSQL host from ?host= or PGHOST when the URI has none" do
+      previous = ENV["PGHOST"]?
+      ENV.delete("PGHOST")
+      # No server listens there: the error comes from connecting, not from the URI check
+      expect_raises(DB::ConnectionRefused) do
+        CQL::Schema.define(:test_db, adapter: CQL::Adapter::Postgres, uri: "postgres://app@/testdb?host=/nonexistent") { }
+      end
+      ENV["PGHOST"] = "127.0.0.1"
+      expect_raises(DB::ConnectionRefused) do
+        CQL::Schema.define(:test_db, adapter: CQL::Adapter::Postgres, uri: "postgresql://app@:1/testdb") { }
+      end
+    ensure
+      previous ? (ENV["PGHOST"] = previous) : ENV.delete("PGHOST")
     end
 
     it "accepts the mysql scheme instead of rejecting it as unsupported" do

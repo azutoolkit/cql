@@ -14,6 +14,31 @@ class TestAcceptanceUser
   end
 end
 
+class TwoRuleName
+  include CQL::ActiveRecord::Validations
+
+  property name : String?
+
+  validate :name, presence: true, message: "Name is required"
+  validate :name, size: 2..5, message: "Name is the wrong size"
+
+  def initialize(@name = nil)
+  end
+end
+
+class ContextNote
+  include CQL::ActiveRecord::Validations
+
+  property title : String?
+  property bio : String?
+
+  validate :title, presence: true
+  validate :bio, presence: true, on: :update, message: "Bio is required on update"
+
+  def initialize(@title = nil, @bio = nil)
+  end
+end
+
 describe CQL::ActiveRecord::Validations do
   describe TestUser do
     describe "validations" do
@@ -146,6 +171,29 @@ describe CQL::ActiveRecord::Validations do
         user.valid?.should be_false
         user.errors.map(&.message).should contain("Terms must be accepted")
       end
+    end
+  end
+
+  describe "several validate calls on one attribute" do
+    it "runs every call's rules" do
+      TwoRuleName.new("").errors.map(&.message).should eq(["Name is required", "Name is the wrong size"])
+      TwoRuleName.new("Toolong").errors.map(&.message).should eq(["Name is the wrong size"])
+      TwoRuleName.new("Ada").valid?.should be_true
+    end
+  end
+
+  describe "on:" do
+    it "runs a rule only in its context" do
+      note = ContextNote.new("Draft")
+
+      note.valid?.should be_true
+      note.valid?(:create).should be_true
+      note.errors(:update).map(&.message).should eq(["Bio is required on update"])
+      ContextNote.new("Draft", "Hello").valid?(:update).should be_true
+    end
+
+    it "runs rules without on: in every context" do
+      ContextNote.new(nil, "Hello").errors(:update).map(&.message).should eq(["title must be present"])
     end
   end
 end

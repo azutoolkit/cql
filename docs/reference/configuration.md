@@ -57,7 +57,7 @@ end
 
 | Setting | Type | Default | Meaning |
 | :--- | :--- | :--- | :--- |
-| `db` | `String` | `"sqlite3://./db/development.db"` (`"sqlite3://:memory:"` in test) | Database URL. The scheme picks the adapter: `postgres://`, `postgresql://`, `cockroachdb://`, `mysql://`, `sqlite3://`. `DATABASE_URL` is not read for you. |
+| `db` | `String` | `"sqlite3://./db/development.db"` (`"sqlite3::memory:"` in test) | Database URL. The scheme picks the adapter: `postgres://`, `postgresql://`, `cockroachdb://`, `mysql://`, `sqlite3://` (or the opaque `sqlite3::memory:`). `DATABASE_URL` is not read for you. |
 | `env` | `String` | `ENV["CRYSTAL_ENV"]? \|\| "development"` | Read when the config is built. Assigning it later changes `env` and the `sql_logging` default only; it does not re-apply the [environment strategy](#environment-strategies). |
 | `adapter_options` | `Hash(String, String)` | `{}` | Extra URL parameters, appended after the configured ones. A key the config already emits appears twice and crystal-db reads the first; to override a configured parameter put it in `db`. |
 | `logger` | `Log` | `Log.for("CQL::<Env>")`, e.g. `CQL::Development` | `Schema`, `Table`, `AlterTable` and `Migrator` capture it when CQL loads (`Log = CQL.config.logger`); a logger assigned later reaches only `effective_logger` (the `CQL.build_*` helpers). |
@@ -252,7 +252,7 @@ These settings are accepted, and `timezone` is validated, but nothing in `src/` 
 
 | Setting | development | test | production |
 | :--- | :--- | :--- | :--- |
-| `db` | unchanged | `"sqlite3://:memory:"` | unchanged |
+| `db` | unchanged | `"sqlite3::memory:"` | unchanged |
 | `migrations_table` | `:schema_migrations` | `:test_migrations` | `:schema_migrations` |
 | `pool_size` / `pool.size` | 5 | 1 | 25 |
 | `pool.initial_size` | 2 | 1 | 5 |
@@ -268,8 +268,8 @@ These settings are accepted, and `timezone` is validated, but nothing in `src/` 
 | `log_level` | `Debug` | `Error` | `Info` |
 | `sql_logging` | `true` when named, unless `CQL_NO_SQL_LOG` | `false` | `false` |
 
-{% hint style="warning" %}
-The test strategy's `db` cannot be opened: `CQL.build_schema` raises `URI::Error` (`bad port`) on `sqlite3://:memory:`. Assign a file URL in test, e.g. `c.db = "sqlite3://./db/test.db"`.
+{% hint style="info" %}
+The test strategy's `db` is an in-memory SQLite database, one per connection; its pool of one connection keeps every statement on it. The migrator needs two connections, so assign a file URL when tests run migrations, e.g. `c.db = "sqlite3://./db/test.db"`.
 {% endhint %}
 
 ## Environment variables
@@ -277,7 +277,7 @@ The test strategy's `db` cannot be opened: `CQL.build_schema` raises `URI::Error
 | Variable | Read by | Effect |
 | :--- | :--- | :--- |
 | `CRYSTAL_ENV` | `Config#env`, `CacheConfig`, `CQL::Performance::Config` | Picks the environment. Unset means `development` (without SQL logging). |
-| `CQL_NO_SQL_LOG` | `Config#sql_logging?` | Present (any value) and `sql_logging` never assigned: development does not log SQL. |
+| `CQL_NO_SQL_LOG` | `Config#sql_logging?`, the performance monitor's development defaults | Present (any value) and `sql_logging` never assigned: development does not log SQL. |
 | `CQL_VALIDATE_SCHEMA_MAPPINGS` | model definitions | `1` checks model getter types and primary keys against the schema; a mismatch raises `CQL::ActiveRecord::SchemaMappingError`. The check is emitted from `macro finished`, so it runs after all other top-level code: a server that blocks in `listen` never reaches it. Run it from a spec or a script that only requires the models. |
 | `NO_COLOR` | `CQL::Performance::SQLFormatter` | Present: SQL logging is not colorized. |
 | `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` | native PostgreSQL driver | Used when the URL has no host, port, user or password (defaults `localhost`, `5432`, `postgres`, none). |
