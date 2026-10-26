@@ -44,7 +44,7 @@ DATABASE_URL=postgres://example:example@localhost:5432/example crystal spec
 
 ## Conventions a Change Is Reviewed Against
 
-**Design.** Apply SOLID and the patterns already in use: Visitor for SQL generation, Builder for queries and conditions, Strategy for dialects, Template Method for dialect defaults. Add a feature as a new AST node, a visitor method and a dialect hook, not as `if`/`case` branches on the adapter. Keep classes and methods small, and let names carry the meaning instead of comments.
+**Design.** Apply SOLID and the patterns already in use: Visitor for SQL generation, Builder for queries and conditions, Strategy for dialects, Template Method for dialect defaults. Add a feature as a new AST node, a visitor method and a dialect hook, not as `if`/`case` branches on the adapter. In `Expression::Generator`, a node that appears inside statements writes its SQL with a private `write(node, io)` overload and gets its String `visit` from `visit_through_write`; a node without one falls back to its String `visit`. Keep classes and methods small, and let names carry the meaning instead of comments.
 
 **Safety.** Values are always bound as parameters; identifiers go through `CQL::Identifier` or `Dialect#quote_identifier`. Never interpolate user input into SQL.
 
