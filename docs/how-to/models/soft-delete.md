@@ -67,7 +67,7 @@ User.only_deleted.all        # WHERE users.deleted_at IS NOT NULL
 User.count_with_deleted      # same as User.with_deleted.count
 User.count_only_deleted      # same as User.only_deleted.count
 
-# Both are scopes, so keep chaining
+# Both start a query; chain after them
 User.only_deleted.where(name: "Ada").order(deleted_at: :desc).all
 ```
 

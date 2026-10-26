@@ -124,6 +124,17 @@ describe "Eager Loading / Preload" do
       parents.each { |parent| parent.posts.size.should eq(parent.id == user.id ? 1 : 0) }
     end
 
+    it "keeps the preload when a scope follows it" do
+      user = preload_chunk_user(1)
+      Post.create!(title: "only", body: "b", user_id: user.id)
+      loaded = [] of TestUser
+
+      statements = count_queries { loaded = TestUser.preload(:posts).adults.all }
+
+      statements.size.should eq(2)
+      loaded.map(&.posts.size).should eq([1])
+    end
+
     it "uses a single SELECT when the parents fit in one chunk" do
       users = (1..4).map { |i| preload_chunk_user(i) }
       users.each { |user| Post.create!(title: "only", body: "b", user_id: user.id) }

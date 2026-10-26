@@ -29,7 +29,7 @@ class Post
 end
 ```
 
-`scope` defines a class method (`Post.published`) and a `QueryBuilder` method, so scopes chain with each other and with `where`, `order` and `limit`. Lambdas have no default values: pass every argument, with the exact type (integer literals are `Int32`).
+`scope` defines a class method (`Post.published`) and a `QueryBuilder` method, so scopes chain with each other and with `where`, `order` and `limit`. The body runs on the query it is chained to, as if written there: call the builder's methods (`where`, `order`, ...) in it. A body that starts its own query (`Post.query...`) replaces the chain, and a bare `query` is the chain's `CQL::Query`, which `query.where` changes in place. Lambdas have no default values: pass every argument, with the exact type (integer literals are `Int32`).
 
 ## Use Scopes
 
@@ -44,7 +44,7 @@ Post.featured.limit(5).all                # ... ORDER BY posts.views_count DESC 
 Post.active.order(created_at: :desc).all  # ... WHERE (posts.deleted_at IS NULL) AND (posts.published = ?)
 
 # Scopes also follow where, order and limit. user.posts is a Collection without scopes, so start from Post:
-Post.where(user_id: user.id!).published.all
+Post.where(user_id: user.id!).published.all # ... WHERE (posts.user_id = ?) AND (posts.published = ?)
 Post.by_author(user.id!).draft.count
 ```
 
@@ -65,20 +65,11 @@ A plain class method like this starts a chain but cannot follow other query meth
 ## List a Model's Scopes
 
 ```crystal
-Post.defined_scopes.keys  # => [":published", ":draft", ":popular", ":recent", ...]
+Post.defined_scopes.keys  # => ["published", "draft", "popular", "recent", ...]
+CQL::ActiveRecord::Scopes::ScopeUtilities.scope_defined?(Post, "published") # => true
 ```
 
-{% hint style="warning" %}
-Scope methods are added to the `QueryBuilder` class that every model shares, so the last model to define a scope name wins. Give scopes distinct names across models (for example `published` on one model only, or `post_published`).
-{% endhint %}
-
-{% hint style="warning" %}
-Once the program calls `pluck`, `pick` or `select(:column)` on `Post`, `Post.published.all` is typed `Array(Post) | Array(Post::Row)`, so reading an attribute may not compile. Start with `Post.query.published` to keep `Array(Post)`.
-{% endhint %}
-
-{% hint style="info" %}
-A scope chained after another query method repeats that query's conditions in its `WHERE` (`(posts.user_id = ?) AND ((posts.user_id = ?) AND (posts.published = ?))`). The rows are the same; the SQL grows with each chained scope.
-{% endhint %}
+Each model's queries run that model's own scopes, so two models can define scopes with the same name.
 
 ## See Also
 

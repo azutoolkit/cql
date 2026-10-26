@@ -24,6 +24,7 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 - **Removed APIs.** `Dialect#format_insert_values`, the PostgreSQL driver's `ResultSet#result`, and the parent-ids argument of the generated `_preload_<name>` methods.
 - **Models without `db_context`.** The typed query DSL (`where { }`, `joins`, `Model::Columns`, `Model::Row`) is now generated for every model, so a model that defines its own `Columns` or `Row` of another kind clashes. `CQL_VALIDATE_SCHEMA_MAPPINGS=1` also validates models whose schema was inferred; models with no resolvable schema are skipped. `Model.schema` of a model whose schema cannot be resolved raises `CQL::ActiveRecord::SchemaMappingError` (it was `NilAssertionError`), and `Model.table` no longer raises. `CQL_TABLE_NAME` and `CQL_SCHEMA_CONTEXT` are defined only for the arguments `db_context` was given.
 - **Migrations.** On SQLite and PostgreSQL a `migrator.up`/`down` run is one transaction: a failing migration rolls the whole run back, and statements that cannot run in a transaction (`CREATE INDEX CONCURRENTLY`) fail inside a migration. On MySQL and CockroachDB, `schema.alter`, `schema.build`, a table's `create!`, `drop!` and `truncate!`, and the migrator (`pending_migrations` included) raise `CQL::DialectError` inside an open `schema.transaction`; run them outside it. On SQLite and PostgreSQL, `schema.build` and `create!` are atomic.
+- **Scopes.** A scope's body runs on the query it is chained to: its `limit` now replaces an earlier one (the smaller used to win), and a body that starts its own query (`Post.query...`) replaces the chain. SoftDeletable's `with_deleted` and `only_deleted` are class methods that start a query instead of scopes, so they no longer appear in `defined_scopes`; chained after another query method, `with_deleted` never compiled and `only_deleted` matched nothing.
 - **NULL lookups.** `where(col: nil)`, `find_by`, `exists?`, `delete_by!` and `update_by` with a nil value match the rows whose column is NULL (`IS NULL`) instead of none, and so does `col == nil` in a schema query's `where { }` block (`!= nil` matches `IS NOT NULL`); reject a nil from untrusted input first.
 
 ### Added
@@ -178,12 +179,17 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Removed
 
+- The `Scopes.create_chainable_scope_method` macro and the private `QueryBuilder#merge_queries` it defined; `scope` no longer uses them.
 - `format_insert_values` on `Expression::PostgresDialect`, `MySqlDialect` and `SqliteDialect` (and the abstract `DmlDialect#format_insert_values`). It was the generator's internal hook for the VALUES list, took the generator's flat placeholder list, and had three identical implementations; the generator now writes the list itself. A custom dialect that still defines it compiles unchanged; the method is no longer called.
 
 - Unused backup code in `src/expression/expressions_backup.cr`
 
 ### Fixed
 
+- A scope chained after other query methods runs its body on that query, as if written there, so `Post.where(user_id: 1).published` is `WHERE (posts.user_id = ?) AND (posts.published = ?)`. Before, the receiver's WHERE was ANDed in a second time with each chained scope, the receiver's query was changed in place, and preloads were dropped.
+- Each model's queries run that model's own scope. Before, chained scope methods were defined on the `QueryBuilder` every model shares, so when two models declared a scope with the same name, the last one's body ran for both.
+- `Model.defined_scopes` and `CQL::ActiveRecord::Scopes::ScopeUtilities` key scopes by their plain names (`"published"`), so `scope_defined?(Post, "published")` is true. Before, the keys were `":published"`.
+- `Post.published.all` stays `Array(Post)` in a program that also calls `pluck`, `pick` or `select(:col)` on `Post`. Before, the class-method form of a scope ran the scope through a `Proc`, whose return type widened to include `PartialBuilder`, so the result was `Array(Post) | Array(Post::Row)`.
 - SoftDeletable `delete_by!` returns a `DB::ExecResult` whose `rows_affected` is the number of records it soft deleted. Before, the count went into `last_insert_id` and `rows_affected` was always 0.
 - `save` on a soft-deleted record updates its row (which stays soft deleted) instead of inserting a copy. `save`, its timestamps and optimistic locking decide between INSERT and UPDATE by whether the record has an id (`new_record?`), not by `persisted?`, which stays `false` for a soft-deleted record.
 - `save!` on an invalid record raises a `CQL::RecordInvalid`, as its doc comment says: `CQL::ActiveRecord::Validations::ValidationError` is now a subclass of `CQL::RecordInvalid` (and so of `CQL::Error`) with `error_fields` and `error_messages`, and its message is unchanged. Before, it inherited from `Exception`, so `rescue CQL::RecordInvalid` never caught a failed validation. `save!` raises `CQL::RecordNotSaved` when a callback halts the save and no longer validates a second time.

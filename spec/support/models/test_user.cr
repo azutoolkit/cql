@@ -37,6 +37,8 @@ class TestUser
   before_destroy :check_halt_destroy
   after_destroy :do_after_destroy
 
+  scope :adults, -> { where { age >= 18 } }
+
   has_one :profile, UserProfile
   has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
 
