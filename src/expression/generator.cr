@@ -18,6 +18,21 @@ module Expression
       @quote_identifiers ? @dialect.quote_identifier(name.to_s) : name.to_s
     end
 
+    # Tables and columns keep their quoted names (see `CQL::QuotedNameCache`).
+    private def ident(table : CQL::Table) : String
+      @quote_identifiers ? table.__quoted_name(@dialect, table.table_name) : table.table_name.to_s
+    end
+
+    private def ident(column : CQL::BaseColumn) : String
+      @quote_identifiers ? column.__quoted_name(@dialect, column.name) : column.name.to_s
+    end
+
+    # An alias that is just the table's name is quoted like the table.
+    private def alias_ident(alias_name : String, table : CQL::Table?) : String
+      return ident(alias_name) unless table && @quote_identifiers
+      table.table_name.to_s == alias_name ? ident(table) : ident(alias_name)
+    end
+
     # Helper method to check if a column is an auto-timestamp column
     private def is_auto_timestamp_column?(column : CQL::BaseColumn) : Bool
       column_name = column.name.to_s
@@ -127,7 +142,7 @@ module Expression
         write(node.table, io)
         io << " ("
         columns.each_with_index do |col, i|
-          io << ident(col.column.name)
+          io << ident(col.column)
           io << ", " if i < columns.size - 1
         end
         io << ")"
@@ -137,18 +152,7 @@ module Expression
           io << " "
           write(q, io)
         else
-          # Store placeholders for values
-          placeholders = [] of String
-
-          # Add all values to params and collect placeholders
-          node.values.each do |row|
-            row.each do |val|
-              placeholders << bind(val)
-            end
-          end
-
-          # Use dialect to format insert values
-          io << @dialect.format_insert_values(node.values, placeholders)
+          write_values(node.values, io)
           node.conflict.try { |conflict| write(conflict, io) }
 
           # Handle returning clause if needed
@@ -173,6 +177,29 @@ module Expression
           column_names = node.back.map(&.accept(self))
           io << @dialect.format_delete_returning(column_names)
         end
+      end
+    end
+
+    # Values are bound row by row, so `$n` numbering runs across the rows.
+    private def write_values(rows : Array(Array(DB::Any)), io : IO) : Nil
+      return if rows.empty?
+      io << " VALUES "
+      rows.each_with_index do |row, row_index|
+        io << ", " if row_index > 0
+        io << '('
+        bind_row(row, io)
+        io << ')'
+      end
+    end
+
+    # Binds a row's values in one step; each placeholder is its value's 1-based position in the
+    # parameters, as `bind` gives it.
+    private def bind_row(row : Array(DB::Any), io : IO) : Nil
+      first = @params.size
+      @params.concat(row)
+      row.each_index do |index|
+        io << ", " if index > 0
+        io << @dialect.placeholder_format(first + index + 1)
       end
     end
 
@@ -210,15 +237,15 @@ module Expression
     # query builder expands when specific tables are needed.
     private def column_parts(node : BaseColumn) : {String?, String}
       column_name = node.column.name
-      name = column_name == :* ? "*" : ident(column_name)
+      name = column_name == :* ? "*" : ident(node.column)
       if alias_name = node.alias_name
-        {ident(alias_name), name}
+        {alias_ident(alias_name, node.column.table), name}
       elsif column_name == :*
         {nil, name}
       else
         table = node.column.table
         raise "Internal Error: Column expression missing table context and no alias provided" unless table
-        {ident(table.table_name), name}
+        {ident(table), name}
       end
     end
 
@@ -323,10 +350,10 @@ module Expression
     end
 
     def visit(node : OnConflict) : String
-      target = node.target.map { |column| ident(column.column.name) }
+      target = node.target.map { |column| ident(column.column) }
       return @dialect.format_on_conflict_nothing(target) if node.do_nothing?
 
-      refreshed = node.refreshed.map { |column| name = ident(column.column.name); "#{name} = #{@dialect.excluded_reference(name)}" }
+      refreshed = node.refreshed.map { |column| name = ident(column.column); "#{name} = #{@dialect.excluded_reference(name)}" }
       @dialect.format_on_conflict_update(target, refreshed + node.assignments.map(&.accept(self)))
     end
 
@@ -458,7 +485,7 @@ module Expression
     # `AS alias` only when the alias differs from the table name.
     private def write(node : Table, io : IO) : Nil
       table_name = node.table.table_name.to_s
-      io << ident(table_name)
+      io << ident(node.table)
       alias_name = node.alias_name
       io << " AS " << ident(alias_name) if alias_name && alias_name != table_name
     end
@@ -529,7 +556,7 @@ module Expression
     end
 
     private def write(node : Setter, io : IO) : Nil
-      io << ident(node.column.column.name) << " = " << bind(node.value)
+      io << ident(node.column.column) << " = " << bind(node.value)
     end
 
     def visit(node : Update) : String

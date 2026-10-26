@@ -142,7 +142,8 @@ query.explain(analyze: true)                  # PostgreSQL / MySQL / CockroachDB
 
 Every query and DML statement – selects, inserts, updates, deletes, DDL through
 `Schema#exec`, `explain` – goes through `CQL::Execution.run`. That is where
-performance tracking and telemetry happen, and where an explicit connection
+telemetry happens for all of them, and performance tracking for selects and DML (not
+`Schema#exec` or `explain`), and where an explicit connection
 can be supplied:
 
 ```crystal

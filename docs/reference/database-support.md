@@ -20,7 +20,7 @@ Legend: yes, no (raises `CQL::DialectError` unless stated), or a note.
 | Placeholders | `?` | `$1`, `$2`, ... | `?` | `$1`, `$2`, ... |
 | Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |
 | Upsert (`on_conflict`, `upsert`) | `ON CONFLICT`, SQLite 3.24+ | `ON CONFLICT` | `ON DUPLICATE KEY UPDATE`; the conflict target is ignored, any unique key triggers it | `ON CONFLICT` |
-| `RETURNING` on insert, update, delete (`back`) | SQLite 3.35+ (older raises `CQL::SQLiteUnsupportedFeatureError`) | yes | no, the clause is omitted | yes |
+| `RETURNING` on insert, update, delete (`back`) | no: requesting columns raises `CQL::SQLiteUnsupportedFeatureError` | yes | no, the clause is omitted | yes |
 | `distinct_on` | no | yes | no | yes |
 | Row locking (`lock(:update \| :share, skip_locked:, nowait:)`) | no | yes | yes | yes |
 | `ilike` / `not_ilike` | emulated with `LOWER(...) LIKE LOWER(...)` | native `ILIKE` | emulated with `LOWER()` | native `ILIKE` |
@@ -37,7 +37,7 @@ Legend: yes, no (raises `CQL::DialectError` unless stated), or a note.
 | Bare `OFFSET` (no `LIMIT`) | `LIMIT -1 OFFSET n` | `OFFSET n` | `LIMIT 18446744073709551615 OFFSET n` | `OFFSET n` |
 | `explain` | `EXPLAIN QUERY PLAN` | `EXPLAIN` | `EXPLAIN` | `EXPLAIN` |
 | `explain(analyze: true)` | no | yes | MySQL 8.0.18+ | yes |
-| `structure_dump` | yes | via `pg_dump` | yes | no |
+| `structure_dump` | returns an empty string | via `pg_dump` | yes | no |
 | `Int32` column type | `INTEGER` | `INTEGER` | `INT` | `INT4` |
 | `JSON::Any` column type | `TEXT` | `JSONB` | `JSON` | `JSONB` |
 
@@ -58,10 +58,12 @@ key, not only the columns you name.
 ### Returning
 
 `back(:id, :name)` on `Insert`, `Update` and `Delete` emits `RETURNING` where supported. MySQL drops the clause. On
-SQLite before 3.35, requesting columns raises `CQL::SQLiteUnsupportedFeatureError` with a workaround (run a separate
-`SELECT`). `Insert#get(as:)`/`get!(as:)` run the insert and read the returned row. `Dialect#supports_returning?`
+SQLite, requesting columns raises `CQL::SQLiteUnsupportedFeatureError` whatever the version, with a workaround (run a
+separate `SELECT`). `Insert#get(as:)`/`get!(as:)` run the insert and read the returned row. `Dialect#supports_returning?`
 tells whether `Model.create!` can read the new row from its INSERT: true on PostgreSQL and CockroachDB, false on SQLite
-and MySQL, which read it back with a `SELECT`.
+and MySQL, which read it back with a `SELECT`. `Dialect#supports_transactional_ddl?` (used by
+`Schema#ddl_transaction`) tells whether a schema change rolls back with its transaction: true on SQLite and PostgreSQL,
+false on MySQL, which commits DDL implicitly, and CockroachDB, which does not run it atomically in an explicit transaction.
 
 ### DISTINCT ON
 

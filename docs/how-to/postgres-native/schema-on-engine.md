@@ -43,9 +43,7 @@ AppDB.close                            # closes the pool; waiting fibers get Poo
   errors stay `CQL::Postgres::ServerError` subclasses and `TLSRefused`. `retry_attempts` and `retry_delay` do not exist:
   the engine does not retry connects.
 - A transaction opened inside another one (`schema.transaction` or `Model.transaction`) runs as a SAVEPOINT on the outer
-  transaction's engine connection, so nesting takes no extra pool slot and works with `pool_size=1`. `Migrator#up`/`#down`
-  still run each migration's statements on a second pooled connection, so a pool of size 1 deadlocks there (see the
-  CHANGELOG).
+  transaction's engine connection, so nesting takes no extra pool slot and works with `pool_size=1`.
 - `Schema#uri` is the URL you passed without the engine's pool options (`pool_size`, `max_queries`, ...; connection settings such as `sslmode` and `max_protocol_version` stay), because `SchemaDump`
   (migrations with `auto_sync`) opens its own connection from it through crystal-db. It must name the same server and
   database as the engine; Schema validates it but does not compare it.

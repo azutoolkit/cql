@@ -12,7 +12,7 @@ Use `has_many` when:
 ## Options
 
 ```crystal
-has_many :posts, Post                                  # foreign key defaults to user_id (owner name + _id)
+has_many :posts, Post                                  # foreign key defaults to user_id (owner name + _id, without its namespace: Blog::User -> user_id)
 has_many :posts, Post, :user_id                        # third argument is the foreign key
 has_many :posts, Post, foreign_key: :author_id, dependent: :destroy
 ```
@@ -27,6 +27,7 @@ CQL validates `has_many` declarations during compilation:
 - The `foreign_key` option must be a symbol literal when provided.
 - The `dependent` option must be one of `:destroy`, `:delete_all`, `:nullify`, or `:restrict_with_error`.
 - If the target model is available during compilation, the target foreign key type must match the parent model primary key type.
+- The foreign key must not be the target's primary key (`id`, or the column named by `db_context ..., primary_key:`): shared-primary-key associations are not supported.
 
 Example:
 
@@ -182,6 +183,19 @@ user.posts.count  # => 3
 ```
 
 The parent must be saved first; `user.posts` raises `CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord` otherwise.
+
+### Insert Many Related Rows at Once
+
+`insert_<name>_all` inserts rows of column values with `Model.insert_all` (multi-row INSERTs, in chunks under the bind-parameter limit), sets the foreign key on every row to the parent's id, and returns how many rows were inserted:
+
+```crystal
+user.insert_posts_all([
+  {title: "First Post", body: "Hello world"},
+  {title: "Second Post", body: "Another post"},
+]) # => 2
+```
+
+It sends one statement per chunk instead of one per post, but like `insert_all` it runs no validations or callbacks and returns no records; use `user.posts.create` or `create_posts` when those matter. The foreign key (`foreign_key:`, `user_id` here) is set on every row, replacing any value a row gives, and an association's `scope:` is not applied: rows are inserted as given, so a scoped association only returns those that match its scope. Rows may be hashes or named tuples, and `batch_size:` caps the rows per statement as in `insert_all` (the foreign key counts toward the bind-parameter limit). The parent must be saved first.
 
 ## Delete Related Records
 

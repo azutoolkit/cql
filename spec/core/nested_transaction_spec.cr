@@ -8,6 +8,19 @@ describe "CQL::Schema#transaction nesting" do
       primary :id, Int32
       column :label, String
     end
+
+    table :nested_alters do
+      primary :id, Int32
+      column :label, String
+    end
+  end
+
+  # Speaks MySQL's dialect but runs on the SQLite file, so a spec can open a transaction around DDL.
+  mysql_schema = CQL::Schema.new(:nested_tx_mysql, "mysql://localhost/cql_spec", CQL::Adapter::MySql,
+    source: CQL::DatabaseSource.new(DB.open("sqlite3://#{db_file}")))
+  mysql_schema.table :nested_alters do
+    primary :id, Int32
+    column :label, String
   end
 
   count_rows = -> { schema.exec_query(&.query_one("SELECT COUNT(*) FROM nested_rows", as: Int64)) }
@@ -16,13 +29,23 @@ describe "CQL::Schema#transaction nesting" do
   committed_labels = -> do
     DB.open("sqlite3://#{db_file}", &.query_all("SELECT label FROM nested_rows ORDER BY label", as: String))
   end
+  # Reads through a separate connection, so it sees only committed schema changes.
+  committed_columns = -> do
+    DB.open("sqlite3://#{db_file}", &.query_all("SELECT name FROM pragma_table_info('nested_alters')", as: String))
+  end
+  # Reads through a separate connection, so it sees only committed schema changes.
+  committed_probe_tables = -> do
+    DB.open("sqlite3://#{db_file}", &.query_all("SELECT name FROM sqlite_master WHERE name = 'ddl_tx_probe'", as: String))
+  end
 
   before_each do
     schema.build
     schema.exec("DELETE FROM nested_rows")
+    schema.exec("DROP TABLE IF EXISTS ddl_tx_probe")
   end
 
   after_all do
+    mysql_schema.close
     ["", "-wal", "-shm", "-journal"].each do |suffix|
       path = db_file + suffix
       File.delete(path) if File.exists?(path)
@@ -281,5 +304,72 @@ describe "CQL::Schema#transaction nesting" do
 
     plain_queries_beside_open_tx.should be > 0
     wrong_connections.should be_empty
+  end
+
+  it "alters a table inside a transaction and commits the column with it" do
+    schema.transaction { schema.alter(:nested_alters) { add_column :added_in_transaction, String } }
+
+    committed_columns.call.should contain "added_in_transaction"
+  end
+
+  it "discards an alter when the outer transaction block raises" do
+    expect_raises(Exception, "boom") do
+      schema.transaction do
+        schema.alter(:nested_alters) { add_column :added_then_rolled_back, String }
+        raise "boom"
+      end
+    end
+
+    committed_columns.call.should_not contain "added_then_rolled_back"
+  end
+
+  it "alters a table outside a transaction" do
+    schema.alter(:nested_alters) { add_column :added_outside_transaction, String }
+
+    committed_columns.call.should contain "added_outside_transaction"
+  end
+
+  it "refuses an alter inside a transaction on a dialect whose DDL commits implicitly" do
+    expect_raises(CQL::DialectError, /MySQL/) do
+      mysql_schema.transaction do
+        mysql_schema.exec("INSERT INTO nested_rows (label) VALUES ('kept_out')")
+        mysql_schema.alter(:nested_alters) { add_column :mysql_nested, String }
+      end
+    end
+
+    committed_labels.call.should be_empty
+    committed_columns.call.should_not contain "mysql_nested"
+  end
+
+  it "alters outside a transaction on a dialect whose DDL commits implicitly" do
+    mysql_schema.alter(:nested_alters) { add_column :mysql_outside_transaction, String }
+
+    committed_columns.call.should contain "mysql_outside_transaction"
+  end
+
+  it "rolls back DDL run in a ddl_transaction when the block raises" do
+    expect_raises(Exception, "boom") do
+      schema.ddl_transaction do
+        schema.exec("CREATE TABLE ddl_tx_probe (id INTEGER)")
+        raise "boom"
+      end
+    end
+
+    committed_probe_tables.call.should be_empty
+  end
+
+  it "runs a ddl_transaction block bare outside a transaction on a dialect whose DDL commits implicitly" do
+    events = [] of CQL::Telemetry::TransactionEvent
+    CQL::Telemetry.subscribe_transactions("ddl_transaction_spec") { |event| events << event }
+    ran = false
+
+    begin
+      mysql_schema.ddl_transaction { ran = true }
+    ensure
+      CQL::Telemetry.unsubscribe_transactions("ddl_transaction_spec")
+    end
+
+    ran.should be_true
+    events.should be_empty
   end
 end

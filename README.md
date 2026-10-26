@@ -15,10 +15,11 @@ A high-performance, type-safe ORM for Crystal applications that combines compile
 
 ### Performance
 
-- 4x faster than ActiveRecord and Eloquent in real-world scenarios
-- 75% less memory usage compared to Ruby/PHP ORMs
-- Zero-allocation queries for maximum throughput
-- Compile-time optimizations eliminate runtime overhead
+- `Model.find` renders its statement once per model and rebinds only the id: about a million lookups per second on in-memory SQLite, 480 bytes each
+- SQL is written in one pass into one buffer; values are always bound, never interpolated
+- `last`, `exists?`, `count` and `find_each` fetch only the rows they need; `preload` loads associations in one query per chunk
+- Bulk writes (`insert_all`, `upsert_all`, `insert_<assoc>_all`), `INSERT ... RETURNING` on PostgreSQL, and opt-in dirty tracking that updates only changed columns
+- Per-query diagnostics (SQL logging, performance monitor, request cache) are off unless you enable them or run in development, so production pays nothing for them
 
 ### Type Safety
 
@@ -35,17 +36,19 @@ A high-performance, type-safe ORM for Crystal applications that combines compile
 - Familiar ActiveRecord-style API - easy migration from Rails/Laravel
 - Rich query DSL with readable, type-safe syntax
 - Automatic schema synchronization - database changes tracked and versioned
-- Built-in performance monitoring with N+1 query detection
+- Built-in performance monitoring with N+1 query detection (opt-in)
 
 ## Core Features
 
 - **Type-Safe ORM**: Leverage Crystal's static type system for compile-time safety
-- **High Performance**: 4x faster than traditional ORMs with compile-time optimizations
+- **High Performance**: Cached find statements, single-pass SQL rendering, and diagnostics that are off until you enable them (see [How CQL Keeps Queries Fast](docs/explanation/performance-design.md))
 - **Active Record Pattern**: Intuitive Active Record API with full CRUD operations
-- **Smart Relationships**: Support for `belongs_to`, `has_one`, `has_many`, and `many_to_many` with compile-time FK/PK validation and automatic N+1 prevention
+- **Smart Relationships**: Support for `belongs_to`, `has_one`, `has_many`, and `many_to_many` with compile-time FK/PK validation and `preload` eager loading for has_many, belongs_to and has_one
 - **Schema Mapping Guardrails**: Opt-in validation checks model getter types against schema column types at application boot
 - **Comprehensive Validations**: Built-in validation system with custom validator support
 - **Lifecycle Callbacks**: Before/after hooks for validation, save, create, update, and destroy
+- **Bulk Writes**: `insert_all`, `upsert_all` and has_many's `insert_<assoc>_all` send multi-row statements, chunked under each database's bind-parameter limit
+- **Dirty Tracking**: Opt-in `CQL::ActiveRecord::DirtyTracking` reports `changes` and updates only changed columns
 - **Intelligent Migrations**: Schema evolution tools with automatic rollback support
 - **Schema Dump**: Reverse-engineer existing databases into CQL schema definitions
 - **Typed Query DSL**: `User.query.where { (age >= 18) & (status == "active") }` with compile-time column and type checks, association joins, CTEs, window functions, set operations, upsert, JSON/geo predicates and safe bound raw fragments (see the [before/after guide](docs/explanation/dsl-before-after.md) and `playground/cql_demo.cr`)
@@ -53,20 +56,26 @@ A high-performance, type-safe ORM for Crystal applications that combines compile
 - **Optimistic Locking**: Built-in support for optimistic concurrency control
 - **Query Scopes**: Reusable query scopes for common filtering patterns
 - **Advanced Caching**: Multi-layer caching with Redis and memory cache support
-- **Performance Monitoring**: Built-in query profiling, N+1 detection, and optimization suggestions
+- **Performance Monitoring**: Opt-in query profiling, N+1 detection, and optimization suggestions
 - **Multi-Database**: Support for PostgreSQL, MySQL, SQLite and CockroachDB with dialect-specific optimizations
 - **Flexible Primary Keys**: Support for Int32, Int64, UUID, and ULID primary keys
 
-## Performance Comparison
+## Performance
 
-Real-world benchmarks (1M records, complex queries):
+`benchmarks/sqlite_bench.cr` on in-memory SQLite, one fiber, release build:
 
-| Operation         | CQL   | ActiveRecord | Eloquent | Improvement     |
-| ----------------- | ----- | ------------ | -------- | --------------- |
-| **Simple SELECT** | 0.8ms | 3.2ms        | 4.1ms    | **4x faster**   |
-| **Complex JOIN**  | 2.1ms | 8.7ms        | 12.3ms   | **4-6x faster** |
-| **Bulk INSERT**   | 15ms  | 89ms         | 124ms    | **6-8x faster** |
-| **Memory Usage**  | 12MB  | 48MB         | 67MB     | **75% less**    |
+| Operation | Throughput | Time | Allocated |
+| --- | --- | --- | --- |
+| `User.find(id)` | 1.01M ops/s | 0.99 µs | 480 B |
+| `User.last` | 350k ops/s | 2.9 µs | 3.3 kB |
+| `where(...).exists?` | 404k ops/s | 2.5 µs | 3.1 kB |
+| `create!` | 333k ops/s | 3.0 µs | 2.4 kB |
+| `update!` | 336k ops/s | 3.0 µs | 2.0 kB |
+| Simple `to_sql` | 854k ops/s | 1.2 µs | 1.9 kB |
+| JOIN with ORDER BY and LIMIT, `to_sql` | 491k ops/s | 2.0 µs | 3.7 kB |
+| 100 parents with `preload(:children)` | 5.0k ops/s | 199 µs | 165 kB |
+
+These numbers measure CQL's own overhead; against a database server, the round trip usually dominates. Your hardware will give different numbers, so measure your own workload with [Benchmark CQL](docs/how-to/performance/benchmark.md).
 
 ## Database Support
 
@@ -85,8 +94,8 @@ keeps the names) or after it (it replaces them), the `pg` shard's driver serves 
 `require "pg"` to switch, or compile with `-Dcql_no_postgres_driver` to keep this driver out of crystal-db's registry
 (that flag also wins over `-Dcql_postgres_driver_cockroachdb`; call the `register` methods yourself if you want them).
 Differences from the `pg` shard to know about when switching: `sslmode` takes `disable`, `prefer`, `require` or
-`verify-full` only (`verify-ca`, `allow` and the libpq options `sslcert`, `sslkey`, `auth_methods` and similar are
-rejected, not ignored); `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` are read from the environment when the URL omits
+`verify-full` only (`verify-ca`, `allow` and the libpq options `sslcert`, `sslkey` and similar are rejected, not
+ignored; `auth_methods`, written for the `pg` shard, is accepted and ignored); `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` are read from the environment when the URL omits
 them; arrays decode to their text form and `numeric` to `CQL::Postgres::Types::DecimalText`, so `read(Float64)` and
 `read(Array(Int32))` raise `TypeCastError` (register a codec with `Types.register`); connection failures reach
 crystal-db's pool as `DB::ConnectionRefused`, so `retry_attempts` and `retry_delay` apply.
@@ -512,8 +521,7 @@ BlogDB = CQL::Schema.define(:blog, adapter: CQL::Adapter::Postgres, uri: ENV["DA
 
     # Constraints and indexes
     unique_constraint [:name]
-    # Non-unique indexes are created in a migration:
-    #   schema.alter(:products) { create_index :idx_products_price, [:price, :created_at] }
+    index [:price, :created_at]          # created with the table as idx_products_price_created_at
   end
 end
 ```
@@ -554,6 +562,19 @@ product.save!  # Validates before saving
 
 # Safe deletion
 product.delete!
+
+# Bulk writes: multi-row INSERTs, no validations or callbacks
+Product.insert_all([{name: "Mouse", price: 25.0}, {name: "Desk", price: 300.0}])
+Product.upsert_all([{name: "Mouse", price: 20.0}], on_conflict: :name)
+```
+
+Include `CQL::ActiveRecord::DirtyTracking` after `Model` and `save` sends only the columns that changed, or nothing when none did:
+
+```crystal
+user = User.find!(1)
+user.name = "Ada"
+user.changes # => {:name => {"Grace", "Ada"}}
+user.save    # UPDATE users SET name = ?, updated_at = ? WHERE users.id = ?
 ```
 
 ### Validations
@@ -561,6 +582,15 @@ product.delete!
 ```crystal
 class User
   include CQL::ActiveRecord::Model(Int64)
+
+  property name : String
+  property email : String
+  property age : Int32
+  property password : String?
+  property password_confirmation : String?
+
+  def initialize(@name : String, @email : String, @age : Int32 = 1)
+  end
 
   # Built-in validations with clear error messages
   validate :name, presence: true, size: 2..50
@@ -604,11 +634,15 @@ user.posts.build(title: "New Post", content: "Content").save!
 user.posts.size                         # Number of posts
 user.posts.empty?                       # Existence check
 
+# Insert many children in multi-row statements (no validations or callbacks)
+user.insert_posts_all([{title: "One", content: "..."}, {title: "Two", content: "..."}]) # => 2
+
 # Eager loading with preload for has_many, belongs_to and has_one associations (avoids N+1 queries)
-users_with_posts = User.preload(:posts)
+users_with_posts = User.preload(:posts, :profile)
                       .where(active: true)
                       .all
-# Only 2 queries instead of N+1 queries!
+posts = Post.preload(:user).all
+# One query per association instead of one per record
 ```
 
 ### Transaction Management
@@ -623,7 +657,7 @@ User.transaction do |tx|
   raise "Error!" if some_condition  # Everything safely rolls back
 end
 
-# Nested transactions with savepoints (PostgreSQL)
+# Nested transactions are savepoints (on every adapter)
 User.transaction do |outer_tx|
   user = User.create!(username: "alice", email: "alice@example.com")
 
@@ -758,7 +792,7 @@ CQL::Telemetry.subscribe("slow") do |event|
 end
 CQL::Telemetry.alert_on_slow(100.milliseconds) { |event| Log.warn { event.sql } }
 
-# Automatic N+1 query detection (statements run through CQL are fed to the global monitor for you)
+# N+1 query detection (with `CQL::Performance.enable_monitoring`, statements run through CQL feed the global monitor)
 detector = CQL::Performance::NPlusOneDetector.new
 queries.each { |sql| detector.record_query(sql) }
 detector.patterns.each do |pattern|
@@ -831,11 +865,15 @@ Comprehensive guides for every level:
 - **[Callbacks](./docs/how-to/models/use-callbacks.md)** - Lifecycle hooks and callbacks
 - **[Scopes](./docs/how-to/querying/scopes.md)** - Reusable query methods
 - **[Optimistic Locking](./docs/how-to/models/optimistic-locking.md)** - Concurrency control
+- **[Dirty Tracking](./docs/how-to/models/dirty-tracking.md)** - Track changes and update only changed columns
 
 ### Performance & Production
 
 - **[Advanced Caching](./docs/how-to/caching/query-cache.md)** - Multi-layer caching strategies
 - **[Performance Monitoring](./docs/how-to/performance/monitoring.md)** - Query profiling and optimization
+- **[Optimize Queries](./docs/how-to/performance/optimize-queries.md)** - Bulk writes, preload and the cached paths
+- **[How CQL Keeps Queries Fast](./docs/explanation/performance-design.md)** - What each query costs and what is opt-in
+- **[Benchmark CQL](./docs/how-to/performance/benchmark.md)** - Run the benchmarks and compare versions
 - **[Testing Strategies](./docs/how-to/testing/test-models.md)** - Testing CQL applications
 
 ### Reference
@@ -869,7 +907,8 @@ crystal spec spec/performance/                     # Performance tests
 
 CQL is actively tested and optimized for:
 
-- **PostgreSQL**: 12, 13, 14, 15, 16 with full feature support
+- **PostgreSQL**: 11 through 18 (native driver matrix above; the full spec suite runs against 16)
+- **CockroachDB**: 24.3 through the PostgreSQL dialect and the native driver
 - **MySQL**: 8.0+ with dialect-specific optimizations
 - **SQLite**: 3.35+ perfect for development and testing
 

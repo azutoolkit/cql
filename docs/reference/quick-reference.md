@@ -24,7 +24,9 @@ end
 ```crystal
 struct User
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
+  # db_context is optional: User maps to :users, in the schema whose define block declares it.
+  # One argument overrides just that part: db_context table: :people, db_context schema: MyDB
+  # Both: db_context MyDB, :users
 
   property id : Int64?
   property name : String
@@ -135,7 +137,7 @@ end
 CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
 ```
 
-When enabled, CQL checks model getter types against the schema table bound with `db_context` and raises `CQL schema mapping error` for mismatches.
+When enabled, CQL checks model getter types against the model's schema table (from `db_context`, or inferred) and raises `CQL schema mapping error` for mismatches.
 
 ## Validations
 
@@ -214,7 +216,7 @@ User.only_deleted.all
 
 ```crystal
 include CQL::ActiveRecord::OptimisticLocking
-optimistic_locking version_column: :version   # version property type must match the model's primary key type
+optimistic_locking version_column: :version   # version property is an Int32 (the lock_version column), whatever the primary key type
 
 begin
   user.update!

@@ -10,6 +10,7 @@ module CQL
         schema : CQL::Schema,
         table_name : Symbol,
         getter_types : Hash(String, String),
+        primary_key : Symbol = :id,
       ) : Nil
         table = schema.tables[table_name]?
         unless table
@@ -18,8 +19,12 @@ module CQL
           )
         end
 
+        validate_primary_key!(model_name, table_name, table, primary_key)
+
         table.columns.each do |column_name, column|
-          getter_name = column_name.to_s
+          # A plain `id` column on a table keyed elsewhere is not what the model's `id` reads
+          next if column_name == :id && primary_key != :id
+          getter_name = column_name == primary_key ? "id" : column_name.to_s
           getter_type = getter_types[getter_name]?
 
           next unless getter_type
@@ -39,14 +44,27 @@ module CQL
         end
       end
 
+      private def validate_primary_key!(model_name : String, table_name : Symbol, table : CQL::Table, primary_key : Symbol) : Nil
+        declared = table.primary_key.try(&.name)
+        return if declared.nil? || declared == primary_key
+
+        raise SchemaMappingError.new(
+          "CQL schema mapping error in #{model_name}: table `#{table_name}` declares primary key `#{declared}`, but the model maps `id` to `#{primary_key}`. Declare `db_context ..., primary_key: :#{declared}` on the model."
+        )
+      end
+
       private def normalize_type(type_name : String) : String
         type_name
           .split("|")
           .map(&.strip)
           .reject { |part| part == "Nil" || part == "::Nil" }
           .map { |part| part.starts_with?("::") ? part[2..] : part }
+          .map { |part| TYPE_ALIASES.fetch(part, part) }
           .join(" | ")
       end
+
+      # Getter types are written as the model spells them; schema columns use the resolved type.
+      private TYPE_ALIASES = {"Bytes" => "Slice(UInt8)"}
 
       private def compatible_type?(expected_type : String, actual_type : String) : Bool
         return true if expected_type == actual_type

@@ -13,6 +13,15 @@ OPTIMISTIC_LOCKING_TEST_SCHEMA = CQL::Schema.define(
     lock_version :version
     timestamps
   end
+
+  table :int64_products do
+    primary :id, Int64, auto_increment: true
+    varchar :name
+    double :price, default: 0.0
+    integer :stock, default: 0
+    lock_version :version
+    timestamps
+  end
 end
 
 # Define our test class using Active Record
@@ -44,17 +53,39 @@ class CustomProduct < Product
   optimistic_locking version_column: :version
 end
 
+class Int64Product
+  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::OptimisticLocking
+
+  db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :int64_products
+
+  property id : Int64?
+  property name : String
+  property price : Float64
+  property stock : Int32
+  property version : Int32
+  property created_at : Time
+  property updated_at : Time
+
+  def initialize(@name = "", @price = 0.0, @stock = 0, @version = 1, @created_at = Time.utc, @updated_at = Time.utc)
+  end
+
+  optimistic_locking version_column: :version
+end
+
 module CQL::ActiveRecord::OptimisticLockingSpec
   describe "Optimistic Locking" do
     before_each do
       OPTIMISTIC_LOCKING_TEST_SCHEMA.build
       # Clean up table before each test
       Product.delete_all
+      Int64Product.delete_all
     end
 
     after_all do
       # Clean up after all tests
       OPTIMISTIC_LOCKING_TEST_SCHEMA.products.drop!
+      OPTIMISTIC_LOCKING_TEST_SCHEMA.int64_products.drop!
     end
 
     it "should create a product with version 1" do
@@ -146,6 +177,33 @@ module CQL::ActiveRecord::OptimisticLockingSpec
       custom_product.update!
 
       custom_product.version.should eq(2)
+    end
+
+    context "with an Int64 primary key" do
+      it "should increment the Int32 version on the record and in the database" do
+        product = Int64Product.create!(name: "Test Product")
+        product_id = product.id.not_nil!
+
+        product.price = 15.0
+        product.update!
+
+        product.version.should eq(2)
+        Int64Product.find!(product_id).version.should eq(2)
+      end
+
+      it "should detect a stale copy" do
+        product = Int64Product.create!(name: "Test Product")
+        product_id = product.id.not_nil!
+
+        OPTIMISTIC_LOCKING_TEST_SCHEMA.exec_query do |conn|
+          conn.exec("UPDATE int64_products SET version = version + 1 WHERE id = ?", args: [product_id])
+        end
+
+        product.name = "Updated Product"
+        expect_raises(CQL::OptimisticLockError) do
+          product.update!
+        end
+      end
     end
   end
 end

@@ -9,6 +9,7 @@
 - [Use Callbacks](models/use-callbacks.md)
 - [Implement Soft Deletes](models/soft-delete.md)
 - [Add Optimistic Locking](models/optimistic-locking.md)
+- [Track Changes and Update Only Changed Columns](models/dirty-tracking.md)
 - [Use Timestamps](models/timestamps.md)
 - [Use UUID and ULID Primary Keys](models/uuid-ulid-primary-keys.md)
 
@@ -67,6 +68,7 @@
 
 - [Native PostgreSQL Driver](postgres-native/README.md)
 - [Use AsyncEngine and Its Connection Pool](postgres-native/async-engine.md)
+- [Run a Schema on the AsyncEngine's Pool](postgres-native/schema-on-engine.md)
 - [Stream Large Results and Pipeline Statements](postgres-native/streaming-and-pipelining.md)
 - [Bulk Load with COPY and Send Binary Parameters](postgres-native/copy-and-binary-params.md)
 - [Configure TLS, Poolers, Timeouts and Transactions](postgres-native/tls-and-poolers.md)
@@ -83,6 +85,8 @@
 - [Avoid N+1 Queries](performance/n-plus-one.md)
 - [Monitor Performance](performance/monitoring.md)
 - [Profile Queries and Detect N+1](performance/query-profiler.md)
+- [Telemetry](performance/telemetry.md)
+- [Benchmark CQL](performance/benchmark.md)
 
 ## Testing
 
@@ -94,6 +98,7 @@
 - [Fix Connection Errors](troubleshooting/connection-errors.md)
 - [Fix Migration Errors](troubleshooting/migration-errors.md)
 - [Fix Validation Errors](troubleshooting/validation-errors.md)
+- [Fix Schema Mapping Errors](troubleshooting/schema-mapping-errors.md)
 
 ---
 

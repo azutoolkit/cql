@@ -64,7 +64,7 @@ def up
 
   schema.posts.create!
 
-  # Indexes are created separately; `index` inside the table block is not emitted by create!
+  # `index [...]` in the table block is created by create!; for an existing table use schema.alter
   schema.alter :posts do
     create_index :idx_posts_user_id, [:user_id]
     create_index :idx_posts_published, [:published]

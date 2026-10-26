@@ -43,7 +43,7 @@ Feature requests are welcome! Open an issue describing:
 5. **Format and lint your code**
    ```shell
    crystal tool format src spec     # apply formatting
-   crystal tool format --check src spec  # what CI checks
+   crystal tool format --check src spec  # CI checks src; keep spec formatted too
    bin/ameba                        # lint (build it first with `shards build ameba`)
    ```
 

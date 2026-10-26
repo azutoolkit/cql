@@ -94,6 +94,32 @@ describe CQL::Postgres::Wire::Frontend do
     frame_bytes { |io| Wire::Frontend.flush(io) }.should eq "4800000004"
   end
 
+  it "writes Bind, Execute and Sync into a memory buffer exactly as through any other IO" do
+    params = [Types::ParamEncoder.encode(42_i64), Types::Param.null]
+    write = ->(io : IO) do
+      io.write_byte(0xAB_u8) # output already in the buffer
+      Wire::Frontend.bind(io, "cql_7", params, [1_i16])
+      Wire::Frontend.execute(io, 5)
+      Wire::Frontend.sync(io)
+    end
+    in_place = IO::Memory.new
+    write.call(in_place)
+    buffered = IO::Memory.new
+    write.call(IO::MultiWriter.new(buffered)) # not an IO::Memory: goes through a body buffer
+
+    in_place.to_slice.should eq(buffered.to_slice)
+    bind_length = IO::ByteFormat::NetworkEndian.decode(Int32, in_place.to_slice[2, 4])
+    in_place.to_slice[1].should eq('B'.ord)
+    in_place.to_slice[1 + 1 + bind_length].should eq('E'.ord)
+    in_place.to_slice[-5, 5].hexstring.should eq("5300000004")
+  end
+
+  it "leaves the buffer untouched when a Bind names a statement with a NUL byte" do
+    io = IO::Memory.new
+    expect_raises(ArgumentError, /NUL/) { Wire::Frontend.bind(io, "bad\0name", [] of Types::Param, [] of Int16) }
+    io.size.should eq 0
+  end
+
   it "rejects NUL bytes that would split a protocol string" do
     expect_raises(ArgumentError, /NUL/) { Wire::Frontend.query(IO::Memory.new, "SELECT 1\0; DROP TABLE x") }
     expect_raises(ArgumentError, /NUL/) { Wire::Frontend.password(IO::Memory.new, "pw\0") }

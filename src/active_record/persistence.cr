@@ -91,21 +91,7 @@ module CQL
           end
 
           # Update the database directly without callbacks
-          {% if Pk == UUID %}
-            result = CQL::Update
-              .new({{@type.id}}.schema)
-              .table({{@type.id}}.table)
-              .set(attrs)
-              .where(id: id!.to_s)
-              .commit
-          {% else %}
-            result = CQL::Update
-              .new({{@type.id}}.schema)
-              .table({{@type.id}}.table)
-              .set(attrs)
-              .where(id: id!)
-              .commit
-          {% end %}
+          result = {{@type.id}}.update_of(id!).set(attrs).commit
 
           # Update the local instance attributes to match
           if result.rows_affected > 0
@@ -171,24 +157,13 @@ module CQL
             # In production, you may want to validate that these are timestamp columns
           end
 
-          # Update multiple records directly without callbacks using IN clause
-          {% if Pk == UUID %}
-            result = CQL::Update
-              .new({{@type.id}}.schema)
-              .table({{@type.id}}.table)
-              .set(attrs)
-              .where(id: ids.map(&.to_s.as(DB::Any)))
-              .commit
-          {% else %}
-            result = CQL::Update
-              .new({{@type.id}}.schema)
-              .table({{@type.id}}.table)
-              .set(attrs)
-              .where(id: ids.map(&.as(DB::Any)))
-              .commit
-          {% end %}
-
-          result.rows_affected
+          # One UPDATE ... IN per chunk of keys, each statement also binding the touched values. The
+          # chunks are separate statements: wrap the call in a transaction to make it all-or-nothing.
+          touched = 0_i64
+          CQL::ActiveRecord::IdChunks.each(ids, adapter.dialect.max_bind_params - attrs.size) do |chunk|
+            touched += update_of(chunk).set(attrs).commit.rows_affected
+          end
+          touched
         end
 
         # Save the record to the database or update it if it already exists

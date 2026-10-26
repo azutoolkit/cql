@@ -113,7 +113,7 @@ The native PostgreSQL/CockroachDB driver raises subclasses of `CQL::Postgres::Er
 
 ### Dialect errors
 
-`CQL::DialectError` (with `dialect`, `feature` and an optional `workaround`) is raised when the adapter cannot express a feature. `CQL::SQLiteUnsupportedFeatureError` and `CQL::MySqlUnsupportedFeatureError` are its subclasses, for example `change_column` or adding a foreign key to an existing SQLite table.
+`CQL::DialectError` (with `dialect`, `feature` and an optional `workaround`) is raised when the adapter cannot express a feature. `CQL::SQLiteUnsupportedFeatureError` and `CQL::MySqlUnsupportedFeatureError` are its subclasses, for example `change_column` or adding a foreign key to an existing SQLite table. On MySQL and CockroachDB (`Dialect#supports_transactional_ddl?` is false) `schema.alter`, `Migrator.new`, `migrator.up` and `migrator.down` raise it when a transaction is open.
 
 ### QueryError, TransactionError, PersistenceError, AttributeError, CallbackError, ConnectionError
 
@@ -131,7 +131,7 @@ Raised by `schema.alter :table` when the table is not registered in the schema (
 
 ### Database errors during a migration
 
-A failing statement in `up` or `down` raises the driver's exception and rolls back the whole `migrator.up`/`migrator.down` transaction (MySQL commits DDL implicitly).
+A failing statement in `up` or `down` raises the driver's exception and rolls back the whole `migrator.up`/`migrator.down` run on SQLite and PostgreSQL; on MySQL and CockroachDB each statement commits on its own.
 
 **Common causes:**
 - Table already exists (only for tables created outside CQL; `create!` uses `IF NOT EXISTS`)
@@ -157,7 +157,7 @@ end
 
 ### SchemaMappingError
 
-Raised when strict schema mapping validation is enabled and a model getter type does not match the schema column type.
+Raised when strict schema mapping validation is enabled and a model getter type does not match the schema column type, or the model's primary key column differs from the table's declared primary key (``table `labels` declares primary key `label_no`, but the model maps `id` to `id` ``).
 
 Enable strict validation with:
 
@@ -169,6 +169,7 @@ CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
 - Model property type differs from the column type in `CQL::Schema.define`
 - `db_context` points at the wrong table
 - A schema was changed but the model was not updated
+- The table's `primary` column is not `id` and the model lacks `db_context ..., primary_key: :column`
 
 **Solution:** Update the model property type or the schema column type so they agree.
 
@@ -244,8 +245,8 @@ Log.setup do |c|
   c.bind("cql.*", :debug, Log::IOBackend.new)
 end
 
-# Or let CQL print formatted SQL (auto-enabled when CRYSTAL_ENV=development)
-CQL.configure { |config| config.sql_logging = true }
+# Or let CQL print formatted SQL (`config.sql_logging = true` takes effect when CQL.build_schema runs)
+CQL::Performance.enable_sql_logging
 ```
 
 ### Print Error Details

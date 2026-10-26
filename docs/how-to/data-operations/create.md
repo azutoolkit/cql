@@ -9,12 +9,14 @@ Create an instance and save separately:
 ```crystal
 user = User.new("John", "john@example.com")
 
-if user.save
+if user.valid? && user.save
   puts "Created user #{user.id}"
 else
   puts "Failed: #{user.errors.map(&.message).join(", ")}"
 end
 ```
+
+`save` raises `CQL::ActiveRecord::Validations::ValidationError` for an invalid record; it returns `false` only when a callback halts the save. Check `valid?` first, as above, to branch without rescuing.
 
 ## Create with save!
 
@@ -24,20 +26,6 @@ Use `save!` to raise an exception on failure:
 user = User.new("John", "john@example.com")
 user.save!  # Raises if validation fails
 puts "Created user #{user.id}"
-```
-
-## Create in One Step
-
-Use `create` to instantiate and save:
-
-```crystal
-user = User.create(name: "John", email: "john@example.com")
-
-if user.persisted?
-  puts "Created user #{user.id}"
-else
-  puts "Failed to create"
-end
 ```
 
 ## Create! in One Step
@@ -83,7 +71,7 @@ puts "Created #{users.size} users"
 
 ## Insert Many Rows at Once
 
-`insert_all` sends multi-row INSERT statements instead of one INSERT (and one SELECT) per record, and returns the
+`insert_all` sends multi-row INSERT statements instead of one INSERT per record (plus a read-back SELECT on SQLite and MySQL), and returns the
 number of rows inserted:
 
 ```crystal
@@ -119,12 +107,12 @@ Product.upsert_all([
 ], on_conflict: :sku)
 ```
 
-- By default an existing row takes every inserted column except the `on_conflict` columns, `id` and `created_at`, so
+- By default an existing row takes every inserted column except the `on_conflict` columns, the primary key (`id` unless the model declares `primary_key:`) and `created_at`, so
   `updated_at` is refreshed. On a table without `updated_at`, rows that insert nothing else leave existing rows unchanged.
 - `update: [:price]` changes only the listed columns, exactly as given (it does not add `updated_at`, and it may name
-  `id` or `created_at`). `update: [] of Symbol` leaves existing rows unchanged while still inserting new ones.
-- `on_conflict: :id` needs every row to carry its id: generated UUID or ULID ids never match, so it raises
-  `ArgumentError` when an id would be generated.
+  the primary key or `created_at`). `update: [] of Symbol` leaves existing rows unchanged while still inserting new ones.
+- `on_conflict` on the primary key (`:id`, or the column named by `primary_key:`) needs every row to carry its key:
+  generated UUID or ULID keys never match, so it raises `ArgumentError` when a key would be generated.
 - The `on_conflict` columns must be inserted columns covered by a unique index or primary key. MySQL ignores them and
   matches on any unique key.
 - The return value is the rows affected as the database reports it: one per inserted or updated row on SQLite and
@@ -147,18 +135,21 @@ puts "Created post for user #{user.name}"
 
 ## Create with Default Values
 
-Set defaults in your model:
+`User.create!(**fields)` inserts only the columns you pass and returns the row as stored, so a default must be a column default in the schema:
 
 ```crystal
-struct User
-  property status : String = "pending"
-  property role : String = "user"
+schema.table :users do
+  # ...
+  column :status, String, default: "pending"
+  column :role, String, default: "user"
 end
 
 user = User.create!(name: "John", email: "john@example.com")
 user.status  # => "pending"
 user.role    # => "user"
 ```
+
+Property defaults in the model (`property status : String = "pending"`) apply to records built with `new` and saved with `save`.
 
 ## Create with Timestamp
 
@@ -175,7 +166,9 @@ user.updated_at  # => 2024-01-15 10:30:00 UTC
 ```crystal
 user = User.new("", "invalid-email")
 
-unless user.save
+begin
+  user.save
+rescue CQL::ActiveRecord::Validations::ValidationError
   user.errors.each do |error|
     puts "#{error.field}: #{error.message}"
   end

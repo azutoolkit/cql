@@ -149,7 +149,7 @@ Validation: `mode` must be one of `disable`, `allow`, `prefer`, `require`, `veri
 
 These cache settings are inert (nothing in `src/` reads them): `memory`, `memory_stats`, `auto_clear`, `fragments` (only echoed by `cache_stats`), `auto_cleanup`, `cleanup_interval`, `batch_ops`, `middleware`, `request_id_header`.
 
-An environment other than `development`, `test` or `production` keeps the plain defaults (cache off).
+An unset `CRYSTAL_ENV` counts as `development` here, so `cache.on` is `true`. An environment other than `development`, `test` or `production` keeps the plain defaults (cache off).
 
 Cache helpers on `CQL`: `cache_on(enabled = true)`, `cache_on?`, `cache_stats`, `cache_summary`, `reset_cache!`, `memory_cache`, `fragment_cache`. See [Query caching](../how-to/caching/query-cache.md).
 
@@ -181,7 +181,7 @@ Cache helpers on `CQL`: `cache_on(enabled = true)`, `cache_on?`, `cache_stats`, 
 
 Warning: `URI.parse("sqlite3://:memory:")` raises, so `CQL.build_schema` fails with the test strategy's default `db`. Assign a file URL in test (`c.db = "sqlite3://./db/test.db"`).
 
-Warning: the test pool of 1 deadlocks `Migrator#up`, which holds one connection in a transaction while checking out another (`DB::PoolTimeout`). Use `c.pool_size = 2` when running migrations in test.
+Warning: `Migrator#up` and `#down` run on a pool of 1, but with `auto_sync` on the schema file dump that follows needs a second connection and raises `CQL::Migrator::Error` ("Schema update failed: Could not check out a connection"). Use `c.pool_size = 2` or `CQL::MigratorConfig.new(auto_sync: false)` when running migrations in test.
 
 ## Environment variables read
 

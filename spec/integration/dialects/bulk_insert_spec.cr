@@ -22,6 +22,14 @@ describe "Bulk INSERT generation" do
     params.size.should eq(6)
   end
 
+  it "generates positional placeholders for MySQL, and no VALUES for no rows" do
+    generator = -> { Expression::Generator.new(CQL::Adapter::MySql) }
+
+    Northwind.insert.into(:users).values(rows).to_sql(generator.call)[0]
+      .should eq("INSERT INTO users (name, email) VALUES (?, ?), (?, ?), (?, ?)")
+    Northwind.insert.into(:users).to_sql(generator.call)[0].should eq("INSERT INTO users ()")
+  end
+
   it "aligns values by column name when rows list keys in a different order" do
     reordered = [
       {:name => "Ada", :email => "ada@example.com"} of Symbol => DB::Any,
@@ -30,6 +38,24 @@ describe "Bulk INSERT generation" do
     _, params = Northwind.insert.into(:users).values(reordered).to_sql
 
     params.should eq(["Ada", "ada@example.com", "Grace", "grace@example.com"] of DB::Any)
+  end
+
+  it "aligns a row whose keys start in the first row's order and then diverge" do
+    diverging = [
+      {:name => "Ada", :email => "ada@example.com", :age => 36} of Symbol => DB::Any,
+      {:name => "Grace", :age => 85, :email => "grace@example.com"} of Symbol => DB::Any,
+    ]
+    _, params = Northwind.insert.into(:users).values(diverging).to_sql
+
+    params.should eq(["Ada", "ada@example.com", 36, "Grace", "grace@example.com", 85] of DB::Any)
+  end
+
+  it "keeps numbering placeholders after the VALUES in a conflict update" do
+    generator = Expression::Generator.new(CQL::Adapter::Postgres)
+    sql, params = Northwind.insert.into(:users).values(rows).on_conflict(:email).do_update(age: 1).to_sql(generator)
+
+    sql.should eq("INSERT INTO users (name, email) VALUES ($1, $2), ($3, $4), ($5, $6) ON CONFLICT (email) DO UPDATE SET age = $7")
+    params.size.should eq(7)
   end
 
   it "rejects rows whose columns differ from the first row instead of misaligning values" do

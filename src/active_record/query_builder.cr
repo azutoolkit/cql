@@ -604,7 +604,31 @@ module CQL
         # - **@param** id [Int32 | Int64] The primary key value
         # - **@return** [T?] The record or nil if not found
         def find(id)
-          where(id: id).first
+          where_primary_key(id).first
+        end
+
+        # Rows whose primary key (`T.primary_key_column`) is *key*. A UUID is bound as text.
+        def where_primary_key(key : DB::Any | UUID) : QueryBuilder(T)
+          clone_builder.tap(&.query.where(primary_key_expression == bindable_key(key)))
+        end
+
+        # Rows whose primary key is any of *keys*; none for an empty array.
+        def where_primary_key(keys : Array) : QueryBuilder(T)
+          return none if keys.empty?
+          bound = keys.map { |key| bindable_key(key).as(DB::Any) }
+          clone_builder.tap(&.query.where(primary_key_expression.in(bound)))
+        end
+
+        private def primary_key_expression : Expression::Column
+          @query.column_expression(T.primary_key_column)
+        end
+
+        private def bindable_key(key : UUID) : String
+          key.to_s
+        end
+
+        private def bindable_key(key : DB::Any) : DB::Any
+          key
         end
 
         # Find record by primary key, raises if not found
@@ -612,7 +636,7 @@ module CQL
         # - **@return** [T] The record
         def find!(id)
           result = find(id)
-          raise DB::NoResultsError.new("No records found with id=#{id}") unless result
+          raise DB::NoResultsError.new("No records found with #{T.primary_key_column}=#{id}") unless result
           result
         end
 
@@ -729,7 +753,7 @@ module CQL
           query = @query.clone
           query.columns.clear
           query.select_expressions.clear if query.select_expressions?
-          query.columns << T.cql_column(:id)
+          query.columns << T.cql_column(T.primary_key_column)
           query.all(as: as_kind)
         end
 
@@ -819,9 +843,8 @@ module CQL
           # Set up the FROM clause with the model's table
           table = @model_class.table
           none_query.from(table)
-          # Add an impossible condition to ensure no results
-          # Use a condition that will never be true
-          none_query.where(id: -1)
+          # Never true, whatever the primary key's type
+          none_query.where("1 = 0")
           QueryBuilder(T).new(none_query, @model_class)
         end
 

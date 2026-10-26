@@ -92,12 +92,26 @@ module CQL
           {% kind = metadata.constant(:KIND) %}
           {% owner = metadata.constant(:OWNER).resolve %}
           {% target_path = metadata.constant(:TARGET) %}
-          {% target = target_path.resolve? %}
+          {% global = target_path.stringify.starts_with?("::") %}
+          {% target_name = global ? target_path.stringify : "::" + target_path.stringify %}
+          {% scopes = global ? [] of Nil : owner.name(generic_args: false).split("::") %}
+          {% target = nil %}
+          {% for depth in (0..scopes.size) %}
+            {% prefix = scopes[0...(scopes.size - depth)].map { |scope| "::" + scope }.join("") %}
+            {% target = target || parse_type(prefix + target_name).resolve? %}
+          {% end %}
           {% association = metadata.constant(:ASSOCIATION) %}
           {% foreign_key = metadata.constant(:FOREIGN_KEY) %}
 
           {% unless target %}
             {{ raise "CQL association error in #{owner}: association `#{association}` references #{target_path}, but that model type was not found. Define the target model or require the file that defines it before compiling." }}
+          {% end %}
+
+          {% if kind == :has_many || kind == :has_one %}
+            {% target_key = target.constant(:CQL_PRIMARY_KEY_COLUMN) || :id %}
+            {% if foreign_key.id == target_key.id %}
+              {{ raise "CQL #{kind.id} error in #{owner}: foreign key `#{foreign_key.id}` is the primary key of #{target}. Associations whose foreign key is the target's primary key (shared primary keys) are not supported: give #{target} its own key column and a separate `#{foreign_key.id}` column, or declare the association from #{target} with belongs_to." }}
+            {% end %}
           {% end %}
 
           {% if kind == :belongs_to %}

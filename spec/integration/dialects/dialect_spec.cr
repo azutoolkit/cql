@@ -311,29 +311,6 @@ module Expression
         sqlite.format_limit_offset(10, 20).should eq(" LIMIT 10 OFFSET 20")
       end
 
-      it "formats INSERT VALUES correctly" do
-        postgres = create_dialect(:postgres)
-        mysql = create_dialect(:mysql)
-        sqlite = create_dialect(:sqlite)
-
-        values = [[1, "John"], [2, "Jane"]]
-        # The generator passes one flat placeholder list spanning every row
-        placeholders = ["$1", "$2", "$3", "$4"] # For PostgreSQL
-
-        # Test PostgreSQL: each row gets its own numbered placeholders
-        postgres_values = postgres.format_insert_values(values, placeholders)
-        postgres_values.should eq(" VALUES ($1, $2), ($3, $4)")
-
-        # For MySQL and SQLite, we'd use ? placeholders
-        placeholders = ["?", "?", "?", "?"]
-
-        mysql_values = mysql.format_insert_values(values, placeholders)
-        mysql_values.should eq(" VALUES (?, ?), (?, ?)")
-
-        sqlite_values = sqlite.format_insert_values(values, placeholders)
-        sqlite_values.should eq(" VALUES (?, ?), (?, ?)")
-      end
-
       it "handles RETURNING clause correctly" do
         postgres = create_dialect(:postgres)
         mysql = create_dialect(:mysql)

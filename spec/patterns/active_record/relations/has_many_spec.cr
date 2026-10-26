@@ -90,6 +90,38 @@ describe CQL::ActiveRecord::Relations::HasMany do
       user.posts.all.any? { |post| post.title == "Second Post" }.should be_true
     end
 
+    it "inserts many associated posts with one INSERT and no records" do
+      user = TestUser.new(name: "John Doe", email: "john@example.com", age: 30, password: "password123", password_confirmation: "password123")
+      user.create!
+      user.posts.to_a.should be_empty # memoized empty collection
+      rows = [{title: "First", body: "one", user_id: 999}, {title: "Second", body: "two", user_id: nil}]
+
+      inserts = count_queries(:insert) { user.insert_posts_all(rows).should eq(2) }
+
+      inserts.size.should eq(1)
+      user.posts.map(&.title).sort!.should eq(["First", "Second"])
+      Post.where(user_id: 999).count.should eq(0)
+      user.insert_posts_all([{:title => "Third", :body => "three"} of Symbol => DB::Any]).should eq(1)
+      user.insert_posts_all([] of Hash(Symbol, DB::Any)).should eq(0)
+      user.posts.size.should eq(3)
+    end
+
+    it "refuses to insert posts for an unsaved user" do
+      user = TestUser.new(name: "John Doe", email: "john@example.com", age: 30, password: "password123", password_confirmation: "password123")
+
+      expect_raises(CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord) { user.insert_posts_all([{title: "x", body: "y"}]) }
+      Post.count.should eq(0)
+    end
+
+    it "counts the foreign key toward the bind-parameter limit of each INSERT" do
+      user = TestUser.new(name: "John Doe", email: "john@example.com", age: 30, password: "password123", password_confirmation: "password123")
+      user.create!
+      fits_without_key = Post.adapter.dialect.max_bind_params // 2 # rows bind title and body, plus user_id
+
+      expect_raises(ArgumentError) { user.insert_posts_all([{title: "x", body: "y"}], batch_size: fits_without_key) }
+      Post.count.should eq(0)
+    end
+
     it "returns empty array when no associated posts exist" do
       user = TestUser.new(
         name: "John Doe",

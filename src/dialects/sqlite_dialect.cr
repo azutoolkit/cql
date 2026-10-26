@@ -5,7 +5,6 @@ module Expression
   class SqliteDialect < BaseDialect
     # Cache for frequently used SQLite-specific strings
     @@cached_strings = {
-      "sqlite_placeholder"          => "?",
       "sqlite_integer_pk_autoincr"  => "INTEGER PRIMARY KEY AUTOINCREMENT",
       "sqlite_primary_key"          => " PRIMARY KEY",
       "sqlite_drop_index_prefix"    => "DROP INDEX IF EXISTS ",
@@ -16,7 +15,7 @@ module Expression
 
     # SQLite uses ? for all placeholders regardless of position
     def placeholder_format(param_index : Int32) : String
-      @@cached_strings["sqlite_placeholder"]
+      "?"
     end
 
     # SQLITE_MAX_VARIABLE_NUMBER's default before SQLite 3.32 (32766 since), so older builds work too.
@@ -215,6 +214,10 @@ module Expression
       "SQLite"
     end
 
+    def supports_transactional_ddl? : Bool
+      true
+    end
+
     def format_json_text(column : String, path_placeholder : String) : String
       "CAST(json_extract(#{column}, #{path_placeholder}) AS TEXT)"
     end
@@ -261,27 +264,6 @@ module Expression
         raise CQL::SQLiteUnsupportedFeatureError.new("RETURNING clause (before SQLite 3.35.0)", workaround)
       end
       ""
-    end
-
-    def format_insert_values(values : Array(Array(DB::Any)), placeholders : Array(String)) : String
-      return "" if values.empty?
-
-      build_sql(values.size * 16) do |str|
-        str << " VALUES "
-        # `placeholders` is a flat list spanning every row, so each row must
-        # read from its own offset (otherwise rows reuse the first row's `$n`).
-        offset = 0
-        values.each_with_index do |row, i|
-          str << "("
-          row.size.times do |j|
-            str << placeholders[offset + j]
-            str << ", " if j < row.size - 1
-          end
-          offset += row.size
-          str << ")"
-          str << ", " if i < values.size - 1
-        end
-      end
     end
 
     def format_update_returning(columns : Array(String)) : String

@@ -83,14 +83,16 @@ struct Comment
 
   property id : Int64?
   property body : String
-  property post_id : Int64
+  property post_id : Int64?
 
   belongs_to :post, Post, :post_id
 
-  def initialize(@body : String, @post_id : Int64)
+  def initialize(@body : String, @post_id : Int64? = nil)
   end
 end
 ```
+
+Declare the foreign key property nilable (`Int64?`) even when the column is `NOT NULL`: the generated `post=`, `create_post`, `delete_post` and `clear_post` assign `nil` to it, and they do not compile against an `Int64` property.
 
 ## Access the Parent
 

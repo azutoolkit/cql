@@ -48,28 +48,29 @@ module CQL::ActiveRecord::Relations
         apply_on_delete {{name}}
       {% end %}
 
-      # Determine foreign key name if not provided
-      {% fk = foreign_key || "#{@type.name.underscore.id}_id".id %}
+      # Determine foreign key name if not provided (a symbol literal or the default, as an identifier)
+      {% fk = (foreign_key || "#{@type.name.split("::").last.underscore.id}_id").id %}
 
       module ::CQL::ActiveRecord::AssociationRegistry::{{@type.name.gsub(/::/, "__").id}}__has_many__{{name.id}}
         KIND = :has_many
         OWNER = {{@type}}
         TARGET = {{type}}
         ASSOCIATION = {{name}}
-        FOREIGN_KEY = :{{fk.id}}
+        FOREIGN_KEY = :{{fk}}
       end
 
       {% if target_model = type.resolve? %}
         {% parent_id_getter = @type.methods.find { |method| method.name == "id!" && method.args.empty? } %}
-        {% target_fk_getter = target_model.methods.find { |method| method.name == fk.id.stringify && method.args.empty? } %}
-        {% unless target_fk_getter %}
+        {% target_fk_getter = target_model.methods.find { |method| method.name == fk.stringify && method.args.empty? } %}
+        {% shared_key = fk.id == (target_model.constant(:CQL_PRIMARY_KEY_COLUMN) || :id).id %}
+        {% unless target_fk_getter || shared_key %}
           {{ raise "CQL has_many error in #{@type}: target model #{type} does not define foreign key `#{fk}`. Add a typed getter/property to #{type}, for example `property #{fk} : #{parent_id_getter ? parent_id_getter.return_type : "ParentPk"}?`." }}
         {% end %}
-        {% if parent_id_getter %}
+        {% if parent_id_getter && !shared_key %}
           {% fk_type = target_fk_getter.return_type.stringify.split("|").map(&.strip).reject { |part| part == "Nil" || part == "::Nil" }.join(" | ") %}
           {% pk_type = (@type.constant(:CQL_PRIMARY_KEY_TYPE) || parent_id_getter.return_type).stringify.split("|").map(&.strip).reject { |part| part == "Nil" || part == "::Nil" }.join(" | ") %}
           {% unless fk_type == pk_type %}
-            {{ raise "CQL has_many error in #{@type}: target foreign key #{type}##{fk.id} type " + fk_type + " does not match #{@type}.id! primary key type " + pk_type + ". Change `#{fk}` to " + pk_type + " or update the parent model primary key type." }}
+            {{ raise "CQL has_many error in #{@type}: target foreign key #{type}##{fk} type " + fk_type + " does not match #{@type}.id! primary key type " + pk_type + ". Change `#{fk}` to " + pk_type + " or update the parent model primary key type." }}
           {% end %}
         {% end %}
       {% end %}
@@ -98,7 +99,7 @@ module CQL::ActiveRecord::Relations
         {% end %}
 
         @{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
-          key: {{fk}},
+          key: :{{fk}},
           id: parent_id,
           cascade: ({{strategy}} == :destroy || {{strategy}} == :delete_all),
           query: scoped_query,
@@ -131,7 +132,7 @@ module CQL::ActiveRecord::Relations
         parent_id = safe_id(self, Pk)
 
         @{{name.id}} = CQL::ActiveRecord::Relations::Collection({{type.id}}, Pk).new(
-          key: {{fk}},
+          key: :{{fk}},
           id: parent_id,
           cascade: ({{strategy}} == :destroy || {{strategy}} == :delete_all),
           dependent: {{strategy}},
@@ -152,8 +153,8 @@ module CQL::ActiveRecord::Relations
 
         grouped = {} of Pk => Array({{type.id}})
         CQL::ActiveRecord::IdChunks.each(parent_ids, chunk_size) do |ids|
-          {{type.id}}.where({ {{fk}} => ids }).all.each do |record|
-            fk_value = record.{{fk.id}}
+          {{type.id}}.where({ :{{fk}} => ids }).all.each do |record|
+            fk_value = record.{{fk}}
             next if fk_value.nil?
             (grouped[fk_value.as(Pk)] ||= [] of {{type.id}}) << record
           end
@@ -192,7 +193,7 @@ module CQL::ActiveRecord::Relations
         parent_id = safe_id(self, Pk)
 
         safe_db_operation do
-          build_query({{type.id}}).where({ {{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) }).count.get(Int64?) || 0_i64
+          build_query({{type.id}}).where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) }).count.get(Int64?) || 0_i64
         end
       end
 
@@ -209,7 +210,7 @@ module CQL::ActiveRecord::Relations
           created_records = [] of {{type.id}}
 
           records.each do |record|
-             record.attributes({ {{fk}} => parent_id })
+             record.attributes({ :{{fk}} => parent_id })
              record.create!
              created_records << record
            end
@@ -219,6 +220,21 @@ module CQL::ActiveRecord::Relations
 
           created_records
         end
+      end
+
+      # Inserts *rows* (column values) as associated records with `{{type.id}}.insert_all`, setting
+      # `{{fk}}` on each to this record's id, and returns how many were inserted. Unlike
+      # `create_{{name.id}}`, it runs no validations or callbacks and builds no records.
+      def insert_{{name.id}}_all(rows : Array(Hash(Symbol, DB::Any)), batch_size : Int32? = nil) : Int64
+        owner = { :{{fk}} => CQL::ActiveRecord::IdChunks.bound(safe_id(self, Pk)) }
+        inserted = {{type.id}}.insert_all(rows.map(&.merge(owner)), batch_size)
+        @{{name.id}} = nil
+        inserted
+      end
+
+      # Named-tuple rows; see the hash overload.
+      def insert_{{name.id}}_all(rows : Array(NamedTuple), batch_size : Int32? = nil) : Int64
+        insert_{{name.id}}_all(rows.map { |row| row.to_h.transform_values(&.as(DB::Any)) }, batch_size)
       end
 
       # Find associated records with given attributes

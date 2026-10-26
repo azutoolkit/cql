@@ -96,7 +96,7 @@ Update parameters are ordered `SET` values first, then the fragment's (`["X", 3]
 
 ## NULL
 
-`nil` binds as `NULL`, so `name = ?` never matches it. Use the null-safe comparison:
+In a raw fragment `nil` binds as `NULL`, so `name = ?` never matches it (the hash form `where(city: nil)` emits `IS NULL` for you). Use the null-safe comparison:
 
 ```crystal
 query.where("customers.city IS NOT DISTINCT FROM ?", nil)

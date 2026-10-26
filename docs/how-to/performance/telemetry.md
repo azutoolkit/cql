@@ -90,10 +90,10 @@ end
 `using` works on queries, inserts, updates and deletes, so a transaction's connection can be
 passed explicitly instead of relying on the fiber-local one.
 
-Statements served from the result cache emit no event, and the duration includes pool wait time:
+Every executed statement emits an event, and the duration includes pool wait time:
 `event.pool_wait` is the part of it spent waiting for a pooled connection (about zero on a transaction or pinned
 connection), and a checkout that fails counts its wait until the failure.
-`Schema#alter` and migrations bypass telemetry. `event.error.message` may contain data, so
+`Schema#alter` statements (including those inside migrations) bypass telemetry. `event.error.message` may contain data, so
 redact it before shipping it anywhere.
 
 Call `CQL::Telemetry.reset!` in specs to remove all subscribers.

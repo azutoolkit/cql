@@ -10,7 +10,7 @@ migrator.rollback
 puts "Rolled back one migration"
 ```
 
-`rollback(steps = 1)` rolls back the newest applied migration. Note that `down(steps)` defaults to **all** migrations, so call `migrator.down` without an argument only when you mean to undo everything. The whole rollback runs in one transaction and prints a table of the migrations it reverted.
+`rollback(steps = 1)` rolls back the newest applied migration. Note that `down(steps)` defaults to **all** migrations, so call `migrator.down` without an argument only when you mean to undo everything. On SQLite and PostgreSQL the whole rollback runs in one transaction; on MySQL and CockroachDB each statement commits on its own. It prints a table of the migrations it reverted.
 
 ## Rollback Multiple Migrations
 
@@ -102,7 +102,7 @@ class DropLegacyTable < CQL::Migration(10)
 end
 ```
 
-When you try to rollback, the exception aborts the rollback transaction and nothing is reverted:
+When you try to rollback, the exception aborts the rollback and, on SQLite and PostgreSQL, nothing is reverted:
 
 ```crystal
 begin
