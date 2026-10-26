@@ -59,4 +59,4 @@ CQL's own. Its lines about JSONB, array and UUID columns are printed text. It wa
 - [Run Migrations](../../docs/how-to/migrations/run-migrations.md)
 - [Rollback Migrations](../../docs/how-to/migrations/rollback.md)
 - [Dump and Validate Your Schema](../../docs/how-to/migrations/schema-dump-and-validation.md)
-- [Migration Workflows](../../docs/tutorials/real-world-examples/migration-workflows.md)
+- [Run Migrations](../../docs/how-to/migrations/run-migrations.md)

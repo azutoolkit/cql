@@ -59,7 +59,7 @@ The timings in sections 5 and 6 are measured on your machine each run. It requir
 
 ## See Also
 
-- [Typed Query DSL: Before and After](../docs/explanation/dsl-before-after.md)
+- [Write Typed Queries](../docs/how-to/querying/typed-where-dsl.md)
 - [Write Typed Queries](../docs/how-to/querying/typed-where-dsl.md)
 - [AsyncEngine and pool options](../docs/how-to/postgres-native/async-engine.md)
 - [Native PostgreSQL Driver](../README.md#native-postgresql-driver)

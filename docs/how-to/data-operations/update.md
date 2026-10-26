@@ -71,17 +71,7 @@ One statement, no validations, no callbacks, no `updated_at`. Each returns a `DB
 
 ## Update Only Changed Columns
 
-```crystal
-class User
-  include CQL::ActiveRecord::Model(Int64)
-  include CQL::ActiveRecord::DirtyTracking
-end
-
-user = User.find!(1)
-user.name = "New Name"
-user.save!   # UPDATE users SET name = ?, updated_at = ? WHERE users.id = ?
-user.save!   # nothing changed: no UPDATE
-```
+With `include CQL::ActiveRecord::DirtyTracking`, `save` writes only the changed columns plus `updated_at`, and no `UPDATE` when nothing changed; see [Track Changes and Update Only Changed Columns](../models/dirty-tracking.md).
 
 For read-modify-write updates that race, such as the `views_count` increment above, add a lock version column; see
 [Add Optimistic Locking](../models/optimistic-locking.md).

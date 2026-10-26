@@ -129,5 +129,5 @@ columns measure the same thing.
 
 - [Native PostgreSQL Driver](../README.md#native-postgresql-driver): `binary_params`, pooling, streaming, and the
   measured results of both PostgreSQL scripts
-- [Benchmark CQL](../docs/how-to/performance/benchmark.md)
+- [Benchmark a Change](../docs/resources/contributing.md#benchmark-a-change): compare two versions
 - [script/README.md](../script/README.md): the scripts that check the driver against many servers and poolers

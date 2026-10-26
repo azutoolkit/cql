@@ -116,7 +116,7 @@ New to CQL? Start with the [tutorials](../tutorials/README.md); for every option
 
 ## Testing
 
-- [Set Up Test Databases](testing/test-database.md)
+- [Set Up Test Databases and Factories](testing/test-database.md)
 
 ## Troubleshooting
 

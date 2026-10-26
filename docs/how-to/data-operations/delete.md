@@ -17,9 +17,7 @@ user.delete!     # => false: no id any more
 User.find(1)     # => nil
 ```
 
-`delete!` runs `before_destroy` / `after_destroy` and the associations' `dependent:` strategies. It returns `false`
-when the record has no id, a `before_destroy` callback returns `false`, or no row matched. A `restrict_with_error`
-association that has records raises and deletes nothing.
+`delete!` runs `before_destroy` / `after_destroy` and the associations' `dependent:` strategies. It returns `false` when the record has no id, a `before_destroy` callback returns `false`, or no row matched. A `restrict_with_error` association that has records raises and deletes nothing.
 
 ## Delete Without Loading Records
 
@@ -41,10 +39,7 @@ User.where(active: false).delete_all              # => 2 (Int64)
 Post.where { created_at < 1.year.ago }.delete_all
 ```
 
-Without destroy callbacks or `dependent:` associations (or `many_to_many`), this reads the ids and deletes them with one
-`DELETE ... IN` per chunk of the bind limit, outside any transaction; wrap it in one if it must be all or nothing.
-Otherwise it loads each record and calls its `delete!`, all in one transaction, so callbacks and the
-[association strategies](../relationships/has-many.md#when-the-parent-is-deleted) run.
+Without destroy callbacks or `dependent:` associations (or `many_to_many`), this reads the ids and deletes them with one `DELETE ... IN` per chunk of the bind limit, outside any transaction; wrap it in one if it must be all or nothing. Otherwise it loads each record and calls its `delete!`, all in one transaction, so callbacks and the [association strategies](../relationships/has-many.md#when-the-parent-is-deleted) run.
 
 ## Delete Children First
 
@@ -57,14 +52,16 @@ end
 
 # Or refuse
 user.posts.exists? ? puts("Cannot delete user with posts") : user.delete!
+
+# Or let the database delete them: declare the key in the posts table block
+foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
 ```
 
-A foreign key declared with `on_delete: :cascade` lets the database delete the children. SQLite enforces foreign keys
-only when the connection enables them: `uri: "sqlite3://./app.db?foreign_keys=true"`.
+SQLite enforces foreign keys only when the connection enables them: `uri: "sqlite3://./app.db?foreign_keys=true"`.
 
-## Soft Delete
-
+{% hint style="info" %}
 To keep rows and set a `deleted_at` timestamp instead, include `CQL::ActiveRecord::SoftDeletable`; see [Implement Soft Deletes](../models/soft-delete.md).
+{% endhint %}
 
 ## See Also
 

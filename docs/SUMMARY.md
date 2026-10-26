@@ -117,7 +117,7 @@
 
 ### Testing
 
-- [Set Up Test Databases](how-to/testing/test-database.md)
+- [Set Up Test Databases and Factories](how-to/testing/test-database.md)
 
 ### Troubleshooting
 

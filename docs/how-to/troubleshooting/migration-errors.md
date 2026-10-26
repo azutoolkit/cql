@@ -4,7 +4,17 @@ description: "Find the error your migration raised, then apply its fix."
 
 # Fix Migration Errors
 
-SQLite messages come from SQLite; PostgreSQL errors go through CQL's native driver, which prints a fixed title for SQLSTATE classes whose server text can quote values. Read the server's own wording from `ex.server_message`. Check which migrations have run first, as in [Check Status](../migrations/run-migrations.md#check-status).
+Check which migrations have run first, as in [Check Status](../migrations/run-migrations.md#check-status). SQLite messages below come from SQLite. PostgreSQL errors go through CQL's native driver, which prints a fixed title for SQLSTATE classes whose server text can quote values; the server's own text is in `server_message`:
+
+```crystal
+begin
+  migrator.up
+rescue ex : CQL::Postgres::ServerError # the PostgreSQL errors below inherit from it
+  ex.message        # => "ERROR: syntax error or access rule violation (SQLSTATE 42P07)"
+  ex.sqlstate       # => "42P07"
+  ex.server_message # => "relation \"users\" already exists"; may quote bound values
+end
+```
 
 ## Table already exists
 
@@ -37,7 +47,12 @@ SQLite3::Exception: duplicate column name: email
 CQL::Postgres::SyntaxOrAccessError: ERROR: syntax error or access rule violation (SQLSTATE 42701)
 ```
 
-**Cause:** the migration already ran, or the column was added by hand. Check `migrator.applied_migrations`; `schema.tables[:users].columns` mirrors the schema definition, not the live database.
+**Cause:** the migration already ran, or the column was added by hand:
+
+```crystal
+migrator.applied_migrations.map(&.version) # did the migration run?
+schema.tables[:users].columns.keys         # the schema's declaration, not the live database
+```
 
 ## Adding a NOT NULL column fails
 
@@ -51,8 +66,7 @@ CQL::Postgres::NotNullViolation: ERROR: column "name" of relation "users" contai
 schema.exec("ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT 'Unknown'")
 ```
 
-[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) explains the cause and the
-nullable-then-backfill alternative.
+[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) explains the cause and the nullable-then-backfill alternative.
 
 ## Column cannot be dropped
 
@@ -73,7 +87,15 @@ end
 # ALTER TABLE posts DROP CONSTRAINT fk_posts_user_id; DROP INDEX IF EXISTS idx_posts_user_id; ALTER TABLE posts DROP COLUMN user_id;
 ```
 
-SQLite cannot drop foreign keys or change column types (`SQLite does not support ALTER COLUMN syntax`): create a new table, copy the rows, drop the old table and rename the new one. `drop_column` on a column the schema does not declare only logs `Column nope does not exist in table ...` and emits no SQL.
+`drop_column` on a column the schema does not declare only logs `Column nope does not exist in table ...` and emits no SQL. SQLite cannot drop foreign keys or change column types (`SQLite does not support ALTER COLUMN syntax`), so rebuild the table:
+
+```crystal
+# SQLite, in a migration: rebuild posts without user_id (or with a new column type)
+schema.exec("CREATE TABLE posts_new (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL)")
+schema.exec("INSERT INTO posts_new (id, title) SELECT id, title FROM posts")
+schema.exec("DROP TABLE posts")
+schema.exec("ALTER TABLE posts_new RENAME TO posts")
+```
 
 ## Foreign key violation
 
