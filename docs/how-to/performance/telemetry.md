@@ -93,7 +93,9 @@ passed explicitly instead of relying on the fiber-local one.
 Every executed statement emits an event, and the duration includes pool wait time:
 `event.pool_wait` is the part of it spent waiting for a pooled connection (about zero on a transaction or pinned
 connection), and a checkout that fails counts its wait until the failure.
-`Schema#alter` statements (including those inside migrations) bypass telemetry. `event.error.message` may contain data, so
+`Schema#alter` statements (including those inside migrations) bypass telemetry; where DDL is transactional (SQLite,
+PostgreSQL), `alter`, `Migrator.new`, `Migrator#up` and `Migrator#down` run inside `Schema#transaction`, so they publish
+transaction events (`nested` when a transaction is already open). `event.error.message` may contain data, so
 redact it before shipping it anywhere.
 
 Call `CQL::Telemetry.reset!` in specs to remove all subscribers.
