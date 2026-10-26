@@ -1,32 +1,38 @@
-# Adding CQL to an Existing Project
+---
+description: "Add CQL to an app whose PostgreSQL database already has users and products tables, then move code over one query at a time."
+---
 
-Add CQL to an app whose PostgreSQL database already has `users` and `products` tables, then move code over one query at a time.
+# Adding CQL to an Existing Project
 
 **You need:** an existing Crystal project, its database URL, and the basics from [Your First CQL App](your-first-cql-app.md).
 
-## Step 1: Add the dependency
+{% stepper %}
+{% step %}
+### Add the dependency
 
-Add CQL to `shard.yml` and keep your existing driver:
+Add CQL to `shard.yml` and keep your existing driver; PostgreSQL needs no extra shard ([Installation](../../installation.md) has the details).
 
+{% code title="shard.yml" %}
 ```yaml
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.589"
-  # PostgreSQL needs no other shard: require "cql" registers a native driver.
-  # If your app already uses the pg shard, keep it; once required, it serves postgres:// URLs.
+    version: ~> 0.0.808
 ```
+{% endcode %}
 
 ```bash
 shards install
 ```
 
 Check: the output lists `Installing cql`.
+{% endstep %}
 
-## Step 2: Describe the existing tables
+{% step %}
+### Describe the existing tables
 
+{% code title="src/cql_config.cr" %}
 ```crystal
-# src/cql_config.cr
 require "cql" # includes a native PostgreSQL driver for postgres:// URLs
 
 DATABASE_URL = ENV["DATABASE_URL"]? || "postgres://localhost/myapp_development"
@@ -57,13 +63,16 @@ CQL_MIGRATOR_CONFIG = CQL::MigratorConfig.new(
   auto_sync: true
 )
 ```
+{% endcode %}
 
 Declare each column under its real name: a model property reads the column of the same name.
+{% endstep %}
 
-## Step 3: Map models to the tables
+{% step %}
+### Map models to the tables
 
+{% code title="src/models/user.cr" %}
 ```crystal
-# src/models/user.cr
 class User
   include CQL::ActiveRecord::Model(Int64) # adds the id primary key
   db_context AppDB, :users
@@ -78,9 +87,10 @@ class User
   end
 end
 ```
+{% endcode %}
 
+{% code title="src/models/product.cr" %}
 ```crystal
-# src/models/product.cr
 class Product
   include CQL::ActiveRecord::Model(Int64)
   db_context AppDB, :products
@@ -96,29 +106,34 @@ class Product
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 4: Load CQL in your application
+{% step %}
+### Load CQL in your application
 
-Requiring the config and models is all the setup CQL needs; the pool opens when code first uses `AppDB`.
+In your main file, requiring the config and models is all the setup CQL needs; the pool opens when code first uses `AppDB`.
 
+{% code title="src/app.cr" %}
 ```crystal
-# src/app.cr (your main file)
 require "./cql_config"
 require "./models/*"
 
 # ...your existing application code
 ```
+{% endcode %}
 
 Check it against your data:
 
+{% code title="src/cql_check.cr" %}
 ```crystal
-# src/cql_check.cr
 require "./cql_config"
 require "./models/*"
 
 puts "users: #{User.count}, products: #{Product.count}"
 puts "first user: #{User.first.try(&.email)}"
 ```
+{% endcode %}
 
 ```bash
 crystal src/cql_check.cr
@@ -130,11 +145,13 @@ It prints your own row counts, for example:
 users: 1, products: 0
 first user: ada@example.com
 ```
+{% endstep %}
 
-## Step 5: Add a table with a migration
+{% step %}
+### Add a table with a migration
 
+{% code title="migrations/001_create_orders.cr" %}
 ```crystal
-# migrations/001_create_orders.cr
 class CreateOrders < CQL::Migration(1)
   def up
     schema.table :orders do
@@ -160,40 +177,31 @@ class CreateOrders < CQL::Migration(1)
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 6: Run the migration
+{% step %}
+### Run the migration
 
+Apply it with a migrator built from `CQL_MIGRATOR_CONFIG`. [Run Migrations](../../how-to/migrations/run-migrations.md) turns this script into an `up`, `status` and `version` command.
+
+{% code title="src/migrate.cr" %}
 ```crystal
-# src/migrate.cr
 require "./cql_config"
 require "../migrations/*"
 
-migrator = AppDB.migrator(CQL_MIGRATOR_CONFIG)
-
-case ARGV[0]?
-when "up"
-  migrator.up
-when "down"
-  migrator.rollback # the newest migration file, if applied; migrator.down reverts all
-when "status"
-  puts "Applied: #{migrator.applied_migrations.map(&.version)}"
-  puts "Pending: #{migrator.pending_migrations.map(&.version)}"
-else
-  puts "Usage: crystal src/migrate.cr [up|down|status]"
-end
+AppDB.migrator(CQL_MIGRATOR_CONFIG).up
 ```
+{% endcode %}
 
 ```bash
-crystal src/migrate.cr up
-crystal src/migrate.cr status
+crystal src/migrate.cr
 ```
 
 ```text
 ...
 │   ✔    │ CreateOrders │       1 │
 ...
-Applied: [1]
-Pending: []
 ```
 
 The migration declares `orders` only while it runs. Add the table to `AppDB` in `src/cql_config.cr` too, so that models can use it and `down` can drop it:
@@ -210,9 +218,11 @@ The migration declares `orders` only while it runs. Add the table to `AppDB` in 
 
 Or point models at `AppSchema`, which `auto_sync` writes to `src/schemas/app_schema.cr` after every run.
 
-Check: `crystal src/migrate.cr down` prints `✗ CreateOrders`, and `up` reapplies it.
+Check: a second `crystal src/migrate.cr` prints the same table and applies nothing.
+{% endstep %}
 
-## Step 7: Move code over one phase at a time
+{% step %}
+### Move code over one phase at a time
 
 Raw SQL and CQL run side by side, so switch one kind of query at a time, starting with reads.
 
@@ -240,8 +250,8 @@ order_counts = AppDB.query
 
 Phase 4 adds associations:
 
+{% code title="src/models/order.cr" %}
 ```crystal
-# src/models/order.cr
 class Order
   include CQL::ActiveRecord::Model(Int64)
   db_context AppDB, :orders
@@ -258,6 +268,7 @@ class Order
   end
 end
 ```
+{% endcode %}
 
 ```crystal
 # src/models/user.cr: add below the properties
@@ -270,13 +281,15 @@ puts "#{user.email} has #{user.orders.count} order(s)"
 ```
 
 Keep raw SQL where the builder falls short, and wrap bulk changes in `AppDB.transaction`.
+{% endstep %}
+{% endstepper %}
 
 ## Existing migrations from another ORM
 
 CQL tracks its migrations in its own `cql_schema_migrations` table, so another ORM's migrations do not conflict. Leave them in place and either number CQL migrations after them (a timestamp such as `CQL::Migration(20260101120000)` works), or add an empty baseline:
 
+{% code title="migrations/000_baseline.cr" %}
 ```crystal
-# migrations/000_baseline.cr
 class Baseline < CQL::Migration(0)
   def up
     # The tables already exist; this only marks the starting point for CQL
@@ -287,6 +300,7 @@ class Baseline < CQL::Migration(0)
   end
 end
 ```
+{% endcode %}
 
 ## Rename a column to match a property
 
@@ -311,5 +325,10 @@ end
 ## Next steps
 
 - [Define a Model](../../how-to/models/define-model.md)
-- [Run Migrations](../../how-to/migrations/run-migrations.md)
 - [Building a Blog](../building-a-blog/01-project-setup.md)
+
+The how-to guides cover each feature as a task:
+
+{% content-ref url="../../how-to/README.md" %}
+[README.md](../../how-to/README.md)
+{% endcontent-ref %}

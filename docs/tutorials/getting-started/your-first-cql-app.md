@@ -1,10 +1,14 @@
-# Your First CQL App
+---
+description: "Build a small SQLite app: connect, migrate, define models, query, validate and use a transaction."
+---
 
-Build a small SQLite app: connect, migrate, define models, query, validate and use a transaction.
+# Your First CQL App
 
 **You need:** Crystal 1.12.2 or later and the SQLite 3 development library (`libsqlite3-dev` on Debian and Ubuntu).
 
-## Step 1: Create the project
+{% stepper %}
+{% step %}
+### Create the project
 
 ```bash
 crystal init app myapp
@@ -12,34 +16,40 @@ cd myapp
 ```
 
 Check: `ls` shows `shard.yml` and `src/myapp.cr`.
+{% endstep %}
 
-## Step 2: Add CQL and a driver
+{% step %}
+### Add CQL and a driver
 
 Add to `shard.yml`:
 
+{% code title="shard.yml" %}
 ```yaml
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.589"
+    version: ~> 0.0.808
   sqlite3:
     github: crystal-lang/crystal-sqlite3
 ```
+{% endcode %}
 
 ```bash
 shards install
 ```
 
 Check: the output lists `Installing cql` and `Installing sqlite3`.
+{% endstep %}
 
-## Step 3: Connect to the database
+{% step %}
+### Connect to the database
 
 ```bash
 mkdir -p db
 ```
 
+{% code title="src/database.cr" %}
 ```crystal
-# src/database.cr
 require "cql"
 require "sqlite3"
 
@@ -54,14 +64,16 @@ end
 #   MySQL: add the mysql shard (github: crystal-lang/crystal-mysql) and require "mysql"
 #     adapter: CQL::Adapter::MySql, uri: "mysql://user:pass@localhost:3306/myapp"
 ```
+{% endcode %}
 
+{% code title="src/check_connection.cr" %}
 ```crystal
-# src/check_connection.cr
 require "./database"
 
 AppDB.exec("SELECT 1")
 puts "Connected to #{AppDB.uri}"
 ```
+{% endcode %}
 
 ```bash
 crystal src/check_connection.cr
@@ -70,11 +82,13 @@ crystal src/check_connection.cr
 ```text
 Connected to sqlite3://./db/development.db?foreign_keys=1
 ```
+{% endstep %}
 
-## Step 4: Create the users table
+{% step %}
+### Create the users table
 
+{% code title="migrations/001_create_users.cr" %}
 ```crystal
-# migrations/001_create_users.cr
 class CreateUsers < CQL::Migration(1)
   def up
     schema.table :users do
@@ -95,9 +109,10 @@ class CreateUsers < CQL::Migration(1)
   end
 end
 ```
+{% endcode %}
 
+{% code title="src/setup.cr" %}
 ```crystal
-# src/setup.cr
 require "./database"
 require "../migrations/*"
 
@@ -107,6 +122,7 @@ migrator = AppDB.migrator
 migrator.up
 puts "Applied #{migrator.applied_migrations.size} migration(s)"
 ```
+{% endcode %}
 
 ```bash
 crystal src/setup.cr
@@ -123,11 +139,13 @@ Applied 1 migration(s)
 ```
 
 CQL's development logger adds `INFO` and `DEBUG` lines. Check that `src/schemas/app_schema.cr` exists: its `AppSchema` knows every table, so the app uses it instead of the empty `AppDB`.
+{% endstep %}
 
-## Step 5: Define a model and run CRUD queries
+{% step %}
+### Define a model and run CRUD queries
 
+{% code title="src/models/user.cr" %}
 ```crystal
-# src/models/user.cr
 class User
   include CQL::ActiveRecord::Model(Int64) # adds the id primary key
   db_context AppSchema, :users
@@ -142,11 +160,12 @@ class User
   end
 end
 ```
+{% endcode %}
 
 Models are classes so that `save` can set the new id on your instance. Replace `src/myapp.cr`:
 
+{% code title="src/myapp.cr" %}
 ```crystal
-# src/myapp.cr
 require "cql"
 require "sqlite3"
 require "./schemas/app_schema"
@@ -177,6 +196,7 @@ puts "Updated: #{User.all.map(&.name)}"
 User.where(active: false).first.try(&.delete!)
 puts "Remaining: #{User.all.map(&.name)}"
 ```
+{% endcode %}
 
 ```bash
 crystal src/myapp.cr
@@ -193,11 +213,13 @@ Remaining: ["Robert Smith"]
 ```
 
 The id grows on every run.
+{% endstep %}
 
-## Step 6: Add posts
+{% step %}
+### Add posts
 
+{% code title="migrations/002_create_posts.cr" %}
 ```crystal
-# migrations/002_create_posts.cr
 class CreatePosts < CQL::Migration(2)
   def up
     schema.table :posts do
@@ -222,9 +244,10 @@ class CreatePosts < CQL::Migration(2)
   end
 end
 ```
+{% endcode %}
 
+{% code title="src/models/post.cr" %}
 ```crystal
-# src/models/post.cr
 class Post
   include CQL::ActiveRecord::Model(Int64)
   db_context AppSchema, :posts
@@ -241,6 +264,7 @@ class Post
   end
 end
 ```
+{% endcode %}
 
 In `src/models/user.cr`, add below the properties:
 
@@ -276,8 +300,10 @@ Carol has 2 posts: ["My First Post", "Another Post"]
 ```
 
 `User.delete_all` now removes posts too, through the `on_delete: :cascade` foreign key.
+{% endstep %}
 
-## Step 7: Validate input
+{% step %}
+### Validate input
 
 In `src/models/user.cr`, add below `has_many`:
 
@@ -312,8 +338,10 @@ save raised: name must be present,name must have a size of 1..100,email must mat
 ```
 
 `save` and `save!` raise on an invalid record; `create!` skips validations.
+{% endstep %}
 
-## Step 8: Use a transaction
+{% step %}
+### Use a transaction
 
 Add to the end of `src/myapp.cr`:
 
@@ -345,6 +373,8 @@ Rolled back (payment failed): Erin saved? no
 ```
 
 An exception rolls back the whole block, then propagates.
+{% endstep %}
+{% endstepper %}
 
 ## Project structure
 
@@ -371,24 +401,16 @@ myapp/
 
 The pool opens when code first uses `AppDB`, so a bad PostgreSQL or MySQL URL raises there (for example `DB::ConnectionRefused`); `src/check_connection.cr` shows it.
 
-To reset the migrations in development, run the migrator on `AppSchema`: `down` methods such as `schema.posts.drop!` raise `KeyError` on `AppDB`, which knows no tables.
-
-```crystal
-# src/reset.cr
-require "cql"
-require "sqlite3"
-require "./schemas/app_schema"
-require "../migrations/*"
-
-migrator = AppSchema.migrator
-puts "Applied: #{migrator.applied_migrations.size}, pending: #{migrator.pending_migrations.size}"
-migrator.down # roll back every migration
-migrator.up   # apply them again
-```
+To reset the database in development, call `down` and then `up` on `AppSchema.migrator`, not `AppDB.migrator`: a `down` method such as `schema.posts.drop!` raises `KeyError` on `AppDB`, which knows no tables. [Rollback Migrations](../../how-to/migrations/rollback.md) covers rolling back to a version.
 
 ## Next steps
 
-- [Building a Blog](../building-a-blog/01-project-setup.md): a five-part project
 - [Define a Model](../../how-to/models/define-model.md)
 - [Build Complex Queries](../../how-to/querying/complex-queries.md)
 - [Add Validations](../../how-to/models/add-validations.md)
+
+The five-part blog tutorial builds a larger app:
+
+{% content-ref url="../building-a-blog/01-project-setup.md" %}
+[01-project-setup.md](../building-a-blog/01-project-setup.md)
+{% endcontent-ref %}
