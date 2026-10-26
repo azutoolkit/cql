@@ -129,7 +129,7 @@ All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain cre
 
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
-| `DB::NoResultsError` | `find!`, `find_by!`, `first!` and `last!` (class and `QueryBuilder`); `Repository#find!`; `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, ``"No records found with conditions: {email: "x"}"``, `"No records found"`, `"The insert returned no row"` |
+| `DB::NoResultsError` | `find!`, `find_by!`, `first!` and `last!` (class and `QueryBuilder`); `Repository#find!`; `Query#get!`; `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, ``"No records found with conditions: {email: "x"}"``, `"No records found"`, `"The query returned no row"`, `"The insert returned no row"` |
 | `DB::ConnectionRefused` | Opening a connection fails (crystal-db's first connect; the native driver maps transport and TLS failures to it) | |
 | `DB::PoolTimeout`, `DB::PoolRetryAttemptsExceeded` | A saturated pool; a failed lazy reconnect | |
 | `URI::Error` | `CQL.build_schema` with a `db` URL `URI.parse` rejects, such as `sqlite3://:memory:` | `"Invalid URI: bad port at character 11"` |

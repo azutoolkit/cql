@@ -88,6 +88,12 @@ describe CQL::Executable do
     users.call.all!(as: String).size.should eq(3)
   end
 
+  it "get! raises DB::NoResultsError on an empty result" do
+    expect_raises(DB::NoResultsError, "The query returned no row") do
+      users.call.where(name: "nobody").get!(as: String)
+    end
+  end
+
   it "first is nil on an empty result" do
     users.call.where(name: "nobody").first(as: String).should be_nil
   end

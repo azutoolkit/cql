@@ -216,14 +216,17 @@ module CQL
         cache_store.set(key, serialize_rows(value), ttl)
       end
 
-      # A value `set` stored, read back: integers that fit come back as `Int32`, as before, and a
-      # `Time` as its RFC 3339 `String`.
-      private def self.cached_db_value(item : JSON::Any) : DB::Any
+      # :nodoc:
+      # A cached JSON value read back as `DB::Any`: integers that fit come back as `Int32`, as before,
+      # larger ones as `Int64`, a `Time` as its RFC 3339 `String`, and an array or object as its JSON text.
+      def self.cached_db_value(item : JSON::Any) : DB::Any
         case raw = item.raw
         when Int64
           Int32::MIN <= raw <= Int32::MAX ? raw.to_i32 : raw
         when String, Bool, Float64, Nil
           raw
+        else
+          item.to_json
         end
       end
 

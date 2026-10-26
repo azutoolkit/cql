@@ -107,6 +107,17 @@ describe "many_to_many lookups" do
     team.players.exists?(name: "Gone").should be_false
   end
 
+  it "associates a soft-deleted target with create(record) without inserting it again" do
+    team = LookupTeam.create!(name: "Purples")
+    gone = LookupPlayer.create!(name: "Gone")
+    gone.delete!
+
+    team.players.create(gone).should be(gone)
+
+    LookupPlayer.with_deleted.count.should eq(1)
+    LookupRoster.count.should eq(1)
+  end
+
   it "returns a target once when it is associated twice" do
     team = LookupTeam.create!(name: "Blues")
     player = LookupPlayer.create!(name: "Twice")

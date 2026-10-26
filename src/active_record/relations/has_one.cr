@@ -19,9 +19,18 @@ module CQL::ActiveRecord::Relations
     #
     # **Example**
     # ```
-    # class User
-    #   include CQL::Model(Int64)
-    #   has_one :profile, Profile, foreign_key: :user_id, dependent: :destroy
+    # class Profile
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :profiles
+    #
+    #   property account_id : Int64?
+    # end
+    #
+    # class Account
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :accounts
+    #
+    #   has_one :profile, Profile, foreign_key: :account_id, dependent: :destroy
     # end
     # ```
     macro has_one(name, kind, foreign_key = nil, dependent = nil, cache = true)

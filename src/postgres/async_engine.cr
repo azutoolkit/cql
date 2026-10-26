@@ -12,9 +12,12 @@ module CQL::Postgres
   # ```
   # engine = CQL::Postgres::AsyncEngine.connect("postgres://app:secret@db/app?pool_size=10")
   # User.query.where(active: true).using(engine).to_a
-  # AppDB.query.from(:users).select(:name).using(engine).all(as: String)
-  # engine.transaction { |tx| AppDB.insert.into(:users).values(name: "ada").using(tx).commit }
+  # engine.transaction { |tx| User.query.where(name: "Ada").using(tx).to_a }
+  # engine.exec("INSERT INTO notes (body) VALUES ($1)", ["first".as(DB::Any)])
   # ```
+  #
+  # `using(engine)` changes where a statement runs, not its SQL, so the statement's schema must
+  # use a PostgreSQL or CockroachDB adapter.
   #
   # Statements run through `CQL::Execution`, so telemetry and performance
   # tracking see them like any other.
@@ -57,8 +60,11 @@ module CQL::Postgres
     # connection (`query.using(tx)`) and offers `tx.savepoint { ... }`.
     #
     # ```
-    # engine.transaction(isolation: :serializable, read_only: true, deferrable: true) { |tx| ... }
-    # engine.transaction(synchronous_commit: false) { |tx| ... } # SET LOCAL: this commit may be lost in a crash
+    # engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
+    # engine.transaction(isolation: :serializable, read_only: true, deferrable: true) { |tx| User.query.using(tx).to_a }
+    # engine.transaction(synchronous_commit: false) do |tx| # SET LOCAL: this commit may be lost in a crash
+    #   tx.savepoint { |inner| User.query.where(name: "Ada").using(inner).to_a }
+    # end
     # ```
     #
     # `synchronous_commit: false` makes the commit return before the WAL is
@@ -88,7 +94,8 @@ module CQL::Postgres
     # unaffected and appears as its `ServerError` in the returned array.
     #
     # ```
-    # users, orders = engine.pipeline([User.query.where(active: true), Order.query])
+    # engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
+    # users, posts = engine.pipeline([User.query.where(active: true), Post.query])
     # users.as(CQL::Postgres::PipelineResult).all(as: User)
     # ```
     def pipeline(queries : Array(Q)) : Array(PipelineResult | ServerError) forall Q

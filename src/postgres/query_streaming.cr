@@ -9,8 +9,9 @@ module CQL::Postgres
   # `Session#stream` for early stops, errors, cancel and timeouts.
   #
   # ```
+  # engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
   # engine.stream(User.query.where(active: true), fetch_size: 500) do |rows|
-  #   rows.each { puts rows.read(Int64) }
+  #   rows.each { puts rows.read(Int64) } # the model's columns, id first
   # end
   # ```
   module QueryStreaming

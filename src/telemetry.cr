@@ -7,8 +7,8 @@ module CQL
   # statement in a span (OpenTelemetry, Dashforge, ...).
   #
   # ```
-  # CQL::Telemetry.subscribe("metrics") { |event| StatsD.timing("sql.#{event.operation}", event.duration) }
-  # CQL::Telemetry.alert_on_slow(200.milliseconds) { |event| Alerts.warn("slow query: #{event.sql}") }
+  # CQL::Telemetry.subscribe("metrics") { |event| Log.info { "sql.#{event.operation} #{event.duration.total_milliseconds}ms" } }
+  # CQL::Telemetry.alert_on_slow(200.milliseconds) { |event| Log.warn { "slow query: #{event.sql}" } }
   # ```
   #
   # `subscribe_transactions` additionally reports `Schema#transaction`
@@ -369,6 +369,7 @@ module CQL
   end
 end
 
+# :nodoc:
 class ::Fiber
   # :nodoc:
   property cql_telemetry_context : String?

@@ -10,37 +10,42 @@ module CQL
     # - Type-safe scope definitions using macros
     # - Chainable scopes that integrate with QueryBuilder
     # - Support for parameterized scopes
-    # - Lazy evaluation for performance
-    # - Integration with existing query cache
-    # - Support for both lambda and block syntax
+    # - Lazy evaluation: a scope builds a query that runs only when its rows are read
     #
     # ## Examples
     #
     # ```
-    # class User < CQL::ActiveRecord::Model
-    #   include CQL::ActiveRecord::Scopes
+    # class Article
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :posts
+    #
+    #   property title : String = ""
+    #   property user_id : Int64 = 0_i64
+    #   property published : Bool = false
+    #   property created_at : Time?
     #
     #   # Simple scope without parameters
-    #   scope :active, -> { where(active: true) }
+    #   scope :published, -> { where(published: true) }
     #
     #   # Parameterized scope
-    #   scope :by_role, ->(role : String) { where(role: role) }
+    #   scope :by_author, ->(user_id : Int64) { where(user_id: user_id) }
     #
-    #   # Complex scope with multiple conditions
-    #   scope :recent, ->(days : Int32) {
-    #     where("created_at > ?", Time.utc - days.days)
-    #   }
+    #   # Scope with a typed condition
+    #   scope :recent, ->(days : Int32) { where { created_at > days.days.ago } }
     #
     #   # Scope that calls other scopes
-    #   scope :active_admins, -> { active.by_role("admin") }
+    #   scope :published_by, ->(user_id : Int64) { published.by_author(user_id) }
+    #
+    #   def initialize
+    #   end
     # end
     #
     # # Usage examples:
-    # User.active                              # Simple scope
-    # User.by_role("admin")                    # Parameterized scope
-    # User.active.by_role("admin")             # Chained scopes
-    # User.recent(30)                          # Scope with parameter
-    # User.active.recent(7).order(:created_at) # Mixed with query methods
+    # Article.published.all                                    # Simple scope
+    # Article.by_author(1_i64).all                             # Parameterized scope
+    # Article.published.by_author(1_i64).all                   # Chained scopes
+    # Article.recent(30).count                                 # Scope with parameter
+    # Article.published.recent(7).order(created_at: :desc).all # Mixed with query methods
     # ```
     module Scopes
       macro included
@@ -72,18 +77,20 @@ module CQL
       # ## Examples
       #
       # ```
-      # # Simple scope
-      # scope :published, -> { where(published: true) }
+      # class Post
+      #   # Simple scope
+      #   scope :published, -> { where(published: true) }
       #
-      # # Parameterized scope
-      # scope :by_category, ->(category : String) { where(category: category) }
+      #   # Parameterized scope
+      #   scope :by_author, ->(user_id : Int64) { where(user_id: user_id) }
       #
-      # # Scope with complex logic
-      # scope :recent_and_popular, ->(days : Int32) {
-      #   where("created_at > ?", Time.utc - days.days)
-      #     .where("views > ?", 100)
-      #     .order(views: :desc)
-      # }
+      #   # Scope with complex logic
+      #   scope :recent_published, ->(days : Int32) {
+      #     where(published: true)
+      #       .where { created_at > days.days.ago }
+      #       .order(created_at: :desc)
+      #   }
+      # end
       # ```
       macro scope(name, scope_proc)
         # Store scope definition for introspection

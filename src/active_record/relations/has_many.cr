@@ -22,11 +22,18 @@ module CQL::ActiveRecord::Relations
     #
     # **Example**
     # ```
-    # class User
-    #   include CQL::Model(Int64)
-    #   property id : Int64
-    #   property name : String
-    #   has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
+    # class Article
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :articles
+    #
+    #   property author_id : Int64?
+    # end
+    #
+    # class Author
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :authors
+    #
+    #   has_many :articles, Article, foreign_key: :author_id, dependent: :destroy
     # end
     # ```
     macro has_many(name, type, foreign_key = nil, dependent = nil, inverse_of = nil, scope = nil)

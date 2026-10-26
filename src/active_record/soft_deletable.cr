@@ -14,26 +14,38 @@ module CQL
     #
     # ## Usage
     #
-    # ```
-    # class User < CQL::ActiveRecord::Model(Int32)
-    #   db_context AcmeDB, :users
-    #   include CQL::ActiveRecord::SoftDeletable
+    # The table needs a nullable `deleted_at` column:
     #
-    #   property name : String
-    #   property email : String
-    #   property deleted_at : Time? = nil
+    # ```
+    # AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+    #   table :accounts do
+    #     primary :id, Int64, auto_increment: true
+    #     column :name, String
+    #     column :deleted_at, Time, null: true
+    #   end
+    # end
+    #
+    # class Account
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   include CQL::ActiveRecord::SoftDeletable # adds property deleted_at : Time?
+    #   db_context AppDB, :accounts
+    #
+    #   property name : String = ""
+    #
+    #   def initialize
+    #   end
     # end
     #
     # # Basic usage
-    # user = User.create!(name: "John", email: "john@example.com")
-    # user.delete! # Soft deletes the user (sets deleted_at)
-    # User.all     # Returns users without soft-deleted ones
+    # account = Account.create!(name: "John")
+    # account.delete! # Soft deletes the account (sets deleted_at)
+    # Account.all     # Returns accounts without soft-deleted ones
     #
     # # Working with soft-deleted records
-    # User.with_deleted  # Returns all users including soft-deleted
-    # User.only_deleted  # Returns only soft-deleted users
-    # user.restore!      # Restores a soft-deleted user
-    # user.force_delete! # Permanently deletes the user
+    # Account.with_deleted.all # Returns all accounts including soft-deleted
+    # Account.only_deleted.all # Returns only soft-deleted accounts
+    # account.restore!         # Restores a soft-deleted account
+    # account.force_delete!    # Permanently deletes the account
     # ```
     module SoftDeletable
       macro included

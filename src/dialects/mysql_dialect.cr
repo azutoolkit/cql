@@ -250,6 +250,11 @@ module Expression
       ""
     end
 
+    # MySQL's multi-table DELETE lists the target among the USING tables.
+    def format_delete_using(target : String, using : String) : String
+      " USING #{target}, #{using}"
+    end
+
     def format_delete_returning(columns : Array(String)) : String
       ""
     end
@@ -258,11 +263,6 @@ module Expression
     # Under `NO_BACKSLASH_ESCAPES` the stored default keeps both backslashes.
     protected def quote_string_literal(value : String) : String
       "'#{value.gsub({'\\' => "\\\\", '\'' => "''", '\0' => "\\0"})}'"
-    end
-
-    # Override time formatting for MySQL-specific format (with milliseconds)
-    protected def format_time(value : Time) : String
-      "''#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}''"
     end
 
     # Returns the SQL function for the current timestamp (evaluated by database)

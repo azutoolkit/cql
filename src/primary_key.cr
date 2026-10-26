@@ -4,8 +4,8 @@ module CQL
   # **Example:**
   #
   # ```
-  # schema.table :users do
-  #   primary :id, Int32
+  # schema.table :members do
+  #   primary :id, Int64
   #   column :name, String
   # end
   # ```

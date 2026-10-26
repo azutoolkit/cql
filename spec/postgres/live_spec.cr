@@ -362,6 +362,17 @@ describe "CQL::Postgres against a live server" do
     engine.close
   end
 
+  it "runs a query on a URL built by full_db_url, with the configured pool size" do
+    require_live!
+    configuration = CQL::Configure::Config.new
+    configuration.db = LIVE_URL
+    configuration.pool.size = 3
+    engine = PG::AsyncEngine.connect(configuration.full_db_url)
+    engine.with_connection(&.query_one("SELECT 1::int4", as: Int32)).should eq 1
+    engine.pool.stats.max_size.should eq 3
+    engine.close
+  end
+
   it "pipelines CQL queries through the engine, one round trip, with typed results" do
     require_live!
     engine = PG::AsyncEngine.connect(LIVE_URL)

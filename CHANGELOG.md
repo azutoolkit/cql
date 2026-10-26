@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- Code that relied on `QueryBuilder#merge` changing its receiver should use the builder it returns.
+- Code that rescued `NilAssertionError` from `Query#get!` should rescue `DB::NoResultsError`.
+- `touch` on a soft-deleted record now stamps its row and returns `true`; before, it raised `CQL::Error`.
+- Code that called `record.run_save_callbacks` or `record.run_after_save_callbacks` can call `run_callbacks(:before_save)` and the other events directly.
+- Code that calls `Delete#using` on SQLite now raises `CQL::DialectError` when the SQL is generated; match the other table in a subquery instead (`WHERE id IN (SELECT ...)`).
+- `Insert#query(...).back(...)` on SQLite now raises `CQL::SQLiteUnsupportedFeatureError` when the SQL is generated, like `back` on a VALUES insert; it used to drop the RETURNING clause silently.
+- An `AlterTable#foreign_key` with no `references_columns` against a table whose primary key is not `id` now references that primary key. Pass `references_columns: [:id]` to keep the old target.
+- A native-engine URL with `max_pool_size` or `initial_pool_size` used to fail on the first connection; it now sizes the pool. Check those values, or drop them and keep `pool_size` and `pool_min_size`. `prepared_statements=false` has no effect on the engine: use `statement_cache_size=0` to turn the statement cache off.
+
+### Removed
+
+- `run_save_callbacks` and `run_after_save_callbacks`. `save` never called them, nothing else did, and the docs no longer list them.
+
+### Fixed
+
+- `QueryBuilder#merge` returns a new builder and leaves the receiver unchanged; before, it added the other builder's conditions to the receiver's query too. `Query#merge` still merges in place, as documented.
+- `get!(as:)` on a `Query` (and on other executable statements) raises `DB::NoResultsError` ("The query returned no row") when there is no row, like `first!`, instead of `NilAssertionError`.
+- `collection.create(record)` on a `many_to_many` association adds the join row for a soft-deleted record instead of inserting a second copy of it. It now inserts only a new record (`new_record?`), as `save` does.
+- `touch` updates a soft-deleted record instead of raising "Cannot touch on a new record object". It raises only for a record that has no id.
+- `CQL::Repository` can be subclassed outside the `CQL` module (`class UserRepository < CQL::Repository(User, Int64)`). Before, the subclass failed to compile with "undefined constant Schema".
+- A `Time` column default is written as one single-quoted literal in UTC (`DEFAULT '2024-01-01 00:00:00.000'`) on PostgreSQL, MySQL and SQLite; it was wrapped in doubled quotes (`''...''`), which every database rejected, and written in the value's own zone.
+- A PostgreSQL or CockroachDB string column default that contains a backslash is written as an `E'...'` literal with the backslashes doubled, so it is stored as given whatever `standard_conforming_strings` is set to. Before, with the setting off, `\` acted as an escape: `C:\ it's` was stored as `C: it's`, and a value ending in a backslash (`C:\`) left the literal unterminated.
+- `Delete#using` renders MySQL's multi-table form (`DELETE FROM posts USING posts, users ...`) and raises `CQL::DialectError` on SQLite, which has no `DELETE ... USING`. Before, both got PostgreSQL's form, which neither accepts.
+- `INSERT ... SELECT` (`Insert#query`) keeps the `RETURNING` clause asked for with `back(...)`; it was dropped on every dialect.
+- `AlterTable#foreign_key` without `references_columns` references the referenced table's primary key, as `Table#foreign_key` does; it always assumed `id`.
+- `RedisCache#stats` no longer holds the cache's lock while it waits for Redis `INFO`, so `get`, `set` and `delete` in other fibers keep running during the round trip.
+- `FragmentCache#cache_query` reads a cached integer above `Int32::MAX` back as `Int64` instead of raising `OverflowError`. It now shares the reader `Cache.get` uses: integers that fit come back as `Int32`, as before, and a nested array or object comes back as its JSON text.
+- `CQL::Postgres::AsyncEngine.connect` and `EngineSource.connect` accept a URL built by `CQL.config.full_db_url`. They read crystal-db's `max_pool_size` as `pool_size` and `initial_pool_size` as `pool_min_size`; the engine's own key wins when the URL names both. They ignore `max_idle_pool_size`, `retry_attempts`, `retry_delay`, `prepared_statements` and `prepared_statements_cache` instead of sending them to the server, which rejected them with SQLSTATE 42704.
+
 ## [0.0.907] - 2026-10-26
 
 ### Upgrade notes

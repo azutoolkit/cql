@@ -6,7 +6,7 @@ module CQL
       macro included
         include CQL::ActiveRecord::TimestampManager
         # Reload the record from the database
-        # - **@return** [Nil]
+        # - **@return** [self] The record, with its stored values
         #
         # **Example** Reloading a record
         #
@@ -53,7 +53,7 @@ module CQL
         # - **@param** *fields [Symbol] The timestamp fields to update (defaults to :updated_at)
         # - **@param** time [Time] The time to set (defaults to Time.utc)
         # - **@return** [Bool] True if the touch operation was successful
-        # - **@raise** [CQL::Error] If the record is not persisted
+        # - **@raise** [CQL::Error] If the record is new (has no id)
         #
         # **Example** Touch the updated_at timestamp
         #
@@ -64,7 +64,7 @@ module CQL
         # **Example** Touch specific timestamp fields
         #
         # ```
-        # user.touch(:last_seen_at, :updated_at)
+        # user.touch(:created_at, :updated_at)
         # ```
         #
         # **Example** Touch with a specific time
@@ -73,7 +73,7 @@ module CQL
         # user.touch(:updated_at, time: Time.utc - 1.hour)
         # ```
         def touch(*fields, time : Time = Time.utc)
-          raise CQL::Error.new("Cannot touch on a new record object") unless persisted?
+          raise CQL::Error.new("Cannot touch on a new record object") if new_record?
 
           # Default to :updated_at if no fields specified
           touch_fields = fields.empty? ? [:updated_at] : fields.to_a
@@ -126,7 +126,7 @@ module CQL
           touch(:updated_at, time: time)
         end
 
-                # Class method to touch multiple records by IDs without callbacks
+        # Class method to touch multiple records by IDs without callbacks
         # Updates the specified timestamp fields for multiple records
         # - **@param** ids [Array(Pk)] The IDs of the records to touch
         # - **@param** *fields [Symbol] The timestamp fields to update (defaults to :updated_at)
@@ -136,8 +136,8 @@ module CQL
         # **Example** Touch multiple records
         #
         # ```
-        # User.touch_all([1, 2, 3])
-        # User.touch_all([1, 2, 3], :last_seen_at, :updated_at)
+        # User.touch_all([1_i64, 2_i64, 3_i64])
+        # User.touch_all([1_i64, 2_i64, 3_i64], :created_at, :updated_at)
         # ```
         def self.touch_all(ids : Array(Pk), *fields, time : Time = Time.utc)
           return 0_i64 if ids.empty?
@@ -230,7 +230,7 @@ module CQL
 
         # Save the record to the database or update it if it already exists
         # Raises an exception if the record cannot be saved
-        # - **@return** [Bool] Always returns true when successful
+        # - **@return** [Bool] True when saved
         # - **@raise** [CQL::RecordInvalid] If the record is invalid (as `Validations::ValidationError`)
         # - **@raise** [CQL::RecordNotSaved] If a callback halts the save
         #

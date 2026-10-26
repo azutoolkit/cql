@@ -6,10 +6,8 @@ module CQL::Configure
 
   class BasicConfigValidator < ConfigValidator
     def validate!(config : Config) : Nil
-      # === 🔌 DATABASE VALIDATION ===
       raise ArgumentError.new("db (database_url) cannot be empty") if config.db.empty?
 
-      # === 🗂️ SCHEMA VALIDATION ===
       raise ArgumentError.new("schema_dir cannot be empty") if config.schema_dir.empty?
       raise ArgumentError.new("schema_file cannot be empty") if config.schema_file.empty?
 
@@ -21,7 +19,6 @@ module CQL::Configure
         raise ArgumentError.new("schema_file must end with .cr extension")
       end
 
-      # === 🔗 CONNECTION POOL VALIDATION ===
       if config.pool_size <= 0
         raise ArgumentError.new("pool_size must be positive")
       end

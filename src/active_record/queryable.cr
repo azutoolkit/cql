@@ -27,29 +27,24 @@ module CQL
     # ## Examples
     #
     # ```
-    # class User < CQL::ActiveRecord::Model
-    #   db_context AcmeDB, :users
+    # # Basic queries
+    # User.where(active: true).all
+    # User.select(:name, :email).where(age: 18).all
+    # User.order(:created_at).limit(10).all
     #
-    #   # Basic queries
-    #   User.where(active: true)
-    #   User.select(:name, :email).where(age: 18..65)
-    #   User.order(:created_at).limit(10)
+    # # Joins through associations
+    # User.query.joins(:posts) { posts.published == true }.all
     #
-    #   # Complex queries with joins
-    #   User.joins(:posts).where(posts: {published: true})
-    #   User.left_joins(:profile).select(users: [:name], profile: [:bio])
+    # # Aggregations
+    # User.count
+    # User.where(active: true).count
     #
-    #   # Aggregations
-    #   User.count
-    #   User.where(active: true).count
-    #   User.group(:role).count
-    #
-    #   # Method chaining
-    #   User.where(active: true)
-    #       .order(:created_at)
-    #       .limit(20)
-    #       .offset(10)
-    #       .all
+    # # Method chaining
+    # User.where(active: true)
+    #   .order(:created_at)
+    #   .limit(20)
+    #   .offset(10)
+    #   .all
     # ```
     module Queryable
       macro included
@@ -72,13 +67,16 @@ module CQL
           query.select(*columns)
         end
 
-        # Create a QueryBuilder and execute select with hash syntax
-        # - **@param** fields [Hash] The fields to select using hash syntax
-        # - **@return** [QueryBuilder(T)] The query builder instance
+        # Select only these columns; the result rows are `Model::Row` records whose unselected columns are nil.
+        # - **@param** columns [Symbol*] The columns to select
+        # - **@return** [PartialBuilder(T)] The query builder for the partial rows
         def self.select(*columns : Symbol)
           query.select(*columns)
         end
 
+        # Create a QueryBuilder and execute select with hash syntax
+        # - **@param** fields [Hash] The fields to select using hash syntax
+        # - **@return** [QueryBuilder(T)] The query builder instance
         def self.select(**fields)
           query.select(**fields)
         end
@@ -175,8 +173,7 @@ module CQL
         #
         # **Example**
         # ```
-        # User.preload(:posts).all           # Preload single association
-        # User.preload(:posts, :comments).all # Preload multiple associations
+        # User.preload(:posts).all                     # Preload an association
         # User.where(active: true).preload(:posts).all # Chain with where
         # ```
         def self.preload(*associations : Symbol)

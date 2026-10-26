@@ -23,30 +23,21 @@ require "./performance/monitor"
 #   config.logging.colorize = true
 # end
 #
-# # CQL Query integration - once monitoring is enabled, queries are tracked
-# schema = CQL::Schema.define do
-#   table :users do
-#     primary :id, Int64
-#     column :name, String
-#     column :email, String
-#   end
-# end
-#
 # # Every query execution is monitored once monitoring is enabled
-# users = schema.query.from(:users).where(active: true).all(User)
+# users = AcmeDB.query.from(:users).where(active: true).all(User)
 #
 # # Track with context for better insights
 # CQL::Performance.with_context("UserController#index") do
-#   @users = schema.query.from(:users)
+#   users = AcmeDB.query.from(:users)
 #     .where(active: true)
 #     .order(created_at: :desc)
 #     .limit(20)
 #     .all(User)
 # end
 #
-# # Manual tracking for non-CQL queries
-# result = CQL::Performance.track("SELECT * FROM users WHERE id = ?", [1]) do
-#   db.query_one("SELECT * FROM users WHERE id = ?", 1, as: User)
+# # Manual tracking for SQL that CQL does not run itself
+# name = CQL::Performance.track("SELECT name FROM users WHERE id = ?", [1] of DB::Any) do
+#   AcmeDB.with_connection { |connection| connection.query_one("SELECT name FROM users WHERE id = ?", 1, as: String) }
 # end
 #
 # # Generate performance report

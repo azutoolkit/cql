@@ -9,7 +9,7 @@ module CQL
         # ```
         # User.transaction do |tx|
         #   # Operations within this block are part of the transaction
-        #   user = User.create!(name: "John Doe")
+        #   user = User.create!(name: "John Doe", email: "john@example.com")
         #   user.update!(email: "john.doe@example.com")
         #   # If any exception is raised here, the transaction will be rolled back.
         #   # tx.rollback # to manually rollback
@@ -34,11 +34,11 @@ module CQL
         # ```
         # User.transaction do |outer_tx|
         #   # Operations in outer transaction
-        #   User.create!(name: "Outer User")
+        #   User.create!(name: "Outer User", email: "outer@example.com")
         #
         #   User.transaction(outer_tx) do |inner_tx|
         #     # Operations in nested transaction (savepoint)
-        #     user = User.create!(name: "Inner User")
+        #     User.create!(name: "Inner User", email: "inner@example.com")
         #     # If an error occurs here, or if inner_tx.rollback is called,
         #     # only the creation of "Inner User" is rolled back.
         #     # The "Outer User" would still be part of the outer_tx,

@@ -16,13 +16,13 @@ module CQL
         end
 
         # Update a record by ID with given attributes
-        # - **@param** id [PrimaryKey] The ID of the record
+        # - **@param** id [Pk] The ID of the record
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to update
         #
         # **Example** Updating a record by ID
         #
         # ```
-        # User.update(1, active: true)
+        # User.update!(1, {:active => true} of Symbol => DB::Any)
         # ```
         def self.update!(id : Pk, attrs : Hash(Symbol, DB::Any))
           raise CQL::Error.new("No attributes to update") if attrs.empty?
@@ -46,13 +46,13 @@ module CQL
         end
 
         # Update a record by ID with given fields
-        # - **@param** id [PrimaryKey] The ID of the record
-        # - **@param** fields [Hash(Symbol, DB::Any)] The fields to update
+        # - **@param** id [Pk] The ID of the record
+        # - **@param** attrs [NamedTuple] The fields to update
         #
         # **Example** Updating a record by ID
         #
         # ```
-        # User.update(1, active: true)
+        # User.update!(1, active: true)
         # ```
         def self.update!(id : Pk, **attrs)
           raise CQL::Error.new("No attributes to update") if attrs.empty?
@@ -75,19 +75,16 @@ module CQL
           update_of(id).set(**attrs).commit
         end
 
-        # Update a record by ID with given record object
-        # - **@param** id [PrimaryKey] The ID of the record
-        # - **@param** record [T] The record to update
+        # Write every column of a saved record to its row, without validations or callbacks
+        # - **@param** record [{{@type.id}}] The record to update
+        # - **@return** [{{@type.id}}] The record
         #
-        # **Example** Updating a record by ID
+        # **Example** Updating a record
         #
         # ```
-        # bob = User.new(name: "Bob", email: "bob@example.com")
-        # id = bob.save
-        #
-        # bob.reload!
-        #
-        # User.update(1, bob)
+        # bob = User.find!(1)
+        # bob.name = "Bob"
+        # User.update!(bob)
         # ```
         def self.update!(record : {{@type.id}})
           attrs = record.attributes
@@ -107,7 +104,7 @@ module CQL
         # **Example** Updating records by email
         #
         # ```
-        # User.update_by(email: "alice@example.com", active: true)
+        # User.update_by({:email => "alice@example.com"} of Symbol => DB::Any, {:active => true} of Symbol => DB::Any)
         # ```
         def self.update_by(
           where_attrs : Hash(Symbol, DB::Any),
@@ -131,7 +128,7 @@ module CQL
         # **Example** Updating all records
         #
         # ```
-        # User.update_all(active: true)
+        # User.update_all({:active => true} of Symbol => DB::Any)
         # ```
         def self.update_all(attrs : Hash(Symbol, DB::Any))
           CQL::Update
@@ -141,9 +138,8 @@ module CQL
             .commit
         end
 
-        # Updates the given record
-        # - **@param** record [T] The record to update
-        # - **@return** [Bool] True if updated successfully, false otherwise
+        # Write this record's columns to its row, without validations or callbacks
+        # - **@return** [self] The record
         #
         # **Example** Updating a record
         #
@@ -154,28 +150,28 @@ module CQL
           {{@type.id}}.update!(self)
         end
 
-        # Update the record with the given fields
-        # - **@param** fields [Hash(Symbol, DB::Any)] The fields to update
-        # - **@return** [Bool] True if updated successfully, false otherwise
+        # Assign the given fields and write the record to its row
+        # - **@param** attrs [NamedTuple] The fields to update
+        # - **@return** [self] The record
         #
         # **Example** Updating a record
         #
         # ```
-        # user.update(name: "Alice", email: "alice@example.com")
+        # user.update!(name: "Alice", email: "alice@example.com")
         # ```
         def update!(**attrs)
           self.attributes(**attrs)
           update!
         end
 
-        # Update a record by ID with given attributes
-        # - **@param** id [PrimaryKey] The ID of the record
+        # Assign the given attributes and write the record to its row
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to update
+        # - **@return** [self] The record
         #
-        # **Example** Updating a record by ID
+        # **Example** Updating a record
         #
         # ```
-        # User.update(1, active: true)
+        # user.update!({:active => true} of Symbol => DB::Any)
         # ```
         def update!(attrs : Hash(Symbol, DB::Any))
           self.attributes(attrs)

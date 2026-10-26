@@ -14,8 +14,8 @@ module CQL
         # **Example** Defining the schema and table
         #
         # ```
-        # struct User
-        #   include CQL::ActiveRecord::Model
+        # class User
+        #   include CQL::ActiveRecord::Model(Int64)
         #   db_context AcmeDB, :users
         # end
         # ```
@@ -23,8 +23,15 @@ module CQL
         # **Example** Defining only one of them
         #
         # ```
-        # db_context table: :people # schema: the one declaring `:people`
-        # db_context schema: AcmeDB # table: `:users`, from the type name
+        # class Author
+        #   include CQL::ActiveRecord::Model(Int64)
+        #   db_context table: :users # schema: AcmeDB, the one schema declaring `:users`
+        # end
+        #
+        # class Comment
+        #   include CQL::ActiveRecord::Model(Int64)
+        #   db_context schema: AcmeDB # table: `:comments`, from the type name
+        # end
         # ```
         def self.db_context(schema : CQL::Schema? = nil, table : Symbol? = nil)
           @@schema = schema if schema
@@ -89,7 +96,7 @@ module CQL
         end
 
         # Build a new object of type T with the given attributes
-        # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
+        # - **@param** fields [NamedTuple] The attributes to use, as named arguments
         # - **@return** [T] The new object
         #
         # **Example** Building a new user object

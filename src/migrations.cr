@@ -1,82 +1,6 @@
 require "./schema_dump"
 
 module CQL
-  # Migrations are used to manage changes to the database schema over time.
-  # Each migration is a subclass of `Migration` and must implement the `up` and `down` methods.
-  #
-  # The `up` method is used to apply the migration, while the `down` method is used to rollback the migration.
-  # Migrations are executed in their version order defined.
-  # The `Migrator` class is used to manage migrations and provides methods to apply, rollback, and redo migrations.
-  # The `Migrator` class also provides methods to list applied and pending migrations.
-  #
-  # **Example** Creating a new migration
-  #
-  # ```
-  # class CreateUsersTable < CQL::Migration(1)
-  #   def up
-  #     schema.alter :users do
-  #       add_column :name, String
-  #       add_column :age, Int32
-  #     end
-  #   end
-  #
-  #   def down
-  #     schema.alter :users do
-  #       drop_column :name
-  #       drop_column :age
-  #     end
-  #   end
-  # end
-  # ```
-  #
-  # **Example** Applying migrations
-  #
-  # ```
-  # migrator = CQL::Migrator.new(schema)
-  # migrator.up
-  # ```
-  #
-  # **Example** Rolling back migrations
-  # ```
-  # migrator.down
-  # ```
-  #
-  # **Example** Redoing migrations
-  # ```
-  # migrator.redo
-  # ```
-  #
-  # **Example** Rolling back to a specific version
-  # ```
-  # migrator.down_to(1_i64)
-  # ```
-  #
-  # **Example** Applying to a specific version
-  # ```
-  # migrator.up_to(1_i64)
-  # ```
-  #
-  # **Example** Listing applied migrations
-  # ```
-  # migrator.print_applied_migrations
-  # ```
-  #
-  # **Example** Listing pending migrations
-  # ```
-  # migrator.print_pending_migrations
-  # ```
-  #
-  # **Example** Listing rolled back migrations
-  # ```
-  # migrator.print_rolled_back_migrations
-  # ```
-  #
-  # **Example** Listing the last migration
-  # ```
-  # migrator.last
-  # ```
-  #
-
   class MigrationRecord
     include DB::Serializable
 
@@ -117,6 +41,38 @@ module CQL
     end
   end
 
+  # Migrations are used to manage changes to the database schema over time.
+  # Each migration is a subclass of `Migration(V)`, where `V` is its version, and implements `up` and `down`.
+  #
+  # The `up` method applies the migration, while the `down` method rolls it back.
+  # Migrations run in version order. Defining the class registers it with `Migrator`, which applies,
+  # rolls back and redoes migrations and lists the applied and pending ones.
+  #
+  # **Example** Creating a new migration
+  #
+  # ```
+  # class AddPhoneToUsers < CQL::Migration(1)
+  #   def up
+  #     schema.alter :users do
+  #       add_column :phone, String, null: true
+  #     end
+  #   end
+  #
+  #   def down
+  #     schema.alter :users do
+  #       drop_column :phone
+  #     end
+  #   end
+  # end
+  # ```
+  #
+  # **Example** Applying and rolling back migrations
+  #
+  # ```
+  # migrator = CQL::Migrator.new(schema)
+  # migrator.up
+  # migrator.rollback
+  # ```
   abstract class Migration(V) < BaseMigration
     macro inherited
       CQL::Migrator.migrations << {{@type}}
@@ -150,16 +106,11 @@ module CQL
   # The `Migrator` class is used to manage migrations and provides methods to apply,
   # rollback, and redo migrations.
   # The `Migrator` class also provides methods to list applied and pending migrations.
+  # It records applied migrations in its own table (`cql_schema_migrations` by default, see `MigratorConfig`),
+  # creating it when missing.
+  #
   # **Example** Creating a new migrator
   # ```
-  # schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
-  #   table :schema_migrations do
-  #     primary :id, Int32
-  #     column :name, String
-  #     column :version, Int32, unique: true
-  #     timestamps
-  #   end
-  # end
   # migrator = CQL::Migrator.new(schema)
   # ```
   #
@@ -169,17 +120,6 @@ module CQL
   # ```
   class Migrator
     Log = CQL.config.logger
-
-    # Represents a migration record.
-    # @field id [Int32] the migration record id
-    # @field name [String] the migration.name
-    # @field version [Int32] the migration version
-    # @field created_at [Time] the creation time
-    # @field updated_at [Time] the update time
-    # **Example** Creating a migration record
-    # ```
-    # record = CQL::MigrationRecord.new(0, "CreateUsersTable", 1)
-    # ```
 
     getter schema : CQL::Schema
     getter config : MigratorConfig
@@ -300,7 +240,7 @@ module CQL
     # ```
     # migrator.last
     # ```
-    # @return [Migration.class | Nil]
+    # - **@return** [BaseMigration.class | Nil]
     def last : BaseMigration.class | Nil
       last_record = repo.last
       return if last_record.nil?
@@ -334,12 +274,12 @@ module CQL
       migrate_up(pending_migrations.select { |migration| migration.version <= version })
     end
 
-    # Prints the rolled back migrations.
-    # - **@param** m [Array(Migration.class)] the migrations to print
+    # Prints the given migrations as rolled back.
+    # - **@param** m [Array(BaseMigration.class)] the migrations to print
     # - **@return** [Nil]
     # **Example** Listing rolled back migrations
     # ```
-    # migrator.print_rolled_back_migrations
+    # migrator.print_rolled_back_migrations(CQL::Migrator.migrations)
     # ```
     def print_rolled_back_migrations(m : Array(BaseMigration.class))
       print_table(m.map { |migration| build_migration_record(migration) }, "✗".colorize.red.to_s)
@@ -365,7 +305,7 @@ module CQL
 
     # Returns the pending migrations. It creates the migrations table if it is missing, so where DDL is not
     # transactional (MySQL, CockroachDB) it raises `CQL::DialectError` inside an open transaction.
-    # - **@return** [Array(MigrationRecord)]
+    # - **@return** [Array(BaseMigration.class)]
     # **Example** Listing pending migrations
     # ```
     # migrator.pending_migrations

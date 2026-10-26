@@ -403,6 +403,17 @@ describe "CQL Advanced Caching" do
         call_count.should eq(1)
         result1.should eq(result2)
       end
+
+      it "reads back an integer above Int32::MAX as Int64, and a small one as Int32" do
+        sql = "SELECT id, count FROM big_ids"
+        rows = [{"id" => 3_000_000_000_i64, "count" => 7}]
+        fragment_cache.cache_query(sql) { rows }
+
+        cached = fragment_cache.cache_query(sql) { raise "expected a cache hit" }
+
+        cached.first["id"].should eq(3_000_000_000_i64)
+        cached.first["count"].should be_a(Int32)
+      end
     end
 
     describe "cache key generation" do

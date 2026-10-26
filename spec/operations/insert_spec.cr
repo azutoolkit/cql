@@ -73,6 +73,15 @@ describe CQL::Insert do
     insert_query.should eq({output, [1]})
   end
 
+  it "keeps RETURNING on an INSERT ... SELECT" do
+    copy = Northwind.insert.into(:users)
+      .query(Northwind.query.from(:users).select(:name, :email).where { users.id == 1 })
+      .back(:id)
+    pg = Expression::Generator.new(CQL::Adapter::Postgres)
+
+    copy.to_sql(pg).should eq({"INSERT INTO users (name, email) SELECT users.name, users.email FROM users WHERE users.id = $1 RETURNING users.id", [1] of DB::Any})
+  end
+
   it "inserts and gets the last inserted id" do
     Northwind.users.drop! rescue nil
     Northwind.users.create!

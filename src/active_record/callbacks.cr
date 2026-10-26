@@ -5,44 +5,32 @@ module CQL
     # similar to Rails ActiveRecord callbacks.
     #
     # **Features**:
-    # - Support for all standard callbacks (before/after validation, save, create, update, destroy)
-    # - Halting the callback chain when a callback returns false
-    # - Proper callback sequence matching Rails ActiveRecord
+    # - Before/after callbacks for validation, save, create, update and destroy
+    # - Halting the chain when a callback returns false (`save` then returns false)
+    # - Several callbacks per event, run in declaration order
     #
     # **Example** Using the Callbacks module
     #
     # ```
-    # struct User
-    #   include CQL::ActiveRecord::Model
+    # class Member
+    #   include CQL::ActiveRecord::Model(Int64)
     #   db_context AcmeDB, :users
     #
-    #   # Define attributes
-    #   getter id : Int64?
-    #   getter email : String
-    #   getter name : String
-    #   property password : String?
-    #   property password_digest : String?
+    #   property name : String = ""
+    #   property email : String = ""
     #
-    #   # Define callbacks
-    #   before_save :encrypt_password
+    #   before_validation :normalize_email
     #   after_create :send_welcome_email
     #
-    #   # Constructor
-    #   def initialize(@email : String, @name : String, @password : String? = nil)
+    #   def initialize(@name : String = "", @email : String = "")
     #   end
     #
-    #   # Callback methods
-    #   private def encrypt_password
-    #     if @password && !@password.empty?
-    #       @password_digest = BCrypt::Password.create(@password).to_s
-    #       @password = nil
-    #     end
-    #     true # Always return true to continue the chain
+    #   private def normalize_email
+    #     @email = @email.downcase.strip # any value but false continues the chain
     #   end
     #
     #   private def send_welcome_email
-    #     # Send welcome email
-    #     true
+    #     puts "Welcome, #{@email}"
     #   end
     # end
     # ```
@@ -204,7 +192,7 @@ module CQL
         # **Example** Running callbacks
         #
         # ```
-        # model.run_callbacks(:before_save)
+        # user.run_callbacks(:before_save)
         # ```
         def run_callbacks(type : Symbol) : Bool
           case type
@@ -261,45 +249,6 @@ module CQL
           end
 
           # All callbacks succeeded
-          true
-        end
-
-        # Run the save callbacks in order
-        # - **@param** create [Bool] Whether this is a create or update operation
-        # - **@return** [Bool] Whether all callbacks completed successfully
-        def run_save_callbacks(create : Bool = true) : Bool
-          # Common validation callbacks
-          return false unless run_callbacks(:before_validation)
-          return false unless run_callbacks(:after_validation)
-
-          # Common save callbacks
-          return false unless run_callbacks(:before_save)
-
-          # Create or update specific callbacks
-          if create
-            return false unless run_callbacks(:before_create)
-          else
-            return false unless run_callbacks(:before_update)
-          end
-
-          # Return true to continue with the save operation
-          true
-        end
-
-        # Run the after save callbacks in order
-        # - **@param** create [Bool] Whether this is a create or update operation
-        # - **@return** [Bool] Whether all callbacks completed successfully
-        def run_after_save_callbacks(create : Bool = true) : Bool
-          # Create or update specific callbacks
-          if create
-            return false unless run_callbacks(:after_create)
-          else
-            return false unless run_callbacks(:after_update)
-          end
-
-          # Common after save callbacks
-          return false unless run_callbacks(:after_save)
-
           true
         end
 

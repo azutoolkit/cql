@@ -10,6 +10,13 @@ RepositoryLabelDB = CQL::Schema.define(:repository_labels, adapter: CQL::Adapter
   end
 end
 
+# Subclassed outside the CQL module, as an application would
+class BillingUserRepository < CQL::Repository(User, Int32)
+  def by_email(email : String) : User?
+    find_by(email: email)
+  end
+end
+
 struct RepositoryLabel
   include DB::Serializable
 
@@ -43,6 +50,17 @@ describe CQL::Repository(User, Int32) do
 
   it "raises DB::NoResultsError from find! for a missing ID" do
     expect_raises(DB::NoResultsError, "No records found with id=999") { Users.find!(999) }
+  end
+
+  it "works when subclassed outside the CQL module" do
+    repository = BillingUserRepository.new(Billing, :users)
+    id = repository.create(name: "Ada", email: "ada@example.com")
+
+    repository.by_email("ada@example.com").try(&.name).should eq("Ada")
+    repository.find!(id.to_i32).email.should eq("ada@example.com")
+    repository.count.should eq(1_i64)
+    repository.delete(id.to_i32)
+    repository.count.should eq(0_i64)
   end
 
   it "counts rows of a repository keyed by a String" do

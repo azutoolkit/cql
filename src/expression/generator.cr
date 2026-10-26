@@ -154,24 +154,17 @@ module Expression
         else
           write_values(node.values, io)
           node.conflict.try { |conflict| write(conflict, io) }
-
-          # Handle returning clause if needed
-          if !node.back.empty?
-            column_names = node.back.map(&.accept(self))
-            io << @dialect.format_returning(column_names)
-          end
         end
+
+        io << @dialect.format_returning(node.back.map(&.accept(self))) unless node.back.empty?
       end
     end
 
     def visit(node : Delete) : String
       @query = String.build do |io|
-        io << "DELETE FROM "
-        write(node.table, io)
-        if using = node.using
-          io << " USING "
-          write(using, io)
-        end
+        target = node.table.accept(self)
+        io << "DELETE FROM " << target
+        node.using.try { |using| io << @dialect.format_delete_using(target, using.accept(self)) }
         node.where.try { |where| write(where, io) }
         if !node.back.empty?
           column_names = node.back.map(&.accept(self))

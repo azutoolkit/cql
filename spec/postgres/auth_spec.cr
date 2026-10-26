@@ -108,6 +108,27 @@ describe CQL::Postgres::Config do
     config.startup_parameters["search_path"].should eq "public"
   end
 
+  it "reads the crystal-db pool keys full_db_url adds: sizes become pool options, the rest is dropped" do
+    configuration = CQL::Configure::Config.new
+    configuration.db = "postgres://ada@h/app?search_path=public"
+    configuration.pool.size = 7
+    configuration.pool.initial_size = 2
+    config = CQL::Postgres::Config.parse(configuration.full_db_url)
+
+    {config.driver_options["pool_size"]?, config.driver_options["pool_min_size"]?}.should eq({"7", "2"})
+    config.startup_options.should eq({"search_path" => "public"})
+  end
+
+  it "lets the engine's own pool keys win over crystal-db's" do
+    config = CQL::Postgres::Config.parse("postgres://ada@h/app?max_pool_size=20&pool_size=5&initial_pool_size=3&pool_min_size=1")
+    {config.driver_options["pool_size"]?, config.driver_options["pool_min_size"]?}.should eq({"5", "1"})
+    config.startup_options.should be_empty
+  end
+
+  it "drops prepared_statements_cache, which the engine replaces with statement_cache_size" do
+    CQL::Postgres::Config.parse("postgres://ada@h/app?prepared_statements_cache=true").startup_options.should be_empty
+  end
+
   it "decodes credentials once, so `+` and encoded percent signs survive" do
     CQL::Postgres::Config.parse("postgres://ada:a+b@h/db").password_for_authentication.should eq "a+b"
     CQL::Postgres::Config.parse("postgres://ada:p%2540x@h/db").password_for_authentication.should eq "p%40x"

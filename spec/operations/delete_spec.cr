@@ -128,6 +128,24 @@ describe CQL::Delete do
     delete_query.should eq({output, [1]})
   end
 
+  describe "#using" do
+    gone_customers = -> { Northwind.delete.from(:users).using(:customers).where { customers.user_id == users.id } }
+
+    it "names the USING table on PostgreSQL" do
+      gone_customers.call.to_sql(Expression::Generator.new(CQL::Adapter::Postgres)).should eq(
+        {"DELETE FROM users USING customers WHERE customers.user_id = users.id", [] of DB::Any})
+    end
+
+    it "lists the target table first in MySQL's multi-table form" do
+      gone_customers.call.to_sql(Expression::Generator.new(CQL::Adapter::MySql)).should eq(
+        {"DELETE FROM users USING users, customers WHERE customers.user_id = users.id", [] of DB::Any})
+    end
+
+    it "raises on SQLite, which has no DELETE ... USING" do
+      expect_raises(CQL::DialectError, /DELETE \.\.\. USING/) { gone_customers.call.to_sql }
+    end
+  end
+
   it "raises ArgumentError for a table the schema does not know" do
     expect_raises(ArgumentError, "Table nope not found") { Northwind.delete.from(:nope) }
     expect_raises(ArgumentError, "Table nope not found") { Northwind.delete.from(:users).using(:nope) }

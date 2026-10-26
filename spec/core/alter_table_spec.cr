@@ -149,9 +149,55 @@ describe "CQL::AlterTable" do
       end.create_sql.should contain("path VARCHAR(255) DEFAULT 'C:\\\\' NOT NULL")
     end
 
-    it "leaves backslashes alone where they are not escape characters" do
+    it "writes a PostgreSQL default without backslashes as a plain literal" do
+      alter_sql(postgres_widgets, CQL::Adapter::Postgres) { add_column :name, String, default: "it's" }
+        .should eq("ALTER TABLE widgets ADD COLUMN name VARCHAR DEFAULT 'it''s';\n")
+    end
+
+    it "writes a PostgreSQL default with backslashes as an E'' literal, whatever standard_conforming_strings is" do
       alter_sql(postgres_widgets, CQL::Adapter::Postgres) { add_column :path, String, default: "C:\\ it's" }
-        .should eq("ALTER TABLE widgets ADD COLUMN path VARCHAR DEFAULT 'C:\\ it''s';\n")
+        .should eq("ALTER TABLE widgets ADD COLUMN path VARCHAR DEFAULT E'C:\\\\ it''s';\n")
+      alter_sql(cockroach_widgets, CQL::Adapter::CockroachDB) { add_column :path, String, default: "C:\\" }
+        .should eq("ALTER TABLE widgets ADD COLUMN path VARCHAR DEFAULT E'C:\\\\';\n")
+    end
+
+    it "leaves SQLite backslashes alone, where they are not escape characters" do
+      with_widgets do |schema|
+        schema.alter :widgets do
+          add_column :path, String, default: "C:\\ it's"
+        end
+
+        schema.exec_query(&.query_one("SELECT path FROM widgets", as: String)).should eq("C:\\ it's")
+      end
+    end
+  end
+
+  describe "time defaults" do
+    it "is a single-quoted literal on PostgreSQL and MySQL" do
+      {postgres_widgets, mysql_widgets}.each do |widgets|
+        widgets.schema.table(:events) do
+          primary :id, Int32
+          column :at, Time, default: Time.utc(2024, 1, 1)
+        end.create_sql.should contain(" DEFAULT '2024-01-01 00:00:00.000' NOT NULL")
+      end
+    end
+
+    it "is written in UTC, like a bound Time" do
+      tokyo = Time::Location.fixed(9 * 3600)
+      postgres_widgets.schema.table(:events) do
+        primary :id, Int32
+        column :at, Time, default: Time.local(2024, 1, 1, 9, 0, 0, location: tokyo)
+      end.create_sql.should contain(" DEFAULT '2024-01-01 00:00:00.000' NOT NULL")
+    end
+
+    it "is stored as given on SQLite" do
+      with_widgets do |schema|
+        schema.alter :widgets do
+          add_column :at, Time, default: Time.utc(2024, 1, 1)
+        end
+
+        schema.exec_query(&.query_one("SELECT at FROM widgets", as: String)).should eq("2024-01-01 00:00:00.000")
+      end
     end
 
     it "keeps each statement whole, whatever its default holds" do
@@ -297,6 +343,16 @@ describe "CQL::AlterTable" do
           end
         end
       end
+    end
+
+    it "references the referenced table's primary key when no columns are given, as Table#foreign_key does" do
+      widgets = postgres_widgets
+      widgets.schema.table(:labels) do
+        primary :label_no, Int32
+      end
+
+      alter_sql(widgets, CQL::Adapter::Postgres) { foreign_key [:name], references: :labels }
+        .should contain("REFERENCES labels (label_no)")
     end
   end
 end

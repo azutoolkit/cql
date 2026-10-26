@@ -22,9 +22,9 @@ module CQL
   #
   # **Example** Creating a new schema
   # ```
-  # schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do
+  # AcmeDB = CQL::Schema.define(:acme_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./db/acme.db") do
   #   table :users do
-  #     primary :id, Int32, auto_increment: true
+  #     primary :id, Int64, auto_increment: true
   #     column :name, String
   #     column :email, String
   #   end
@@ -40,7 +40,6 @@ module CQL
   # ```
   # query = schema.query
   # ```
-  # The `Schema` class represents a database schema.
   class Schema
     include Executor
 
@@ -114,7 +113,7 @@ module CQL
     # **Example**
     # ```
     # gen = schema.new_generator
-    # sql, params = query.to_sql(gen)
+    # sql, params = schema.query.from(:users).to_sql(gen)
     # ```
     def new_generator : Expression::Generator
       Expression::Generator.new(@adapter, @quote_identifiers)
@@ -171,17 +170,18 @@ module CQL
     #
     # - **@param** name [Symbol] the name of the schema
     # - **@param** uri [String] the URI of the database
-    # - **@param** adapter [Adapter] the database adapter (default: `Adapter::SQLite`)
+    # - **@param** adapter [Adapter] the database adapter
     # - **@param** version [String] the version of the schema (default: "1.0")
+    # - **@param** quote_identifiers [Bool] whether generated SQL quotes identifiers (default: false)
     # - **@param** source [ConnectionSource] where connections come from (default: crystal-db's pool opened from the URI)
-    # - **@yield** [Schema] the schema being built
+    # - **@yield** the block runs with the schema as its receiver, so `table` declares a table
     # - **@return** [Schema] the built schema
     #
     # **Example**
     # ```
-    # schema = CQL::Schema.define(:northwind, "sqlite3://db.sqlite3") do |s|
-    #   s.create_table :users do
-    #     primary :id, Int32, auto_increment: true
+    # AcmeDB = CQL::Schema.define(:acme_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./db/acme.db") do
+    #   table :users do
+    #     primary :id, Int64, auto_increment: true
     #     column :name, String
     #     column :email, String
     #   end
@@ -197,12 +197,12 @@ module CQL
     #
     # - **@param** name [Symbol] the name of the schema
     # - **@param** uri [String] the URI of the database
-    # - **@param** adapter [Adapter] the database adapter (default: `Adapter::SQLite`)
+    # - **@param** adapter [Adapter] the database adapter
     # - **@param** version [String] the version of the schema (default: "1.0")
     #
     # **Example** Initializing a new schema
     # ```
-    # schema = CQL::Schema.new(:northwind, "sqlite3://db.sqlite3")
+    # schema = CQL::Schema.new(:acme_db, "sqlite3://./db/acme.db", CQL::Adapter::SQLite)
     # ```
     #
     # **Example** Running on the native PostgreSQL engine's pool
@@ -434,17 +434,16 @@ module CQL
       SchemaDump.from_schema(self)
     end
 
-    # Creates a new table in the schema.
+    # Declares a table in the schema; `Table#create!` or `Schema#build` creates it in the database.
     # - **@param** name [Symbol] the name of the table
-    # - **@param** as_name [Symbol] the alias of the table
-    # - **@yield** [Table] the table being created
-    # - **@return** [Table] the created table
+    # - **@param** as [Symbol, String, nil] the alias of the table
+    # - **@yield** the block runs with the table as its receiver
+    # - **@return** [Table] the declared table
     # **Example**
     # ```
-    # schema.create_table :users do
-    #   primary :id, Int32, auto_increment: true
+    # schema.table :tags do
+    #   primary :id, Int64, auto_increment: true
     #   column :name, String
-    #   column :email, String
     # end
     # ```
     #
@@ -464,17 +463,17 @@ module CQL
 
     # Alter a table in the schema.
     # - **@param** table_name [Symbol] the name of the table
-    # - **@yield** [AlterTable] the table being altered
+    # - **@yield** the block runs with an `AlterTable` as its receiver
     # **Example**
     # ```
-    # schema.alter(:users) do |t|
-    #   t.add_column :age, Int32
+    # schema.alter :users do
+    #   add_column :phone, String
     # end
     # ```
     # **Example**
     # ```
-    # schema.alter(:users) do |t|
-    #   t.drop_column :age
+    # schema.alter :users do
+    #   drop_column :age
     # end
     # ```
     #

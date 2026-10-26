@@ -12,7 +12,7 @@ module CQL
   # **Example** Deleting a record
   #
   # ```
-  # delete.from(:users).where(id: 1).commit
+  # AcmeDB.delete.from(:users).where(id: 1).commit
   # ```
   class Delete
     include Pinnable
@@ -31,7 +31,7 @@ module CQL
     # **Example** Deleting a record
     #
     # ```
-    # delete = CQL::Delete.new(schema)
+    # CQL::Delete.new(AcmeDB) # same as AcmeDB.delete
     #   .from(:users)
     #   .where(id: 1)
     #   .commit
@@ -41,15 +41,13 @@ module CQL
 
     # Executes the delete query and returns the result
     # The query execution is automatically tracked by CQL::Performance when enabled.
-    # - **@return** [DB::Result] The result of the query
+    # - **@return** [DB::ExecResult] The result of the query
     #
     # **Example** Deleting a record
     #
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
-    #   .where(id: 1)
-    #   .commit
+    # result = AcmeDB.delete.from(:users).where(id: 1).commit
+    # result.rows_affected
     # ```
     def commit
       query, params = to_sql
@@ -63,10 +61,8 @@ module CQL
     # **Example** Generating a delete query
     #
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
-    #   .where(id: 1)
-    #   .to_sql
+    # AcmeDB.delete.from(:users).where(id: 1).to_sql
+    # # => {"DELETE FROM users WHERE users.id = ?", [1]}
     # ```
     def to_sql(gen : Expression::Generator? = nil)
       generator = gen || @schema.new_generator
@@ -83,8 +79,7 @@ module CQL
     # **Example** Setting the table
     #
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
+    # AcmeDB.delete.from(:users)
     # ```
     def from(table : Symbol)
       @table = Expression::Table.new(find_table(table))
@@ -98,28 +93,27 @@ module CQL
     #
     # **Example** Setting the using table
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
-    #   .using(:posts)
+    # AcmeDB.delete.from(:posts).using(:users)
+    #   .where { (posts.user_id == users.id) & (users.active == false) }
+    #   .to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
+    # # => {"DELETE FROM posts USING users WHERE (posts.user_id = users.id) AND (users.active = $1)", [false]}
     # ```
     #
+    # MySQL renders `DELETE FROM posts USING posts, users ...`; SQLite has no such form, so generating the SQL
+    # raises `CQL::DialectError` there.
     def using(table : Symbol)
       @using = Expression::Table.new(find_table(table))
       self
     end
 
-    # Sets the columns to return
-    # - **@param** columns [Symbol*] The columns to return
+    # Sets the WHERE clause using a block evaluated on an `Expression::FilterBuilder`,
+    # where the FROM and USING tables are reachable by name
     # - **@return** [self] The current instance
-    # - **@raise** [Exception] If the column does not exist
     #
-    # **Example** Setting the columns to return
+    # **Example** Setting the where clause
     #
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
-    #   .where { users.name == 'John' }
-    #   .back(:name, :age)
+    # AcmeDB.delete.from(:users).where { users.name == "John" }
     # ```
     def where(&)
       # Construct the QueryTableInfo hash expected by FilterBuilder
@@ -157,17 +151,14 @@ module CQL
       self
     end
 
-    # Sets the columns to return
-    # - **@param** columns [Symbol*] The columns to return
+    # Where clause using keyword conditions, ANDed together
+    # - **@param** fields [NamedTuple] The conditions to match against
     # - **@return** [self] The current instance
-    # - **@raise** [Exception] If the column does not exist
     #
-    # **Example** Setting the columns to return
+    # **Example** Setting the where clause
     #
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
-    #   .back(:name, :age)
+    # AcmeDB.delete.from(:users).where(name: "John", active: false)
     # ```
     def where(**fields)
       condition = nil
@@ -188,9 +179,8 @@ module CQL
     # **Example** Setting the where clause
     #
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
-    #   .where(id: 1)
+    # conditions = {:id => 1} of Symbol => DB::Any
+    # AcmeDB.delete.from(:users).where(conditions)
     # ```
     def where(attr : Hash(Symbol, DB::Any))
       condition = nil
@@ -204,16 +194,14 @@ module CQL
       self
     end
 
-    # Sets the columns to return after the delete
+    # Sets the columns to return after the delete (`RETURNING`; not on SQLite)
     # - **@param** columns [Symbol*] The columns to return
     # - **@return** [self] The current instance
     # - **@raise** [Exception] If the column does not exist
     #
     # **Example** Setting the columns to return
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
-    #   .back(:name, :age)
+    # AcmeDB.delete.from(:users).where(id: 1).back(:name, :age)
     # ```
     def back(*columns : Symbol)
       @back = columns.to_a.map { |column| Expression::Column.new(find_column(column)) }.to_set
@@ -223,14 +211,10 @@ module CQL
     # Builds the delete expression
     # - **@return** [Expression::Delete] The delete expression
     # - **@raise** [Exception] If the table is not set
-    # - **@raise** [Exception] If the where clause is not set
     #
     # **Example** Building the delete expression
     # ```
-    # delete = CQL::Delete.new(schema)
-    #   .from(:users)
-    #   .where(id: 1)
-    #   .commit
+    # AcmeDB.delete.from(:users).where(id: 1).build
     # ```
     def build
       Expression::Delete.new(@table.not_nil!, @where, @back, @using)

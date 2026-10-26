@@ -1,30 +1,23 @@
 require "./base_relation"
 
 module CQL::ActiveRecord::Relations
-  # Enhanced collection class for one-to-many relationships with improved
-  # type safety, error handling, and performance optimizations.
-  #
   # Logger for deprecation warnings
   Log = ::Log.for("CQL::Relations")
 
+  # Collection for one-to-many relationships.
   #
   # This class manages the relationship between two tables through a foreign key
   # column in the target table and provides methods to manage the association
   # between the two tables and query records in the associated table based on
   # the foreign key value of the parent record.
-  # - **param** : Target (CQL::Model) - The target model
-  # - **param** : Pk (Int64) - The primary key type
-  # - **return** : Nil
+  # - **param** : Target (CQL::ActiveRecord::Model) - The target model
+  # - **param** : Pk - The parent's primary key type
   #
-  # **Example**
+  # `has_many` returns one, for example `has_many :posts, Post, foreign_key: :user_id` in `User`:
   #
   # ```
-  # class User
-  #   include CQL::ActiveRecord::Model(Int64)
-  #   property id : Int64
-  #   property name : String
-  #   has_many :posts, Post, foreign_key: :user_id
-  # end
+  # user.posts.create(title: "Hello World")
+  # user.posts.size # => 1
   # ```
   class Collection(Target, Pk)
     include Enumerable(Target)
@@ -49,11 +42,11 @@ module CQL::ActiveRecord::Relations
     # **Example**
     #
     # ```
-    # Collection(Post, Int64).new(
+    # CQL::ActiveRecord::Relations::Collection(Post, Int64).new(
     #   :user_id,
-    #   1,
-    #   cascade: true,
-    #   query: CQL::Query.new(Post.schema).from(Post.table)
+    #   1_i64,
+    #   query: CQL::Query.new(Post.schema).from(Post.table),
+    #   dependent: :destroy
     # )
     # ```
     def initialize(
@@ -91,7 +84,6 @@ module CQL::ActiveRecord::Relations
     #
     # ```
     # user.posts.all
-    # => [#<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">]
     # ```
     def all : Array(Target)
       load_records unless @loaded
@@ -107,7 +99,6 @@ module CQL::ActiveRecord::Relations
     #
     # ```
     # user.posts.offset(2).all(Post)
-    # => [#<Post:0x00007f8b3b1b3f00 @id=3, @title="Post 3">]
     # ```
     def all(type : T.class) : Array(T) forall T
       # This method should not be called on the collection directly
@@ -123,7 +114,6 @@ module CQL::ActiveRecord::Relations
     #
     # ```
     # user.posts.reload
-    # => [#<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">]
     # ```
     def reload
       @records = safe_db_operation do
@@ -162,7 +152,6 @@ module CQL::ActiveRecord::Relations
     #
     # ```
     # user.posts.ids
-    # => [1, 2, 3]
     # ```
     def ids : Array(Pk)
       load_records unless @loaded
@@ -177,7 +166,6 @@ module CQL::ActiveRecord::Relations
     #
     # ```
     # user.posts << Post.new(title: "Hello World")
-    # => [#<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">]
     # ```
     def <<(record : Target)
       load_records unless @loaded
@@ -192,7 +180,6 @@ module CQL::ActiveRecord::Relations
     # **Example**
     # ```
     # user.posts.empty?
-    # => true
     # ```
     def empty?
       return @records.empty? if @loaded
@@ -248,7 +235,6 @@ module CQL::ActiveRecord::Relations
     #
     # ```
     # user.posts.size
-    # => 1
     # ```
     def size
       load_records unless @loaded
@@ -273,7 +259,6 @@ module CQL::ActiveRecord::Relations
     #
     # ```
     # user.posts.find(title: "Hello World")
-    # => [#<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">]
     # ```
     def find(**attributes)
       safe_db_operation do
@@ -319,7 +304,6 @@ module CQL::ActiveRecord::Relations
     #
     # ```
     # user.posts.create(title: "Hello World")
-    # => #<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello World">
     # ```
     def create(**attributes)
       record = build(**attributes)
@@ -350,15 +334,8 @@ module CQL::ActiveRecord::Relations
     # **Example**
     #
     # ```
-    # movie.actors.create(name: "Carrie-Anne Moss")
-    # movie.actors.reload
-    # movie.actors.all => 1
-    #
-    # movie.actors.delete(Actor.find(1))
-    # movie.actors.reload
-    # movie.actors.all
-    #
-    # => [] of Actor
+    # post = user.posts.create(title: "Hello World")
+    # user.posts.delete(post) # => true
     # ```
     def delete(record : Target)
       record_id = safe_id(record, Pk)
@@ -372,12 +349,8 @@ module CQL::ActiveRecord::Relations
     # **Example**
     #
     # ```
-    # movie.actors.create(name: "Carrie-Anne Moss")
-    # movie.actors.reload
-    # movie.actors.all => 1
-    # movie.actors.delete(1)
-    # movie.actors.reload
-    # movie.actors.all => []
+    # post = user.posts.create(title: "Hello World")
+    # user.posts.delete(post.id!) # => true
     # ```
     def delete(id : Pk)
       result = safe_db_operation do
@@ -443,12 +416,7 @@ module CQL::ActiveRecord::Relations
     # **Example**
     #
     # ```
-    # movie.actors.ids = [1, 2, 3]
-    # movie.actors.reload
-    # movie.actors.all => [
-    # #<Actor:0x00007f8b3b1b3f00 @id=1, @name="Carrie-Anne Moss">,
-    #    #<Actor:0x00007f8b3b1b3f00 @id=2, @name="Hugo Weaving">,
-    #   #<Actor:0x00007f8b3b1b3f00 @id=3, @name="Laurence Fishburne">]
+    # user.posts.ids = [1_i64, 2_i64, 3_i64]
     # ```
     def ids=(ids : Array(Pk))
       safe_db_operation do
@@ -467,8 +435,7 @@ module CQL::ActiveRecord::Relations
     # **Example**
     #
     # ```
-    # user.posts.where(title: "Hello").where(published: true).all
-    # => [#<Post:0x00007f8b3b1b3f00 @id=1, @title="Hello", @published=true>]
+    # user.posts.where(title: "Hello").where(published: true).all(Post)
     # ```
     def where(**conditions)
       query_copy.where(**conditions)
@@ -493,25 +460,21 @@ module CQL::ActiveRecord::Relations
       query_copy.offset(offset_count)
     end
 
-    # Order the query results
-    # - **param** : column (Symbol)
-    # - **param** : direction (Symbol) - :asc or :desc
+    # Order the query results, for example `user.posts.order(created_at: :desc)`
+    # - **param** : order_by (column: direction) - each column with :asc or :desc
     # - **return** : CQL::Query
     def order(**order_by)
       query_copy.order(**order_by)
     end
 
-    # Clears all associated records from the parent record
+    # Clears all associated records from the parent record with the association's `dependent:`
+    # strategy (`:destroy`, `:delete_all`, or `:nullify`, the default, which needs a nullable foreign key)
     # - **return** : Int64 - Number of records affected
     #
     # **Example**
     # ```
     # user.posts.create(title: "Hello World")
-    # user.posts.reload
-    # user.posts.size => 1
     # user.posts.clear
-    # user.posts.reload
-    # user.posts.size => 0
     # ```
     def clear
       records_affected = 0_i64

@@ -6,45 +6,41 @@ module CQL
     #
     # ## Usage
     #
-    # Include this module in your model and name its version column:
-    #
-    # ```
-    # class User
-    #   include CQL::ActiveRecord::Model(Int64)
-    #   include CQL::ActiveRecord::OptimisticLocking
-    #   db_context AppDB, :users
-    #
-    #   property name : String = ""
-    #   property version : Int32 = 1
-    #
-    #   optimistic_locking version_column: :version
-    # end
-    # ```
-    #
-    # The table needs that column. The `lock_version` table helper names it `version` unless told
-    # otherwise, while a bare `optimistic_locking` reads `lock_version`, so pass `version_column:`:
+    # Give the table a version column and include this module in the model, naming that column.
+    # The `lock_version` table helper names it `version` unless told otherwise, while a bare
+    # `optimistic_locking` reads `lock_version`, so pass `version_column:`:
     #
     # ```
     # AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
-    #   table :users do
+    #   table :documents do
     #     primary :id, Int64, auto_increment: true
-    #     text :name
+    #     text :title
     #     lock_version :version
     #   end
     # end
-    # ```
     #
-    # When updating a record, any concurrent updates will be detected:
+    # class Document
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   include CQL::ActiveRecord::OptimisticLocking
+    #   db_context AppDB, :documents
     #
-    # ```
-    # user = User.find!(1)
+    #   property title : String = ""
+    #   property version : Int32 = 1
+    #
+    #   optimistic_locking version_column: :version
+    #
+    #   def initialize
+    #   end
+    # end
+    #
+    # # When updating a record, a concurrent update is detected:
+    # document = Document.find!(1)
     # # Somebody else updates this record in another process
     # begin
-    #   user.update!(name: "New Name") # This will fail
+    #   document.update!(title: "New Title") # raises: the version moved on
     # rescue CQL::OptimisticLockError
-    #   # Handle concurrent update
-    #   user.reload!                   # Get the latest version
-    #   user.update!(name: "New Name") # Try again
+    #   document.reload!                     # Get the latest version
+    #   document.update!(title: "New Title") # Try again
     # end
     # ```
     module OptimisticLocking

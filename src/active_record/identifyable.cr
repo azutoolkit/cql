@@ -31,34 +31,33 @@ module CQL
         {% else %}
           @id : Pk? = nil
 
-          # Identity method for the record ID
-          # - **@return** [PrimaryKey] The ID
+          # The record's ID, nil until it is saved
+          # - **@return** [Pk?] The ID
           #
           # **Example** Getting the ID of a record
           #
           # ```
-          # user.id
-          # -> Pk | Nil
+          # User.new("Alice", "alice@example.com").id # => nil
           # ```
           def id : Pk?
             @id
           end
 
-          # Identity method for the record ID
-          # - **@return** [PrimaryKey] The ID
+          # The record's ID; raises `NilAssertionError` when it has none
+          # - **@return** [Pk] The ID
           #
-          # **Example** Getting the ID of a record
+          # **Example** Getting the ID of a saved record
           #
           # ```
+          # user.save
           # user.id!
-          # -> 1
           # ```
           def id! : Pk
             @id.not_nil!
           end
 
           # Set the record's ID
-          # - **@param** id [PrimaryKey] The ID
+          # - **@param** id [Pk] The ID
           #
           # **Example** Setting the ID of a record
           #
@@ -69,14 +68,13 @@ module CQL
             @id = id
           end
 
-          # Identity method for the record ID
-          # - **@return** [PrimaryKey] The ID
+          # Same as `id`: the record's ID, nil until it is saved
+          # - **@return** [Pk?] The ID
           #
           # **Example** Getting the ID of a record
           #
           # ```
-          # user.id?
-          # -> Pk | Nil
+          # User.new("Alice", "alice@example.com").id? # => nil
           # ```
           def id? : Pk?
             @id

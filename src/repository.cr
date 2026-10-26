@@ -7,11 +7,7 @@ module CQL
   # **Example** Creating a new repository
   #
   # ```
-  # class UserRepository < CQL::Repository(User)
-  #  def initialize(@schema : Schema, @table : Symbol)
-  # end
-  #
-  # user_repo = UserRepository.new(schema, :users)
+  # user_repo = CQL::Repository(User, Int64).new(AcmeDB, :users)
   # user_repo.all
   # user_repo.find(1)
   # ```
@@ -25,40 +21,32 @@ module CQL
     # **Example** Creating a new repository
     #
     # ```
-    # class UserRepository < CQL::Repository(User)
-    # end
-    #
-    # user_repo = UserRepository.new(schema, :users
+    # user_repo = CQL::Repository(User, Int64).new(AcmeDB, :users)
     # ```
-    def initialize(@schema : Schema, @table : Symbol)
+    def initialize(@schema : CQL::Schema, @table : Symbol)
     end
 
     def query
-      Query.new(@schema).from(@table)
+      CQL::Query.new(@schema).from(@table)
     end
 
     def insert
-      Insert.new(@schema).into(@table)
+      CQL::Insert.new(@schema).into(@table)
     end
 
     def update
-      Update.new(@schema).table(@table)
+      CQL::Update.new(@schema).table(@table)
     end
 
     def delete
-      Delete.new(@schema).from(@table)
+      CQL::Delete.new(@schema).from(@table)
     end
 
-    # Build a new object of type T with the given attributes
+    # Build a new object of type T with the given attributes. It calls `T.new(attrs)`, so it
+    # compiles only when `T` has an initializer that takes a `Hash(Symbol, DB::Any)`; an
+    # ActiveRecord model has none, so use `create` for one.
     # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
     # - **@return** [T] The new object
-    #
-    # **Example** Building a new user object
-    #
-    # ```
-    # user_repo.build(name: "Alice", email: " [email protected]")
-    # ```
-    #
     def build(attrs : Hash(Symbol, DB::Any))
       T.new(attrs)
     end
@@ -110,7 +98,7 @@ module CQL
     # **Example** Fetching a record by email
     #
     # ```
-    # user_repo.find_by(email: " [email protected]")
+    # user_repo.find_by(email: "alice@example.com")
     # ```
     def find_by(**fields)
       query.where(**fields).first(T)
@@ -131,10 +119,12 @@ module CQL
 
     # Create a new record with given attributes
     # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to use
-    # - **@return** [PrimaryKey] The ID of the new record
+    # - **@return** [Pk] The ID of the new record
     # **Example** Creating a new record
     # ```
-    # user_repo.create(name: "Alice", email: " [email protected]")
+    # user_repo = CQL::Repository(User, Int64).new(AcmeDB, :users)
+    # user_repo.create({:name => "Alice", :email => "alice@example.com"} of Symbol => DB::Any)
+    # user_repo.create(name: "Alice", email: "alice@example.com")
     # ```
     def create(attrs : Hash(Symbol, DB::Any))
       insert.values(attrs).last_insert_id(as: Pk)
@@ -216,7 +206,7 @@ module CQL
     # **Example** Deleting records by email
     #
     # ```
-    # user_repo.delete_by(email: " [email protected]")
+    # user_repo.delete_by(email: "alice@example.com")
     # ```
     def delete_by(**fields)
       delete.where(**fields).commit
@@ -252,7 +242,7 @@ module CQL
     # **Example** Checking if a record exists by email
     #
     # ```
-    # user_repo.exists?(email: " [email protected]")
+    # user_repo.exists?(email: "alice@example.com")
     # ```
     def exists?(**fields)
       query.select.where(**fields).limit(1).first(T) != nil

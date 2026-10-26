@@ -1,17 +1,15 @@
 module CQL
-  # This module is part of the CQL namespace and is responsible for handling
-  # database alterations. This class represents an AlterTable object.
+  # Collects the changes to one table inside a `Schema#alter` block, which runs them as
+  # `ALTER TABLE` (and index) statements and updates the table's declaration.
   #
-  # **Example** :
+  # **Example**
   #
   # ```
-  # alter_table = AlterTable.new
-  # alter_table.add_column(:email, "string")
-  # alter_table.drop_column(:age)
-  # alter_table.rename_column(:email, :user_email)
-  # alter_table.change_column(:age, "string")
-  #
-  # => #<AlterTable:0x00007f8e7a4e1e80>
+  # schema.alter :users do
+  #   add_column :phone, String, null: true
+  #   rename_column :phone, :mobile
+  #   create_index :idx_users_mobile, [:mobile]
+  # end
   # ```
   class AlterTable
     Log = CQL.config.logger
@@ -27,22 +25,20 @@ module CQL
     # Adds a new column to the table.
     #
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** type [Any] the data type of the column
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** type [T.class] the Crystal type of the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: true)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
     # - **@param** size [Int32, nil] the size of the column (default: nil)
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     #
-    # **Example**  Adding a new column with default options
+    # **Example**  Adding new columns
     # ```
-    # add_column(:email, "string")
-    # ```
-    #
-    # **Example**  Adding a new column with custom options
-    # ```
-    # add_column(:age, "integer", null: false, default: "18")
+    # schema.alter :users do
+    #   add_column :phone, String
+    #   add_column :score, Int32, null: false, default: 0, index: true
+    # end
     # ```
     def add_column(
       name : Symbol,
@@ -76,7 +72,9 @@ module CQL
     #
     # **Example**  Dropping a column
     # ```
-    # drop_column(:age)
+    # schema.alter :users do
+    #   drop_column :age
+    # end
     # ```
     def drop_column(column : Symbol)
       @table.columns.delete(column)
@@ -92,8 +90,10 @@ module CQL
     # **Example**  Renaming a column
     #
     # ```
-    #   rename_column(:email, :user_email)
-    # ````
+    # schema.alter :users do
+    #   rename_column :email, :user_email
+    # end
+    # ```
     def rename_column(old_name : Symbol, new_name : Symbol)
       column = @table.columns[old_name]
       column.table = @table
@@ -106,14 +106,16 @@ module CQL
       @table.columns_changed!
     end
 
-    # Changes the type of a column in the table.
+    # Changes the type of a column in the table. Not on SQLite, which raises `CQL::SQLiteUnsupportedFeatureError`.
     #
     # - **@param** name [Symbol] the name of the column to be changed
-    # - **@param** type [Any] the new data type for the column
+    # - **@param** type [T.class] the new Crystal type for the column
     #
     # **Example**  Changing the type of a column
     # ```
-    # change_column(:age, "string")
+    # schema.alter :users do
+    #   change_column :age, Int64
+    # end
     # ```
     def change_column(name : Symbol, type : T.class) forall T
       new_column = Column(T).new(name)
@@ -129,7 +131,9 @@ module CQL
     #
     # **Example**  Renaming the table
     # ```
-    # rename_table(:new_table_name)
+    # schema.alter :users do
+    #   rename_table :members
+    # end
     # ```
     def rename_table(new_name : Symbol)
       @statements << Expression::RenameTable.new(as_declared, new_name.to_s)
@@ -140,16 +144,20 @@ module CQL
 
     # Adds a foreign key to the table.
     #
-    # - **@param** name [Symbol, nil] the optional name of the foreign key constraint
     # - **@param** columns [Array(Symbol)] the columns in the current table
-    # - **@param** table [Symbol] the referenced table
-    # - **@param** references [Array(Symbol), Symbol, nil] the columns in the referenced table (defaults to PK)
+    # - **@param** references [Symbol] the referenced table
+    # - **@param** references_columns [Array(Symbol), Symbol, nil] the columns in the referenced table (default: its primary key)
+    # - **@param** name [Symbol, nil] the optional name of the foreign key constraint
     # - **@param** on_delete [Symbol] the action on delete (default: :no_action)
     # - **@param** on_update [Symbol] the action on update (default: :no_action)
     #
+    # Not on SQLite, which raises `CQL::SQLiteUnsupportedFeatureError`: declare foreign keys in `Schema#table` there.
+    #
     # **Example**  Adding a foreign key
     # ```
-    # foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
+    # schema.alter :posts do
+    #   foreign_key [:user_id], references: :users, references_columns: [:id], name: :fk_posts_user, on_delete: :cascade
+    # end
     # ```
     def foreign_key(
       columns local_columns : Array(Symbol),
@@ -159,12 +167,7 @@ module CQL
       on_delete : Symbol = :no_action, # Use Symbol for actions
       on_update : Symbol = :no_action, # Use Symbol for actions
     )
-      # Resolve referenced columns if nil (default to PK :id)
-      ref_columns_array = case references_columns
-                          when Array(Symbol) then references_columns
-                          when Symbol        then [references_columns]
-                          else                    [:id] # Default PK assumption
-                          end
+      ref_columns_array = table.referenced_columns(references_table, references_columns)
 
       # Ensure column counts match
       unless local_columns.size == ref_columns_array.size
@@ -202,13 +205,15 @@ module CQL
       )
     end
 
-    # Drops a foreign key from the table.
+    # Drops a foreign key from the table. Not on SQLite, which raises `CQL::SQLiteUnsupportedFeatureError`.
     #
     # - **@param** name [Symbol] the name of the foreign key to be dropped
     #
     # **Example**  Dropping a foreign key
     # ```
-    # drop_foreign_key(:fk_user_id)
+    # schema.alter :posts do
+    #   drop_foreign_key :fk_posts_user
+    # end
     # ```
     def drop_foreign_key(name : Symbol)
       alter Expression::DropForeignKey.new(name.to_s, @table.table_name.to_s)
@@ -222,7 +227,9 @@ module CQL
     #
     # **Example**  Creating an index
     # ```
-    # create_index(:index_users_on_email, [:email], unique: true)
+    # schema.alter :users do
+    #   create_index :index_users_on_email, [:email], unique: true
+    # end
     # ```
     def create_index(name : Symbol, columns : Array(Symbol), unique : Bool = false)
       @statements << Expression::CreateIndex.new(Index.new(as_declared, columns, unique, name.to_s))
@@ -234,7 +241,9 @@ module CQL
     #
     # **Example**  Dropping an index
     # ```
-    # drop_index(:index_users_on_email)
+    # schema.alter :users do
+    #   drop_index :index_users_on_email
+    # end
     # ```
     def drop_index(name : Symbol)
       index = Index.new(as_declared, [] of Symbol, false, name.to_s)
@@ -246,7 +255,9 @@ module CQL
     #
     # **Example**  Generating SQL for alter table actions
     # ```
-    # statements(visitor) # => ["ALTER TABLE users ADD COLUMN email TEXT"]
+    # alter_table = CQL::AlterTable.new(schema.users, schema)
+    # alter_table.add_column :phone, String
+    # alter_table.statements(schema.new_generator) # => ["ALTER TABLE users ADD COLUMN phone TEXT"]
     # ```
     def statements(visitor : Expression::Visitor) : Array(String)
       @statements.map(&.accept(visitor))

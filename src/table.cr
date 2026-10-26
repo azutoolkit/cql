@@ -2,39 +2,24 @@ require "./base_column"
 require "./schema"
 
 module CQL
-  # Represents a table in the database.
-  # This class is responsible for handling table creation, modification, and deletion.
+  # Represents a table in the database: its columns, primary key, indexes and constraints,
+  # and the DDL that creates, drops or truncates it.
+  #
+  # Tables are declared in a `Schema.define` block or with `Schema#table`, and read back by name.
   #
   # ## Usage
   #
   # ```
-  # table = Table.new(:users, schema)
-  # => #<Table:0x00007f8e7a4e1e80>
-  # ```
+  # schema.table :tags do
+  #   primary :id, Int64
+  #   column :name, String
+  # end
   #
-  # ```
-  # table.column(:id, Int64, primary: true)
-  # table.column(:name, String)
-  # table.create_sql
-  # => "CREATE TABLE users (id BIGINT PRIMARY KEY, name TEXT);"
-  # ```
-  #
-  # ```
-  # table = Table.new(:users, schema)
-  # table.drop!
-  # => nil
-  # ```
-  #
-  # ```
-  # table = Table.new(:users, schema)
-  # table.truncate!
-  # => nil
-  #
-  # table = Table.new(:users, schema)
-  # table.column(:id, Int64, primary: true)
-  # table.column(:name, String)
-  # table.create!
-  # => nil
+  # tags = schema.tags
+  # tags.create_sql # => "CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)"
+  # tags.create!
+  # tags.truncate!
+  # tags.drop!
   # ```
   #
   class Table
@@ -78,17 +63,11 @@ module CQL
 
     getter schema : Schema
 
-    # Creates a new table instance.
+    # Creates a new table instance. Applications declare tables with `Schema#table` instead.
     # - **@param** table_name [Symbol] The name of the table
     # - **@param** schema [Schema] The schema this table belongs to
     # - **@param** as_name [String, nil] An optional alias for the table
     # - **@raise** [Error] If the table name is invalid
-    #
-    # **Example**
-    # ```
-    # table = Table.new(:users, schema)
-    # table = Table.new(:users, schema, as: "user_table")
-    # ```
     def initialize(@table_name : Symbol, @schema : Schema, @as_name : String? = nil)
       validate_table_name!
     end
@@ -117,15 +96,20 @@ module CQL
     # **Example**
     #
     # ```
-    # # Simple foreign key referencing the primary key of 'users'
-    # foreign_key :user_id, references: :users
+    # schema.table :comments do
+    #   primary :id, Int64
+    #   column :post_id, Int64
+    #   column :author_id, Int64
     #
-    # # Foreign key with explicit referenced column and ON DELETE CASCADE
-    # foreign_key :author_id, references: :authors, references_columns: :id, on_delete: :cascade
+    #   # References the primary key of `posts`
+    #   foreign_key :post_id, references: :posts
     #
-    # # Composite foreign key
-    # foreign_key [:order_id, :product_id], references: :order_items, references_columns: [:o_id, :p_id]
+    #   # Explicit referenced column and ON DELETE CASCADE
+    #   foreign_key [:author_id], references: :users, references_columns: [:id], on_delete: :cascade
+    # end
     # ```
+    #
+    # Pass several columns in the array for a composite foreign key.
     def foreign_key(
       columns local_columns : Array(Symbol),
       references references_table : Symbol,
@@ -134,28 +118,16 @@ module CQL
       on_delete : Symbol = :no_action,
       on_update : Symbol = :no_action,
     )
-      ref_columns = case references_columns
-                    when Array(Symbol) then references_columns
-                    when Symbol        then [references_columns]
-                    when Nil
-                      # If nil, assume it references the primary key of the target table
-                      # We might need to fetch the target table schema definition here,
-                      # but for now, let's assume the primary key is always :id
-                      # A more robust solution would look up the primary key name.
-                      primary_key_columns(references_table) # Use helper to get PK
-                    end
-
-      # Validate column count match
-      ref_cols_nn = ref_columns.not_nil!            # Assert it's not nil
-      unless local_columns.size == ref_cols_nn.size # Use the non-nil variable
-        raise ArgumentError.new("Number of columns (#{local_columns.join(", ")}) must match number of referenced columns (#{ref_cols_nn.join(", ")})")
+      ref_columns = referenced_columns(references_table, references_columns)
+      unless local_columns.size == ref_columns.size
+        raise ArgumentError.new("Number of columns (#{local_columns.join(", ")}) must match number of referenced columns (#{ref_columns.join(", ")})")
       end
 
       fk = ForeignKey.new(
         table: self,
         columns: local_columns,
         references_table: references_table,
-        references_columns: ref_cols_nn, # Use the non-nil variable here too
+        references_columns: ref_columns,
         name: name,
         on_delete: on_delete,
         on_update: on_update
@@ -182,6 +154,16 @@ module CQL
         on_delete: on_delete,
         on_update: on_update
       )
+    end
+
+    # The columns a foreign key to *references_table* points at: *references_columns* when given,
+    # otherwise that table's primary key.
+    def referenced_columns(references_table : Symbol, references_columns : (Array(Symbol) | Symbol)?) : Array(Symbol)
+      case references_columns
+      in Array(Symbol) then references_columns
+      in Symbol        then [references_columns]
+      in Nil           then primary_key_columns(references_table)
+      end
     end
 
     # Helper method to get primary key columns for a referenced table
@@ -214,15 +196,18 @@ module CQL
     # - **@param** name [Symbol] the name of the column to be added
     # - **@param** type [T.class] the data type of the column (default: Int32)
     # - **@param** auto_increment [Bool] whether the column should auto increment (default: true)
-    # - **@param** as_name [String, nil] an optional alias for the column
-    # - **@param** unique [Bool] whether the column should have a unique constraint (default: true)
     # - **@return** [PrimaryKey(T)] the new primary key column
     #
     # **Example** Adding a new primary key column
     #
     # ```
-    # primary :id, Int32
-    # primary :id, Int32, auto_increment: false
+    # schema.table :tags do
+    #   primary :id, Int64
+    # end
+    #
+    # schema.table :countries do
+    #   primary :id, Int32, auto_increment: false
+    # end
     # ```
     def primary(
       name : Symbol,
@@ -250,7 +235,7 @@ module CQL
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
     # - **@param** type [T.class] the data type of the column
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -282,7 +267,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -292,8 +277,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # integer :age
-    # integer :age, as: "user_age", null: false, default: 18, unique: true, index: true
+    # schema.table :people do
+    #   integer :age
+    #   integer :score, as: "points", null: true, default: 0, index: true
+    # end
     # ```
     def integer(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Int32).new(name, as_name, null, default, unique)
@@ -305,7 +292,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -315,8 +302,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # bigint :age
-    # bigint :age, as: "user_age", null: false, default: 18, unique: true, index: true
+    # schema.table :pages do
+    #   bigint :views
+    #   bigint :external_id, null: true, unique: true, index: true
+    # end
     # ```
     def bigint(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Int64).new(name, as_name, null, default, unique)
@@ -328,7 +317,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -338,8 +327,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # float :age
-    # float :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
+    # schema.table :products do
+    #   float :rating
+    #   float :weight, null: true, default: 0.0
+    # end
     # ```
     def float(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Float32).new(name, as_name, null, default, unique)
@@ -351,7 +342,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -361,8 +352,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # double :age
-    # double :age, as: "user_age", null: false, default: 18.0, unique: true, index: true
+    # schema.table :places do
+    #   double :latitude
+    #   double :longitude, null: true, default: 0.0
+    # end
     # ```
     def double(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Float64).new(name, as_name, null, default, unique)
@@ -374,7 +367,7 @@ module CQL
 
     # Adds a new REAL column to the table (SQLite floating point type).
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -384,8 +377,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # real :price
-    # real :price, as: "product_price", null: false, default: 0.0, unique: true, index: true
+    # schema.table :products do
+    #   real :price
+    #   real :discount, null: true, default: 0.0
+    # end
     # ```
     def real(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Float64).new(name, as_name, null, default, unique)
@@ -395,20 +390,23 @@ module CQL
       col
     end
 
-    # Adds a new column to the table.
+    # Adds a new `String` column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
+    # - **@param** size [Int32, nil] the declared length, `VARCHAR(size)` (default: nil)
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
     # **Example** Adding a new column with default options
     #
     # ```
-    # decimal :price
-    # decimal :price, as: "product_price", null: false, default: 0.0, unique: true, index: true
+    # schema.table :profiles do
+    #   text :title
+    #   text :bio, null: true, default: ""
+    # end
     # ```
     def text(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
       col = Column(String).new(name, as_name, null, default, unique, size)
@@ -430,7 +428,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -440,8 +438,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # boolean :active
-    # boolean :active, as: "is_active", null: false, default: false, unique: true, index: true
+    # schema.table :accounts do
+    #   boolean :active
+    #   boolean :admin, default: false, index: true
+    # end
     # ```
     def boolean(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Bool).new(name, as_name, null, default, unique)
@@ -453,7 +453,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -463,8 +463,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # timestamp :created_at
-    # timestamp :created_at, as: "created_at", null: false, default: Time.local, unique: true, index: true
+    # schema.table :events do
+    #   timestamp :starts_at
+    #   timestamp :cancelled_at, null: true, index: true
+    # end
     # ```
     def timestamp(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Time).new(name, as_name, null, default, unique)
@@ -476,7 +478,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -486,8 +488,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # date :birthday
-    # date :birthday, as: "date_of_birth", null: false, default: Time.local, unique: true, index: true
+    # schema.table :employees do
+    #   date :birthday
+    #   date :hired_on, null: true
+    # end
     # ```
     def date(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = DateColumn(Date).new(name, as_name, null, default, unique)
@@ -497,10 +501,9 @@ module CQL
       col
     end
 
-    # Adds a new JSON column to the table.
+    # Adds a new JSON column (`JSON::Any`) to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** type [T.class] the Crystal type to map the JSON to (default: JSON::Any)
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -510,18 +513,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # # Defaults to JSON::Any
-    # json :metadata
-    #
-    # # Using a custom type
-    # class MySettings
-    #   include JSON::Serializable
-    #   property theme : String
+    # schema.table :accounts do
+    #   json :metadata
+    #   json :settings, null: true
     # end
-    #
-    # json :settings, MySettings
-    #
-    # json :metadata, JSON::Any, as: "meta", null: false, default: nil, unique: true, index: true
     # ```
     def json(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(JSON::Any).new(name, as_name, null, default, unique)
@@ -533,7 +528,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -543,8 +538,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # interval :duration
-    # interval :duration, as: "time_span", null: false, default: Time.local, unique: true, index: true
+    # schema.table :subscriptions do
+    #   interval :duration
+    #   interval :grace_period, null: true
+    # end
     # ```
     def interval(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
       col = Column(Time::Span).new(name, as_name, null, default, unique)
@@ -556,7 +553,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
@@ -566,8 +563,10 @@ module CQL
     # **Example** Adding a new column with default options
     #
     # ```
-    # blob :data
-    # blob :data, as: "binary_data", null: false, default: nil, unique: true, index: true
+    # schema.table :attachments do
+    #   blob :data
+    #   blob :thumbnail, null: true
+    # end
     # ```
     def blob(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
       col = Column(Slice(UInt8)).new(name, as_name, null, default, unique, size)
@@ -584,7 +583,7 @@ module CQL
     # The user will then need to retry the operation.
     #
     # - **@param** name [Symbol] the name of the column to be added (default: :version)
-    # - **@param** as_name [String, nil] an optional alias for the column
+    # - **@param** as [String, nil] an optional alias for the column
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any] the default value for the column (default: 1)
     # - **@param** index [Bool] whether the column should be indexed (default: false)
@@ -633,8 +632,12 @@ module CQL
     # **Example** Adding a new index
     #
     # ```
-    # add_index([:email], unique: true)
-    # add_index([:email, :username], unique: true, name: "idx_users_login")
+    # schema.table :accounts do
+    #   column :email, String
+    #   column :username, String
+    #   add_index([:email], unique: true)
+    #   add_index([:email, :username], unique: true, name: "idx_accounts_login")
+    # end
     # ```
     def add_index(columns : Array(Symbol), unique : Bool = false, name : String? = nil) : Index
       index = Index.new(self, columns, unique, name)
@@ -654,8 +657,13 @@ module CQL
     #
     # **Example**
     # ```
-    # unique_constraint [:email]
-    # unique_constraint [:first_name, :last_name], name: "uk_person_name"
+    # schema.table :people do
+    #   column :first_name, String
+    #   column :last_name, String
+    #   column :email, String
+    #   unique_constraint [:email]
+    #   unique_constraint [:first_name, :last_name], name: "uk_person_name"
+    # end
     # ```
     def unique_constraint(columns : Array(Symbol), name : String? = nil)
       constraint = UniqueConstraint.new(columns, name)
@@ -670,8 +678,12 @@ module CQL
     #
     # **Example**
     # ```
-    # check_constraint "price > 0"
-    # check_constraint "email LIKE '%@%'", name: "chk_email_format"
+    # schema.table :products do
+    #   column :price, Float64
+    #   column :email, String
+    #   check_constraint "price > 0"
+    #   check_constraint "email LIKE '%@%'", name: "chk_email_format"
+    # end
     # ```
     def check_constraint(condition : String, name : String? = nil)
       constraint = CheckConstraint.new(condition, name)
@@ -702,26 +714,19 @@ module CQL
     # **Example**
     #
     # ```
-    # table = Table.new(:users, schema)
-    # table.drop_sql
-    # ```
-    #
-    # ```
-    # => "DROP TABLE users;"
+    # schema.users.drop_sql # => "DROP TABLE IF EXISTS users"
     # ```
     def drop_sql
       Expression::DropTable.new(self).accept(schema.new_generator).to_s
     end
 
-    # Generates the SQL to truncate the table.
+    # Generates the SQL to truncate the table (`DELETE FROM` on SQLite, which has no `TRUNCATE`).
     # - **@return** [String] the SQL query
     #
     # **Example**
     #
     # ```
-    # table = Table.new(:users, schema)
-    # table.truncate_sql
-    # => "TRUNCATE TABLE users;"
+    # schema.users.truncate_sql # => "DELETE FROM users"
     # ```
     def truncate_sql
       Expression::TruncateTable.new(self).accept(schema.new_generator).to_s
@@ -733,11 +738,7 @@ module CQL
     # **Example**
     #
     # ```
-    # table = Table.new(:users, schema)
-    # table.column(:id, Int64, primary: true)
-    # table.column(:name, String)
-    # table.create!
-    # => nil
+    # schema.users.create!
     # ```
     def create!
       schema.ddl_transaction do
@@ -753,9 +754,7 @@ module CQL
     # **Example**
     #
     # ```
-    # table = Table.new(:users, schema)
-    # table.drop!
-    # => nil
+    # schema.users.drop!
     # ```
     def drop!
       Log.debug { "Dropping table #{table_name}" }
@@ -767,9 +766,7 @@ module CQL
     #
     # **Example**
     # ```
-    # table = Table.new(:users, schema)
-    # table.truncate!
-    # => nil
+    # schema.users.truncate!
     # ```
     def truncate!
       Log.debug { "Truncating table #{table_name}" }
@@ -782,9 +779,7 @@ module CQL
     # **Example**
     #
     # ```
-    # table = Table.new(:users, schema)
-    # table.expression
-    # => #<Expression::Table:0x00007f8e7a4e1e80>
+    # schema.users.expression
     # ```
     def expression
       Expression::Table.new(self)

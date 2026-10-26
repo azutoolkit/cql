@@ -40,7 +40,16 @@ module CQL::Postgres::Types
   # half-edited.
   #
   # ```
-  # CQL::Postgres::Types.register(oid, binary: false) { |bytes| MyType.parse(String.new(bytes)) } # MyType includes Types::Custom
+  # struct Shout
+  #   include CQL::Postgres::Types::Custom
+  #   getter text : String
+  #
+  #   def initialize(@text : String)
+  #   end
+  # end
+  #
+  # oid = 777_001_u32 # the type's OID, e.g. from pg_type
+  # CQL::Postgres::Types.register(oid, binary: false) { |bytes| Shout.new(String.new(bytes)) }
   # ```
   def self.register(oid : UInt32, binary : Bool = true, borrowed : Bool = false, &decode : Bytes -> Value) : Nil
     decoder = borrowed ? decode : ->(bytes : Bytes) { decode.call(bytes.dup).as(Value) }

@@ -7,7 +7,7 @@ module CQL
         property destroyed : Bool = false
 
         # Delete a record by ID
-        # - **@param** id [PrimaryKey] The ID of the record
+        # - **@param** id [Pk] The ID of the record
         #
         # **Example** Deleting a record by ID
         #
@@ -32,7 +32,7 @@ module CQL
         end
 
         # Delete records matching specific fields
-        # - **@param** fields [Hash(Symbol, DB::Any)] The fields to match
+        # - **@param** fields [NamedTuple] The fields to match
         #
         # **Example** Deleting records by email
         #
@@ -47,13 +47,13 @@ module CQL
             .commit
         end
 
-         # Delete records matching specific fields
+        # Delete records matching specific fields
         # - **@param** fields [Hash(Symbol, DB::Any)] The fields to match
         #
         # **Example** Deleting records by email
         #
         # ```
-        # User.delete_by!(email: "alice@example.com")
+        # User.delete_by!({:email => "alice@example.com"} of Symbol => DB::Any)
         # ```
         def self.delete_by!(fields : Hash(Symbol, DB::Any))
           CQL::Delete
