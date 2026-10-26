@@ -54,7 +54,7 @@ DATABASE_URL=postgres://example:example@localhost:5432/example crystal spec
 
 **Changelog and docs.** Record behavior changes under `[Unreleased]` in `CHANGELOG.md`. A behavior change updates the matching page in `docs/` in the same change. The docs follow Diátaxis (tutorials, how-to, reference, explanation); every page is listed in `docs/SUMMARY.md` and linked from its section `README.md`, and every class, method and option a page cites must exist in `src/`.
 
-## Compare Two Versions
+## Benchmark a Change
 
 For a change that may affect speed, build the benchmark from `master` and from your branch into separate binaries, then run them alternately so both see the same machine conditions:
 

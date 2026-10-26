@@ -1,6 +1,8 @@
-# Write Typed Queries
+---
+description: "Filter, order and join model queries with bare column names that the compiler checks."
+---
 
-Filter, order and join model queries with bare column names that the compiler checks: `where { (age >= 18) & (status == "active") }`.
+# Write Typed Queries
 
 The examples use a `User` with `name`, `email`, `role`, `status : String`, `age : Int32`, `score : Float64?` and `created_at : Time?`, which `has_one :profile` (`country : String`) and `has_many :posts`.
 
@@ -54,6 +56,34 @@ User.query.select(:name, :nope)     # User has no column :nope in table users. C
 User.query.where { age == 3_000_000_000 } # 3000000000 does not fit a Int32 column
 ```
 
+<details>
+
+<summary>Full compiler output for the String comparison</summary>
+
+```text
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'macro_140604030851904'
+
+Code in src/active_record/dsl/column.cr:14:7
+
+ 14 | {% for name, sql in {"==" => "=", "!=" => "!=", "<" => "<", "<=" => "<=", ">" => ">", ">=" => ">=",
+      ^
+Called macro defined in src/active_record/dsl/column.cr:14:7
+
+ 14 | {% for name, sql in {"==" => "=", "!=" => "!=", "<" => "<", "<=" => "<=", ">" => ">", ">=" => ">=",
+
+Which expanded to:
+
+   147 | 
+   148 |         def >(other : U) : NoReturn forall U
+ > 149 |           {% raise "CQL: cannot compare a #{T} column with #{U} using `>`; use a #{T} value or another #{T} column" %}
+                      ^----
+Error: CQL: cannot compare a Int32 column with String using `>`; use a Int32 value or another Int32 column
+```
+
+</details>
+
 ## Order with order_by
 
 ```crystal
@@ -101,11 +131,7 @@ User.query.select(:name).preload(:posts) # ArgumentError: preload is not support
 
 ## Mix in Raw SQL
 
-```crystal
-User.query.where { (age >= 18) & CQL.raw("lower(name) = ?", "ada") } # raw alone does not compile here
-# ... WHERE (users.age >= ?) AND (lower(name) = ?)   params: [18, "ada"]
-User.query.where("lower(name) = :name", name: "ada")                  # ... WHERE lower(name) = ?
-```
+Combine typed conditions with a SQL fragment through `CQL.raw` (bare `raw` does not compile in a model's block); see [Use Raw SQL Fragments Safely](../advanced-sql/raw-fragments.md#use-fragments-on-models-update-and-delete).
 
 ## Inspect the Generated Metadata
 
@@ -124,4 +150,3 @@ User::Row                   # the record type of a partial select
 - [Build Complex Queries](complex-queries.md)
 - [Use Raw SQL Fragments Safely](../advanced-sql/raw-fragments.md)
 - [Query JSON and Geospatial Columns](../advanced-sql/json-and-geo-predicates.md)
-- [The query DSL: before and after](../../explanation/dsl-before-after.md)
