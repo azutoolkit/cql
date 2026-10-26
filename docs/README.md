@@ -1,6 +1,11 @@
+---
+description: "A type-safe query builder and Active Record ORM for Crystal on SQLite, PostgreSQL, MySQL and CockroachDB."
+icon: "house"
+---
+
 # CQL (Crystal Query Language)
 
-CQL is a query builder and Active Record ORM for Crystal on SQLite, PostgreSQL, MySQL and CockroachDB. Schemas, models and queries are Crystal code, so a misspelled column or a value of the wrong type fails at compile time, and every value reaches the database as a bound parameter. CQL ships its own PostgreSQL driver.
+Schemas, models and queries are Crystal code, so a misspelled column or a value of the wrong type fails at compile time, and every value reaches the database as a bound parameter. CQL ships its own PostgreSQL driver.
 
 ```crystal
 require "cql"
@@ -29,13 +34,13 @@ User.where(name: "Ada").count # => 1   SELECT COUNT(*) FROM users WHERE users.na
 
 ## Start Here
 
-| You want to | Section | Start with |
-| :--- | :--- | :--- |
-| Add CQL to a project | [Installation](installation.md) | the `shard.yml` lines and a connection check |
-| Learn CQL step by step | [Tutorials](tutorials/README.md) | [Your First CQL App](tutorials/getting-started/your-first-cql-app.md) |
-| Get a specific task done | [How-to Guides](how-to/README.md) | [Configure Database Connection](how-to/configuration/database-connection.md) |
-| Look up a method, option or error | [Reference](reference/README.md) | [Quick Reference](reference/quick-reference.md) |
-| Understand how CQL works and why | [Explanation](explanation/README.md) | [What is an ORM?](explanation/what-is-an-orm.md) |
-| Get help or contribute | [Resources](resources/README.md) | [FAQ](resources/faq.md) |
+<table data-view="cards"><thead><tr><th></th><th></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody>
+<tr><td><strong>Installation</strong></td><td>Add the shards for your database and check the connection.</td><td><a href="installation.md">installation.md</a></td></tr>
+<tr><td><strong>Tutorials</strong></td><td>Learn CQL step by step, from a first app to a full blog.</td><td><a href="tutorials/README.md">tutorials/README.md</a></td></tr>
+<tr><td><strong>How-to Guides</strong></td><td>One task per page: models, queries, migrations, caching, PostgreSQL.</td><td><a href="how-to/README.md">how-to/README.md</a></td></tr>
+<tr><td><strong>Reference</strong></td><td>Every setting, DSL method, callback, validator and error.</td><td><a href="reference/README.md">reference/README.md</a></td></tr>
+<tr><td><strong>Explanation</strong></td><td>How CQL works and why: Active Record, guardrails, performance.</td><td><a href="explanation/README.md">explanation/README.md</a></td></tr>
+<tr><td><strong>Resources</strong></td><td>FAQ and how to contribute.</td><td><a href="resources/README.md">resources/README.md</a></td></tr>
+</tbody></table>
 
 Source, issues and releases: [azutoolkit/cql](https://github.com/azutoolkit/cql) on GitHub. CQL is available under the MIT license.

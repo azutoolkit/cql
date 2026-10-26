@@ -19,11 +19,6 @@ crystal run examples/caching/redis_cache_demo.cr                   # needs Redis
 | `active_record_cache_demo.cr` | model-style caching (find, cache keys and tags, invalidation on update) on `MockUser`, a plain class kept in a `Hash` | none |
 | `activerecord_cache_demo.cr` | `CQL::ActiveRecord::Model` structs with a custom `cache_key`, cached as JSON in `MemoryCache` with tags, fragment and version invalidation, `stats` | none (the models are never saved) |
 | `redis_cache_demo.cr` | `CacheStore.configure_from_env` (`CQL_CACHE_TYPE`, `CQL_REDIS_URL`, `CQL_CACHE_PREFIX`, `CQL_CACHE_TTL`), `CacheStoreConfig`, `CacheStore.create`, `set_multi`/`get_multi`, tags, `GlobalCache`, memory against Redis timing, `ping` | Redis databases 1 to 5 |
-| `with_cache_demo.cr` | `CQL::Cache::Cache.with_cache` on several value types | does not compile, see below |
-
-> [!WARNING]
-> `with_cache_demo.cr` fails to compile: `CQL::Cache::Cache.with_cache` (`src/cache/cache.cr:71`) declares
-> `as_kind : Class?`, and Crystal answers "can't use Class in unions yet".
 
 `activerecord_cache_demo.cr` ends by printing that `CQL::ActiveRecord::Model` includes
 `CQL::Cache::ActiveRecordCaching`; no such module exists in `src/`.

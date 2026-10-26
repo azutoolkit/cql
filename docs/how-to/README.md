@@ -1,10 +1,29 @@
+---
+description: "One task per page, with code you can copy."
+icon: "list-check"
+---
+
 # How-to Guides
 
-Each guide solves one task with code you can copy. New to CQL? Start with the [tutorials](../tutorials/README.md); for every option and method, see the [reference](../reference/README.md).
+New to CQL? Start with the [tutorials](../tutorials/README.md); for every option and method, see the [reference](../reference/README.md).
+
+<table data-view="cards"><thead><tr><th></th><th></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody>
+<tr><td><strong>Models</strong></td><td>Declare models, validate them and hook into their lifecycle.</td><td><a href="models/define-model.md">models/define-model.md</a></td></tr>
+<tr><td><strong>Relationships</strong></td><td>Connect models and load associated records.</td><td><a href="relationships/belongs-to.md">relationships/belongs-to.md</a></td></tr>
+<tr><td><strong>Querying</strong></td><td>Find, filter, page through and inspect records.</td><td><a href="querying/find-records.md">querying/find-records.md</a></td></tr>
+<tr><td><strong>Advanced SQL</strong></td><td>SQL features beyond simple filters, on <code>CQL::Query</code>.</td><td><a href="advanced-sql/ctes.md">advanced-sql/ctes.md</a></td></tr>
+<tr><td><strong>Data Operations</strong></td><td>Write, change and remove rows, alone or in bulk.</td><td><a href="data-operations/create.md">data-operations/create.md</a></td></tr>
+<tr><td><strong>Migrations</strong></td><td>Evolve the schema and keep its file in sync.</td><td><a href="migrations/create-migration.md">migrations/create-migration.md</a></td></tr>
+<tr><td><strong>Configuration</strong></td><td>Connect to a database and set CQL up per environment.</td><td><a href="configuration/configure-cql.md">configuration/configure-cql.md</a></td></tr>
+<tr><td><strong>Native PostgreSQL Driver</strong></td><td>CQL's own PostgreSQL wire-protocol driver.</td><td><a href="postgres-native/README.md">postgres-native/README.md</a></td></tr>
+<tr><td><strong>Caching</strong></td><td>Cache query results in memory, in Redis or per request.</td><td><a href="caching/query-cache.md">caching/query-cache.md</a></td></tr>
+<tr><td><strong>Performance</strong></td><td>Send fewer, cheaper queries and measure the result.</td><td><a href="performance/optimize-queries.md">performance/optimize-queries.md</a></td></tr>
+<tr><td><strong>Observability</strong></td><td>See every statement, profile queries and watch production.</td><td><a href="observability/telemetry.md">observability/telemetry.md</a></td></tr>
+<tr><td><strong>Testing</strong></td><td>Run model specs against a disposable database.</td><td><a href="testing/test-database.md">testing/test-database.md</a></td></tr>
+<tr><td><strong>Troubleshooting</strong></td><td>Read an error message, find the cause, apply the fix.</td><td><a href="troubleshooting/connection-errors.md">troubleshooting/connection-errors.md</a></td></tr>
+</tbody></table>
 
 ## Models
-
-Declare models, validate them and hook into their lifecycle.
 
 - [Define a Model](models/define-model.md)
 - [Add Validations](models/add-validations.md)
@@ -17,16 +36,12 @@ Declare models, validate them and hook into their lifecycle.
 
 ## Relationships
 
-Connect models and load associated records.
-
 - [Set Up Belongs To](relationships/belongs-to.md)
 - [Set Up Has One](relationships/has-one.md)
 - [Set Up Has Many](relationships/has-many.md)
 - [Set Up Many-to-Many](relationships/many-to-many.md)
 
 ## Querying
-
-Find, filter, page through and inspect records.
 
 - [Find Records](querying/find-records.md)
 - [Filter with Where Clauses](querying/filter-records.md)
@@ -39,8 +54,6 @@ Find, filter, page through and inspect records.
 
 ## Advanced SQL
 
-SQL features beyond simple filters, on `CQL::Query`.
-
 - [Use CTEs and Recursive CTEs](advanced-sql/ctes.md)
 - [Use Window Functions](advanced-sql/window-functions.md)
 - [Combine Queries with Set Operations](advanced-sql/set-operations.md)
@@ -49,8 +62,6 @@ SQL features beyond simple filters, on `CQL::Query`.
 - [Query JSON and Geospatial Columns](advanced-sql/json-and-geo-predicates.md)
 
 ## Data Operations
-
-Write, change and remove rows, alone or in bulk.
 
 - [Create Records](data-operations/create.md)
 - [Update Records](data-operations/update.md)
@@ -61,8 +72,6 @@ Write, change and remove rows, alone or in bulk.
 
 ## Migrations
 
-Evolve the schema and keep its file in sync.
-
 - [Create a Migration](migrations/create-migration.md)
 - [Run Migrations](migrations/run-migrations.md)
 - [Rollback Migrations](migrations/rollback.md)
@@ -71,8 +80,6 @@ Evolve the schema and keep its file in sync.
 - [Dump and Validate Your Schema](migrations/schema-dump-and-validation.md)
 
 ## Configuration
-
-Connect to a database and set CQL up per environment.
 
 - [Configure CQL](configuration/configure-cql.md)
 - [Configure Database Connection](configuration/database-connection.md)
@@ -83,8 +90,6 @@ Connect to a database and set CQL up per environment.
 
 ## Native PostgreSQL Driver
 
-CQL's own PostgreSQL wire-protocol driver.
-
 - [Native PostgreSQL Driver](postgres-native/README.md)
 - [Use AsyncEngine and Its Connection Pool](postgres-native/async-engine.md)
 - [Run a Schema on the AsyncEngine's Pool](postgres-native/schema-on-engine.md)
@@ -94,23 +99,16 @@ CQL's own PostgreSQL wire-protocol driver.
 
 ## Caching
 
-Cache query results in memory, in Redis or per request.
-
 - [Enable Query Caching](caching/query-cache.md)
 - [Configure Redis Cache](caching/redis.md)
 - [Use Per-Request Caching](caching/per-request.md)
 
 ## Performance
 
-Send fewer, cheaper queries and measure the result.
-
 - [Optimizing Queries in CQL](performance/optimize-queries.md)
 - [Avoid N+1 Queries](performance/n-plus-one.md)
-- [Benchmark CQL](performance/benchmark.md)
 
 ## Observability
-
-See every statement, profile queries and watch production.
 
 - [Telemetry](observability/telemetry.md)
 - [Profile Queries and Detect N+1](observability/query-profiler.md)
@@ -118,14 +116,9 @@ See every statement, profile queries and watch production.
 
 ## Testing
 
-Run model specs against a disposable database.
-
 - [Set Up Test Databases](testing/test-database.md)
-- [Test Models](testing/test-models.md)
 
 ## Troubleshooting
-
-Read an error message, find the cause, apply the fix.
 
 - [Fix Connection Errors](troubleshooting/connection-errors.md)
 - [Fix Migration Errors](troubleshooting/migration-errors.md)

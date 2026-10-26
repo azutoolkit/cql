@@ -1,21 +1,15 @@
+---
+description: "How CQL works and why it is designed the way it is."
+icon: "lightbulb"
+---
+
 # Explanation
 
-Background on how CQL works and why it is designed the way it is. For step-by-step tasks, see the [How-to Guides](../how-to/README.md).
+For step-by-step tasks, see the [How-to Guides](../how-to/README.md).
 
-## Concepts
-
-- [What is an ORM?](what-is-an-orm.md): what object-relational mapping does, what it buys you, and CQL's exits when it gets in the way
-
-## Design Patterns
-
-- [Active Record Pattern](active-record-pattern.md): the pattern CQL's models follow
-- [Repository Pattern](repository-pattern.md): `CQL::Repository` and repositories written around a model
-
-## Query DSL
-
-- [Typed Query DSL: Before and After](dsl-before-after.md): what the typed DSL checks at compile time, side by side with the old forms
-- [Safety Guardrails](safety-guardrails.md): parameter binding, identifier validation and compile-time checks
-
-## Architecture
-
-- [How CQL Keeps Queries Fast](performance-design.md): the stages of a query, what is off by default, and what is computed once
+<table data-view="cards"><thead><tr><th></th><th></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody>
+<tr><td><strong>Active Record Pattern</strong></td><td>The pattern CQL models follow, and where CQL differs.</td><td><a href="active-record-pattern.md">active-record-pattern.md</a></td></tr>
+<tr><td><strong>Repository Pattern</strong></td><td>CQL::Repository and repositories written around a model.</td><td><a href="repository-pattern.md">repository-pattern.md</a></td></tr>
+<tr><td><strong>Safety Guardrails</strong></td><td>Parameter binding, identifier validation and compile-time checks.</td><td><a href="safety-guardrails.md">safety-guardrails.md</a></td></tr>
+<tr><td><strong>How CQL Keeps Queries Fast</strong></td><td>The stages of a query, what is off by default, and what is computed once.</td><td><a href="performance-design.md">performance-design.md</a></td></tr>
+</tbody></table>

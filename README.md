@@ -134,10 +134,8 @@ functions) are listed in [Database Support](docs/reference/database-support.md).
 ## Native PostgreSQL Driver
 
 `require "cql"` registers CQL's driver with crystal-db for `postgres://` and `postgresql://` URLs, so
-`CQL::Schema` and `DB.open` use it. If your app also requires the `pg` shard, that shard serves those URLs instead;
-compile with `-Dcql_no_postgres_driver` to keep CQL's driver out of crystal-db's registry. `cockroachdb://` for
-`DB.open` is opt-in: call `CQL::Postgres::Driver.register_cockroachdb` or compile with
-`-Dcql_postgres_driver_cockroachdb`.
+`CQL::Schema` and `DB.open` use it without the `pg` shard. Coexisting with `pg` and opting in to `cockroachdb://`
+for `DB.open` are covered in the [native driver guide](docs/how-to/postgres-native/README.md).
 
 `CQL::Postgres::AsyncEngine` has its own fiber-safe pool and is a `CQL::Executor`, so any statement runs on it with
 `using`:
@@ -248,7 +246,7 @@ What each query costs, and what is off by default: [How CQL Keeps Queries Fast](
 | How-to guides | [docs/how-to/](docs/how-to/README.md) | one task each: models, queries, migrations, caching, performance, PostgreSQL |
 | Reference | [docs/reference/](docs/reference/README.md) | every option, DSL method and error, plus the [quick reference](docs/reference/quick-reference.md) |
 | Explanation | [docs/explanation/](docs/explanation/README.md) | why CQL works the way it does: Active Record, guardrails, performance |
-| Resources | [docs/resources/](docs/resources/README.md) | FAQ, community, contributing |
+| Resources | [docs/resources/](docs/resources/README.md) | FAQ, contributing |
 
 Also: [Installation](docs/installation.md), [runnable examples](examples/README.md),
 [playground](playground/README.md), [changelog](CHANGELOG.md).

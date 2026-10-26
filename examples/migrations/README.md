@@ -1,26 +1,19 @@
 # Migration and Schema Examples
 
-Four migrations run through `CQL::Migrator` with `auto_sync`, so that a Crystal schema file is rewritten after every
-change. Run from the repository root.
+Four migrations run through `CQL::Migrator` with `auto_sync` on PostgreSQL, so that a Crystal schema file is
+rewritten after every change. Run from the repository root.
 
 ```bash
-crystal run examples/migrations/schema_migration_workflow.cr                    # SQLite
 DATABASE_URL=postgres://user:pass@localhost/scratch \
-  crystal run examples/migrations/schema_migration_workflow_pg.cr               # PostgreSQL
+  crystal run examples/migrations/schema_migration_workflow_pg.cr
 ```
 
 | File | What it is |
 | --- | --- |
-| `schema_migration_workflow.cr` | the workflow on SQLite (`examples/app_example.db`) |
-| `schema_migration_workflow_pg.cr` | the same workflow on PostgreSQL; `DATABASE_URL` defaults to `postgresql://localhost/cql_example_db` |
+| `schema_migration_workflow_pg.cr` | the workflow; `DATABASE_URL` defaults to `postgresql://localhost/cql_example_db` |
 | `generated_schema.cr` | a sample of a generated schema file (a `schema_migrations` table only). It is not a program: it has no `require` |
 
-> [!WARNING]
-> On SQLite the workflow stops at the first migration with `attempt to write a readonly database`, then exits 0. It
-> deletes `examples/app_example.db` (line 122) after `AppDB` has already opened that file, so every later write
-> fails. Until the example is fixed, read it for the calls it makes.
-
-Both files define the same migrations:
+The workflow defines these migrations:
 
 | Migration | Change |
 | --- | --- |

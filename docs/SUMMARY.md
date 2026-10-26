@@ -20,11 +20,6 @@
 - [Part 4: CRUD Operations](tutorials/building-a-blog/04-crud-operations.md)
 - [Part 5: Adding Features](tutorials/building-a-blog/05-adding-features.md)
 
-### Real-World Examples
-
-- [Migration Workflows](tutorials/real-world-examples/migration-workflows.md)
-- [Performance Monitoring](tutorials/real-world-examples/performance-monitoring.md)
-
 ## How-to Guides
 
 - [How-to Overview](how-to/README.md)
@@ -113,7 +108,6 @@
 
 - [Optimizing Queries in CQL](how-to/performance/optimize-queries.md)
 - [Avoid N+1 Queries](how-to/performance/n-plus-one.md)
-- [Benchmark CQL](how-to/performance/benchmark.md)
 
 ### Observability
 
@@ -124,7 +118,6 @@
 ### Testing
 
 - [Set Up Test Databases](how-to/testing/test-database.md)
-- [Test Models](how-to/testing/test-models.md)
 
 ### Troubleshooting
 
@@ -140,7 +133,6 @@
 - [Configuration Reference](reference/configuration.md)
 - [Database Support](reference/database-support.md)
 - [Error Codes](reference/error-codes.md)
-- [Glossary](reference/glossary.md)
 
 ### API Reference
 
@@ -151,10 +143,8 @@
 ## Explanation
 
 - [Explanation Overview](explanation/README.md)
-- [What is an ORM?](explanation/what-is-an-orm.md)
 - [Active Record Pattern](explanation/active-record-pattern.md)
 - [Repository Pattern](explanation/repository-pattern.md)
-- [Typed Query DSL: Before and After](explanation/dsl-before-after.md)
 - [Safety Guardrails](explanation/safety-guardrails.md)
 - [How CQL Keeps Queries Fast](explanation/performance-design.md)
 
@@ -162,5 +152,4 @@
 
 - [Resources Overview](resources/README.md)
 - [Frequently Asked Questions](resources/faq.md)
-- [Community](resources/community.md)
 - [Contributing](resources/contributing.md)

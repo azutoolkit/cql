@@ -17,9 +17,19 @@ redirects:
   how-to/performance/telemetry: how-to/observability/telemetry.md
   how-to/performance/monitoring: how-to/observability/monitoring.md
   how-to/performance/query-profiler: how-to/observability/query-profiler.md
-  explanation/concepts/what-is-orm: explanation/what-is-an-orm.md
+  explanation/concepts/what-is-orm: explanation/active-record-pattern.md
   explanation/design-patterns/active-record: explanation/active-record-pattern.md
   explanation/design-patterns/repository: explanation/repository-pattern.md
+
+  # Pages deleted as duplicates or generic background (their unique content moved to the target)
+  tutorials/real-world-examples/migration-workflows: how-to/migrations/run-migrations.md
+  tutorials/real-world-examples/performance-monitoring: how-to/observability/monitoring.md
+  explanation/what-is-an-orm: explanation/active-record-pattern.md
+  explanation/dsl-before-after: how-to/querying/typed-where-dsl.md
+  resources/community: resources/contributing.md
+  reference/glossary: reference/quick-reference.md
+  how-to/performance/benchmark: resources/contributing.md
+  how-to/testing/test-models: how-to/testing/test-database.md
 
   # Pages from the layout before the Diátaxis reorganization (822225bb)
   introduction: README.md
@@ -66,11 +76,11 @@ redirects:
   active-record-with-cql/scopes: how-to/querying/scopes.md
   active-record-with-cql/soft-deletes: how-to/models/soft-delete.md
   active-record-with-cql/touch: how-to/models/timestamps.md
-  active-record-with-cql/integrated-migration-workflow: tutorials/real-world-examples/migration-workflows.md
+  active-record-with-cql/integrated-migration-workflow: how-to/migrations/run-migrations.md
   database-management/configure-migration-integration: how-to/configuration/configure-cql.md
   database-management/migrations: how-to/migrations/create-migration.md
   database-management/handling-migrations: how-to/migrations/run-migrations.md
-  database-management/migration-guide: tutorials/real-world-examples/migration-workflows.md
+  database-management/migration-guide: how-to/migrations/run-migrations.md
   database-management/schema-dump: how-to/migrations/schema-dump-and-validation.md
   caching-and-performance/caching-guide: how-to/caching/query-cache.md
   caching-and-performance/centralized-cache-configuration: how-to/caching/query-cache.md
@@ -78,7 +88,7 @@ redirects:
   caching-and-performance/redis-cache-configuration: how-to/caching/redis.md
   advanced-topics/performance-optimization: how-to/performance/optimize-queries.md
   advanced-topics/performance-tools: how-to/observability/query-profiler.md
-  advanced-topics/testing-strategies: how-to/testing/test-models.md
+  advanced-topics/testing-strategies: how-to/testing/test-database.md
   advanced-topics/security-guide: explanation/safety-guardrails.md
   examples-and-tutorials/examples: tutorials/README.md
   examples-and-tutorials/examples-1: tutorials/README.md
@@ -88,9 +98,9 @@ redirects:
   examples-and-tutorials/examples-1/logger-report-example: how-to/observability/query-profiler.md
   examples-and-tutorials/examples-1/migration-configuration-example: how-to/configuration/configure-cql.md
   examples-and-tutorials/examples-1/migrator-config-example: how-to/configuration/configure-cql.md
-  examples-and-tutorials/examples-1/performance-monitoring-example: tutorials/real-world-examples/performance-monitoring.md
-  examples-and-tutorials/examples-1/postgresql-migration-workflow: tutorials/real-world-examples/migration-workflows.md
-  examples-and-tutorials/examples-1/schema-migration-workflow: tutorials/real-world-examples/migration-workflows.md
-  help-and-resources/community: resources/community.md
+  examples-and-tutorials/examples-1/performance-monitoring-example: how-to/observability/monitoring.md
+  examples-and-tutorials/examples-1/postgresql-migration-workflow: how-to/migrations/run-migrations.md
+  examples-and-tutorials/examples-1/schema-migration-workflow: how-to/migrations/run-migrations.md
+  help-and-resources/community: resources/contributing.md
   help-and-resources/troubleshooting: resources/faq.md
   help-and-resources/faqs: resources/faq.md
