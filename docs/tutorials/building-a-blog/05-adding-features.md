@@ -1,14 +1,12 @@
 # Part 5: Adding Features
 
-Add validations, callbacks and transactions to the blog engine, seed it with sample data, print statistics, and prepare it for production.
+Add validations, callbacks and transactions, seed sample data, print statistics, and prepare for production.
 
 **You need:** the project from [Part 4](04-crud-operations.md).
 
 ## Step 1: Add validations
 
-Declare rules with `validate :attribute, predicate: value`. The predicates are `presence`, `required`, `size`, `match`, `eq`, `gt`, `gte`, `lt`, `lte`, `in`, `exclude`, `confirmation` and `accept`; `message:` replaces the default text. A rule that needs the database, such as uniqueness, is a `CQL::ActiveRecord::Validations::CustomValidator` registered with `use`.
-
-At the top of `src/models/user.cr`, above `class User`:
+A rule that needs the database, such as uniqueness, is a custom validator. At the top of `src/models/user.cr`, above `class User`:
 
 ```crystal
 # Uniqueness needs the database, so it is a custom validator
@@ -32,6 +30,8 @@ end
 Inside `class User`, below the associations:
 
 ```crystal
+  # Predicates: presence, required, size, match, eq, gt, gte, lt, lte, in, exclude,
+  # confirmation, accept; message: "..." replaces the default text
   validate :username, presence: true, size: 3..50
   validate :email, presence: true, match: /\A[^@\s]+@[^@\s]+\z/
   use UniqueUserValidator
@@ -75,15 +75,16 @@ valid? false
 save raised: username must have a size of 3..50,email must match the pattern /\A[^@\s]+@[^@\s]+\z/
 ```
 
-`save` and `save!` both raise on an invalid record, so call `valid?` first when you want to report errors. `create!` skips validations.
+`save` and `save!` raise on an invalid record, so call `valid?` first to report errors. `create!` skips validations.
 
 ## Step 2: Add callbacks
-
-The callbacks are `before_validation`, `after_validation`, `before_save`, `after_save`, `before_create`, `after_create`, `before_update`, `after_update`, `before_destroy` and `after_destroy`. `save` runs them in this order: `before_validation`, `after_validation`, the validation rules, `before_save`, `before_create` or `before_update`, `after_create` or `after_update`, `after_save`. `create!` runs none.
 
 Inside `class User`, below `use UniqueUserValidator`:
 
 ```crystal
+  # save runs: before_validation, after_validation, the validate rules, before_save,
+  # before_create or before_update, after_create or after_update, after_save.
+  # delete! runs before_destroy and after_destroy; create! runs none.
   before_validation :normalize_email
   after_create :send_welcome_notification
 
@@ -111,7 +112,7 @@ Inside `class Post`, below the validations:
   end
 ```
 
-`save` fills in `created_at` and `updated_at` itself, so no callback is needed for them. Add to `src/features.cr`:
+`save` sets `created_at` and `updated_at` itself. Add to `src/features.cr`:
 
 ```crystal
 dana = User.new(username: "dana", email: "  Dana@Example.COM ", first_name: "Dana")
@@ -180,7 +181,7 @@ Rolled back (something failed): 0 posts titled Half done
 DB::Rollback: 0 posts, no exception
 ```
 
-An exception rolls the whole block back and propagates; `DB::Rollback` rolls back without escaping. `transaction` returns the block's value or `nil`, so the method above returns `post` itself.
+An exception rolls the block back and propagates; `DB::Rollback` rolls back silently. `transaction` returns the block's value or `nil`, so the method returns `post` itself.
 
 ## Step 4: Write a seeder
 
@@ -235,11 +236,11 @@ module Seeders
 end
 ```
 
-Users go through `save!`, so their validations and `after_create` callback run. Step 6 runs the seeder.
+Users go through `save!`, so their validations and callbacks run. Step 6 runs the seeder.
 
 ## Step 5: Print statistics
 
-`CQL::Telemetry` publishes every statement CQL runs. `alert_on_slow` calls a block for the slow ones.
+`CQL::Telemetry.alert_on_slow` calls a block for every slow statement.
 
 ```crystal
 # src/monitoring.cr
@@ -330,11 +331,11 @@ Recent posts:
     A sample post by Charlie Brown. A sample post by Charlie Bro...
 ```
 
-No `Slow query` line appears unless a statement takes 100 ms. To find N+1 queries and profile in depth, see [Performance Monitoring](../real-world-examples/performance-monitoring.md).
+A `Slow query` line appears only for a statement that takes 100 ms.
 
 ## Step 7: Prepare for production
 
-Switch the adapter with the environment. `require "cql"` includes a native PostgreSQL driver, so `postgres://` URLs need no other shard:
+Pick the adapter from the environment; `require "cql"` already includes a PostgreSQL driver:
 
 ```crystal
 # src/database.cr
@@ -355,7 +356,7 @@ MIGRATOR_CONFIG = CQL::MigratorConfig.new(
 )
 ```
 
-The models use `AppSchema`, and the generated file hard-codes the adapter and URL it was dumped from. Edit those two lines to read the environment too. With `auto_sync: false` the migrator no longer rewrites the file, so add each new table to it yourself:
+The generated `AppSchema` hard-codes the adapter and URL it was dumped from, so edit those two lines too. With `auto_sync: false` the migrator stops rewriting the file; add new tables to it yourself:
 
 ```crystal
 # src/schemas/app_schema.cr, edited by hand
@@ -374,19 +375,17 @@ export DATABASE_URL=postgres://user:pass@host:5432/blog_production
 
 | Before deploying | Where |
 | :--- | :--- |
-| Values are bound as parameters by every CQL query; keep raw SQL to literals you control | [Use Raw SQL Fragments Safely](../../how-to/querying/raw-fragments.md) |
+| CQL binds every value as a parameter; keep raw SQL to literals you control | [Use Raw SQL Fragments Safely](../../how-to/querying/raw-fragments.md) |
 | Index the columns you filter and join on | [Create Indexes](../../how-to/migrations/indexes.md) |
 | Load associations with `preload` instead of in a loop | [Avoid N+1 Queries](../../how-to/performance/n-plus-one.md) |
 | Paginate every list | [Paginate Results](../../how-to/querying/pagination.md) |
 | Cache expensive queries | [Enable Query Caching](../../how-to/caching/query-cache.md) |
 | Size the connection pool | [Set Up Connection Pooling](../../how-to/configuration/connection-pooling.md) |
 
-Authentication, authorization and rate limiting belong to your web framework.
-
 ## What you built
 
-A blog engine with migrations, four associated models, validations, callbacks, transactions, seed data and statistics. To keep going:
+A blog engine with migrations, associated models, validations, callbacks, transactions, seed data and statistics. Next:
 
-- [Migration Workflows](../real-world-examples/migration-workflows.md) adds tags and a `featured` flag to this project.
-- [Performance Monitoring](../real-world-examples/performance-monitoring.md) profiles it.
-- The [How-to Guides](../../how-to/README.md), [Reference](../../reference/README.md) and [Explanation](../../explanation/README.md) cover each feature in depth.
+- [Migration Workflows](../real-world-examples/migration-workflows.md) adds tags and a `featured` flag.
+- [Performance Monitoring](../real-world-examples/performance-monitoring.md) finds N+1 queries and profiles it.
+- The [How-to Guides](../../how-to/README.md), [Reference](../../reference/README.md) and [Explanation](../../explanation/README.md) cover each feature.
