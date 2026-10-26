@@ -13,11 +13,13 @@ SQLite · PostgreSQL · MySQL · CockroachDB
 [![Crystal ≥ 1.12.2](https://img.shields.io/badge/crystal-%E2%89%A5%201.12.2-000000?logo=crystal)](https://crystal-lang.org/install/)
 [![License: MIT](https://img.shields.io/github/license/azutoolkit/cql)](LICENSE)
 [![Docs on GitBook](https://img.shields.io/badge/docs-GitBook-3884FF?logo=gitbook&logoColor=white)](https://azutopia.gitbook.io/cql)
+[![API reference](https://img.shields.io/badge/API-reference-2E1052)](https://azutoolkit.github.io/cql/)
 
 [Documentation](https://azutopia.gitbook.io/cql) ·
 [Tutorials](docs/tutorials/README.md) ·
 [How-to guides](docs/how-to/README.md) ·
 [Reference](docs/reference/README.md) ·
+[API](https://azutoolkit.github.io/cql/) ·
 [Examples](examples/README.md) ·
 [Changelog](CHANGELOG.md)
 
@@ -315,8 +317,9 @@ need:
 | Explanation | why CQL works the way it does: Active Record, guardrails, performance | [docs/explanation/](docs/explanation/README.md) |
 | Resources | FAQ and contributing | [docs/resources/](docs/resources/README.md) |
 
-There are also [installation notes](docs/installation.md), [runnable examples](examples/README.md) and a
-[playground](playground/README.md).
+Every public type and method is in the [API reference](https://azutoolkit.github.io/cql/), generated from the doc
+comments in `src/` for each release. There are also [installation notes](docs/installation.md),
+[runnable examples](examples/README.md) and a [playground](playground/README.md).
 
 ## Project Status
 

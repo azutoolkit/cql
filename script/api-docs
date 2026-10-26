@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Builds the API reference from the doc comments in src/ into DIR (default _site), as published to GitHub Pages.
+#
+#   script/api-docs 0.0.862            # CI: the api-docs job in .github/workflows/crystal.yml
+#   script/api-docs 0.0.862 /tmp/api  # preview locally, then open /tmp/api/index.html
+#
+# `crystal docs` renders README.md as the index page, but the README uses GitHub-only markup (alerts, Mermaid), so the
+# build swaps in a short landing page and restores README.md afterwards. Source links point at the vVERSION tag.
+set -euo pipefail
+
+version="${1:?usage: script/api-docs VERSION [DIR]}"
+out="${2:-_site}"
+
+landing_page() {
+  cat <<EOF
+# CQL $version API reference
+
+Every public type and method in CQL, generated from the doc comments in \`src/\`.
+
+For tutorials, task guides and explanations, read the guide at
+**[azutopia.gitbook.io/cql](https://azutopia.gitbook.io/cql)**. The source is on
+[GitHub](https://github.com/azutoolkit/cql).
+
+## Where to start
+
+- **Tables, indexes and foreign keys:** \`CQL::Schema\`, \`CQL::Table\`
+- **Models:** \`CQL::ActiveRecord::Model\`
+- **Queries:** \`CQL::ActiveRecord::Queryable::QueryBuilder\`, \`CQL::Query\`
+- **Inserts, updates and deletes:** \`CQL::Insert\`, \`CQL::Update\`, \`CQL::Delete\`
+- **Migrations:** \`CQL::Migration\`, \`CQL::Migrator\`
+- **Configuration:** \`CQL::Configure\`
+- **The native PostgreSQL driver:** \`CQL::Postgres::AsyncEngine\`
+- **Errors:** \`CQL::Error\`
+EOF
+}
+
+backup="$(mktemp)"
+cp README.md "$backup"
+trap 'mv "$backup" README.md' EXIT
+landing_page >README.md
+
+crystal docs src/cql.cr \
+  --project-name=CQL \
+  --project-version="$version" \
+  --source-refname="v$version" \
+  --source-url-pattern="https://github.com/azutoolkit/cql/blob/%{refname}/%{path}#L%{line}" \
+  --canonical-base-url=https://azutoolkit.github.io/cql/ \
+  -o "$out"

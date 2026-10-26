@@ -44,6 +44,7 @@ Check: the output lists `Installing cql` and `Installing sqlite3`.
 {% step %}
 ### Connect to the database
 
+<!-- docs-check: run -->
 ```bash
 mkdir -p db
 ```
@@ -124,6 +125,7 @@ puts "Applied #{migrator.applied_migrations.size} migration(s)"
 ```
 {% endcode %}
 
+<!-- docs-check: run -->
 ```bash
 crystal src/setup.cr
 ```
@@ -286,6 +288,7 @@ puts "'#{first_post.title}' was written by #{first_post.user.try(&.name)}"
 
 Migrate first, so that `AppSchema` gains `posts`:
 
+<!-- docs-check: run -->
 ```bash
 crystal src/setup.cr
 crystal src/myapp.cr

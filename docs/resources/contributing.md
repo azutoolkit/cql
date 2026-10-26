@@ -20,8 +20,10 @@ shards install --ignore-crystal-version
 | :--- | :--- | :--- |
 | Tests | `crystal spec` | The full suite. PostgreSQL and Redis specs are marked pending when no server is reachable. |
 | One spec file | `crystal spec spec/core/query_spec.cr` | |
-| Format | `crystal tool format --check src spec` | CI checks `./src`; keep `spec` formatted too. `crystal tool format src spec` applies it. |
+| Format | `crystal tool format --check src spec` | `crystal tool format src spec` applies it. |
 | Lint | `crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec` | What CI runs. To keep a binary, `crystal build lib/ameba/bin/ameba.cr -o bin/ameba`, then run `bin/ameba`. |
+| Docs | `python3 script/docs/check_links.py`, `check_nav.py`, `gitbook_lint.py` | Links and anchors, navigation and redirects, GitBook markup. The last two need PyYAML. |
+| Docs programs | `python3 script/docs/compile_snippets.py [PAGE.md ...]` | Compiles the programs and tutorials in `README.md` and `docs/`. The script's header explains which blocks count. |
 
 Without a MySQL client, one spec errors because `mysqldump` is not installed (`spec/integration/dialects/mysql_dialect_spec.cr`). That is an environment issue, not a regression.
 
@@ -31,11 +33,13 @@ Without a MySQL client, one spec errors because `mysqldump` is not installed (`s
 
 - installs SQLite, the PostgreSQL client and the MySQL client;
 - `shards install --ignore-crystal-version`;
-- `crystal tool format --check ./src`;
+- `crystal tool format --check ./src ./spec`;
 - `crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec`;
-- `crystal spec` against a PostgreSQL service, with `DATABASE_URL=postgres://example:example@postgres:5432/example`.
+- `crystal spec` against a PostgreSQL service, with `DATABASE_URL=postgres://example:example@postgres:5432/example`;
+- `crystal spec` again on Crystal 1.19.1, the oldest version CI tests;
+- the docs checks and `compile_snippets.py` from `script/docs/`.
 
-After a green build on `master`, the same workflow bumps the version in `shard.yml` and tags a release. `.github/workflows/db-compat.yml` compiles CQL against every supported `crystal-db` version with `script/check_db_compat 0.13.1 0.14.0 0.15.0 latest`, also weekly.
+After a green build on `master`, `script/release` sets the next version in `shard.yml`, moves the `[Unreleased]` changelog entries under it, commits both, tags that commit and publishes a GitHub release with those entries as notes. `script/api-docs` then builds the API reference, which is deployed to GitHub Pages. `.github/workflows/db-compat.yml` compiles CQL against every supported `crystal-db` version with `script/check_db_compat 0.13.1 0.14.0 0.15.0 latest`, also weekly.
 
 To run the PostgreSQL specs locally, start the server from `docker-compose.yaml` and point `DATABASE_URL` at it; without it, the specs try `postgres://localhost/cql_test`:
 

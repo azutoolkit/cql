@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Releases VERSION from the checked-out commit: sets it in shard.yml, moves the [Unreleased] changelog entries under
+# a "## [VERSION] - DATE" heading, commits both files, tags that commit vVERSION, pushes the commit and the tag, and
+# publishes a GitHub release whose notes are those changelog entries.
+#
+#   script/release 0.0.862             # CI: the release job in .github/workflows/crystal.yml
+#   script/release 0.0.862 --dry-run   # commit and tag locally, then print what would be pushed and published
+#
+# Needs git with push access to origin and, unless --dry-run, the gh CLI with GH_TOKEN set.
+# Skips (exit 0, no changes) when origin/master has moved past HEAD: the run for the newer commit releases it.
+# Under GitHub Actions it sets the step output released=true once the release is published.
+set -euo pipefail
+
+version="${1:?usage: script/release VERSION [--dry-run]}"
+dry_run="${2:-}"
+tag="v$version"
+branch="${RELEASE_BRANCH:-master}"
+
+unreleased_entries() {
+  awk '/^## \[Unreleased\]/ { inside = 1; next } /^## / { inside = 0 } inside' CHANGELOG.md
+}
+
+roll_changelog() {
+  awk -v heading="## [$version] - $(date -u +%Y-%m-%d)" '
+    !rolled && /^## \[Unreleased\]/ { print; print ""; print heading; rolled = 1; next }
+    { print }
+  ' CHANGELOG.md >CHANGELOG.md.next
+  mv CHANGELOG.md.next CHANGELOG.md
+}
+
+git fetch --quiet origin "$branch"
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$branch")" ]; then
+  echo "origin/$branch has moved past $(git rev-parse --short HEAD); the newer run releases it."
+  exit 0
+fi
+
+notes="$(unreleased_entries)"
+sed -i.bak -E "s/^version: .*/version: $version/" shard.yml && rm shard.yml.bak
+if [ -n "$(tr -d '[:space:]' <<<"$notes")" ]; then
+  roll_changelog
+fi
+
+git add shard.yml CHANGELOG.md
+git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+  commit --quiet -m "Set shard version $version"
+git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+  tag -a "$tag" -m "Release $tag"
+
+notes_args=(--generate-notes)
+if [ -n "$(tr -d '[:space:]' <<<"$notes")" ]; then
+  notes_args=(--notes "$notes")
+fi
+
+if [ "$dry_run" = "--dry-run" ]; then
+  echo "dry run: would push $(git rev-parse --short HEAD) to $branch and tag $tag"
+  echo "dry run: would run gh release create $tag --title 'Release $tag' ${notes_args[0]}"
+  exit 0
+fi
+
+git push --atomic origin "HEAD:refs/heads/$branch" "refs/tags/$tag"
+gh release create "$tag" --verify-tag --title "Release $tag" "${notes_args[@]}"
+echo "released=true" >>"${GITHUB_OUTPUT:-/dev/null}"

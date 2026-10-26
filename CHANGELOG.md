@@ -103,6 +103,7 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Changed
 
+- Releases: CI tags the commit that sets the new version in `shard.yml` (the tag used to point at the commit before it), moves the `[Unreleased]` changelog entries under the released version, and uses them as the GitHub release notes.
 - `healthy?`, `critical_issues` and `high_priority_issues` (on `Monitor` and on `CQL::Performance`) no longer build the whole `PerformanceMetrics`. `healthy?` reads the profiler's statistics and slow queries and the N+1 detector's patterns, and the issue methods read only the issues. At 1000 statement shapes `healthy?` takes about a third of the time (311 to 99 µs) and the issue methods about a twentieth (316 to 15 µs). Results are unchanged.
 - `QueryProfiler#slowest_queries` sorts outside the profiler lock. While it holds the lock it copies the slow queries (about 25 µs for 1000) instead of sorting them (about 80–95 µs), so `record_query` waits less on a report. The sort is still cached until a slow query is added, and it is not cached when one arrives during the sort.
 - A metrics report sorts the statement shapes by count once, for both `most_frequent_queries` and `query_patterns` (it sorted them twice): at 1000 shapes about 10% less time and 16% fewer bytes. The lists are unchanged.
@@ -270,6 +271,9 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 - Regrouped the how-to guides: CTEs, window functions, set operations, FULL/CROSS joins, raw fragments and JSON/geo predicates moved to `how-to/advanced-sql/`; upsert and row locking to `how-to/data-operations/`; telemetry, the query profiler and monitoring to `how-to/observability/`; the explanation pages out of single-page folders. `docs/.gitbook.yaml` redirects every moved page and the pages of the layout before the Diátaxis reorganization.
 - Removed duplicate and generic pages (the two real-world tutorials, What is an ORM, Typed Query DSL: Before and After, Community, Glossary, Benchmark CQL, Test Models), moving their CQL-specific content into the page that owns each topic, and redirecting their URLs; trimmed repeated blocks across about 25 pages to links. Removed the stale `SECURITY_AUDIT.md`, `src/performance/OPTIMIZATION_SUMMARY.md` and `.cursor/rules`, 11 unreferenced images, and the example programs that no longer compiled or ran (`examples/blog`, `examples/performance`, `with_cache_demo.cr`, the SQLite `schema_migration_workflow.cr`, `run_examples.cr`).
 - The docs use GitBook blocks: page descriptions in frontmatter, card grids on the landing pages, steppers in the tutorials, tabs for per-database and per-framework variants, file-name code titles and expandable sections.
+- Rebuilt the README as a landing page: badges, the compiler errors a misspelled column or a wrongly typed value produces, a features table, a diagram of how a query runs, and the PostgreSQL compatibility details and benchmarks in expandable sections.
+- CI checks the docs on every pull request with the scripts in `script/docs/`: links and anchors, the navigation and redirects, GitBook markup, and a compile of the programs and tutorials in `README.md` and `docs/` (tutorial steps marked to run are run). The first run fixed two examples whose constants read top-level local variables and so did not compile: the CockroachDB page and the blog tutorial's production `src/database.cr`.
+- The API reference is generated from the doc comments for each release and published at <https://azutoolkit.github.io/cql/>.
 
 ## [0.0.435]
 
