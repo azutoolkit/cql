@@ -11,7 +11,7 @@ Every callback names an instance method; there are no block, `if:`, `unless:` or
 | Macro | Runs | `false` halts |
 | :--- | :--- | :--- |
 | **`before_validation :method`** | First in every `save` | `save` returns `false` before validating |
-| **`after_validation :method`** | After the rules pass; an invalid record raises `ValidationError` before it runs | `save` returns `false` |
+| **`after_validation :method`** | After the rules pass; it does not run for an invalid record | `save` returns `false` |
 | **`before_save :method`** | After validation passes, for inserts and updates | `save` returns `false` |
 | **`before_create :method`** | After `before_save`, new records only | `save` returns `false` |
 | **`before_update :method`** | After `before_save`, records with an id only | `save` returns `false` |
@@ -108,7 +108,7 @@ end
 | :--- | :--- | :--- | :--- |
 | 0 | timestamps set | timestamps set | `dependent: :restrict_with_error` check (raises `RelationError`) |
 | 1 | `before_validation` | `before_validation` | `before_destroy` |
-| 2 | validation rules (raise `ValidationError` when invalid) | validation rules | `DELETE` (with `dependent:` handling) |
+| 2 | validation rules (`save` returns `false`, `save!` raises `ValidationError`, when invalid) | validation rules | `DELETE` (with `dependent:` handling) |
 | 3 | `after_validation` | `after_validation` | `after_destroy` |
 | 4 | `before_save` | `before_save` | `id` cleared |
 | 5 | `before_create` | `before_update` | |
@@ -127,7 +127,7 @@ post.delete! # before_destroy, after_destroy
 
 | Call | Callbacks | Validates |
 | :--- | :--- | :--- |
-| `record.save`, `record.save!` | save callbacks | yes (raises `ValidationError`) |
+| `record.save`, `record.save!` | save callbacks | yes (`save` returns `false`, `save!` raises `ValidationError`) |
 | `record.delete!`; soft-delete `delete!`, `force_delete!` | destroy callbacks | no |
 | `Post.where(...).delete_all` when the model declares destroy callbacks, `dependent:` or `many_to_many` | each record's destroy callbacks, in one transaction | no |
 | `has_many` / `has_one ..., dependent: :destroy` | the child's destroy callbacks | no |

@@ -426,14 +426,13 @@ describe CQL::ActiveRecord::Persistence do
       user.updated_at.not_nil!.should be > original_updated_at.not_nil!
     end
 
-    it "returns false when validation fails" do
-      # Create a user with invalid data that would fail validation
-      # Note: This test assumes there are validations in place
-      # For now, we'll test the basic save functionality
-      user = PersistenceUser.new("John Doe", "john@example.com", 30)
+    it "returns false when validation fails, and writes nothing" do
+      user = ContextValidatedUser.new("Ada")
 
-      result = user.save
-      result.should be_true # Should pass since no validations are defined
+      user.save.should be_false
+      user.new_record?.should be_true
+      user.errors.map(&.message).should eq(["Email is required to sign up"])
+      ContextValidatedUser.count.should eq(0)
     end
   end
 
@@ -455,7 +454,7 @@ describe CQL::ActiveRecord::Persistence do
 
       user.valid?.should be_false
       user.errors.map(&.message).should eq(["Email is required to sign up"])
-      expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Email is required to sign up") { user.save }
+      user.save.should be_false
       expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Email is required to sign up") { user.create! }
     end
 
@@ -466,7 +465,7 @@ describe CQL::ActiveRecord::Persistence do
 
       user.valid?.should be_false
       user.errors.map(&.message).should eq(["Name is required once saved"])
-      expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Name is required once saved") { user.save }
+      user.save.should be_false
 
       user.name = "Ada"
       user.email = ""

@@ -98,7 +98,7 @@ class UserRepository
     UserRecord.where(active: true).all.map(&.to_entity)
   end
 
-  # Raises CQL::ActiveRecord::Validations::ValidationError when the user is invalid
+  # false when the user is invalid or a callback halts the save
   def save(user : User) : Bool
     record = user.id.try { |id| UserRecord.find(id) } || UserRecord.new(user.name, user.email)
     record.name = user.name

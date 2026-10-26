@@ -68,7 +68,7 @@ User.count                             # Int64 | Int32
 draft = User.new("", "invalid")
 draft.valid?                # => false
 draft.errors.map(&.message) # => ["name must be present", "email must match the pattern /@/"]
-draft.save                  # raises CQL::ActiveRecord::Validations::ValidationError; nothing is written
+draft.save                  # => false; nothing is written (save! raises CQL::RecordInvalid)
 ```
 
 `save` validates once, before `before_save`, so a value a callback sets is not validated. A callback halts the save only by returning `false`; any other value, including `nil`, lets it continue. `User.create!(**attrs)` and bulk inserts skip both; [Create Records](../how-to/data-operations/create.md) shows which writes validate. The rules and hooks are listed in [Validation Options](../reference/api/validation-options.md) and [Callback Hooks](../reference/api/callback-hooks.md).

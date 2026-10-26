@@ -1,5 +1,5 @@
 ---
-description: "Read why a record is invalid, handle the exception save raises, and fix validations that do not compile or do not run."
+description: "Read why a record is invalid, handle a save that returns false or raises, and fix validations that do not run."
 ---
 
 # Fix Validation Errors
@@ -36,25 +36,17 @@ user.errors.each { |error| puts "#{error.field}: #{error.message}" }
 
 `errors` returns `Array(CQL::ActiveRecord::Validations::Error)`, one per failing predicate; [Validation Options Reference](../../reference/api/validation-options.md) lists each predicate's default message and `message:`.
 
-## Handle the exception `save` raises
+## Handle a save that fails
 
 ```text
 CQL::ActiveRecord::Validations::ValidationError: name must be present,email must match the pattern ...
 ```
 
-`save`, `save!` and the instance `create!` raise this on an invalid record; `save` does not return `false` for it. It is a `CQL::RecordInvalid`, so `rescue CQL::RecordInvalid` catches it too. The message joins the error messages with commas, and `error_fields` lists the failing attributes.
+`save` returns `false` on an invalid record. `save!` and the instance `create!` raise this instead; it is a `CQL::RecordInvalid`, so `rescue CQL::RecordInvalid` catches it. The message joins the error messages with commas, and `error_fields` lists the failing attributes.
 
 ```crystal
-# ❌ Never reaches else: save raises before it can return false
 if user.save
   redirect_to user
-else
-  render_errors user.errors
-end
-
-# ✅ Check first, or rescue
-if user.valid?
-  user.save!
 else
   render_errors user.errors.map { |e| {field: e.field, message: e.message} }
 end
@@ -67,7 +59,7 @@ rescue ex : CQL::RecordInvalid
 end
 ```
 
-`save` returns `false`, and `save!` raises `CQL::RecordNotSaved: Failed to save the record`, only when a callback halts the save.
+When a callback halts the save, `save` returns `false` with no errors, and `save!` raises `CQL::RecordNotSaved: Failed to save the record`.
 
 ## Know which writes skip validation
 

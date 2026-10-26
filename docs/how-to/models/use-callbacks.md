@@ -67,7 +67,7 @@ save, new record           save, persisted record     record.delete!
 8. after_save              8. after_save
 ```
 
-`after_validation` runs only once the validations pass; an invalid record raises before it. A value set in `before_save`, `before_create` or `before_update` is not validated, so set derived values in `before_validation`. `save` stamps `created_at`/`updated_at` before step 1.
+`after_validation` runs only once the validations pass. A value set in `before_save`, `before_create` or `before_update` is not validated, so set derived values in `before_validation`. `save` stamps `created_at`/`updated_at` before step 1.
 
 ## Halt a Save
 

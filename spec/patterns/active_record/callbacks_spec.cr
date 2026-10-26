@@ -32,8 +32,9 @@ describe CQL::ActiveRecord::Callbacks do
   describe "validation callbacks" do
     it "runs after_validation only once the record is valid" do
       invalid = TestUser.new("J", "bad", 0, "password123", "password123")
-      expect_raises(CQL::ActiveRecord::Validations::ValidationError) { invalid.save }
+      invalid.save.should be_false
       CallbackTracker.order.should eq(["before_validation"])
+      expect_raises(CQL::RecordInvalid) { invalid.save! }
     end
 
     it "halts the save when after_validation returns false" do

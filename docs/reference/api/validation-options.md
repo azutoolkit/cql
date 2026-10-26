@@ -88,7 +88,8 @@ end
 | **`record.errors`** | `Array(CQL::ActiveRecord::Validations::Error)` | Runs every rule and custom validator; rebuilt on each call. Each `Error` has `field : Symbol` and `message : String`. |
 | **`record.valid?`** | `Bool` | `errors.empty?`. |
 | **`record.validate!`** | `Bool` | `true`, or raises `CQL::ActiveRecord::Validations::ValidationError`, whose `message` joins the error messages with `,`. |
-| `save`, `save!`, instance `create!`, `collection.create(**attrs)` | | Call `validate!`, so an invalid record raises instead of returning `false`. |
+| `save` | | Returns `false` on an invalid record; `errors` lists what failed. |
+| `save!`, instance `create!`, `collection.create(**attrs)` | | Call `validate!`, so an invalid record raises `ValidationError` (a `CQL::RecordInvalid`). |
 | `Model.create!(**attrs)`, `update!`, `insert_all`, `upsert_all` | | Do not validate. |
 
 `errors`, `valid?` and `validate!` take an optional context. Without one, a model uses `:create` for a new record and `:update` for a saved one, the contexts `save` uses; a class that includes only `Validations` then runs only the rules without `on:`.

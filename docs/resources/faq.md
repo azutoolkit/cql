@@ -116,14 +116,14 @@ The table was never created in this database. Run `migrator.up`, or create a dec
 
 ### Validation failed, but I don't know why
 
-`save`, `save!` and the instance method `record.create!` raise `CQL::ActiveRecord::Validations::ValidationError`, whose message joins the errors; `user.errors` lists each field and message without a `rescue`. See [Fix Validation Errors](../how-to/troubleshooting/validation-errors.md).
+`save` returns `false`; `save!` and the instance method `record.create!` raise `CQL::RecordInvalid`, whose message joins the errors. `user.errors` lists each field and message. See [Fix Validation Errors](../how-to/troubleshooting/validation-errors.md).
 
 ## Best Practices
 
 ### Should I use `save` or `save!`?
 
-- `save` returns `false` when a `before_*` callback returns `false`; `save!` raises `CQL::RecordNotSaved` instead.
-- Both raise `CQL::ActiveRecord::Validations::ValidationError` for an invalid record, so call `valid?` first to handle validation failures without `rescue`.
+- `save` returns `false` for an invalid record or when a `before_*` callback returns `false`; an empty `errors` means a callback halted it.
+- `save!` raises instead: `CQL::RecordInvalid` for an invalid record, `CQL::RecordNotSaved` for a halting callback.
 
 See [Use Callbacks](../how-to/models/use-callbacks.md).
 

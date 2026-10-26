@@ -172,19 +172,24 @@ module CQL
         end
 
         # Save the record to the database or update it if it already exists
-        # - **@return** [Bool] True if saved successfully, false otherwise
+        # - **@return** [Bool] True if saved; false if the record is invalid (see `errors`) or a callback halted
         #
         # **Example** Saving a record
         #
         # ```
-        # user.save
+        # user.save || puts(user.errors.map(&.message).join(", "))
         # ```
-        def save
+        def save : Bool
+          save_record { valid? }
+        end
+
+        # Shared body of `save` and `save!`; the block validates the record (`valid?` or `validate!`).
+        private def save_record(& : -> Bool) : Bool
           # Set timestamps before running callbacks
           set_timestamps!
 
           return false unless run_callbacks(:before_validation)
-          validate!
+          return false unless yield
           return false unless run_callbacks(:after_validation)
 
           # Run before save callbacks
@@ -243,7 +248,7 @@ module CQL
         # end
         # ```
         def save!
-          save || raise CQL::RecordNotSaved.new("Failed to save the record")
+          save_record { validate! } || raise CQL::RecordNotSaved.new("Failed to save the record")
         end
       end
     end

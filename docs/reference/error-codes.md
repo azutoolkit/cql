@@ -67,7 +67,7 @@ end
 
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
-| **`CQL::ActiveRecord::Validations::ValidationError`** < `CQL::RecordInvalid` | `validate!`, `save`, `save!` and the instance `create!` on an invalid record. Class-level `Model.create!(**attrs)` does not validate. | the error messages joined by `,`; `error_fields`, `error_messages` |
+| **`CQL::ActiveRecord::Validations::ValidationError`** < `CQL::RecordInvalid` | `validate!`, `save!` and the instance `create!` on an invalid record; `save` returns `false` instead. Class-level `Model.create!(**attrs)` does not validate. | the error messages joined by `,`; `error_fields`, `error_messages` |
 | **`CQL::ActiveRecord::SchemaMappingError`** | `Model.schema` when no `CQL::Schema.define` block, or more than one, declares the inferred table; with `CQL_VALIDATE_SCHEMA_MAPPINGS=1`, after the program's other top-level code has run, when the table is missing, a getter type differs from the column type, or the primary key column differs | ``CQL schema mapping error in User: schema column `users.age` type Int32 does not match model getter `age` type Int64. ...`` |
 | **`CQL::ActiveRecord::Relations::BaseRelation::RelationError`** | Instance `delete!` / `force_delete!` with a `has_many ..., dependent: :restrict_with_error` that has records, or a `dependent: :destroy` child whose `delete!` returns `false`; a `DB::Error` inside an association operation | `"Cannot delete record because dependent posts exist"`, `"... could not be deleted"`, `"Database operation failed: ..."` |
 | **`...::AssociationNotFound`** < `RelationError` | `first` / `last` on an empty `has_many` collection; updating a missing `has_one` / `belongs_to` target | `"No records found in collection"`, `"No profile to update"` |

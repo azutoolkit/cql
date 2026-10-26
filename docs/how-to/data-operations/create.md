@@ -22,30 +22,25 @@ user.created_at  # set by save, like updated_at
 ```crystal
 user = User.new("", "not-an-email")
 
-# ❌ save does not return false for an invalid record: it raises
-user.save   # raises CQL::ActiveRecord::Validations::ValidationError: can't be blank,is not an email
-
-# ✅ Branch on valid? first
-if user.valid?
-  user.save
-else
+# save returns false for an invalid record and writes nothing
+unless user.save
   user.errors.each { |error| puts "#{error.field}: #{error.message}" }
   # name: can't be blank
   # email: is not an email
 end
 
-# ✅ Or rescue
+# save! raises instead
 begin
   user.save!
-rescue CQL::ActiveRecord::Validations::ValidationError
-  user.errors.map(&.field) # => [:name, :email]
+rescue ex : CQL::RecordInvalid
+  ex.error_fields # => [:name, :email]
 end
 ```
 
 | Outcome | `save` | `save!` |
 | :--- | :--- | :--- |
 | Saved | `true` | `true` |
-| Invalid | raises `ValidationError` | raises `ValidationError` |
+| Invalid | `false` | raises `ValidationError` (a `CQL::RecordInvalid`) |
 | A callback returned `false` | `false` | raises `CQL::RecordNotSaved` |
 
 ## Create in One Step
