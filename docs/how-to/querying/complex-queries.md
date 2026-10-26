@@ -1,6 +1,8 @@
-# Build Complex Queries
+---
+description: "Combine conditions, subqueries, aggregates, grouping, joins and raw SQL in one query."
+---
 
-Combine conditions, subqueries, aggregates, grouping, joins and raw SQL in one query.
+# Build Complex Queries
 
 ## Chain Conditions
 
@@ -67,58 +69,48 @@ counts = AppDB.query.from(:posts)
 top_authors = counts.sort_by { |(_, posts)| -posts }.first(10)
 ```
 
-## Select, Order and Deduplicate
+## Order and Deduplicate
 
 ```crystal
-User.where(active: true).pluck(:name, as: String)  # => Array(String)
-rows = User.where(active: true).select(:id, :name).all
-rows.first.name                                    # => "Ada"; Array(User::Row), unselected columns are nil
-
 Post.order(published: :desc, created_at: :desc).all
 # ... ORDER BY posts.published DESC, posts.created_at DESC
 
 Post.distinct(:category_id, as: Int64)                         # => [1, 2, 3]
 Post.where(published: true).distinct_values(:category_id, as: Int64)
 # SELECT DISTINCT posts.category_id FROM posts WHERE posts.published = ?
+```
 
-# PostgreSQL and CockroachDB: the first row of each group, in the query's order
+To read single columns or partial rows, see [Read Values Without Records](find-records.md#read-values-without-records) and [Select Columns](typed-where-dsl.md#select-columns).
+
+`distinct_on` keeps the first row of each group, in the query's order:
+
+```crystal
 AppDB.query.from(:posts).select(:user_id, :title)
   .order(user_id: :asc, created_at: :desc)
   .distinct_on(:user_id)
-# SELECT DISTINCT ON (posts.user_id) posts.user_id, posts.title FROM posts ORDER BY ...
-# SQLite and MySQL raise CQL::DialectError "... does not support DISTINCT ON" when SQL is generated
 ```
+
+{% tabs %}
+{% tab title="PostgreSQL, CockroachDB" %}
+```sql
+SELECT DISTINCT ON (posts.user_id) posts.user_id, posts.title FROM posts ORDER BY posts.user_id ASC, posts.created_at DESC
+```
+{% endtab %}
+
+{% tab title="SQLite, MySQL" %}
+Generating the SQL raises `CQL::DialectError` ("SQLite does not support DISTINCT ON", and likewise on MySQL). Number the rows with `ROW_NUMBER()` in a CTE and keep row 1 instead, as in [Filter on a Window Result](../advanced-sql/window-functions.md#filter-on-a-window-result).
+{% endtab %}
+{% endtabs %}
 
 ## Query Associated Records
 
-```crystal
-# The model's QueryBuilder keeps scopes and typed blocks
-Post.where(user_id: user.id!, published: true).all
-Post.where(user_id: user.id!).order(created_at: :desc).limit(5).all
-
-# Collection methods (where, order, limit, offset) return a plain CQL::Query
-user.posts.where(published: true).all(Post)
-user.posts.order(created_at: :desc).limit(5).all(Post)
-```
-
-## Join Associations
-
-`joins` and `left_joins` are on `QueryBuilder` (`User.query`), not on the model class:
-
-```crystal
-User.query.joins(:posts) { posts.published == true }.all
-# SELECT users.id, ..., posts.id, ... FROM users INNER JOIN posts ON (posts.user_id = users.id) AND (posts.published = ?)
-
-User.query.left_joins(:profile).where { age > 18 }.all
-# ... FROM users LEFT JOIN profiles ON profiles.user_id = users.id WHERE users.age > ?
-```
+Start from the model, as in `Post.where(user_id: user.id!)`, to keep scopes and typed blocks: an association collection's `where`, `order` and `limit` return a plain `CQL::Query` (see [Read the Posts](../relationships/has-many.md#read-the-posts)). To join associations, use `User.query.joins(:posts)` and `left_joins` from [Join Associations](typed-where-dsl.md#join-associations).
 
 ## Fall Back to Raw SQL
 
-```crystal
-User.where("lower(email) = ? AND age > ?", "ada@example.com", 18).all
+For a fragment inside a query, see [Use Raw SQL Fragments Safely](../advanced-sql/raw-fragments.md). Run a whole statement on a pooled connection and map the rows yourself:
 
-# A whole statement: run it on a pooled connection and map the rows yourself
+```crystal
 rows = AppDB.exec_query do |conn|
   conn.query_all(<<-SQL, as: {String, Int64})
     SELECT u.name, COUNT(p.id) AS post_count

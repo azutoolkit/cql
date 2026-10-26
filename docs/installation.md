@@ -130,6 +130,7 @@ puts AppDB.query.from(:users).select(:name).where(id: id).get(as: String)
 ```bash
 crystal run src/check_cql.cr
 # Ada
+# 2026-10-26T11:31:33.209740Z  DEBUG - CQL::Development: Creating table users   (CQL's development log)
 ```
 
 For another database, change `adapter:` and `uri:` and the `require` lines to the ones in its tab. The [first tutorial](tutorials/getting-started/your-first-cql-app.md) continues from here with models and migrations.

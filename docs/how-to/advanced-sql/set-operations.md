@@ -1,6 +1,8 @@
-# Combine Queries with Set Operations
+---
+description: "Combine two CQL::Query objects with UNION, UNION ALL, INTERSECT and EXCEPT; the result is a CQL::CompoundQuery that runs like a query."
+---
 
-Combine two `CQL::Query` objects with `UNION`, `UNION ALL`, `INTERSECT` and `EXCEPT`; the result is a `CQL::CompoundQuery` that runs like a query.
+# Combine Queries with Set Operations
 
 ## Combine Two Queries
 

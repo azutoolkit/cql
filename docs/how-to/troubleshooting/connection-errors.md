@@ -1,6 +1,8 @@
-# Fix Connection Errors
+---
+description: "Find the connection error CQL printed, then apply its fix."
+---
 
-Find the error CQL printed below, then apply its fix. Messages are shown as CQL formats them.
+# Fix Connection Errors
 
 ## Know where errors come from
 
@@ -121,8 +123,14 @@ Use one of the schemes in [Configure Database Connection](../configuration/datab
 
 ## Check a connection from the command line
 
+Run `crystal run scripts/check_connection.cr -- postgres://app:secret@db.internal/app` to print the error class and
+message for a URL.
+
+<details>
+<summary>scripts/check_connection.cr</summary>
+
+{% code title="scripts/check_connection.cr" %}
 ```crystal
-# scripts/check_connection.cr: crystal run scripts/check_connection.cr -- postgres://app:secret@db.internal/app
 require "cql"
 
 url = ARGV[0]? || ENV["DATABASE_URL"]? || "postgres://localhost/myapp"
@@ -138,6 +146,9 @@ rescue ex
   exit 1
 end
 ```
+{% endcode %}
+
+</details>
 
 ## See Also
 

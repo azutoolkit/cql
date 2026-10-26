@@ -1,3 +1,7 @@
+---
+description: "Cut round trips, allocations and in-memory work: preload associations, select only the columns you need, and let the database count."
+---
+
 # Optimizing Queries in CQL
 
 {% hint style="success" %}
@@ -216,7 +220,7 @@ CQL::Performance.monitor.detector.not_nil!.issues # :n_plus_one issues, :medium 
 ```
 
 {% hint style="info" %}
-Keep SQL logging and the performance monitor off in production; each adds several microseconds per query.
+Keep SQL logging and the performance monitor off in production; the production monitor alone adds about 340 ns per query (see [What monitoring costs](../observability/query-profiler.md#what-monitoring-costs)).
 {% endhint %}
 
 ---

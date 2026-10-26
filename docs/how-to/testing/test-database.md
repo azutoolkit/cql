@@ -42,6 +42,9 @@ end
 
 {% code title="src/db.cr" %}
 ```crystal
+require "cql"
+require "./config/database"
+
 AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::Postgres, uri: Config.database_url) do
   table :users do
     primary :id, Int64, auto_increment: true
@@ -158,7 +161,7 @@ about them:
 
 ```crystal
 # ❌ create! runs no callbacks: Post's before_save :generate_slug never ran
-Factory.post.slug.should eq("hello-world")       # slug is ""
+Factory.post(title: "Hello World").slug.should eq("hello-world")  # fails: slug is ""
 
 # ✅ save runs them
 post = Post.new("Hello World", "Content")

@@ -1,6 +1,8 @@
-# Use Window Functions
+---
+description: "Add ROW_NUMBER, running totals, LAG and other window functions to a CQL::Query (AppDB.query) with window; QueryBuilder and model classes do not have it."
+---
 
-Add `ROW_NUMBER`, running totals, `LAG` and other window functions to a `CQL::Query` (`AppDB.query`) with `window`. `QueryBuilder` and model classes do not have it.
+# Use Window Functions
 
 The examples use a `staff(id, dept, name, salary)` table.
 
@@ -127,4 +129,4 @@ Aliases are checked as identifiers (`as: :"x; DROP TABLE staff"` raises `Invalid
 - [Use CTEs and Recursive CTEs](ctes.md)
 - [Build Complex Queries](../querying/complex-queries.md)
 - [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
-- [The query DSL: before and after](../../explanation/dsl-before-after.md)
+- [Write Typed Queries](../querying/typed-where-dsl.md)

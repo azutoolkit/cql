@@ -1,6 +1,8 @@
-# Use CTEs and Recursive CTEs
+---
+description: "Build WITH queries, recursive CTEs and subqueries in FROM on CQL::Query (AppDB.query); QueryBuilder and model classes do not have them."
+---
 
-Build `WITH` queries, recursive CTEs and subqueries in `FROM` on `CQL::Query` (`AppDB.query`). `QueryBuilder` and model classes do not have them.
+# Use CTEs and Recursive CTEs
 
 The examples use `orders(customer_id, total)`, `customers(id, name)`, `users(name, age)` and `nodes(id, parent_id, name)`.
 
@@ -126,4 +128,4 @@ In a set operation, an operand that declares CTEs is grouped: `UNION (WITH t AS 
 - [Combine Queries with Set Operations](set-operations.md)
 - [Build Complex Queries](../querying/complex-queries.md)
 - [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
-- [The query DSL: before and after](../../explanation/dsl-before-after.md)
+- [Write Typed Queries](../querying/typed-where-dsl.md)

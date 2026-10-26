@@ -1,6 +1,8 @@
-# Avoid N+1 Queries
+---
+description: "Load associations and counts for a whole collection in a fixed number of queries, not one query per record."
+---
 
-Load associations and counts for a whole collection in a fixed number of queries, not one query per record.
+# Avoid N+1 Queries
 
 ## Spot the Pattern
 
@@ -69,10 +71,11 @@ counts = AppDB.query
 posts.each { |post| puts counts[post.id!]? || 0 }
 ```
 
-For a count read on every page, keep it in a column:
+For a count read on every page, keep it in a column. Add it with raw DDL so it gets its default, as
+[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) explains:
 
 ```crystal
-# Migration: add_column ignores default:, so add the column with raw DDL, then declare it
+# Migration: add the column, then declare it
 schema.exec "ALTER TABLE posts ADD COLUMN comments_total INTEGER DEFAULT 0 NOT NULL"
 schema.posts.integer :comments_total, default: 0  # declares only; runs no SQL
 
@@ -99,16 +102,35 @@ CQL::Telemetry.log_queries  # debug lines on the "cql.telemetry" log source
 CQL::Performance.enable_development_mode!  # the N+1 detector
 CQL::Performance.metrics.issues_by_type(:n_plus_one).each { |issue| puts issue.message }
 # N+1 pattern detected: Query repeated 10 times
-
-# Count the statements a block runs before and after the fix
-count = 0
-CQL::Telemetry.subscribe("count") { count += 1 }
-Post.preload(:user).all.each { |post| post.user.try(&.name) }
-CQL::Telemetry.unsubscribe("count")
-count  # => 2
 ```
 
 The detector, its window and its severities are in [Profile Queries and Detect N+1](../observability/query-profiler.md).
+
+Once fixed, guard the query count in a spec (`Factory` is from [Set Up Test Databases and Factories](../testing/test-database.md#build-records-with-factories)):
+
+{% code title="spec/n_plus_one_spec.cr" %}
+```crystal
+require "./spec_helper"
+
+def count_queries(&) : Int32
+  count = 0
+  CQL::Telemetry.subscribe("query_count") { count += 1 }
+  yield
+  count
+ensure
+  CQL::Telemetry.unsubscribe("query_count")
+end
+
+describe "Post list" do
+  it "loads posts and their authors in two queries" do
+    3.times { Factory.post }
+    count_queries { Post.preload(:user).all.each(&.user) }.should eq(2)
+  end
+end
+```
+{% endcode %}
+
+Without `preload(:user)` the block runs 4 queries (the posts, then one per post) and the example fails.
 
 ## See Also
 

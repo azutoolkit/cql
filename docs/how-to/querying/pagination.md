@@ -1,6 +1,8 @@
-# Paginate Results
+---
+description: "Split results into numbered pages with limit and offset, or with the built-in page helpers."
+---
 
-Split results into numbered pages with `limit` and `offset`, or with the built-in `page` helpers.
+# Paginate Results
 
 ## Page a Query
 
@@ -66,16 +68,9 @@ list_posts({"page" => "2", "per_page" => "500"})[:meta]
 # => {page: 2, per_page: 100, total: 20, total_pages: 1}
 ```
 
-## Switch to a Cursor for Deep Pages
-
-`OFFSET n` makes the database read and skip `n` rows on every page. For large tables or feeds that change while users page, filter past the last row seen instead:
-
-```crystal
-Post.where(published: true).where { id < last_seen_id }.order(id: :desc).limit(20).all
-# ... WHERE (posts.published = ?) AND (posts.id < ?) ORDER BY posts.id DESC LIMIT ?
-```
-
-See [Use Cursor Pagination](cursor-pagination.md) for `has_more`, compound keys and the built-in cursor helpers.
+{% hint style="success" %}
+`OFFSET n` makes the database read and skip `n` rows on every page. For deep pages, or feeds that change while users page, use [cursor pagination](cursor-pagination.md) instead.
+{% endhint %}
 
 ## See Also
 
