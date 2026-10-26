@@ -89,6 +89,13 @@ workload("production monitor") do
   CQL::Performance.enable_production_mode!
 end
 
+# Like the async subscriber row, the consumer rarely runs, so this mostly measures the push and drop path.
+workload("async monitor") do
+  config = CQL::Performance.production_config
+  config.monitoring.async = true
+  CQL::Performance.monitor = CQL::Performance::Monitor.new(config)
+end
+
 # Lines below the log level are never formatted, so this isolates the monitor's own bookkeeping. Failed statements
 # and those over `very_slow_threshold` would still be logged at error, with their bound values.
 workload("sql logging, filtered out") do

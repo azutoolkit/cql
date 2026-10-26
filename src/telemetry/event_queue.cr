@@ -46,10 +46,25 @@ module CQL::Telemetry
 
     # Enqueues *event* without waiting or allocating; false when closed or full (counted in `dropped`).
     def push(event : T) : Bool
+      push { event }
+    end
+
+    # Like `push(event)`, but builds the event only once a slot is free, so a dropped event costs nothing.
+    # A block that raises, breaks or returns gives its slot back.
+    def push(& : -> T) : Bool
       return false if @channel.closed?
-      return enqueue(event, @event_slots) if @event_slots.take?
-      @dropped.add(1)
-      false
+      unless @event_slots.take?
+        @dropped.add(1)
+        return false
+      end
+      built = false # ameba:disable Lint/UselessAssign (read by the ensure when the block raises, breaks or returns)
+      begin
+        event = yield
+        built = true
+      ensure
+        @event_slots.release unless built
+      end
+      enqueue(event, @event_slots)
     end
 
     def dropped : Int64

@@ -75,7 +75,7 @@ module CQL::Performance
     # Records a statement `CQL::Execution.run` has already timed, on the async queue's fiber when monitoring is async.
     def record(event : CQL::Telemetry::QueryEvent, params : Array(DB::Any)) : Nil
       if queue = @queue
-        queue.push({event, event.params || (params.empty? ? EMPTY_PARAMS : params.map(&.dup))})
+        queue.push { {event, event.params || (params.empty? ? EMPTY_PARAMS : params.map(&.dup))} }
       else
         record_event(event, params)
       end

@@ -42,6 +42,38 @@ describe CQL::Telemetry::EventQueue do
     queue.dropped.should eq(1)
   end
 
+  describe "#push with a block" do
+    it "does not build the item for a closed queue" do
+      queue, built = CQL::Telemetry::EventQueue(Int32).new(1) { |_| }, false
+      queue.close
+      queue.push { built = true; 1 }.should be_false
+      built.should be_false
+    end
+
+    it "does not build the item for a full queue, and counts the drop" do
+      queue, built = stuck_queue(1), false
+      queue.push(2).should be_true
+      within { queue.push { built = true; 3 } }.should be_false
+      {built, queue.dropped}.should eq({false, 1})
+    end
+
+    it "builds the item once for a queue with room, and the handler receives it" do
+      seen, builds = [] of Int32, 0
+      queue = CQL::Telemetry::EventQueue(Int32).new(8) { |event| seen << event }
+      queue.push { builds += 1; 7 }.should be_true
+      within { queue.flush }.should be_true
+      {builds, seen}.should eq({1, [7]})
+    end
+
+    it "gives the slot back when the block raises" do
+      queue = CQL::Telemetry::EventQueue(Int32).new(2) { |_| }
+      2.times { expect_raises(Exception, "boom") { queue.push { raise "boom" } } }
+      queue.push(1).should be_true
+      queue.dropped.should eq(0)
+      queue.close
+    end
+  end
+
   it "logs a handler that raises and carries on with the next event" do
     seen = [] of Int32
     queue = CQL::Telemetry::EventQueue(Int32).new(8) { |event| event == 1 ? raise("boom") : seen << event }

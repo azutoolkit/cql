@@ -10,6 +10,27 @@ def bytes_per_statement : Float64
   end
 end
 
+# Holds the first recorded statement until its gate closes, so the async queue behind it stays full.
+class BlockedProfiler < CQL::Performance::QueryProfiler
+  def initialize(@gate : Channel(Nil))
+    super()
+  end
+
+  def record_query(sql : String, params : Array(DB::Any), execution_time : Time::Span, rows_affected : Int64? = nil,
+                   error : String? = nil, normalized_sql : String? = nil) : Void
+    @gate.receive?
+  end
+end
+
+# Profiling, detection and logging stay off, so the consumer allocates nothing either.
+private def async_config(capacity : Int32) : CQL::Performance::Config
+  config = CQL::Performance.minimal_config
+  config.monitoring.enabled = true
+  config.monitoring.async = true
+  config.monitoring.async_queue_capacity = capacity
+  config
+end
+
 describe "instrumentation allocation budget" do
   before_each { CQL::Telemetry.reset! }
   after_each { CQL::Telemetry.reset! }
@@ -38,6 +59,25 @@ describe "instrumentation allocation budget" do
   ensure
     CQL::Telemetry.reset!
     CQL::Telemetry.async_queue_capacity = 4096
+  end
+
+  it "allocates nothing per statement with an async monitor and no bound values" do
+    monitor = CQL::Performance::Monitor.new(async_config(150_000))
+    with_global_monitor(monitor) { bytes_per_statement.should be < 1.0 }
+  ensure
+    monitor.try(&.close)
+  end
+
+  it "allocates nothing for a statement the full async queue drops, bound values included" do
+    gate = Channel(Nil).new
+    monitor = CQL::Performance::Monitor.new(async_config(1), profiler: BlockedProfiler.new(gate))
+    params = [1, "x"] of DB::Any
+    event = CQL::Telemetry.query_event(CQL::Adapter::SQLite, :select, "SELECT 1", params, 1.millisecond, nil, nil)
+    bytes_per_call(100_000) { monitor.record(event, params) }.should be < 1.0
+    monitor.counters.dropped_events.should be > 99_000
+  ensure
+    gate.try(&.close)
+    monitor.try(&.close)
   end
 
   it "allocates nothing beginning a transaction without transaction subscribers" do
