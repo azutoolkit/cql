@@ -44,6 +44,15 @@ module Expression
         end
       end
 
+      it "passes the URI's sslmode in PGSSLMODE and ignores its other query parameters" do
+        FakeExecutable.with("pg_dump", %(printf '%s\n' "$@"; echo "PGSSLMODE=$PGSSLMODE")) do
+          PostgresDialect.new.structure_dump(URI.parse("postgres://user@db.example/mydb?sslmode=verify-full&pool_size=5")).should eq([
+            "--no-comments", "--schema-only", "--username=user", "--dbname=mydb", "--host=db.example",
+            "PGSSLMODE=verify-full",
+          ].join("\n") + "\n")
+        end
+      end
+
       it "passes an IPv6 host without brackets and leaves out what the URI does not name" do
         FakeExecutable.with("pg_dump", %(printf '%s\n' "$@")) do
           PostgresDialect.new.structure_dump(URI.parse("postgres://user@[::1]/mydb")).should end_with("--host=::1\n")

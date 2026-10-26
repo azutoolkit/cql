@@ -101,8 +101,8 @@ File.write("db/structure.sql", ddl)
 
 | Adapter | Runs |
 | :--- | :--- |
-| PostgreSQL | `pg_dump --no-comments --schema-only` with the URI's user, database, host and port; the password goes in `PGPASSWORD` |
-| MySQL | `mysqldump --no-data --skip-comments --compact` with the URI's user, password, host, port and database |
+| PostgreSQL | `pg_dump --no-comments --schema-only` with the URI's user, database, host and port; the password goes in `PGPASSWORD` and the `sslmode` query parameter in `PGSSLMODE`. Other query parameters are ignored |
+| MySQL | `mysqldump --no-data --skip-comments --compact` with the URI's user, host, port and database, plus `--protocol=tcp` when the URI has a port. The password goes in a temporary option file that only its owner can read (`--defaults-extra-file`), deleted when `mysqldump` exits. A database name starting with `-` raises `CQL::Error` |
 | SQLite | nothing: returns `""` |
 | CockroachDB | nothing: raises `CQL::DialectError` (use `SHOW CREATE ALL TABLES`) |
 

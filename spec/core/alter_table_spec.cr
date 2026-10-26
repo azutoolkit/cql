@@ -105,6 +105,65 @@ describe "CQL::AlterTable" do
       alter_sql(postgres_widgets, CQL::Adapter::Postgres) { add_column :count, Int32, size: 4 }
         .should eq("ALTER TABLE widgets ADD COLUMN count INTEGER;\n")
     end
+
+    it "restores the declaration when a later statement of the alter fails" do
+      with_widgets do |schema|
+        schema.exec("CREATE INDEX idx_widgets_status ON widgets (name)")
+
+        expect_raises(Exception, /idx_widgets_status/) do
+          schema.alter :widgets do
+            add_column :status, String, null: true, index: true
+          end
+        end
+
+        query_all_strings(schema, "SELECT name FROM pragma_table_info('widgets')").should eq(["id", "name"])
+        schema.widgets.columns.keys.should eq([:id, :name])
+      end
+    end
+
+    it "adds a column whose default holds a statement separator" do
+      with_widgets do |schema|
+        schema.alter :widgets do
+          add_column :note, String, null: false, default: "a;\nb"
+        end
+
+        schema.exec_query(&.query_one("SELECT note FROM widgets", as: String)).should eq("a;\nb")
+      end
+    end
+  end
+
+  describe "string defaults" do
+    it "keeps a default that tries to close its MySQL literal inside that literal" do
+      alter_sql(mysql_widgets, CQL::Adapter::MySql) { add_column :status, String, default: "\\';\nDROP TABLE users;\n--" }
+        .should eq("ALTER TABLE widgets ADD COLUMN status VARCHAR(255) DEFAULT '\\\\'';\nDROP TABLE users;\n--';\n")
+    end
+
+    it "escapes backslashes and NUL in a MySQL default, where they are escape characters" do
+      alter_sql(mysql_widgets, CQL::Adapter::MySql) { add_column :path, String, default: "C:\\" }
+        .should eq("ALTER TABLE widgets ADD COLUMN path VARCHAR(255) DEFAULT 'C:\\\\';\n")
+      alter_sql(mysql_widgets, CQL::Adapter::MySql) { add_column :path, String, default: "a\0b" }
+        .should eq("ALTER TABLE widgets ADD COLUMN path VARCHAR(255) DEFAULT 'a\\0b';\n")
+      mysql_widgets.schema.table(:accounts) do
+        primary :id, Int32
+        column :path, String, default: "C:\\"
+      end.create_sql.should contain("path VARCHAR(255) DEFAULT 'C:\\\\' NOT NULL")
+    end
+
+    it "leaves backslashes alone where they are not escape characters" do
+      alter_sql(postgres_widgets, CQL::Adapter::Postgres) { add_column :path, String, default: "C:\\ it's" }
+        .should eq("ALTER TABLE widgets ADD COLUMN path VARCHAR DEFAULT 'C:\\ it''s';\n")
+    end
+
+    it "keeps each statement whole, whatever its default holds" do
+      table = mysql_widgets
+      alter = CQL::AlterTable.new(table, table.schema)
+      alter.add_column(:status, String, default: "\\';\nDROP TABLE users;\n--", index: true)
+
+      alter.statements(Expression::Generator.new(CQL::Adapter::MySql)).should eq([
+        "ALTER TABLE widgets ADD COLUMN status VARCHAR(255) DEFAULT '\\\\'';\nDROP TABLE users;\n--'",
+        "CREATE INDEX idx_widgets_status ON widgets (status)",
+      ])
+    end
   end
 
   describe "column size" do

@@ -42,6 +42,7 @@ end
 | `Specified version column '<c>' not found in table '<t>'`, `No version column found in table '<t>' ...`, `Current version value is required for optimistic locking` | `Update#with_optimistic_lock` | |
 | `Table name cannot be empty` / `cannot contain spaces` / `cannot start with a number` | `schema.table`, `CQL::Table.new` | `CQL::Table.new(:"1users", AppDB)` |
 | `<tool> failed: <error output>`, `<tool> could not be run: <cause>` | `dialect.structure_dump` on PostgreSQL and MySQL when `pg_dump` / `mysqldump` fails or is not installed | `"pg_dump failed: pg_dump: error: connection to server ... failed"` |
+| `mysqldump would read the database name "<name>" as an option` | `dialect.structure_dump` on MySQL when the URI's database name starts with `-` | `mysqldump would read the database name "--all-databases" as an option` |
 
 ### Dialect errors
 

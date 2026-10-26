@@ -57,17 +57,38 @@ module Expression
       "?"
     end
 
+    # The password goes in an option file that only its owner can read and that exists only while
+    # mysqldump runs, never on the command line, which other users of the machine can see.
     def structure_dump(uri : URI) : String
-      args = [
-        "--no-data",
-        "--skip-comments",
-        "--compact",
-        "--user=#{uri.user}",
-        "--password=#{uri.password}",
-        *server_options(uri),
-        uri.path[1..-1],
-      ]
+      database = uri.path[1..-1]
+      raise CQL::Error.new("mysqldump would read the database name #{database.inspect} as an option") if database.starts_with?('-')
+
+      if password = uri.password.presence
+        option_file = File.tempfile("cql-mysqldump", ".cnf") # created 0600
+        write_password(option_file, password)
+      end
+      args = [] of String
+      args << "--defaults-extra-file=#{option_file.path}" if option_file # read only as the first option
+      args.concat(["--no-data", "--skip-comments", "--compact", "--user=#{uri.user}"]).concat(server_options(uri))
+      args << "--protocol=tcp" if uri.port # over the localhost socket, mysqldump ignores --port
+      args << database
       run_dump("mysqldump", args)
+    rescue ex : File::Error # the option file could not be written
+      raise CQL::Error.new("mysqldump could not be run: #{ex.message}")
+    ensure
+      option_file.try { |file| File.delete?(file.path) }
+    end
+
+    # Writes *password* to *file* as a `[client]` option file, then closes it.
+    private def write_password(file : File, password : String) : Nil
+      file << "[client]\npassword=" << option_file_value(password) << '\n'
+    ensure
+      file.close
+    end
+
+    # *value* double-quoted, with the escapes MySQL option files read.
+    private def option_file_value(value : String) : String
+      %("#{value.gsub({'\\' => "\\\\", '"' => "\\\"", '\n' => "\\n", '\r' => "\\r", '\t' => "\\t"})}")
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
@@ -129,7 +150,7 @@ module Expression
       timestamp_column : Bool,
     ) : String
       # For timestamp columns, use the database function directly (without quoting)
-      if timestamp_column && default_value.is_a?(String) && default_value.starts_with?("NOW(")
+      if timestamp_column && default_value.is_a?(String) && default_value.matches?(/\ANOW\(\d?\)\z/)
         build_sql(128) do |str|
           str << column_name << " " << column_type
           str << " DEFAULT " << default_value
@@ -230,6 +251,12 @@ module Expression
 
     def format_delete_returning(columns : Array(String)) : String
       ""
+    end
+
+    # MySQL also reads backslash escapes in a string literal, so a backslash is doubled and NUL written as `\0`.
+    # Under `NO_BACKSLASH_ESCAPES` the stored default keeps both backslashes.
+    protected def quote_string_literal(value : String) : String
+      "'#{value.gsub({'\\' => "\\\\", '\'' => "''", '\0' => "\\0"})}'"
     end
 
     # Override time formatting for MySQL-specific format (with milliseconds)

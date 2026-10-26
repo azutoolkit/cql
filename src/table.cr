@@ -52,6 +52,23 @@ module CQL
       @columns_revision += 1
     end
 
+    # :nodoc:
+    # Captures the name and columns that `Schema#alter` may change; the returned proc puts them back.
+    def declaration_snapshot : ->
+      name, columns = @table_name, @columns.dup
+      -> { restore_declaration(name, columns) }
+    end
+
+    private def restore_declaration(name : Symbol, columns : Hash(Symbol, BaseColumn)) : Nil
+      unless name == @table_name
+        @schema.tables.delete(@table_name) if @schema.tables[@table_name]?.try(&.same?(self))
+        @schema.tables[name] = self
+        @table_name = name
+      end
+      @columns = columns
+      columns_changed!
+    end
+
     @primary : BaseColumn = PrimaryKey(Int32).new(:id)
     getter as_name : String?
     getter foreign_keys : Array(ForeignKey) = [] of ForeignKey

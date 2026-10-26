@@ -100,7 +100,7 @@ end
 | Option | Type | Default | SQL |
 | :--- | :--- | :--- | :--- |
 | `null` | `Bool` | `false` | `false` adds `NOT NULL` |
-| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings quoted, `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere |
+| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings single-quoted with `'` doubled (on MySQL also `\` doubled and NUL as `\0`), `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere. On `created_at` and `updated_at`, a whole current-time call (`datetime('now')` on SQLite, `NOW(3)` on MySQL, `CURRENT_TIMESTAMP` on PostgreSQL) is written unquoted, and any other string is quoted |
 | `unique` | `Bool` | `false` | `UNIQUE`; with `index: true` the index is unique too |
 | `index` | `Bool` | `false` | Declares `idx_<t>_<column>` (e.g. `idx_posts_slug`), created by `create!` after the table |
 | `as` | `String?` | `nil` | Alias used when the column is selected |
@@ -177,7 +177,7 @@ AppDB.users.create_sql
 
 ## `schema.alter`
 
-Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`.
+Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`. On SQLite and PostgreSQL, a rollback of that transaction or of an enclosing `schema.transaction` also restores the table's declared name and columns; a transaction you opened yourself and passed in with `schema.transaction(tx)` does not. MySQL and CockroachDB, whose DDL is not transactional, restore nothing.
 
 | Method | Defaults | Notes |
 | :--- | :--- | :--- |

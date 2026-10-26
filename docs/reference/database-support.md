@@ -40,7 +40,7 @@ Only SQLite runs live in CQL's specs; the other dialects are checked through gen
 | `supports_returning?` (`create!` reads the row from its INSERT) | `false` | `true` | `false` | `true` |
 | `supports_transactional_ddl?` (`ddl_transaction`, used by `alter`, `build`, `create!`/`drop!`/`truncate!` and the migrator, rolls DDL back) | `true` | `true` | `false` | `false` |
 | `current_timestamp` | `datetime('now')` | `CURRENT_TIMESTAMP` | `NOW(3)` | `CURRENT_TIMESTAMP` |
-| `structure_dump(uri)` | `""` | the DDL `pg_dump` prints; `CQL::Error` when it fails | the DDL `mysqldump` prints; `CQL::Error` when it fails | raises |
+| `structure_dump(uri)` | `""` | the DDL `pg_dump` prints; `CQL::Error` when it fails. Password in `PGPASSWORD`, `sslmode` in `PGSSLMODE`; other query parameters ignored | the DDL `mysqldump` prints; `CQL::Error` when it fails. Password in a 0600 option file, never an argument; `--protocol=tcp` when the URI has a port | raises |
 | Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |
 
 ## Queries
