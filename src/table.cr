@@ -755,7 +755,6 @@ module CQL
     def truncate!
       Log.debug { "Truncating table #{table_name}" }
       schema.exec "#{truncate_sql};"
-      schema.tables.delete(table_name)
     end
 
     # Gets table expression for Sql query generation

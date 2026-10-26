@@ -216,6 +216,7 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 - `QueryBuilder#having` builds a `HAVING` clause (it called `where`); `reverse_order` and `unscope` work; aggregates, `ids` and `reorder` no longer alter the builder they are called on.
 - `mysql://` URIs are accepted by `Schema` (an empty host is rejected).
 - `QueryBuilder#pick` no longer alters the builder it is called on; `Model.having` accepts implicit-self blocks.
+- `Table#truncate!` only empties the table. Before, it also removed the table from `schema.tables`, so a later `insert.into`, `update`, `delete.from` or model call on that table raised `KeyError` until the table was declared again.
 
 - Connection pool configuration consistency
 - Transaction rollback handling

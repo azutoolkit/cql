@@ -300,6 +300,26 @@ describe CQL::Table do
       count_query.first!(as: Int32).should eq 0
     end
 
+    it "keeps the table usable after truncating it" do
+      table = TableDB.table(:truncated_customers) do
+        primary :id, Int32
+        column :name, String
+      end
+      table.drop! rescue nil
+
+      begin
+        table.create!
+        TableDB.insert.into(:truncated_customers).values(name: "John").commit
+        table.truncate!
+        TableDB.insert.into(:truncated_customers).values(name: "Jane").commit
+
+        TableDB.tables[:truncated_customers].should be(table)
+        TableDB.query.from(:truncated_customers).count.first!(as: Int64).should eq 1
+      ensure
+        table.drop!
+      end
+    end
+
     it "drops table" do
       table = TableDB.table(:customers) do
         primary :id, Int32
