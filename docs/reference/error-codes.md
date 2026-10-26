@@ -25,7 +25,7 @@ end
 | **`CQL::RecordNotSaved`** | `save!` when a callback halted and there are no validation errors | `"Failed to save the record"` |
 | **`CQL::OptimisticLockError`** | `update!` on a model with `optimistic_locking`, and `Update#with_optimistic_lock(...).commit`, when no row matched the version | `"Record has been modified by another process"`; `model_class`, `id`, `expected_version`, `actual_version` (CQL leaves them `nil`) |
 | **`CQL::DialectError`** | SQL generation for a feature the adapter lacks; see [Dialect errors](#dialect-errors) | `"SQLite does not support DISTINCT ON\n\nWorkaround:\n..."`; `dialect`, `feature`, `workaround` |
-| **`CQL::SQLiteUnsupportedFeatureError`** < `DialectError` | SQLite: `back(...)` on insert, update or delete; `change_column`; `drop_foreign_key` | `"SQLite does not support ALTER COLUMN syntax"` |
+| **`CQL::SQLiteUnsupportedFeatureError`** < `DialectError` | SQLite: `back(...)` on insert, update or delete; `change_column`; `foreign_key` and `drop_foreign_key` in `schema.alter` | `"SQLite does not support ALTER COLUMN syntax"` |
 | **`CQL::MySqlUnsupportedFeatureError`** < `DialectError` | MySQL: a table with `check_constraint` | `"MySQL does not support CHECK constraints (...)"` |
 
 `CQL::Error` messages raised directly:
@@ -41,6 +41,7 @@ end
 | `Record must be persisted for optimistic locking`, `Version value missing for optimistic locking` | `update!` on an `optimistic_locking` model | |
 | `Specified version column '<c>' not found in table '<t>'`, `No version column found in table '<t>' ...`, `Current version value is required for optimistic locking` | `Update#with_optimistic_lock` | |
 | `Table name cannot be empty` / `cannot contain spaces` / `cannot start with a number` | `schema.table`, `CQL::Table.new` | `CQL::Table.new(:"1users", AppDB)` |
+| `<tool> failed: <error output>`, `<tool> could not be run: <cause>` | `dialect.structure_dump` on PostgreSQL and MySQL when `pg_dump` / `mysqldump` fails or is not installed | `"pg_dump failed: pg_dump: error: connection to server ... failed"` |
 
 ### Dialect errors
 
@@ -56,8 +57,7 @@ end
 | `dialect.structure_dump` | CockroachDB | `DialectError` |
 | `schema.alter`, `schema.build`, a table's `create!` / `drop!` / `truncate!`, `Migrator.new`, `up`, `down`, `pending_migrations` inside an open transaction | MySQL, CockroachDB | `DialectError` (`"MySQL does not support schema changes inside a transaction"`), raised before any DDL runs |
 | `back(...)` on insert, update, delete | SQLite | `SQLiteUnsupportedFeatureError` |
-| `change_column`, `drop_foreign_key` in `schema.alter` | SQLite | `SQLiteUnsupportedFeatureError` |
-| `foreign_key` in `schema.alter` | SQLite | `DB::Error` (`SQLite does not support adding foreign keys to an existing table ...`) |
+| `change_column`, `foreign_key`, `drop_foreign_key` in `schema.alter` | SQLite | `SQLiteUnsupportedFeatureError` |
 | `check_constraint` | MySQL | `MySqlUnsupportedFeatureError` |
 
 ## Active Record errors
@@ -77,7 +77,7 @@ end
 | :--- | :--- | :--- |
 | **`CQL::Schema::Error`** | `schema.alter :name` for a table not in the schema | `"Table 'users' not found"` |
 | **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL URI with no host part, a MySQL or CockroachDB URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
-| **`CQL::Migrator::Error`** | `update_schema_file` (run by `auto_sync`, `bootstrap_schema`, `up`, `down`) when the dump fails | `"Schema update failed: <cause>"` |
+| **`CQL::Migrator::Error`** | `update_schema_file` (run by `up` and `down` with `auto_sync`, and by `bootstrap_schema`) when the dump fails; `up_to` / `down_to` with a version no migration has | `"Schema update failed: <cause>"`, `"No migration with version 42"` |
 | **`CQL::SchemaDump::Error`** | `SchemaDump` for an unknown adapter or a failed connection; reaches you wrapped in `Migrator::Error` | `"Failed to connect to database: ..."` |
 | `KeyError` | `schema.tables[:name]` for an unknown table | `"Missing hash key: :name"` |
 
@@ -132,7 +132,6 @@ All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain cre
 | `Exception` | `QueryBuilder#last!` / `Model.last!` with no matching row | `"No records found"` |
 | `DB::ConnectionRefused` | Opening a connection fails (crystal-db's first connect; the native driver maps transport and TLS failures to it) | |
 | `DB::PoolTimeout`, `DB::PoolRetryAttemptsExceeded` | A saturated pool; a failed lazy reconnect | |
-| `DB::Error` | `foreign_key` in `schema.alter` on SQLite | |
 | `URI::Error` | `CQL.build_schema` with a `db` URL `URI.parse` rejects, such as `sqlite3://:memory:` | `"Invalid URI: bad port at character 11"` |
 | Driver errors (`SQLite3::Exception`, MySQL and `pg` errors, `CQL::Postgres::ServerError`) | A statement the database rejects | |
 

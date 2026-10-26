@@ -23,7 +23,7 @@ shards install --ignore-crystal-version
 | Format | `crystal tool format --check src spec` | CI checks `./src`; keep `spec` formatted too. `crystal tool format src spec` applies it. |
 | Lint | `crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec` | What CI runs. To keep a binary, `crystal build lib/ameba/bin/ameba.cr -o bin/ameba`, then run `bin/ameba`. |
 
-Without a MySQL client, one spec errors because `mysqldump` is not installed (`spec/integration/dialects/mysql_dialect_spec.cr`). That is an environment issue, not a regression.
+The `structure_dump` specs put a fake `pg_dump` / `mysqldump` on `PATH`, so the suite needs neither tool installed.
 
 ## What CI Runs
 

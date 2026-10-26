@@ -18,13 +18,12 @@ module Expression
 
     def structure_dump(uri : URI) : String
       args = [
-        "--no-data",
         "--no-comments",
         "--schema-only",
         "--username=#{uri.user}",
         "--dbname=#{uri.path[1..-1]}",
-      ]
-      Process.new("pg_dump", args: args, output: Process::Redirect::Pipe).output.to_s
+      ] + server_options(uri)
+      run_dump("pg_dump", args, env: uri.password.try { |password| {"PGPASSWORD" => password} })
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
@@ -95,21 +94,6 @@ module Expression
         end
       else
         build_column_definition(column_name, column_type, default_value, nullable, unique)
-      end
-    end
-
-    def add_column(
-      column_name : String,
-      column_type : String,
-      primary_key : Bool,
-      nullable : Bool,
-      unique : Bool,
-    ) : String
-      build_sql(64) do |str|
-        str << "ADD COLUMN " << column_name << " " << column_type
-        str << " PRIMARY KEY" if primary_key
-        str << " NOT NULL" unless nullable
-        str << " UNIQUE" if unique
       end
     end
 

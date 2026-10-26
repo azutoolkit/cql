@@ -21,6 +21,9 @@ dumper = AppDB.schema_dumper                                 # same as CQL::Sche
 text = dumper.generate_schema_content(:AppSchema, :app_schema) # the file's text, nothing written
 dumper.dump_to_file                                          # ./src/schemas/schema.cr, :AppSchema, :app_schema
 dumper.close
+
+# Opens its own connections from AppDB's URI and closes them after the block
+text = CQL::SchemaDump.open(AppDB, &.generate_schema_content(:AppSchema, :app_schema))
 ```
 
 {% code title="src/schemas/myapp_schema.cr" %}
@@ -71,50 +74,40 @@ config = CQL::MigratorConfig.new(
   schema_symbol: :app_schema,
   auto_sync: true
 )
-migrator = AppDB.migrator(config)  # writes the file now
-migrator.up                        # and again after every up and down
+migrator = AppDB.migrator(config)  # writes nothing yet
+migrator.up                        # writes the file after every up and down
 migrator.update_schema_file        # on demand; bootstrap_schema does the same
 ```
 
 ## Check the File for Drift
 
 ```crystal
-# ❌ auto_sync: true rewrites the file when the migrator is built, so a stale file passes
-AppDB.migrator(config).verify_schema_consistency  # => true
+abort "src/schemas/app_schema.cr is out of date" unless migrator.verify_schema_consistency
 
-# ✅ Check with a migrator that leaves the file alone
-check = AppDB.migrator(CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  auto_sync: false
-))
-abort "src/schemas/app_schema.cr is out of date" unless check.verify_schema_consistency
+CQL.verify_schema(AppDB)                 # => false for a stale file, which is left as it is
+CQL.verify_schema(AppDB, auto_fix: true) # rewrites a stale file (with auto_sync on) and returns true
 ```
 
 `verify_schema_consistency` regenerates the text and compares it exactly, so hand edits count as drift. It returns
-`false` when the file is missing, differs, or the database cannot be read. `CQL.verify_schema(AppDB)` builds its
-migrator from `CQL.configure`, so it only detects drift with `auto_sync = false`, and then `auto_fix: true` has
-nothing to fix with.
+`false` when the file is missing, differs, or the database cannot be read. `CQL.verify_schema` builds its migrator
+from `CQL.configure`.
 
 ## Dump Raw DDL
 
-{% tabs %}
-{% tab title="PostgreSQL" %}
-```bash
-pg_dump --schema-only --no-comments --username=app app_db > db/structure.sql
+```crystal
+ddl = CQL::Adapter::Postgres.dialect.structure_dump(URI.parse("postgres://app:secret@db.internal:5432/app_db"))
+File.write("db/structure.sql", ddl)
 ```
-{% endtab %}
 
-{% tab title="MySQL" %}
-```bash
-mysqldump --no-data --skip-comments --compact --user=app -p app_db > db/structure.sql
-```
-{% endtab %}
-{% endtabs %}
+| Adapter | Runs |
+| :--- | :--- |
+| PostgreSQL | `pg_dump --no-comments --schema-only` with the URI's user, database, host and port; the password goes in `PGPASSWORD` |
+| MySQL | `mysqldump --no-data --skip-comments --compact` with the URI's user, password, host, port and database |
+| SQLite | nothing: returns `""` |
+| CockroachDB | nothing: raises `CQL::DialectError` (use `SHOW CREATE ALL TABLES`) |
 
-Run the tools yourself. The dialects' `structure_dump(uri)` returns `""` on SQLite, raises `CQL::DialectError` on
-CockroachDB, and on PostgreSQL and MySQL currently returns the pipe's description (`#<IO::FileDescriptor:...>`),
-not the DDL.
+`structure_dump` waits for the tool and returns what it printed. It raises `CQL::Error` with the tool's error output
+when the tool fails, and when it is not installed.
 
 ## Validate Models Against the Schema
 

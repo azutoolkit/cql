@@ -99,6 +99,12 @@ module CQL
   abstract class BaseMigration
     @@version : Int64 = 0 # Initialize with a default value
 
+    getter schema : CQL::Schema
+
+    # `Migrator` calls `new(schema)` on every registered class, which must resolve even when no
+    # migration class exists.
+    def initialize(@schema : CQL::Schema); end
+
     abstract def up
     abstract def down
 
@@ -113,13 +119,12 @@ module CQL
 
   abstract class Migration(V) < BaseMigration
     macro inherited
-      getter schema : CQL::Schema
-
       CQL::Migrator.migrations << {{@type}}
       def self.version : Int64
         V.to_i64
       end
 
+      # Kept per class so `new(schema)` survives a migration that adds its own `initialize` overload.
       def initialize(@schema : CQL::Schema); end
     end
   end
@@ -182,59 +187,31 @@ module CQL
     getter repo : Repository(MigrationRecord, Int32)
 
     def initialize(@schema : Schema, @config = MigratorConfig.new)
-      schema.ddl_transaction do
-        bootstrap_schema if @config.auto_sync?
-        ensure_schema_migrations_table
-      end
+      schema.ddl_transaction { ensure_schema_migrations_table }
       @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
 
-    # Applies the pending migrations.
-    #  - **@param** steps [Int32] the number of migrations to apply (default: all)
+    # Applies the oldest pending migrations, in version order.
+    #  - **@param** steps [Int32] the number of pending migrations to apply (default: all)
     # **Example** Applying migrations
     # ```
     # migrator.up
     # ```
     def up(steps : Int32 = Migrator.migrations.size)
-      schema.ddl_transaction do
-        sorted_migrations[0, steps].each do |migration_class|
-          unless migration_applied?(migration_class.version)
-            migration_class.new(schema).up
-            record_migration(migration_class)
-          end
-        end
-      end
-
-      # Update schema file after migrations
-      update_schema_file if config.auto_sync?
-      print_applied_migrations
+      migrate_up(pending_migrations.first(steps))
     end
 
-    # Rolls back the last migration.
-    # - **@param** steps [Int32] the number of migrations to roll back (default: 1)
+    # Rolls back the newest applied migrations, highest version first.
+    # - **@param** steps [Int32] the number of applied migrations to roll back (default: all)
     # **Example** Rolling back migrations
     # ```
     # migrator.down
     # ```
     def down(steps : Int32 = Migrator.migrations.size)
-      rolled_back_migrations = [] of BaseMigration.class
-      schema.ddl_transaction do
-        sorted_migrations.reverse[0, steps].each do |migration_class|
-          if migration_applied?(migration_class.version)
-            migration_class.new(schema).down
-            remove_migration_record(migration_class)
-            rolled_back_migrations << migration_class
-          end
-        end
-      end
-
-      # Update schema file after rollback
-      update_schema_file if config.auto_sync?
-      # Pass the actually rolled back migrations to the print method
-      print_rolled_back_migrations(rolled_back_migrations)
+      migrate_down(applied_migration_classes.last(steps))
     end
 
-    # Rolls back the last migration.
+    # Rolls back the newest applied migrations.
     # - **@param** steps [Int32] the number of migrations to roll back (default: 1)
     # **Example** Rolling back migrations
     # ```
@@ -276,12 +253,9 @@ module CQL
       Log.debug { "Updating schema file: #{config.schema_file_path}" }
 
       begin
-        schema_dumper = SchemaDump.new(schema.adapter, schema.uri)
-        schema_dumper.dump_to_file(
-          config.schema_file_path,
-          config.schema_name,
-          config.schema_symbol
-        )
+        SchemaDump.open(schema) do |schema_dumper|
+          schema_dumper.dump_to_file(config.schema_file_path, config.schema_name, config.schema_symbol)
+        end
         Log.info { "Schema file updated: #{config.schema_file_path}" }
       rescue ex : Exception
         Log.error { "Failed to update schema file: #{ex.message}" }
@@ -298,8 +272,7 @@ module CQL
       Log.debug { "Verifying schema consistency..." }
 
       begin
-        schema_dumper = SchemaDump.new(schema.adapter, schema.uri)
-        current_schema = schema_dumper.generate_schema_content(config.schema_name, config.schema_symbol)
+        current_schema = SchemaDump.open(schema, &.generate_schema_content(config.schema_name, config.schema_symbol))
 
         if File.exists?(config.schema_file_path)
           existing_schema = File.read(config.schema_file_path)
@@ -337,26 +310,28 @@ module CQL
       nil
     end
 
-    # Rolls back to a specific migration version.
-    # - **@param** version [Int32] the version to roll back to
+    # Rolls back every applied migration newer than *version*, which stays applied.
+    # - **@param** version [Int64] the version to roll back to
+    # - **@raise** [Error] if no migration has *version*
     # **Example** Rolling back to a specific version
     # ```
-    # migrator.down_to(1)
+    # migrator.down_to(1_i64)
     # ```
     def down_to(version : Int64)
-      index = sorted_migrations.index { |migration| migration.version == version }
-      down(index ? index + 1 : 0) if index
+      require_registered!(version)
+      migrate_down(applied_migration_classes.select { |migration| migration.version > version })
     end
 
-    # Applies migrations up to a specific version.
-    # - **@param** version [Int32] the version to apply up to
+    # Applies every pending migration up to and including *version*.
+    # - **@param** version [Int64] the version to apply up to
+    # - **@raise** [Error] if no migration has *version*
     # **Example** Applying to a specific version
     # ```
-    # migrator.up_to(1)
+    # migrator.up_to(1_i64)
     # ```
     def up_to(version : Int64)
-      index = sorted_migrations.index { |migration| migration.version == version }
-      up(index ? index + 1 : 0) if index
+      require_registered!(version)
+      migrate_up(pending_migrations.select { |migration| migration.version <= version })
     end
 
     # Prints the rolled back migrations.
@@ -451,6 +426,40 @@ module CQL
 
     private def sorted_migrations
       Migrator.migrations.sort_by(&.version)
+    end
+
+    private def applied_migration_classes : Array(BaseMigration.class)
+      sorted_migrations.select { |migration| migration_applied?(migration.version) }
+    end
+
+    private def require_registered!(version : Int64) : Nil
+      return if Migrator.migrations.any? { |migration| migration.version == version }
+      raise Error.new("No migration with version #{version}")
+    end
+
+    private def migrate_up(migrations : Array(BaseMigration.class)) : Nil
+      schema.ddl_transaction do
+        migrations.each do |migration|
+          migration.new(schema).up
+          record_migration(migration)
+        end
+      end
+
+      update_schema_file if config.auto_sync?
+      print_applied_migrations
+    end
+
+    private def migrate_down(migrations : Array(BaseMigration.class)) : Nil
+      newest_first = migrations.reverse
+      schema.ddl_transaction do
+        newest_first.each do |migration|
+          migration.new(schema).down
+          remove_migration_record(migration)
+        end
+      end
+
+      update_schema_file if config.auto_sync?
+      print_rolled_back_migrations(newest_first)
     end
 
     private def ensure_schema_migrations_table

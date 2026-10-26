@@ -261,8 +261,7 @@ crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec  # lint, as CI ru
 ```
 
 > [!NOTE]
-> Without a server, the PostgreSQL and Redis specs are pending. Without `mysqldump`, one spec in
-> `spec/integration/dialects/mysql_dialect_spec.cr` errors; that is the environment, not a regression.
+> Without a server, the PostgreSQL and Redis specs are pending.
 
 A bug fix comes with a spec that fails without it, and a behavior change updates `CHANGELOG.md` under `[Unreleased]`
 and the matching page in `docs/`. See [Contributing](docs/resources/contributing.md) for the full workflow.

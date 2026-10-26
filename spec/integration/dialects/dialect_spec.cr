@@ -163,15 +163,16 @@ module Expression
         sqlite = create_dialect(:sqlite)
 
         # Test add column
-        postgres_add = postgres.add_column("email", "VARCHAR(255)", false, false, true)
+        postgres_add = postgres.add_column("email VARCHAR(255) NOT NULL UNIQUE", false)
         postgres_add.should eq("ADD COLUMN email VARCHAR(255) NOT NULL UNIQUE")
 
-        mysql_add = mysql.add_column("email", "VARCHAR(255)", false, false, true)
+        mysql_add = mysql.add_column("email VARCHAR(255) NOT NULL UNIQUE", false)
         mysql_add.should eq("ADD COLUMN email VARCHAR(255) NOT NULL UNIQUE")
+        postgres.add_column("id INTEGER NOT NULL", true).should eq("ADD COLUMN id INTEGER NOT NULL PRIMARY KEY")
 
         # SQLite doesn't support adding a PRIMARY KEY column
         expect_raises(CQL::SQLiteUnsupportedFeatureError) do
-          sqlite.add_column("id", "INTEGER", true, false, false)
+          sqlite.add_column("id INTEGER NOT NULL", true)
         end
       end
 
