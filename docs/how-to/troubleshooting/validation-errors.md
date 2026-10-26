@@ -1,6 +1,8 @@
-# Fix Validation Errors
+---
+description: "Read why a record is invalid, handle the exception save raises, and fix validations that do not compile or do not run."
+---
 
-Read why a record is invalid, handle the exception `save` raises, and fix validations that do not compile or do not run.
+# Fix Validation Errors
 
 ## See what is invalid
 
@@ -32,18 +34,7 @@ user.errors.each { |error| puts "#{error.field}: #{error.message}" }
 # age: age must be greater than 0
 ```
 
-`errors` returns `Array(CQL::ActiveRecord::Validations::Error)`, one per failing predicate. Default messages:
-
-| Predicate | Message |
-|---|---|
-| `presence: true` (fails on `nil` or empty) | `<field> must be present` |
-| `required: true` (fails on `nil` only) | `<field> is required` |
-| `match:`, `size:` | `<field> must match the pattern <regex>`, `<field> must have a size of <size>` |
-| `gt:`, `gte:`, `lt:`, `lte:`, `eq:` | `<field> must be greater than <n>`, `... greater than or equal to`, `... less than`, `... less than or equal to`, `... must be equal to` |
-| `in:`, `exclude:` | `<field> must be included in <list>`, `<field> must not be included in <list>` |
-| `accept:`, `confirmation:` | `<field> must be accepted`, `<field> confirmation doesn't match` |
-
-`message:` replaces the message of every predicate in that `validate` call.
+`errors` returns `Array(CQL::ActiveRecord::Validations::Error)`, one per failing predicate; [Validation Options Reference](../../reference/api/validation-options.md) lists each predicate's default message and `message:`.
 
 ## Handle the exception `save` raises
 
@@ -51,7 +42,7 @@ user.errors.each { |error| puts "#{error.field}: #{error.message}" }
 CQL::ActiveRecord::Validations::ValidationError: name must be present,email must match the pattern ...
 ```
 
-`save`, `save!` and the instance `create!` raise this on an invalid record; `save` does not return `false` for it, and `save!` never raises `CQL::RecordInvalid`. The message joins the error messages with commas.
+`save`, `save!` and the instance `create!` raise this on an invalid record; `save` does not return `false` for it. The message joins the error messages with commas.
 
 ```crystal
 # ❌ Never reaches else: save raises before it can return false
@@ -87,33 +78,12 @@ User.update_all({:age => 0})                                  # one UPDATE, no v
 
 ## Catch duplicates
 
-There is no `uniqueness` predicate. A unique index makes the database raise:
-
 ```text
 SQLite3::Exception: UNIQUE constraint failed: users.email
 CQL::Postgres::UniqueViolation: ERROR: duplicate key value violates unique constraint "idx_users_email" (SQLSTATE 23505)
 ```
 
-To report it as a validation error, register a custom validator with `use`:
-
-```crystal
-class UniqueEmailValidator < CQL::ActiveRecord::Validations::CustomValidator
-  def initialize(@record : User)
-  end
-
-  def valid? : Array(CQL::ActiveRecord::Validations::Error)
-    errors = [] of CQL::ActiveRecord::Validations::Error
-    if @record.id.nil? && User.where(email: @record.email).exists?
-      errors << CQL::ActiveRecord::Validations::Error.new(:email, "email is already taken")
-    end
-    errors
-  end
-end
-
-class User
-  use UniqueEmailValidator
-end
-```
+There is no `uniqueness` predicate, so a unique index raises these; to report a duplicate as a validation error, write a custom validator as in [Add Validations](../models/add-validations.md#write-a-custom-validator).
 
 ## Fix validations that do not compile
 
@@ -138,19 +108,7 @@ validate :username, required: true, size: 3..20
 
 ## Test validations
 
-```crystal
-describe User do
-  it "requires a name" do
-    user = User.new("", "ada@example.com", "ada", 36)
-    user.valid?.should be_false
-    user.errors.map(&.field).should contain(:name)
-  end
-
-  it "accepts valid data" do
-    User.new("Ada", "ada@example.com", "ada", 36).valid?.should be_true
-  end
-end
-```
+Spec `valid?` and `errors` on records built with `new`, not with the class-level `create!`; see [Set Up Test Databases and Factories](../testing/test-database.md#build-records-with-factories).
 
 ## See Also
 

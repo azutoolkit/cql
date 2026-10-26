@@ -104,7 +104,7 @@ end
 <details>
 <summary>The table is declared, but the first error still appears</summary>
 
-The lookup cannot see it. It reads only literal `table :name` calls written directly in the `define` block: not tables added later with `Schema.new` and `.table`, through helper macros, or inside `{% raw %}{% if %}{% endraw %}` or `begin`. It cannot reference a `private` schema constant in a namespace either. Name the schema in `db_context` in these cases.
+The lookup cannot see it. It reads only literal `table :name` calls written directly in the `define` block: not tables added later with `Schema.new` and `.table`, through helper macros, or inside `{% if %}` or `begin`. It cannot reference a `private` schema constant in a namespace either. Name the schema in `db_context` in these cases.
 
 </details>
 
