@@ -95,6 +95,7 @@ end
 describe "CQL::Migrator transaction" do
   db_file = File.join(Dir.tempdir, "cql_migration_tx_#{Process.pid}_#{Random::Secure.hex(4)}.db")
   uri = "sqlite3://#{db_file}"
+  schema_file = File.join(Dir.tempdir, "cql_migration_tx_schema_#{Process.pid}_#{Random::Secure.hex(4)}.cr")
 
   # Reads through a separate connection, so it sees only committed state.
   committed_tables = -> do
@@ -108,9 +109,11 @@ describe "CQL::Migrator transaction" do
     DB.open(uri) do |db|
       %w[tx_migration_a tx_migration_b tx_migration_c tx_migration_d tx_migration_e cql_schema_migrations].each { |table| db.exec("DROP TABLE IF EXISTS #{table}") }
     end
+    File.delete(schema_file) if File.exists?(schema_file)
   end
 
   after_all do
+    File.delete(schema_file) if File.exists?(schema_file)
     ["", "-wal", "-shm", "-journal"].each do |suffix|
       path = db_file + suffix
       File.delete(path) if File.exists?(path)
@@ -162,6 +165,32 @@ describe "CQL::Migrator transaction" do
     end
 
     statements.select(&.includes?("CREATE")).should be_empty
+  end
+
+  it "refuses to build a migrator inside a caller's transaction before writing the schema file" do
+    schema = tx_schema(uri, TxNonTransactionalDdlSchema)
+
+    begin
+      expect_raises(CQL::DialectError, "MySQL") do
+        schema.transaction { CQL::Migrator.new(schema, CQL::MigratorConfig.new(schema_file_path: schema_file, auto_sync: true)) }
+      end
+    ensure
+      schema.close
+    end
+
+    File.exists?(schema_file).should be_false
+  end
+
+  it "creates the migrations table before the bootstrap schema dump" do
+    schema = tx_schema(uri)
+
+    begin
+      CQL::Migrator.new(schema, CQL::MigratorConfig.new(schema_file_path: schema_file, auto_sync: true))
+    ensure
+      schema.close
+    end
+
+    File.read(schema_file).should contain("table :cql_schema_migrations")
   end
 
   it "lists pending migrations inside a caller's transaction without running DDL" do
