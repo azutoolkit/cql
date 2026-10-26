@@ -187,10 +187,7 @@ module CQL
     getter repo : Repository(MigrationRecord, Int32)
 
     def initialize(@schema : Schema, @config = MigratorConfig.new)
-      schema.ddl_transaction do
-        bootstrap_schema if @config.auto_sync?
-        ensure_schema_migrations_table
-      end
+      schema.ddl_transaction { ensure_schema_migrations_table }
       @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
 

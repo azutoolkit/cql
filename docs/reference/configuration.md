@@ -41,7 +41,7 @@ Settings marked **inert** are accepted and validated but nothing in `src/` reads
 | `schema_file` | `String` | `"app_schema.cr"` | Cannot be empty; must end in `.cr`. Only names the generated schema file. |
 | `schema_class` | `Symbol` | `:AppSchema` | Constant name written into the generated schema file (`MigratorConfig#schema_name`). |
 | `schema_name` | `Symbol` | `:app_schema` | Schema symbol written into the generated schema file (`MigratorConfig#schema_symbol`). |
-| `auto_sync` | `Bool` | `true` | Passed to the migrator: rewrite the schema file on construction, `up` and `down`. Also gates the auto-fix in `build_migrator` and `CQL.verify_schema(auto_fix: true)`. |
+| `auto_sync` | `Bool` | `true` | Passed to the migrator: rewrite the schema file after `up` and `down` (creating the migrator does not write it). Also gates the auto-fix in `build_migrator` and `CQL.verify_schema(auto_fix: true)`. |
 | `bootstrap` | `Bool` | `false` | `CQL.build_migrator` dumps the schema file from the live database right after building the migrator. |
 | `verify_schema` | `Bool` | `false` | `CQL.build_migrator` checks the schema file against the database (ignored when `bootstrap` is on) and logs a warning on mismatch; with `auto_sync` it rewrites the file. |
 | `sql_logging` | `Bool` | unset: on when the environment is named `development` (`CRYSTAL_ENV=development` or `c.env = "development"`) unless `CQL_NO_SQL_LOG` is set, off otherwise, including when `CRYSTAL_ENV` is unset | `CQL.build_schema` calls `CQL::Performance.enable_sql_logging` when true, which also enables the performance monitor. Assigning `true` or `false` overrides the environment default. |
@@ -224,7 +224,7 @@ Other variables belong to the performance monitor, not the config object: `CQL_E
 | `CQL.build_schema(name, &)` | `CQL::Schema` | Opens `full_db_url`, runs the block in the schema, then sets up the cache (`cache.on`) and SQL logging (`sql_logging`). |
 | `CQL.build_migrator(schema, custom_config = nil)` | `CQL::Migrator` | Uses `migrator_config` and honours `bootstrap` and `verify_schema`; with `custom_config` it is `schema.migrator(custom_config)`. |
 | `CQL.bootstrap_schema(schema)` | `CQL::Migrator` | `build_migrator` followed by `bootstrap_schema`. |
-| `CQL.verify_schema(schema, auto_fix = false)` | `Bool` | Consistency check; rewrites the schema file when `auto_fix` and `auto_sync` are both true. |
+| `CQL.verify_schema(schema, auto_fix = false)` | `Bool` | Compares the schema file with the database without writing it (it builds `schema.migrator(migrator_config)`, skipping `bootstrap` and `verify_schema`). Returns `false` when the file is missing or stale; with `auto_fix` and `auto_sync` both true it rewrites the file instead and returns `true`. |
 
 `CQL::MigratorConfig.new` on its own defaults to schema file `src/schemas/app_schema.cr`, `schema_name` `:AppSchema`, `schema_symbol` `:app_schema`, table `:cql_schema_migrations`, `auto_sync` `true`. This is what plain `schema.migrator` uses; see [the lifecycle guide](../how-to/configuration/configure-cql.md#build_migrator-versus-schemamigrator).
 

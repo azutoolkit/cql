@@ -84,7 +84,7 @@ The two do not agree on where migrations are tracked or where the schema file go
 Consequences:
 
 - Migrations applied through `schema.migrator` are recorded in `cql_schema_migrations`; `build_migrator` looks in `schema_migrations`. Mixing them leaves each migrator blind to what the other applied.
-- `schema.migrator` writes `src/schemas/app_schema.cr` the moment it is constructed, because its `auto_sync` is `true`. `build_migrator` writes to the path you configured (and not at all in production, where `auto_sync` is `false`).
+- `schema.migrator` writes `src/schemas/app_schema.cr` after each `up` and `down`, because its `auto_sync` is `true`; creating it writes no schema file. `build_migrator` writes to the path you configured (and not at all in production, where `auto_sync` is `false`).
 - With `bootstrap = true`, `build_migrator` dumps the schema file from the live database. With `verify_schema = true` (the default in development and production) it compares the file to the database, logs `Schema file is out of sync with database` on a mismatch, and rewrites the file when `auto_sync` is on.
 
 To change only the migrator, pass your own config: `CQL.build_migrator(AppDB, CQL.migrator_config(migrations_table: :my_migrations))`. That skips bootstrap and verification.

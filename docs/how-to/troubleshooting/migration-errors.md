@@ -210,7 +210,7 @@ migrator.up
 Migrator::Error: Schema update failed: ...
 ```
 
-**Cause:** With `auto_sync: true` (the default), creating a migrator and running `up`/`down` rewrites the schema file at `MigratorConfig#schema_file_path`. A missing directory or unwritable path fails the run.
+**Cause:** With `auto_sync: true` (the default), `up` and `down` rewrite the schema file at `MigratorConfig#schema_file_path`. A missing directory or unwritable path fails the run.
 
 **Solutions:** Create the directory, point `schema_file_path` somewhere writable, or pass `auto_sync: false`.
 

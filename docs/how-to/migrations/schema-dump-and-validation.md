@@ -74,7 +74,7 @@ Indexes are not dumped. Treat the generated file as a starting point and add the
 
 ## Keep the File in Sync With Migrations
 
-The migrator rewrites the schema file after `up` and `down` when `auto_sync` is on (the default):
+The migrator rewrites the schema file after `up` and `down` when `auto_sync` is on (the default). Creating the migrator does not touch the file:
 
 ```crystal
 config = CQL::MigratorConfig.new(
@@ -100,7 +100,7 @@ end
 
 `verify_schema_consistency` regenerates the schema text and compares it to the file. It returns `false` when the file is missing, differs, or the database cannot be read. The comparison is exact text, so keep hand edits out of generated files (see [Run Migrations](run-migrations.md)).
 
-`CQL.verify_schema(schema, auto_fix: true)` does the same check and rewrites the file when `auto_sync` is enabled in your configuration.
+`CQL.verify_schema(schema)` does the same check with the migrator settings from `CQL.config` and returns `false` for a missing or stale file. `CQL.verify_schema(schema, auto_fix: true)` rewrites a stale file instead, when `auto_sync` is enabled in your configuration, and returns `true`.
 
 ## Raw Structure Dumps
 

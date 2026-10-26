@@ -157,7 +157,7 @@ describe "CQL::Migrator transaction" do
     statements.select(&.includes?("CREATE")).should be_empty
   end
 
-  it "refuses to bootstrap the schema file inside a caller's transaction without transactional DDL" do
+  it "writes no schema file when refused inside a caller's transaction without transactional DDL" do
     schema = tx_schema(uri, NonTransactionalDdlSchema)
     schema_file = File.join(Dir.tempdir, "cql_migration_tx_schema_#{Process.pid}_#{Random::Secure.hex(4)}.cr")
 

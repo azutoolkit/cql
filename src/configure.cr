@@ -498,18 +498,17 @@ module CQL
     migrator
   end
 
-  # Verify schema consistency with auto-fix option
+  # Whether the schema file matches the database; with `auto_fix` (and `auto_sync`) a stale file is
+  # rewritten instead. Uses a plain migrator: `build_migrator` rewrites a stale file before the check
+  # when `verify_schema` and `auto_sync` are on.
   def self.verify_schema(schema : Schema, auto_fix : Bool = false) : Bool
-    migrator = build_migrator(schema)
-    consistent = migrator.verify_schema_consistency
+    migrator = schema.migrator(config.migrator_config)
+    return true if migrator.verify_schema_consistency
+    return false unless auto_fix && config.auto_sync?
 
-    if !consistent && auto_fix && config.auto_sync?
-      config.effective_logger.info { "🔧 Auto-fixing schema..." }
-      migrator.update_schema_file
-      true
-    else
-      consistent
-    end
+    config.effective_logger.info { "🔧 Auto-fixing schema..." }
+    migrator.update_schema_file
+    true
   end
 
   # Create migrator configuration

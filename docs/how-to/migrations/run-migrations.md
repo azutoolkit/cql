@@ -17,7 +17,7 @@ config = CQL::MigratorConfig.new(
 migrator = MyDB.migrator(config)
 ```
 
-Creating a migrator creates the migrations table (`config.migration_table_name`, default `cql_schema_migrations`). With `auto_sync: true` (the default) it also writes the schema file at `schema_file_path`, from the current database state, when the migrator is created and after every `up`/`down`. Pass `auto_sync: false` to leave the file alone, which is usually what you want in production. Otherwise make sure the directory of `schema_file_path` exists.
+Creating a migrator creates the migrations table (`config.migration_table_name`, default `cql_schema_migrations`). With `auto_sync: true` (the default) `up` and `down` also write the schema file at `schema_file_path` from the database state when they finish; creating the migrator does not write it. Pass `auto_sync: false` to leave the file alone, which is usually what you want in production. Otherwise make sure the directory of `schema_file_path` exists.
 
 Only migration classes that have been required are registered, so require your migrations before calling `migrator.up`.
 
@@ -28,7 +28,7 @@ migrator.up
 puts "Migrations complete"
 ```
 
-Pending migrations run in version order and are recorded as they succeed. On SQLite and PostgreSQL the whole run, `schema_migrations` records included, is one transaction on one connection, so a failing migration rolls back everything the run did. On MySQL and CockroachDB each statement commits on its own, so a failure leaves the earlier migrations of the run applied, and building a migrator (before its `auto_sync` bootstrap writes the schema file), calling `up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`. On PostgreSQL the run holds its DDL locks until the final commit and `CREATE INDEX CONCURRENTLY` fails inside a migration; `up(steps)` keeps runs short. `migrator.up(2)` applies the 2 oldest pending migrations. `up` prints a table of applied migrations when it finishes.
+Pending migrations run in version order and are recorded as they succeed. On SQLite and PostgreSQL the whole run, `schema_migrations` records included, is one transaction on one connection, so a failing migration rolls back everything the run did. On MySQL and CockroachDB each statement commits on its own, so a failure leaves the earlier migrations of the run applied, and building a migrator, calling `up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`. On PostgreSQL the run holds its DDL locks until the final commit and `CREATE INDEX CONCURRENTLY` fails inside a migration; `up(steps)` keeps runs short. `migrator.up(2)` applies the 2 oldest pending migrations. `up` prints a table of applied migrations when it finishes.
 
 ## Check Migration Status
 

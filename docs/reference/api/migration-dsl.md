@@ -324,7 +324,7 @@ end
 ## Migration Execution
 
 ```crystal
-migrator = schema.migrator                                      # auto_sync: true by default
+migrator = schema.migrator                                      # auto_sync: true by default; writes the schema file after up/down
 migrator = schema.migrator(CQL::MigratorConfig.new(auto_sync: false))
 
 # Apply migrations (version order; one transaction on SQLite and PostgreSQL)
@@ -356,7 +356,7 @@ migrator.bootstrap_schema
 
 `up_to` and `down_to` raise `CQL::Migrator::Error` when no registered migration has `version`. Steps count only the migrations that can run: `up(n)` counts pending migrations and `down(n)` counts applied ones.
 
-`CQL::MigratorConfig` takes `schema_file_path`, `schema_name`, `schema_symbol`, `migration_table_name` (default `:cql_schema_migrations`) and `auto_sync`. With `auto_sync` on, the schema file is rewritten from the database when the migrator is created and after `up`/`down`.
+`CQL::MigratorConfig` takes `schema_file_path`, `schema_name`, `schema_symbol`, `migration_table_name` (default `:cql_schema_migrations`) and `auto_sync`. With `auto_sync` on, the schema file is rewritten from the database after `up`/`down`; creating the migrator does not write it.
 
 ## See Also
 
