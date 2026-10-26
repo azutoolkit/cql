@@ -1,6 +1,8 @@
-# Configure TLS, Poolers, Timeouts and Transactions
+---
+description: "Secure the connection, run behind a pooler such as PgBouncer, bound statement time, listen for notifications and tune transactions."
+---
 
-Secure the connection, run behind a pooler such as PgBouncer, bound statement time, listen for notifications and tune transactions.
+# Configure TLS, Poolers, Timeouts and Transactions
 
 ## TLS
 
@@ -22,15 +24,18 @@ engine = CQL::Postgres::AsyncEngine.connect("postgres://app:secret@db.internal/a
 "postgres://app@/app?host=/var/run/postgresql"
 
 # ArgumentError: sslmode=allow or verify-ca, sslcert, sslkey, and sslrootcert without verify-full
-```
 
-When TLS is required and cannot be had (the server declines, the handshake fails, the certificate is bad), the driver raises `CQL::Postgres::TLSRefused`. It is not an `IO::Error`, so crystal-db's pool does not retry it; a server that hangs up mid-handshake is retried.
+# TLS required but not had (server declines, handshake fails, bad certificate): CQL::Postgres::TLSRefused.
+# It is not an IO::Error, so crystal-db's pool does not retry it; a hang-up mid-handshake is retried.
+```
 
 ## Protocol Versions
 
-The driver asks for protocol 3.2 (PostgreSQL 18) and follows the server's `NegotiateProtocolVersion`. It retries once on 3.0 when a server or proxy rejects the startup, answers with something that is not a protocol message, resets the connection or closes it unanswered. A stall is not retried; `connect_timeout` ends it.
-
 ```crystal
+# The driver asks for protocol 3.2 (PostgreSQL 18) and follows NegotiateProtocolVersion. It retries once
+# on 3.0 when a server or proxy rejects the startup, answers with a non-protocol message, or resets or
+# closes the connection unanswered. A stall is not retried; connect_timeout ends it.
+
 # Skip the extra 3.2 attempt on every new connection
 "postgres://app:secret@pooler.internal/app?max_protocol_version=3.0"
 # min_protocol_version and max_protocol_version take 3.0, 3.2 or latest (the default maximum).
@@ -83,7 +88,7 @@ end
 A cancel request carries the session's secret key over a new, **unencrypted** connection, even under `sslmode=require`, as libpq does before version 17.
 {% endhint %}
 
-`Session#ping(timeout)` closes a connection that does not answer in time. Pool health checks ping idle connections for at most 5 seconds (`Session::PING_TIMEOUT`) and share one `checkout_timeout` budget per checkout, so dead connections delay a checkout by about one timeout, not one each. A dropped connection closes its socket without a TLS close_notify, which could block on a dead path.
+`Session#ping(timeout)` closes a connection that does not answer in time. Pool health checks ping idle connections for at most 5 seconds (`Session::PING_TIMEOUT`) within one `checkout_timeout` budget per checkout, so several dead connections delay a checkout by about one timeout. A dropped connection skips the TLS close_notify, which could block on a dead path.
 
 ## LISTEN and NOTIFY
 
@@ -96,7 +101,7 @@ engine.with_connection do |connection|
 end
 ```
 
-Handlers run under the session's lock, so they must not use that session. They are cleared when the connection returns to the pool, which keeps no `LISTEN` state: hold one connection for as long as you listen. CockroachDB has no `LISTEN`, and behind a transaction-mode pooler it breaks because the server connection changes between transactions (general pooler behavior, not probed).
+Handlers run under the session's lock, so they must not use that session. Returning the connection to the pool clears them, and the pool keeps no `LISTEN` state: hold one connection while you listen. CockroachDB has no `LISTEN`; behind a transaction-mode pooler it breaks because the server connection changes between transactions (not probed).
 
 ## Transactions: Isolation and Savepoints
 

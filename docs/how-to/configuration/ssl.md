@@ -1,6 +1,8 @@
-# Enable SSL Connections
+---
+description: "Encrypt and verify PostgreSQL and CockroachDB connections with config.ssl or sslmode in the URL."
+---
 
-Encrypt and verify PostgreSQL and CockroachDB connections with `config.ssl` or `sslmode` in the URL.
+# Enable SSL Connections
 
 ## Configure SSL with `CQL.configure`
 
@@ -28,15 +30,7 @@ puts CQL.config.full_db_url # ...&sslmode=verify-full&sslrootcert=%2Fetc%2Fssl%2
 
 ## Pick a mode the native driver accepts
 
-```crystal
-# sslmode       native driver behavior
-# disable       plaintext
-# prefer        TLS when the server offers it, else plaintext; the certificate is not checked (default)
-# require       TLS or fail; the certificate is not checked (like libpq)
-# verify-full   TLS with the chain and host name checked; sslrootcert adds a CA to the system ones
-```
-
-`CQL.configure` accepts all six libpq modes, but `CQL.build_schema` then fails on the URLs the native driver refuses:
+The native driver accepts `disable`, `prefer`, `require` and `verify-full`; what each one checks is in [TLS](../postgres-native/tls-and-poolers.md#tls). `CQL.configure` accepts all six libpq modes, but `CQL.build_schema` then fails on the URLs the native driver refuses:
 
 ```crystal
 # ❌ ArgumentError: unsupported sslmode "verify-ca" (use disable, prefer, require or verify-full)

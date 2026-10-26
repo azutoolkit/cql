@@ -1,6 +1,8 @@
-# Use CockroachDB
+---
+description: "Connect CQL to CockroachDB through its PostgreSQL wire driver, and know what behaves differently from PostgreSQL."
+---
 
-Connect CQL to CockroachDB through its PostgreSQL wire driver, and know what behaves differently from PostgreSQL.
+# Use CockroachDB
 
 Support was verified against CockroachDB v24.3.5 (single node, insecure, and secure with `sslmode=verify-full` and a password).
 

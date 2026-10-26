@@ -1,6 +1,8 @@
-# Use AsyncEngine and Its Connection Pool
+---
+description: "CQL::Postgres::AsyncEngine runs CQL statements over the native driver on its own fiber-safe connection pool."
+---
 
-`CQL::Postgres::AsyncEngine` runs CQL statements over the native driver on its own fiber-safe connection pool.
+# Use AsyncEngine and Its Connection Pool
 
 ## Connect
 

@@ -1,6 +1,8 @@
-# Use Per-Request Caching
+---
+description: "Count the statements each HTTP request runs so that repeated queries within one request show up."
+---
 
-Count the statements each HTTP request runs so that repeated queries within one request show up.
+# Use Per-Request Caching
 
 ## See What It Tracks
 
@@ -20,31 +22,60 @@ Every select a query runs (`all`, `get`, `each`, `find` and the like) passes thr
 
 Each integration starts a request with the `X-Request-ID` header (or a random id) and ends it when the response is done.
 
+{% tabs %}
+{% tab title="HTTP::Server" %}
 ```crystal
-# HTTP::Server: a handler that ends the request in an ensure
+# A handler that ends the request in an ensure
 server = HTTP::Server.new([CQL::Cache::Middleware::HTTP.new, MyApp.new])
+```
+{% endtab %}
 
-# Azu: add CQL::Cache::Middleware::Azu::Handler.new to the handler chain,
-# or call CQL::Cache::Middleware::Azu.before_request(context) and .after_request(context)
-
-# Kemal (CQL::Cache::Middleware::Kemal.setup! is an empty stub: register the hooks)
+{% tab title="Kemal" %}
+```crystal
+# CQL::Cache::Middleware::Kemal.setup! is an empty stub: register the hooks
 before_all { |env| CQL::Cache::Middleware::Kemal.before_request(env) }
 after_all { |env| CQL::Cache::Middleware::Kemal.after_request(env) }
+```
+{% endtab %}
 
-# Lucky
+{% tab title="Azu" %}
+```crystal
+# Add CQL::Cache::Middleware::Azu::Handler.new to the handler chain,
+# or call CQL::Cache::Middleware::Azu.before_request(context) and .after_request(context)
+# Controllers: include CQL::Cache::Middleware::Azu::Controller
+```
+{% endtab %}
+
+{% tab title="Lucky" %}
+```crystal
 abstract class ApplicationAction < Lucky::Action
   include CQL::Cache::Middleware::Lucky
 end
+```
+{% endtab %}
 
-# Amber: then add QueryCachePipe to a pipeline in config/routes.cr
+{% tab title="Amber" %}
+```crystal
+# Then add QueryCachePipe to a pipeline in config/routes.cr
 class QueryCachePipe < Amber::Pipe::Base
   include CQL::Cache::Middleware::Amber
 end
-# SpiderGazelle and Azu controllers: include CQL::Cache::Middleware::SpiderGazelle / ::Azu::Controller
+```
+{% endtab %}
 
-# Anything else
+{% tab title="SpiderGazelle" %}
+```crystal
+# In a controller
+include CQL::Cache::Middleware::SpiderGazelle
+```
+{% endtab %}
+
+{% tab title="Other" %}
+```crystal
 CQL::Cache::Middleware::Manual.with_request { handle(request) }  # or Manual.start_request / Manual.end_request
 ```
+{% endtab %}
+{% endtabs %}
 
 The Lucky, Amber, SpiderGazelle and Azu controller modules rely on those frameworks' macros and are not exercised by CQL's specs.
 

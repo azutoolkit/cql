@@ -1,6 +1,8 @@
-# Stream Large Results and Pipeline Statements
+---
+description: "Stream big results a batch at a time instead of holding them in memory, and pipeline many small statements into one network round trip."
+---
 
-`all`, `to_a` and `exec_query` hold a whole result in memory: stream big results a batch at a time, and pipeline many small statements into one network round trip.
+# Stream Large Results and Pipeline Statements
 
 ## Stream Rows
 

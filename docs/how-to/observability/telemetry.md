@@ -1,6 +1,8 @@
-# Telemetry
+---
+description: "Subscribe to an event for every statement CQL runs, alert on slow ones, trace them, and watch transactions and the connection pool."
+---
 
-Subscribe to an event for every statement CQL runs, alert on slow ones, trace them, and watch transactions and the connection pool.
+# Telemetry
 
 ## Subscribe to Query Events
 

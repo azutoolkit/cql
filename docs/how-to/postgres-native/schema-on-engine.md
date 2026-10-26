@@ -1,6 +1,8 @@
-# Run a Schema on the AsyncEngine's Pool
+---
+description: "Give a CQL::Schema a CQL::Postgres::EngineSource so models, queries, migrations, schema.transaction and schema.with_connection use the AsyncEngine's pool without using(engine) on every statement."
+---
 
-Give a `CQL::Schema` a **`CQL::Postgres::EngineSource`** so models, queries, migrations, `schema.transaction` and `schema.with_connection` use the [AsyncEngine's](async-engine.md) pool without `using(engine)` on every statement.
+# Run a Schema on the AsyncEngine's Pool
 
 ## Connect the Schema
 

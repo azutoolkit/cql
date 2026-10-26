@@ -1,19 +1,15 @@
+---
+description: "Wire telemetry and the performance monitor into a production app: export metrics, count queries per request and expose a health check."
+---
+
 # Monitor Performance
 
-Wire [telemetry](telemetry.md) and the [performance monitor](query-profiler.md) into a production app: logs, alerts, metrics, health checks and reports.
+Build on [telemetry](telemetry.md) and the [performance monitor](query-profiler.md):
 
-## Log and Alert Off the Query Path
-
-```crystal
-Log.setup(:info, Log::IOBackend.new)  # every source, cql.telemetry and cql.performance.* included
-
-CQL::Telemetry.alert_on_slow(100.milliseconds, async: true) do |event|
-  Log.warn { "slow query (#{event.duration.total_milliseconds.round(1)}ms): #{event.sql}" }
-end
-CQL::Telemetry.log_queries(:info, async: true) if ENV["LOG_SQL"]?  # every statement: for staging or debugging
-```
-
-`async: true` hands each event to a background fiber, so log I/O does not add to query latency.
+- Slow-query alerts and SQL logs: [Alert on Slow Queries and Log SQL](telemetry.md#alert-on-slow-queries-and-log-sql).
+- Exporters that do I/O: subscribe with `async: true` ([Deliver Off the Query Path](telemetry.md#deliver-off-the-query-path)) and call `CQL::Telemetry.flush` and `CQL::Performance.flush` in `at_exit`.
+- Reports: call `CQL::Performance.report` on your own timer ([Generate a Report](query-profiler.md#generate-a-report)); CQL never writes one, since `config.reporting.auto_generate` and `reporting.interval` are not read.
+- Cost per statement: [What monitoring costs](query-profiler.md#what-monitoring-costs).
 
 ## Export Query Metrics
 
@@ -110,52 +106,10 @@ end
 
 What feeds the health score and each key is in [Health and Metrics](query-profiler.md#health-and-metrics).
 
-## Write Periodic Reports
-
-```crystal
-spawn(name: "cql.report") do
-  loop do
-    sleep 10.minutes
-    File.write("log/cql-performance.json", CQL::Performance.report("json"))
-    CQL::Performance.monitor.clear  # start the next window empty
-  end
-end
-```
-
-{% hint style="info" %}
-CQL never writes reports on its own: `config.reporting.auto_generate` and `reporting.interval` (set by the production preset) are not read.
-{% endhint %}
-
-## Query the Database's Own Statistics
-
-```crystal
-# PostgreSQL: the tables read by sequential scan most often
-rows = AppDB.exec_query do |conn|  # a pooled connection; these statements bypass telemetry
-  conn.query_all(<<-SQL, as: {String, Int64, Int64})
-    SELECT relname, seq_scan, COALESCE(idx_scan, 0)
-    FROM pg_stat_user_tables ORDER BY seq_scan DESC LIMIT 10
-    SQL
-end
-rows.each { |table, seq, idx| puts "#{table}: #{seq} seq scans, #{idx} index scans" }
-```
-
-## Shut Down Cleanly
-
-```crystal
-at_exit do
-  CQL::Telemetry.flush(5.seconds)    # deliver queued events; the timeout keeps a stuck exporter from hanging exit
-  CQL::Performance.flush(5.seconds)  # the same for an async monitor
-end
-```
-
-## Keep the Cost Down
-
-Keep SQL logging off in production; the production preset does. Give exporters that do I/O `async: true`, and keep inline subscribers to counters. The production monitor adds about 0.3 µs per statement and no allocations; the measured numbers are in [What monitoring costs](query-profiler.md#what-monitoring-costs).
-
 ## See Also
 
 - [Telemetry](telemetry.md)
 - [Profile Queries and Detect N+1](query-profiler.md)
 - [Avoid N+1 Queries](../performance/n-plus-one.md)
 - [Optimize Queries](../performance/optimize-queries.md)
-- [Performance Monitoring Tutorial](../../tutorials/real-world-examples/performance-monitoring.md)
+- [Use Per-Request Caching](../caching/per-request.md)

@@ -1,6 +1,8 @@
-# Configure Multiple Environments
+---
+description: "Run the same app against different databases and defaults in development, test and production."
+---
 
-Run the same app against different databases and defaults in development, test and production.
+# Configure Multiple Environments
 
 ## Set the environment
 
@@ -10,29 +12,11 @@ CRYSTAL_ENV=test crystal spec
 CRYSTAL_ENV=production DATABASE_URL=postgres://... ./bin/app
 ```
 
-`CQL.config` reads `CRYSTAL_ENV` when it is first created and applies that environment's defaults before your `CQL.configure` block runs. Assignments in the block win over them. For the lifecycle see [Configure CQL](configure-cql.md).
-
-## Know the defaults
-
-| Setting | development | test | production |
-|---|---|---|---|
-| `db` | `sqlite3://./db/development.db` | `sqlite3://:memory:` (does not open; assign a file URL) | `sqlite3://./db/development.db` |
-| `pool_size` / `pool.size` | 5 | 1 | 25 |
-| `pool.initial_size` / `pool.max_idle_size` | 2 / 3 | 1 / 1 | 5 / 10 |
-| `pool.checkout_timeout` / `pool.max_retry_attempts` | 10 s / 3 | 10 s / 3 | 15 s / 5 |
-| `ssl.mode` | `prefer` | `prefer` | `require` |
-| `sqlite.journal_mode` | `wal` | `memory` | `wal` |
-| `auto_sync` / `verify_schema` / `bootstrap` | true / true / false | true / false / false | false / true / false |
-| `migrations_table` | `:schema_migrations` | `:test_migrations` | `:schema_migrations` |
-| `schema_file` / `schema_class` / `schema_name` | `app_schema.cr` / `:AppSchema` / `:app_schema` | `test_schema.cr` / `:TestSchema` / `:test_schema` | as development |
-| `log_level` | Debug | Error | Info |
-| `sql_logging?` | true only when `CRYSTAL_ENV=development` is set and `CQL_NO_SQL_LOG` is not; `config.sql_logging = false` turns it off | false | false |
-| `cache.on` | true | false | false |
-
-Any other name, such as `staging`, gets the development column, except that `sql_logging?` and `cache.on` are false.
+`CQL.config` reads `CRYSTAL_ENV` when it is first created and applies that environment's defaults before your `CQL.configure` block runs. Assignments in the block win over them. The defaults per environment are in [Environment strategies](../../reference/configuration.md#environment-strategies); for the lifecycle see [Configure CQL](configure-cql.md).
 
 ## Choose the URL per environment
 
+{% code title="config/cql.cr" %}
 ```crystal
 CQL.configure do |config|
   config.db = case config.env
@@ -43,6 +27,9 @@ CQL.configure do |config|
   config.pool_size = 2 if config.env == "test" # migrator.up needs two connections
 end
 ```
+{% endcode %}
+
+`CQL::Schema.define` ignores `CQL.config` and these defaults, so with it you pick the URL and adapter per environment yourself; see [Use `Schema.define` for several databases](database-connection.md#use-schemadefine-for-several-databases).
 
 ## Switch environments with `CRYSTAL_ENV`, not `config.env`
 
@@ -75,25 +62,6 @@ puts "db=#{config.db.gsub(/:[^:@\/]+@/, ":****@")}" # hides the password: postgr
 # CRYSTAL_ENV=production:
 #   env=production pool=25 ssl=require sql_logging=false
 #   migrations=schema_migrations schema_file=src/schemas/app_schema.cr auto_sync=false
-```
-
-## Pick the URL yourself with `Schema.define`
-
-`CQL::Schema.define` ignores `CQL.config` and its environment defaults:
-
-```crystal
-APP_ENV = ENV["CRYSTAL_ENV"]? || "development"
-
-DATABASE_URL = case APP_ENV
-               when "production" then ENV["DATABASE_URL"]? || raise "DATABASE_URL required in production"
-               when "test"       then "sqlite3://./db/test.db"
-               else                   ENV["DATABASE_URL"]? || "postgres://localhost/myapp_development"
-               end
-
-ADAPTER = APP_ENV == "test" ? CQL::Adapter::SQLite : CQL::Adapter::Postgres
-
-AppDB = CQL::Schema.define(:app, adapter: ADAPTER, uri: DATABASE_URL) do
-end
 ```
 
 ## See Also

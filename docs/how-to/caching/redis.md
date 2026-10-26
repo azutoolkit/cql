@@ -1,6 +1,8 @@
-# Configure Redis Cache
+---
+description: "Use Redis as the cache store so that every process shares the cached values."
+---
 
-Use Redis as the cache store so that every process shares the cached values.
+# Configure Redis Cache
 
 CQL depends on the `crystal-redis` shard (`stefanwille/crystal-redis`, `~> 2.8`), so there is nothing to add to `shard.yml`. You need a reachable Redis server.
 

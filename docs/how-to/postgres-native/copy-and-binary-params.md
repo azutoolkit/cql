@@ -1,6 +1,8 @@
-# Bulk Load with COPY and Send Binary Parameters
+---
+description: "Load or export many rows with one COPY, and send the values of array and many-parameter statements in binary."
+---
 
-Load or export many rows with one `COPY`, and send array and many-parameter statements' values in binary.
+# Bulk Load with COPY and Send Binary Parameters
 
 ## COPY in Text Format
 

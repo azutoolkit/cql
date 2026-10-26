@@ -1,6 +1,17 @@
+---
+icon: "server"
+description: "CQL ships its own PostgreSQL wire-protocol driver; these guides use it for pooling, streaming, pipelining, COPY, TLS and connection poolers."
+---
+
 # Native PostgreSQL Driver
 
-CQL ships its own PostgreSQL wire-protocol driver; these guides use it for pooling, streaming, pipelining, `COPY`, TLS and connection poolers.
+<table data-view="cards"><thead><tr><th></th><th></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody>
+<tr><td><strong>AsyncEngine and pool options</strong></td><td>Connect, size the pool, run queries and transactions.</td><td><a href="async-engine.md">async-engine.md</a></td></tr>
+<tr><td><strong>A Schema on the engine's pool</strong></td><td>Run models, migrations and <code>schema.transaction</code> on the engine's pool.</td><td><a href="schema-on-engine.md">schema-on-engine.md</a></td></tr>
+<tr><td><strong>Streaming and pipelining</strong></td><td>Read large results in batches, send many statements in one round trip.</td><td><a href="streaming-and-pipelining.md">streaming-and-pipelining.md</a></td></tr>
+<tr><td><strong>COPY and binary parameters</strong></td><td>Bulk load and export, send parameters in binary.</td><td><a href="copy-and-binary-params.md">copy-and-binary-params.md</a></td></tr>
+<tr><td><strong>TLS, poolers and timeouts</strong></td><td>Secure connections, PgBouncer and friends, cancel, <code>LISTEN</code>/<code>NOTIFY</code>, isolation levels.</td><td><a href="tls-and-poolers.md">tls-and-poolers.md</a></td></tr>
+</tbody></table>
 
 ## Pick an Entry Point
 
@@ -29,14 +40,6 @@ DB.open(DATABASE_URL) { |db| db.scalar("SELECT 1") } # => 1
 ```
 
 The driver speaks protocol 3.2 with fallback to 3.0, TLS, Unix sockets, SCRAM-SHA-256, MD5 and cleartext passwords, prepared-statement caching, `COPY`, `LISTEN`/`NOTIFY`, cancellation and statement timeouts. Versions, poolers and benchmarks it was run against are in the README's [measured compatibility](https://github.com/azutoolkit/cql#measured-compatibility).
-
-| Guide | Use it to |
-| --- | --- |
-| [AsyncEngine and pool options](async-engine.md) | Connect, size the pool, run queries and transactions |
-| [A Schema on the engine's pool](schema-on-engine.md) | Run models, migrations and `schema.transaction` on the engine's pool |
-| [Streaming and pipelining](streaming-and-pipelining.md) | Read large results in batches, send many statements in one round trip |
-| [COPY and binary parameters](copy-and-binary-params.md) | Bulk load and export, send parameters in binary |
-| [TLS, poolers and timeouts](tls-and-poolers.md) | Secure connections, PgBouncer and friends, cancel, `LISTEN`/`NOTIFY`, isolation levels |
 
 ## Switch from the `pg` Shard
 

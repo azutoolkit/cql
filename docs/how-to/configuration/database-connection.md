@@ -1,11 +1,17 @@
-# Configure Database Connection
+---
+description: "Point CQL at a database with a URL in CQL.configure; the URL scheme picks the adapter."
+---
 
-Point CQL at a database with a URL in `CQL.configure`; the URL scheme picks the adapter.
+# Configure Database Connection
 
 For when settings are read and validated see [Configure CQL](configure-cql.md). Every setting is in the [configuration reference](../../reference/configuration.md).
 
 ## Connect with `CQL.configure`
 
+Pick the URL for your database:
+
+{% tabs %}
+{% tab title="SQLite" %}
 ```crystal
 require "cql"
 require "sqlite3"
@@ -14,6 +20,56 @@ CQL.configure do |config|
   config.db = ENV["DATABASE_URL"]? || "sqlite3://./db/development.db" # the default db
 end
 
+CQL.config.adapter # => CQL::Adapter::SQLite
+```
+{% endtab %}
+
+{% tab title="PostgreSQL" %}
+```crystal
+require "cql" # also loads CQL's native PostgreSQL driver
+
+CQL.configure do |config|
+  config.db = ENV["DATABASE_URL"]? || "postgres://user:pass@localhost:5432/myapp"
+  # postgresql://localhost/myapp also works: default user and port
+end
+
+CQL.config.adapter # => CQL::Adapter::Postgres
+```
+
+If the app also requires the `pg` shard, `pg` serves `postgres://` URLs instead of the native driver; see the [native PostgreSQL driver guide](../postgres-native/README.md).
+{% endtab %}
+
+{% tab title="MySQL" %}
+```crystal
+require "cql"
+require "mysql"
+
+CQL.configure do |config|
+  config.db = ENV["DATABASE_URL"]? || "mysql://user:pass@localhost:3306/myapp"
+end
+
+CQL.config.adapter # => CQL::Adapter::MySql
+```
+{% endtab %}
+
+{% tab title="CockroachDB" %}
+```crystal
+require "cql" # CockroachDB uses the native PostgreSQL driver
+
+CQL.configure do |config|
+  config.db = ENV["DATABASE_URL"]? || "cockroachdb://root@localhost:26257/app"
+end
+
+CQL.config.adapter # => CQL::Adapter::CockroachDB
+```
+
+See [Use CockroachDB](cockroachdb.md).
+{% endtab %}
+{% endtabs %}
+
+Then build the schema from the config:
+
+```crystal
 AppDB = CQL.build_schema(:app) do
   table :users do
     primary :id, Int64
@@ -22,20 +78,7 @@ AppDB = CQL.build_schema(:app) do
 end
 ```
 
-`CQL.build_schema` opens `config.full_db_url`, so pool, SSL, database-specific and `adapter_options` settings reach the connection. `CQL.config` is process-wide: it describes one database.
-
-## Pick the URL for your database
-
-```text
-postgres://user:pass@localhost:5432/myapp    CQL::Adapter::Postgres     native driver, loaded by require "cql"
-postgresql://localhost/myapp                 CQL::Adapter::Postgres     default user and port
-cockroachdb://root@localhost:26257/app       CQL::Adapter::CockroachDB  see cockroachdb.md
-mysql://user:pass@localhost:3306/myapp       CQL::Adapter::MySql        add require "mysql"
-sqlite3://./db/development.db                CQL::Adapter::SQLite       add require "sqlite3"
-redis://localhost:6379                       ArgumentError: Unsupported database URL: redis://localhost:6379
-```
-
-`config.adapter` reports the adapter. If the app also requires the `pg` shard, `pg` serves `postgres://` URLs instead of the native driver; see the [native PostgreSQL driver guide](../postgres-native/README.md).
+`CQL.build_schema` opens `config.full_db_url`, so pool, SSL, database-specific and `adapter_options` settings reach the connection. `CQL.config` is process-wide: it describes one database. Any other scheme fails validation: `redis://localhost:6379` raises `ArgumentError: Unsupported database URL: redis://localhost:6379`.
 
 ## See what `full_db_url` adds
 
@@ -110,7 +153,7 @@ The schema opens its first connection when it is built, so a refused connection 
 
 ## Use `Schema.define` for several databases
 
-`CQL::Schema.define` takes the adapter and URL directly and ignores `CQL.config`: no pool, SSL or database-specific parameters are added.
+`CQL::Schema.define` takes the adapter and URL directly and ignores `CQL.config` and its environment defaults: no pool, SSL or database-specific parameters are added. Use it for a second database, a script or spec fixture that must not touch the shared config, or a URL that must reach the driver exactly as written. Run its migrations with `schema.migrator`; `CQL.build_migrator` would apply the shared config's migrations table and schema file.
 
 ```crystal
 PrimaryDB = CQL::Schema.define(

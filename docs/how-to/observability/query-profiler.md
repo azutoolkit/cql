@@ -1,6 +1,8 @@
-# Profile Queries and Detect N+1
+---
+description: "Turn on the CQL::Performance monitor to profile statements, find N+1 patterns, log SQL, and read health metrics and reports."
+---
 
-Turn on the `CQL::Performance` monitor to profile statements, find N+1 patterns, log SQL, and read health metrics and reports.
+# Profile Queries and Detect N+1
 
 ## Turn It On
 
@@ -114,9 +116,6 @@ CQL::Performance.configure do |config|
   # config.detection.ignore_patterns      # ["COMMIT", "BEGIN", "ROLLBACK"]: prefixes never counted
 end
 # WARN - N+1 Query Pattern Detected: SELECT users.id, ... WHERE users.id = ? LIMIT ? (2 times)
-
-CQL::Performance.start_relation_loading("user", "Post")  # markers take window slots; reports do not show them
-CQL::Performance.end_relation_loading
 ```
 
 To fix a pattern, see [Avoid N+1 Queries](../performance/n-plus-one.md).
@@ -155,7 +154,12 @@ puts CQL::Performance.report             # config.reporting.format: "text" ("log
 puts CQL::Performance.report("console")  # colored; "logger" is an alias
 File.write("tmp/perf.html", CQL::Performance.report("html"))  # escapes issue messages and details
 File.write("tmp/perf.json", CQL::Performance.report("json"))  # an unknown format falls back to text
+```
 
+<details>
+<summary>Add a report format</summary>
+
+```crystal
 class CsvReportFormatter < CQL::Performance::ReportFormatter
   def format(report : CQL::Performance::PerformanceReport) : String
     "queries,slow,errors\n#{report.total_queries},#{report.slow_queries},#{report.errors}\n"
@@ -168,6 +172,8 @@ generator.available_formats  # => ["text", "json", "html", "console", "logger", 
 CQL::Performance.monitor = CQL::Performance::Monitor.new(CQL::Performance.production_config, report_generator: generator)
 puts CQL::Performance.report("csv")
 ```
+
+</details>
 
 ## Track Statements CQL Does Not Run
 

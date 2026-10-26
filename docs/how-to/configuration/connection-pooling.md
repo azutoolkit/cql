@@ -1,6 +1,8 @@
-# Set Up Connection Pooling
+---
+description: "Size the pool each schema opens, watch it, and fix checkouts that time out."
+---
 
-Size the pool each schema opens, watch it, and fix checkouts that time out.
+# Set Up Connection Pooling
 
 ## Configure the pool with `CQL.configure`
 
@@ -30,12 +32,11 @@ puts CQL.config.full_db_url
 | `initial_size` | `initial_pool_size` | 1 | Connections opened when the schema is built |
 | `max_idle_size` | `max_idle_pool_size` | 1 | Connections kept open while idle |
 | `checkout_timeout` | `checkout_timeout` | 10 seconds | Wait for a free connection, then raise `DB::PoolTimeout` |
-| `max_retry_attempts` | `retry_attempts` | 3 | crystal-db's retries for statements run on the pool itself; CQL checks out a connection, so its queries are not retried |
-| `retry_delay` | `retry_delay` | 1 second | Pause between those retries |
 | `use_prepared_statements?` | `prepared_statements` | `true` | Whether crystal-db prepares statements |
-| `query_timeout` | none | 30 seconds | Stored only; nothing reads it, so it does not limit queries |
 
-`size`, `initial_size`, `max_idle_size` and `max_retry_attempts` must be positive, or `CQL.configure` raises `ArgumentError` (for example `initial_pool_size must be positive`). Setting `pool_size` lowers `initial_size` and `max_idle_size` to fit it.
+`size`, `initial_size`, `max_idle_size` and `max_retry_attempts` must be positive, or `CQL.configure` raises `ArgumentError` (for example `initial_pool_size must be positive`). Setting `pool_size` lowers `initial_size` and `max_idle_size` to fit it. The retry settings (`max_retry_attempts`, `retry_delay`) and `query_timeout` do not affect CQL's queries; see the [configuration reference](../../reference/configuration.md#pool).
+
+`postgres://` schemas use crystal-db's pool even with CQL's native driver. `CQL::Postgres::AsyncEngine` has its own pool with other URL options: see [Pool Options](../postgres-native/async-engine.md#pool-options).
 
 ## Set the pool in a `Schema.define` URI
 
@@ -79,24 +80,6 @@ end
 ```
 
 If the pool is simply too small for the traffic, raise `pool_size`, keeping the total across all processes below the server's connection limit.
-
-## Native `AsyncEngine` pool
-
-`postgres://` schemas use crystal-db's pool, even with CQL's native driver. `CQL::Postgres::AsyncEngine` has its own pool, configured in its URL:
-
-```crystal
-# Parameter (default)       Meaning
-# pool_size (10)            most connections
-# pool_min_size (0)         connections AsyncEngine.connect opens up front
-# checkout_timeout (5)      seconds to wait, then raise CQL::Postgres::PoolTimeout
-# health_check_after (30)   seconds idle before a connection is pinged on checkout
-# max_queries (none)        retire a connection after this many requests
-# max_idle_lifetime (none)  retire a connection idle this many seconds
-engine = CQL::Postgres::AsyncEngine.connect("postgres://app:secret@db/app?pool_size=10&checkout_timeout=2")
-engine.pool.stats # => 0 in use, 0 idle, 10 max  (fields max_size, idle, in_use)
-```
-
-See [AsyncEngine and pool options](../postgres-native/async-engine.md).
 
 ## See Also
 

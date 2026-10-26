@@ -1,6 +1,8 @@
-# Enable Query Caching
+---
+description: "Cache expensive results and rendered fragments in a memory or Redis store, and drop them by key or by tag."
+---
 
-Cache expensive results and rendered fragments in a memory or Redis store, and drop them by key or by tag.
+# Enable Query Caching
 
 | Piece | Class | Use it for |
 | :--- | :--- | :--- |
@@ -43,23 +45,44 @@ CQL::Cache::Cache.enabled = false  # with_cache runs the block, get returns nil,
 
 ## Choose a Store
 
+{% tabs %}
+{% tab title="Memory" %}
 ```crystal
 CQL::Cache::Cache.configure(
   CQL::Cache::CacheStoreConfig.new(type: CQL::Cache::CacheStoreType::Memory, memory_max_size: 1000)
 )
-CQL::Cache::Cache.default_ttl = 5.minutes
-CQL::Cache::Cache.configure_from_env  # CQL_CACHE_* variables, see Configure Redis Cache
 
 store = CQL::Cache::Cache.cache_store         # a MemoryCache unless configured: per process, unbounded
 store.as(CQL::Cache::MemoryCache).cleanup_expired  # expired entries are otherwise dropped when read
+```
+
+A full `MemoryCache` evicts its least recently used entry.
+{% endtab %}
+
+{% tab title="Redis" %}
+```crystal
+CQL::Cache::Cache.configure(
+  CQL::Cache::CacheStoreConfig.new(type: CQL::Cache::CacheStoreType::Redis, redis_url: ENV["REDIS_URL"])
+)
+
+CQL::Cache::Cache.cache_store.class  # => CQL::Cache::RedisCache, shared by every process
+```
+
+Every Redis option and the environment variables are in [Configure Redis Cache](redis.md).
+{% endtab %}
+{% endtabs %}
+
+Then set the TTL, or read the whole setup from the environment:
+
+```crystal
+CQL::Cache::Cache.default_ttl = 5.minutes
+CQL::Cache::Cache.configure_from_env  # CQL_CACHE_* variables, see Configure Redis Cache
 
 CQL.configure do |c|
   c.cache.on = true        # default: on when CRYSTAL_ENV is development or unset, off otherwise
   c.cache.ttl = 5.minutes  # with c.cache.on, CQL.build_schema copies it to Cache.default_ttl
 end
 ```
-
-A full `MemoryCache` evicts its least recently used entry. For a store shared across processes, see [Configure Redis Cache](redis.md).
 
 ## Invalidate by Key
 
