@@ -5,14 +5,12 @@ Wire [telemetry](telemetry.md) and the [performance monitor](query-profiler.md) 
 ## Log and Alert Off the Query Path
 
 ```crystal
-Log.setup do |c|
-  c.bind("cql.*", :info, Log::IOBackend.new)  # cql.telemetry and cql.performance.* sources
-end
+Log.setup(:info, Log::IOBackend.new)  # every source, cql.telemetry and cql.performance.* included
 
-CQL::Telemetry.log_queries(:info, async: true)
 CQL::Telemetry.alert_on_slow(100.milliseconds, async: true) do |event|
   Log.warn { "slow query (#{event.duration.total_milliseconds.round(1)}ms): #{event.sql}" }
 end
+CQL::Telemetry.log_queries(:info, async: true) if ENV["LOG_SQL"]?  # every statement: for staging or debugging
 ```
 
 `async: true` hands each event to a background fiber, so log I/O does not add to query latency.

@@ -84,7 +84,7 @@ end
 # 3x avg 0.01ms  SELECT users.id, users.name, users.email FROM users WHERE users.id = ? LIMIT ?
 
 profiler.slowest_queries(5)  # QueryData: sql, params, execution_time, timestamp, rows_affected, error
-profiler.issues              # :very_slow_queries (critical), :high_frequency_slow_query (> 100 runs averaging > 50 ms)
+profiler.issues              # :very_slow_queries (critical), :high_frequency_slow_query (high: > 100 runs averaging > 50 ms)
 
 CQL::Performance.configure do |config|
   config.profiling.log_slow_queries = true       # default: WARN "SLOW QUERY (7.75μs): SELECT ..."
@@ -187,7 +187,7 @@ From `benchmarks/telemetry_overhead_bench.cr`: `find` and `create!` on in-memory
 
 | Configuration | `find` | `create!` |
 | --- | --- | --- |
-| all off | 0.83 µs, 336 B | 3.28 µs, 2.58 kB |
+| all off | 0.83 µs, 336 B | 3.28 µs, 2.44 kB |
 | one synchronous subscriber | +80 ns, +0 B | +130 ns, +0 B |
 | one `async: true` subscriber¹ | +45 ns, +0 B | about 0, +0 B |
 | no-op tracer | about 0, +0 B | about 0, +0 B |

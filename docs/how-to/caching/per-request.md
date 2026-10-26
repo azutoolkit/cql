@@ -14,7 +14,7 @@ CQL::Cache::RequestQueryCacheHelper.stats["hits"]  # => 1
 CQL::Cache::RequestQueryCacheHelper.end_request    # clears tracked statements; tracking stops with the last request
 ```
 
-Every select a query runs (`all`, `get`, `each`, `find` and the like) passes through `RequestQueryCacheHelper.with_cache(sql, params)`. It keys the statement by its SQL and a hash of its bound values, keeps no values, and **always runs the block**: no rows are stored or replayed. Use the counts to find duplicates, then memoize the result or cache it with [Enable Query Caching](query-cache.md). Outside a request, tracking is off and costs nothing.
+Every select a query runs (`all`, `get`, `each`, `find` and the like) passes through `RequestQueryCacheHelper.with_cache(sql, params)`. It keys the statement by its SQL and a hash of its bound values, keeps no values, and **always runs the block**: no rows are stored or replayed. Use the counts to find duplicates, then memoize the result or cache it with [Enable Query Caching](query-cache.md). Outside a request, tracking is off and `with_cache` just runs the block.
 
 ## Hook It Into Your Framework
 

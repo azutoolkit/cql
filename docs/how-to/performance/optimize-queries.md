@@ -212,7 +212,7 @@ CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
 end
 
 CQL::Performance.enable_development_mode!       # profiler + N+1 detector
-CQL::Performance.critical_issues                # N+1 patterns appear as :n_plus_one issues
+CQL::Performance.monitor.detector.not_nil!.issues # :n_plus_one issues, :medium at most with the default window
 ```
 
 {% hint style="info" %}

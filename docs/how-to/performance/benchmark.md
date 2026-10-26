@@ -63,8 +63,9 @@ Benchmark.ips do |x|
   x.report("find") { User.find(42) }
   x.report("to_sql") { User.where(active: true).order(name: :asc).limit(10).to_sql }
 end
-# find     1.21M (826.45ns) (± 2.10%)  336B/op        fastest
-# to_sql 486.12k (  2.06µs) (± 1.35%)  2.3kB/op  2.49× slower
+#   find 278.20k (  3.59µs) (± 6.30%)    384B/op   1.27× slower
+# to_sql 352.39k (  2.84µs) (± 5.42%)  4.27kB/op        fastest
+# label, iterations per second, time per iteration, deviation, bytes allocated per iteration
 ```
 
 Run it with the configuration you deploy. SQL logging and the performance monitor, when on, add to every statement: [What monitoring costs](query-profiler.md#what-monitoring-costs) has the numbers.
