@@ -241,6 +241,7 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 - Rewrote the caching how-to pages (`per-request`, `redis`, `query-cache`) against the real `CQL::Cache` API.
 - Added how-to pages for the native PostgreSQL driver, CockroachDB, CTEs, window functions, set operations, upsert, row locking, raw fragments, `explain`, JSON/geo predicates and the typed `where` DSL; plus schema dump/validation, UUID/ULID keys, safety guardrails and the query profiler.
 - Added `benchmarks/README.md` and `script/README.md`.
+- Rewrote the Optimize Queries how-to as a code-first reference (preload vs. joins, projections, batching, aggregates, bulk writes, indexes, CTEs, `to_sql`/`explain`), and fixed the joins example in Avoid N+1 Queries to call `Post.query.joins`.
 
 ## [0.0.435]
 

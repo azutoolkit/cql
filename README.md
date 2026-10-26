@@ -871,7 +871,7 @@ Comprehensive guides for every level:
 
 - **[Advanced Caching](./docs/how-to/caching/query-cache.md)** - Multi-layer caching strategies
 - **[Performance Monitoring](./docs/how-to/performance/monitoring.md)** - Query profiling and optimization
-- **[Optimize Queries](./docs/how-to/performance/optimize-queries.md)** - Bulk writes, preload and the cached paths
+- **[Optimize Queries](./docs/how-to/performance/optimize-queries.md)** - Preload, projections, batching, bulk writes, indexes, CTEs and explain
 - **[How CQL Keeps Queries Fast](./docs/explanation/performance-design.md)** - What each query costs and what is opt-in
 - **[Benchmark CQL](./docs/how-to/performance/benchmark.md)** - Run the benchmarks and compare versions
 - **[Testing Strategies](./docs/how-to/testing/test-models.md)** - Testing CQL applications

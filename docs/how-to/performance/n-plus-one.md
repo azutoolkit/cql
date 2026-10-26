@@ -52,7 +52,7 @@ When filtering by associated records, join through the association and put the c
 
 ```crystal
 # Fetch posts written by active users
-posts = Post
+posts = Post.query
   .joins(:user) { user.active == true }
   .all
 ```
