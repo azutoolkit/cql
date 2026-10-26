@@ -14,6 +14,7 @@ LINK = re.compile(r'(?:\]\(|href="|url=")([^)"#\s]+\.md)')
 
 
 def linked_pages(readme):
+    """The docs pages *readme* links to, as paths relative to docs/."""
     base = os.path.dirname(readme)
     text = open(os.path.join(DOCS, readme), encoding="utf-8").read()
     return {os.path.normpath(os.path.join(base, target)) for target in LINK.findall(text)}

@@ -29,7 +29,7 @@ import concurrent.futures
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - runs the Crystal compiler and the docs' own commands
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -102,6 +102,7 @@ end
 
 @dataclass
 class Block:
+    """A fenced code block: its language, `{% code title %}`, first line in the page and marker."""
     page: str
     lang: str
     title: str | None
@@ -111,6 +112,7 @@ class Block:
 
     @property
     def skipped(self):
+        """Whether the block is left out: marked skip, an intentional error (# ❌) or elided (...)."""
         return self.marker == "skip" or "# ❌" in self.code or re.search(r"^\s*\.\.\.\s*$", self.code, re.M)
 
 
@@ -121,11 +123,13 @@ class Source:
     spans: list = field(default_factory=list)  # (first generated line, line count, page, first page line)
 
     def append(self, block):
+        """Appends *block*'s code and records where it came from."""
         first = self.text.count("\n") + 1
         self.text += block.code + "\n"
         self.spans.append((first, block.code.count("\n") + 1, block.page, block.start))
 
     def locate(self, line):
+        """The (page, page line) a generated line came from, or None."""
         for first, count, page, start in self.spans:
             if first <= line < first + count:
                 return page, start + line - first
@@ -134,20 +138,24 @@ class Source:
 
 @dataclass
 class Check:
+    """One command run in the scratch project after writing *files*."""
     label: str
     argv: list  # run in the scratch project
     files: dict  # path in the scratch project -> Source, written before argv runs
 
 
 def compile_check(label, entry, files):
+    """A check that type-checks *entry* without generating code."""
     return Check(label, [CRYSTAL, "build", "--no-codegen", "--no-color", entry], files)
 
 
 def run_check(label, entry, files):
+    """A check that builds and runs *entry*."""
     return Check(f"{label} (ran)", [CRYSTAL, "run", "--no-color", entry], files)
 
 
 def blocks(page):
+    """The fenced code blocks in *page*, in order."""
     lines = open(page, encoding="utf-8").read().split("\n")
     found, title, marker, i = [], None, None, 0
     while i < len(lines):
@@ -174,11 +182,13 @@ def blocks(page):
 
 
 def starts_program(block):
+    """Whether *block* begins a program of its own."""
     standalone = 'require "cql"' in block.code and not re.search(r'require\s+"\.', block.code)
     return standalone or block.marker == "new-program"
 
 
 def with_prelude(source):
+    """Prepends PRELUDE, or just `require "cql"`, when *source* needs it."""
     if USES_APP.search(source.text) and not DEFINES_APP.search(source.text):
         header = PRELUDE
     elif 'require "cql"' not in source.text:
@@ -191,6 +201,7 @@ def with_prelude(source):
 
 
 def page_jobs(page):
+    """One single-check job per program on a non-tutorial page."""
     sources = []
     for block in blocks(page):
         if block.lang != "crystal" or block.skipped or (block.title and not starts_program(block)):
@@ -204,6 +215,7 @@ def page_jobs(page):
 
 
 def tutorial_job(pages):
+    """The checks that replay a tutorial: its titled files written in order, its commands compiled or run."""
     checks, files, seen = [], {}, set()
     for page in pages:
         for block in blocks(page):
@@ -241,6 +253,7 @@ def shell_checks(block, files, seen):
 
 
 def jobs_for(pages):
+    """Groups *pages* into jobs: one per tutorial project, one per program elsewhere."""
     tutorials, jobs = {}, []
     for page in pages:
         directory, name = os.path.split(page)
@@ -252,11 +265,15 @@ def jobs_for(pages):
 
 
 def stdlib_dirs():
-    out = subprocess.run([CRYSTAL, "env", "CRYSTAL_PATH"], capture_output=True, text=True, check=True).stdout
+    """The compiler's standard library directories."""
+    out = subprocess.run(  # nosec B603 - fixed arguments
+        [CRYSTAL, "env", "CRYSTAL_PATH"], capture_output=True, text=True, check=True
+    ).stdout
     return [d for d in out.strip().split(":") if d and d != "lib"]
 
 
 def unresolved_shards(check, lib, stdlib):
+    """The required shard names found neither in *lib* nor in the standard library."""
     names = {name.split("/")[0] for src in check.files.values() for name in SHARD_REQUIRE.findall(src.text)}
     return sorted(n for n in names if not os.path.exists(os.path.join(lib, n))
                   and not any(os.path.exists(os.path.join(d, n + ".cr")) or os.path.isdir(os.path.join(d, n))
@@ -264,6 +281,7 @@ def unresolved_shards(check, lib, stdlib):
 
 
 def to_page_locations(output, project, check):
+    """Rewrites file:line references in compiler output to page:line."""
     for path, source in check.files.items():
         pattern = re.compile(r"(?:" + re.escape(os.path.join(project, path)) + r"|(?<![\w/.-])" + re.escape(path)
                              + r"):(\d+)")
@@ -277,6 +295,7 @@ def to_page_locations(output, project, check):
 
 
 def perform(check, project, lib, stdlib):
+    """Writes the check's files and runs its command: (status, message)."""
     unresolved = unresolved_shards(check, lib, stdlib)
     if unresolved and set(unresolved) <= OPTIONAL_SHARDS:
         return "SKIP", f"{check.label} (needs shard {', '.join(unresolved)})"
@@ -287,8 +306,10 @@ def perform(check, project, lib, stdlib):
         with open(os.path.join(project, path), "w", encoding="utf-8") as out:
             out.write(source.text)
     try:
-        result = subprocess.run(check.argv, cwd=project, capture_output=True, text=True,
-                                stdin=subprocess.DEVNULL, timeout=COMMAND_TIMEOUT)
+        result = subprocess.run(  # nosec B603 - the compiler, or a command the docs tell readers to run
+            check.argv, cwd=project, capture_output=True, text=True, check=False,
+            stdin=subprocess.DEVNULL, timeout=COMMAND_TIMEOUT,
+        )
     except subprocess.TimeoutExpired:
         return "FAIL", f"{check.label}\n    timed out after {COMMAND_TIMEOUT} s"
     if result.returncode == 0:
@@ -298,12 +319,14 @@ def perform(check, project, lib, stdlib):
 
 
 def run_job(checks, lib, stdlib, scratch):
+    """Runs a job's checks in order in one fresh scratch project."""
     project = tempfile.mkdtemp(dir=scratch)
     os.symlink(lib, os.path.join(project, "lib"))
     return [perform(check, project, lib, stdlib) for check in checks]
 
 
 def main():
+    """Compiles the programs in the given pages (default: README.md and docs/) and exits 1 on a failure."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("-j", "--jobs", type=int, default=min(4, os.cpu_count() or 1))
     parser.add_argument("pages", nargs="*")

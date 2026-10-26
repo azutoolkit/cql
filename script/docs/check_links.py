@@ -14,12 +14,14 @@ SKIP = {".git", ".claude", "lib", "node_modules", "bin", "_site"}
 
 
 def slug(heading):
+    """GitHub's and GitBook's anchor for a heading."""
     text = re.sub(r"`", "", heading.strip().lower())
     text = re.sub(r"[^\w\- ]", "", text)
     return text.replace(" ", "-")
 
 
 def markdown_files():
+    """Every Markdown file in the repository, outside SKIP directories."""
     for root, dirs, files in os.walk("."):
         dirs[:] = [d for d in dirs if d not in SKIP]
         for name in files:
@@ -31,6 +33,7 @@ anchor_cache = {}
 
 
 def anchors(path):
+    """The heading anchors of *path* (cached)."""
     if path not in anchor_cache:
         text = FENCE.sub("", open(path, encoding="utf-8").read())
         seen, found = {}, set()

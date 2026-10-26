@@ -15,11 +15,14 @@ LANDING = {"docs/README.md", "docs/installation.md", "docs/tutorials/README.md",
 BLOCKS = {"hint", "tabs", "tab", "stepper", "step", "code", "content-ref"}
 PARENT = {"tab": "tabs", "step": "stepper"}
 NO_SELF_NEST = {"tabs", "stepper", "code", "hint", "content-ref"}
+HINT_STYLE = re.compile(r'style="(info|success|warning|danger)"')
+MAX_HINTS = 4
 TAG = re.compile(r"\{%\s*(end)?([a-z-]+)\b([^%]*)%\}")
 FENCE_LINE = re.compile(r"^\s*(```+|~~~+)")
 
 
 def pages(args):
+    """The pages named on the command line, or every docs page except SUMMARY.md."""
     if args:
         return args
     out = []
@@ -28,114 +31,160 @@ def pages(args):
     return sorted(out)
 
 
-def lint(path):
+def target_exists(page, target):
+    """Whether a relative link *target* in *page* points at an existing file."""
+    return os.path.exists(os.path.normpath(os.path.join(os.path.dirname(page), target.split("#")[0])))
+
+
+def split_frontmatter(text):
+    """Returns (raw frontmatter or None, body, errors)."""
+    if not text.startswith("---\n"):
+        return None, text, ["missing frontmatter"]
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        return None, text, ["frontmatter not closed"]
+    return text[4:end], text[end + 5:], []
+
+
+def frontmatter_errors(raw, page):
+    """Checks the description (present, quoted), icon (landing pages only) and that no other key is set."""
+    try:
+        meta = yaml.safe_load(raw) or {}
+    except yaml.YAMLError as exc:
+        return [f"frontmatter YAML: {exc}".splitlines()[0]]
     errors = []
-    text = open(path, encoding="utf-8").read()
-    rel = os.path.normpath(path)
-
-    if text.startswith("---\n"):
-        end = text.find("\n---\n", 4)
-        if end < 0:
-            errors.append("frontmatter not closed")
-            body, raw = text, ""
-        else:
-            raw, body = text[4:end], text[end + 5:]
-            try:
-                meta = yaml.safe_load(raw) or {}
-            except yaml.YAMLError as exc:
-                errors.append(f"frontmatter YAML: {exc}".splitlines()[0])
-                meta = {}
-            desc = meta.get("description")
-            if not isinstance(desc, str) or not desc.strip():
-                errors.append("frontmatter: missing description")
-            elif not re.search(r'^description:\s*["\']', raw, re.M):
-                errors.append("frontmatter: description must be quoted")
-            if "icon" in meta and rel not in LANDING:
-                errors.append("frontmatter: icon only on landing pages")
-            extra = set(meta) - {"description", "icon"}
-            if extra:
-                errors.append(f"frontmatter: unexpected keys {sorted(extra)}")
-    else:
-        errors.append("missing frontmatter")
-        body = text
-
-    stack, in_fence, details_depth = [], False, 0
-    code_fences = []  # fenced-block count per open {% code %}
-    for lineno, line in enumerate(body.splitlines(), 1):
-        if FENCE_LINE.match(line):
-            if not in_fence and stack and stack[-1][0] == "code":
-                code_fences[-1] += 1
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        if re.match(r"^\s*<details", line):
-            if any(name in ("tabs", "stepper") for name, _ in stack):
-                errors.append(f"{lineno}: <details> inside tabs or stepper")
-            details_depth += 1
-        if re.match(r"^\s*</details>", line):
-            details_depth -= 1
-        for match in TAG.finditer(line):
-            closing, name, attrs = match.group(1), match.group(2), match.group(3)
-            if name not in BLOCKS:
-                continue
-            if closing:
-                if not stack or stack[-1][0] != name:
-                    errors.append(f"{lineno}: end{name} without matching {name}")
-                else:
-                    stack.pop()
-                    if name == "code" and code_fences.pop() != 1:
-                        errors.append(f"{lineno}: code block must wrap exactly one fenced block")
-                continue
-            if name in PARENT and (not stack or stack[-1][0] != PARENT[name]):
-                errors.append(f"{lineno}: {name} outside {PARENT[name]}")
-            if name in NO_SELF_NEST and any(n == name for n, _ in stack):
-                errors.append(f"{lineno}: {name} nested inside {name}")
-            if name == "tabs" and any(n == "stepper" for n, _ in stack):
-                pass  # allowed
-            if name == "code":
-                code_fences.append(0)
-                if 'title="' not in attrs:
-                    errors.append(f"{lineno}: code block without title")
-            if name == "hint" and not re.search(r'style="(info|success|warning|danger)"', attrs):
-                errors.append(f"{lineno}: hint needs style info|success|warning|danger")
-            if name == "tab" and 'title="' not in attrs:
-                errors.append(f"{lineno}: tab without title")
-            if name == "content-ref":
-                url = re.search(r'url="([^"]+)"', attrs)
-                if not url:
-                    errors.append(f"{lineno}: content-ref without url")
-                elif not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(path), url.group(1).split("#")[0]))):
-                    errors.append(f"{lineno}: content-ref target missing: {url.group(1)}")
-            stack.append((name, lineno))
-    for name, lineno in stack:
-        errors.append(f"{lineno}: {name} never closed")
-    if details_depth != 0:
-        errors.append("unbalanced <details>")
-    if in_fence:
-        errors.append("unclosed fenced block")
-
-    for href in re.findall(r'<a href="([^"]+)"', body):
-        if re.match(r"^[a-z]+:", href):
-            continue
-        if not os.path.exists(os.path.normpath(os.path.join(os.path.dirname(path), href.split("#")[0]))):
-            errors.append(f"card href missing: {href}")
-    if body.count("<table") != body.count("</table>"):
-        errors.append("unbalanced <table>")
-    hints = len(re.findall(r"\{%\s*hint ", body))
-    if hints > 4:
-        errors.append(f"{hints} hints (max 4)")
+    desc = meta.get("description")
+    if not isinstance(desc, str) or not desc.strip():
+        errors.append("frontmatter: missing description")
+    elif not re.search(r'^description:\s*["\']', raw, re.M):
+        errors.append("frontmatter: description must be quoted")
+    if "icon" in meta and os.path.normpath(page) not in LANDING:
+        errors.append("frontmatter: icon only on landing pages")
+    extra = set(meta) - {"description", "icon"}
+    if extra:
+        errors.append(f"frontmatter: unexpected keys {sorted(extra)}")
     return errors
 
 
-failed = 0
-files = pages(sys.argv[1:])
-for page in files:
-    problems = lint(page)
-    if problems:
-        failed += 1
-        print(page)
-        for problem in problems:
-            print("   ", problem)
-print(f"{len(files)} pages, {failed} with problems")
-sys.exit(1 if failed else 0)
+def opening_tag_errors(name, attrs, stack, page):
+    """Checks one opening block tag against the blocks already open (*stack*) and its required attributes."""
+    errors = []
+    if name in PARENT and (not stack or stack[-1][0] != PARENT[name]):
+        errors.append(f"{name} outside {PARENT[name]}")
+    if name in NO_SELF_NEST and any(open_name == name for open_name, _ in stack):
+        errors.append(f"{name} nested inside {name}")
+    if name in ("code", "tab") and 'title="' not in attrs:
+        errors.append(f"{name} without title" if name == "tab" else "code block without title")
+    if name == "hint" and not HINT_STYLE.search(attrs):
+        errors.append("hint needs style info|success|warning|danger")
+    if name == "content-ref":
+        url = re.search(r'url="([^"]+)"', attrs)
+        if not url:
+            errors.append("content-ref without url")
+        elif not target_exists(page, url.group(1)):
+            errors.append(f"content-ref target missing: {url.group(1)}")
+    return errors
+
+
+class BlockChecker:
+    """Walks a page body line by line, tracking open GitBook blocks, fenced code and <details>."""
+
+    def __init__(self, page):
+        self.page = page
+        self.errors = []
+        self.stack = []  # (block name, line) of each open block
+        self.code_fences = []  # fenced-block count per open {% code %}
+        self.in_fence = False
+        self.details_depth = 0
+
+    def check(self, body):
+        """Returns the block-structure errors in *body*."""
+        for lineno, line in enumerate(body.splitlines(), 1):
+            if FENCE_LINE.match(line):
+                self.fence(line)
+            elif not self.in_fence:
+                self.details(lineno, line)
+                for match in TAG.finditer(line):
+                    self.tag(lineno, *match.groups())
+        self.errors += [f"{lineno}: {name} never closed" for name, lineno in self.stack]
+        if self.details_depth != 0:
+            self.errors.append("unbalanced <details>")
+        if self.in_fence:
+            self.errors.append("unclosed fenced block")
+        return self.errors
+
+    def fence(self, _line):
+        """A fence line opens or closes a code block; one opened inside {% code %} is counted."""
+        if not self.in_fence and self.stack and self.stack[-1][0] == "code":
+            self.code_fences[-1] += 1
+        self.in_fence = not self.in_fence
+
+    def details(self, lineno, line):
+        """Tracks <details> nesting; GitBook cannot render one inside tabs or a stepper."""
+        if re.match(r"^\s*<details", line):
+            if any(name in ("tabs", "stepper") for name, _ in self.stack):
+                self.errors.append(f"{lineno}: <details> inside tabs or stepper")
+            self.details_depth += 1
+        if re.match(r"^\s*</details>", line):
+            self.details_depth -= 1
+
+    def tag(self, lineno, closing, name, attrs):
+        """Checks one {% name %} or {% endname %} tag."""
+        if name not in BLOCKS:
+            return
+        if closing:
+            self.close(lineno, name)
+            return
+        self.errors += [f"{lineno}: {error}" for error in opening_tag_errors(name, attrs, self.stack, self.page)]
+        if name == "code":
+            self.code_fences.append(0)
+        self.stack.append((name, lineno))
+
+    def close(self, lineno, name):
+        """Closes the innermost block, which must be *name*; a code block must have wrapped one fenced block."""
+        if not self.stack or self.stack[-1][0] != name:
+            self.errors.append(f"{lineno}: end{name} without matching {name}")
+            return
+        self.stack.pop()
+        if name == "code" and self.code_fences.pop() != 1:
+            self.errors.append(f"{lineno}: code block must wrap exactly one fenced block")
+
+
+def card_errors(body, page):
+    """Checks card targets, <table> balance and the hint budget."""
+    errors = [f"card href missing: {href}" for href in re.findall(r'<a href="([^"]+)"', body)
+              if not re.match(r"^[a-z]+:", href) and not target_exists(page, href)]
+    if body.count("<table") != body.count("</table>"):
+        errors.append("unbalanced <table>")
+    hints = len(re.findall(r"\{%\s*hint ", body))
+    if hints > MAX_HINTS:
+        errors.append(f"{hints} hints (max {MAX_HINTS})")
+    return errors
+
+
+def lint(page):
+    """Returns every problem found in *page*."""
+    with open(page, encoding="utf-8") as source:
+        raw, body, errors = split_frontmatter(source.read())
+    if raw is not None:
+        errors += frontmatter_errors(raw, page)
+    return errors + BlockChecker(page).check(body) + card_errors(body, page)
+
+
+def main():
+    """Lints the pages and exits 1 when any has a problem."""
+    failed = 0
+    files = pages(sys.argv[1:])
+    for page in files:
+        problems = lint(page)
+        if problems:
+            failed += 1
+            print(page)
+            for problem in problems:
+                print("   ", problem)
+    print(f"{len(files)} pages, {failed} with problems")
+    sys.exit(1 if failed else 0)
+
+
+if __name__ == "__main__":
+    main()
