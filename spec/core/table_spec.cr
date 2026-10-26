@@ -8,19 +8,6 @@ private def index_list(schema : CQL::Schema, table : Symbol) : Hash(String, Int6
   end
 end
 
-# A table in a schema that renders *adapter*'s SQL without a server (statements would run on an in-memory SQLite).
-private def offline_accounts(adapter : CQL::Adapter, uri : String) : CQL::Table
-  schema = CQL::Schema.new(:offline_ddl, uri, adapter, source: CQL::DatabaseSource.new(DB.open("sqlite3::memory:")))
-  schema.table(:accounts) { column :email, String }
-end
-
-private def add_status_sql(adapter : CQL::Adapter, uri : String, **options) : String
-  table = offline_accounts(adapter, uri)
-  alter = CQL::AlterTable.new(table, table.schema)
-  alter.add_column(:status, String, **options)
-  alter.to_sql(table.schema.new_generator)
-end
-
 describe CQL::Table do
   describe "initialization" do
     it "creates a table with valid name" do
@@ -1120,90 +1107,5 @@ describe CQL::Table do
       col = customers_table.blob(:data)
       col.should be_a(CQL::Column(Slice(UInt8)))
     end
-  end
-end
-
-describe CQL::AlterTable do
-  describe "#add_column" do
-    it "declares the default the column asks for" do
-      add_status_sql(CQL::Adapter::Postgres, "postgres://localhost/offline", null: false, default: "active")
-        .should eq("ALTER TABLE accounts ADD COLUMN status VARCHAR DEFAULT 'active' NOT NULL;\n")
-      add_status_sql(CQL::Adapter::MySql, "mysql://localhost/offline", null: false, default: "active")
-        .should eq("ALTER TABLE accounts ADD COLUMN status VARCHAR(255) DEFAULT 'active' NOT NULL;\n")
-      add_status_sql(CQL::Adapter::SQLite, "sqlite3::memory:", null: false, default: "active")
-        .should eq("ALTER TABLE accounts ADD COLUMN status TEXT DEFAULT 'active' NOT NULL;\n")
-    end
-
-    it "declares a String column's size as its length where the dialect has one" do
-      add_status_sql(CQL::Adapter::Postgres, "postgres://localhost/offline", size: 20)
-        .should eq("ALTER TABLE accounts ADD COLUMN status VARCHAR(20);\n")
-      add_status_sql(CQL::Adapter::MySql, "mysql://localhost/offline", size: 20)
-        .should eq("ALTER TABLE accounts ADD COLUMN status VARCHAR(20);\n")
-      add_status_sql(CQL::Adapter::SQLite, "sqlite3::memory:", size: 20)
-        .should eq("ALTER TABLE accounts ADD COLUMN status TEXT;\n")
-    end
-
-    it "creates the index the column asks for after adding it" do
-      add_status_sql(CQL::Adapter::Postgres, "postgres://localhost/offline", index: true).should eq(
-        "ALTER TABLE accounts ADD COLUMN status VARCHAR;\n" \
-        "CREATE INDEX idx_accounts_status ON accounts (status);\n")
-      add_status_sql(CQL::Adapter::MySql, "mysql://localhost/offline", unique: true, index: true).should eq(
-        "ALTER TABLE accounts ADD COLUMN status VARCHAR(255) UNIQUE;\n" \
-        "CREATE UNIQUE INDEX idx_accounts_status ON accounts (status);\n")
-    end
-
-    it "escapes backslashes in a MySQL default, where they are escape characters" do
-      add_status_sql(CQL::Adapter::MySql, "mysql://localhost/offline", default: "C:\\")
-        .should eq("ALTER TABLE accounts ADD COLUMN status VARCHAR(255) DEFAULT 'C:\\\\';\n")
-      add_status_sql(CQL::Adapter::Postgres, "postgres://localhost/offline", default: "C:\\")
-        .should eq("ALTER TABLE accounts ADD COLUMN status VARCHAR DEFAULT 'C:\\';\n")
-      offline_accounts(CQL::Adapter::MySql, "mysql://localhost/offline").tap(&.column(:path, String, default: "C:\\")).create_sql
-        .should contain("path VARCHAR(255) DEFAULT 'C:\\\\' NOT NULL")
-    end
-
-    it "keeps a default that tries to close its MySQL literal inside that literal" do
-      add_status_sql(CQL::Adapter::MySql, "mysql://localhost/offline", default: "\\';\nDROP TABLE users;\n--")
-        .should eq("ALTER TABLE accounts ADD COLUMN status VARCHAR(255) DEFAULT '\\\\'';\nDROP TABLE users;\n--';\n")
-      add_status_sql(CQL::Adapter::MySql, "mysql://localhost/offline", default: "a\0b")
-        .should eq("ALTER TABLE accounts ADD COLUMN status VARCHAR(255) DEFAULT 'a\\0b';\n")
-    end
-
-    it "keeps each action one statement, whatever its default holds" do
-      table = offline_accounts(CQL::Adapter::MySql, "mysql://localhost/offline")
-      alter = CQL::AlterTable.new(table, table.schema)
-      alter.add_column(:status, String, default: "\\';\nDROP TABLE users;\n--", index: true)
-
-      alter.statements(table.schema.new_generator).should eq([
-        "ALTER TABLE accounts ADD COLUMN status VARCHAR(255) DEFAULT '\\\\'';\nDROP TABLE users;\n--'",
-        "CREATE INDEX idx_accounts_status ON accounts (status)",
-      ])
-    end
-
-    it "does not record the index on the table, like create_index" do
-      table = offline_accounts(CQL::Adapter::SQLite, "sqlite3::memory:")
-      CQL::AlterTable.new(table, table.schema).add_column(:status, String, index: true)
-
-      table.indexes.should be_empty
-    end
-  end
-end
-
-describe "String column length" do
-  it "declares varchar without a size at the dialect's default length" do
-    offline_accounts(CQL::Adapter::Postgres, "postgres://localhost/offline").tap(&.varchar(:code)).create_sql
-      .should contain("code VARCHAR NOT NULL")
-    offline_accounts(CQL::Adapter::MySql, "mysql://localhost/offline").tap(&.varchar(:code)).create_sql
-      .should contain("code VARCHAR(255) NOT NULL")
-    offline_accounts(CQL::Adapter::SQLite, "sqlite3::memory:").tap(&.varchar(:code)).create_sql
-      .should contain("code TEXT NOT NULL")
-  end
-
-  it "declares a sized String column with its length in CREATE TABLE" do
-    offline_accounts(CQL::Adapter::Postgres, "postgres://localhost/offline").tap(&.varchar(:code, size: 50)).create_sql
-      .should contain("code VARCHAR(50) NOT NULL")
-    offline_accounts(CQL::Adapter::MySql, "mysql://localhost/offline").tap(&.column(:code, String, size: 50)).create_sql
-      .should contain("code VARCHAR(50) NOT NULL")
-    offline_accounts(CQL::Adapter::SQLite, "sqlite3::memory:").tap(&.varchar(:code, size: 50)).create_sql
-      .should contain("code TEXT NOT NULL")
   end
 end

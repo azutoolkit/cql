@@ -16,16 +16,14 @@ module Expression
       (PLACEHOLDERS[param_index]? if param_index >= 0) || "$#{param_index}"
     end
 
-    # pg_dump, with the password in PGPASSWORD and the URI's `sslmode` in PGSSLMODE; other query
-    # parameters are ignored. `--no-password` makes it fail rather than prompt.
-    def structure_dump_command(uri : URI, &)
-      args = ["--schema-only", "--no-comments", "--no-password"]
-      args.concat(connection_options(uri, "--username"))
-      args << "--dbname=#{database_name(uri)}"
-      env = {} of String => String
-      uri.password.presence.try { |password| env["PGPASSWORD"] = password }
-      uri.query_params["sslmode"]?.presence.try { |mode| env["PGSSLMODE"] = mode }
-      yield StructureDumpCommand.new("pg_dump", args, env)
+    def structure_dump(uri : URI) : String
+      args = [
+        "--no-comments",
+        "--schema-only",
+        "--username=#{uri.user}",
+        "--dbname=#{uri.path[1..-1]}",
+      ] + server_options(uri)
+      run_dump("pg_dump", args, env: uri.password.try { |password| {"PGPASSWORD" => password} })
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String

@@ -101,12 +101,12 @@ module Expression
         dialect = SqliteDialect.new
 
         # Add a regular column
-        result = dialect.add_column("email VARCHAR(255) NOT NULL UNIQUE", primary_key: false)
+        result = dialect.add_column("email VARCHAR(255) NOT NULL UNIQUE", false)
         result.should eq("ADD COLUMN email VARCHAR(255) NOT NULL UNIQUE")
 
         # SQLite doesn't support adding PRIMARY KEY columns
         expect_raises(CQL::SQLiteUnsupportedFeatureError) do
-          dialect.add_column("id INTEGER PRIMARY KEY AUTOINCREMENT", primary_key: true)
+          dialect.add_column("id INTEGER NOT NULL", true)
         end
       end
     end

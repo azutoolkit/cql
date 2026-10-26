@@ -68,6 +68,7 @@ module CQL
     UInt64       => "BIGINT",
     Float32      => "REAL",
     Float64      => "DOUBLE PRECISION",
+    String       => "VARCHAR",
     Bool         => "BOOLEAN",
     Time         => "TIMESTAMP",
     Time::Span   => "INTERVAL",
@@ -88,6 +89,7 @@ module CQL
       UInt64       => "BIGINT UNSIGNED",
       Float32      => "FLOAT",
       Float64      => "DOUBLE",
+      String       => "TEXT",
       Bool         => "BOOLEAN",
       Time         => "TIMESTAMP",
       Time::Span   => "INTERVAL",
@@ -101,6 +103,7 @@ module CQL
       UInt64       => "BIGINT UNSIGNED",
       Float32      => "FLOAT",
       Float64      => "DOUBLE",
+      String       => "VARCHAR(255)",
       Bool         => "TINYINT(1)",
       Time         => "DATETIME(3)",
       Time::Span   => "TIME",
@@ -125,16 +128,8 @@ module CQL
     # ```
     # CQL::Adapter::SQLite.sql_type(Int32) # => "INTEGER"
     # ```
-    def sql_type(type, size : Int32? = nil) : String
+    def sql_type(type) : String
       DB_TYPE_MAPPING[self][type]
-    end
-
-    # A `String` column holding at most *size* characters (nil: the dialect's default length).
-    # ```
-    # CQL::Adapter::Postgres.sql_type(String, 50) # => "VARCHAR(50)"
-    # ```
-    def sql_type(type : String.class, size : Int32? = nil) : String
-      dialect.string_type(size)
     end
 
     # PostgreSQL and CockroachDB share a wire protocol, `$n` placeholders and RETURNING.

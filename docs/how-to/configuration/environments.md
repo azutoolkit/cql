@@ -24,7 +24,6 @@ CQL.configure do |config|
               when "test"       then ENV["TEST_DATABASE_URL"]? || "sqlite3://./db/test.db"
               else                   ENV["DATABASE_URL"]? || "postgres://localhost/myapp_development"
               end
-  config.pool_size = 2 if config.env == "test" # migrator.up needs two connections
 end
 ```
 {% endcode %}

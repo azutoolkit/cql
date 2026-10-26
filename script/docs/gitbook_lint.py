@@ -17,6 +17,7 @@ HINT_STYLE = re.compile(r'style="(info|success|warning|danger)"')
 MAX_HINTS = 4
 TAG = re.compile(r"\{%\s*(end)?([a-z-]+)\b([^%]*)%\}")
 FENCE_LINE = re.compile(r"^\s*(```+|~~~+)")
+INLINE_CODE = re.compile(r"`[^`\n]+`")
 
 
 def pages(args):
@@ -151,7 +152,8 @@ class BlockChecker:
 
 
 def card_errors(body, page):
-    """Check card targets, <table> balance and the hint budget."""
+    """Check card targets, <table> balance and the hint budget; inline code such as `idx_<table>` is not markup."""
+    body = INLINE_CODE.sub("", body)
     errors = [f"card href missing: {href}" for href in re.findall(r'<a href="([^"]+)"', body)
               if not re.match(r"^[a-z]+:", href) and not target_exists(page, href)]
     if body.count("<table") != body.count("</table>"):

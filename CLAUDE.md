@@ -14,6 +14,9 @@ python3 script/docs/check_links.py && python3 script/docs/check_nav.py && python
 python3 script/docs/compile_snippets.py docs/how-to/models/timestamps.md   # compile a page's programs (CI: all pages)
 ```
 
+The `structure_dump` specs put a fake `pg_dump`/`mysqldump` on `PATH` (`spec/support/helpers/fake_executable.cr`), so
+the suite needs neither tool installed.
+
 ## Required: code review before every commit
 
 Every commit that changes `src/`, `spec/`, `playground/` or `benchmarks/` must be reviewed by the

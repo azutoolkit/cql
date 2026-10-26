@@ -1,19 +1,23 @@
-module CQL::Postgres
-  # Which kind of statement some SQL is, for telemetry: `insert`, `update`,
-  # `delete` or `select`. A `WITH` query counts as the first data-modifying
-  # statement it contains (`WITH moved AS (DELETE ...) INSERT ...` is a delete),
-  # and quoted text and comments are not read (dollar-quoted strings and nested
-  # block comments are, so they can mislabel a `WITH` query; E'...' strings are).
+module CQL
+  # Which kind of statement some raw SQL is, for telemetry: `insert`, `update`,
+  # `delete`, `select`, `explain`, or `ddl` for any other statement (`CREATE`,
+  # `ALTER`, `SET`, `PRAGMA`, ...). A script is labeled by its first statement. A `WITH` query counts as the first
+  # data-modifying statement it contains (`WITH moved AS (DELETE ...) INSERT ...`
+  # is a delete), and quoted text and comments are not read (dollar-quoted
+  # strings and nested block comments are, so they can mislabel a `WITH` query;
+  # E'...' strings are).
   module OperationKind
     ROW_LOCK = /\bfor\s+(?:no\s+key\s+)?(?:update|share)\b/i
 
     def self.of(sql : String) : Symbol
       case first_word(sql)
-      when "insert" then :insert
-      when "update" then :update
-      when "delete" then :delete
-      when "with"   then modifying_in(without_quoted_text_and_comments(sql))
-      else               :select
+      when "insert", "replace", "upsert"            then :insert
+      when "update"                                 then :update
+      when "delete"                                 then :delete
+      when "with"                                   then modifying_in(without_quoted_text_and_comments(sql))
+      when "select", "values", "table", "show", nil then :select
+      when "explain"                                then :explain
+      else                                               :ddl
       end
     end
 

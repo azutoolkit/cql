@@ -157,7 +157,7 @@ describe "CQL::Migrator transaction" do
     statements.select(&.includes?("CREATE")).should be_empty
   end
 
-  it "refuses to bootstrap the schema file inside a caller's transaction without transactional DDL" do
+  it "writes no schema file when refused inside a caller's transaction without transactional DDL" do
     schema = tx_schema(uri, NonTransactionalDdlSchema)
     schema_file = File.join(Dir.tempdir, "cql_migration_tx_schema_#{Process.pid}_#{Random::Secure.hex(4)}.cr")
 
@@ -253,6 +253,23 @@ describe "CQL::Migrator transaction" do
     statements.select(&.includes?("DROP")).should be_empty
     committed_tables.call.should eq(["tx_migration_d"])
     committed_versions.call.should eq([TxMigrationDropDOnDown.version])
+  end
+
+  it "refuses to roll back to a version inside a caller's transaction without transactional DDL" do
+    statements = [] of String
+    with_migrator(uri, TxMigrationCreateA, TxMigrationDropDOnDown, schema_class: NonTransactionalDdlSchema) do |migrator|
+      migrator.up
+      CQL::Telemetry.subscribe("migration_tx_spec") { |event| statements << event.sql }
+      begin
+        expect_raises(CQL::DialectError, "MySQL") { migrator.schema.transaction { migrator.down_to(TxMigrationCreateA.version) } }
+      ensure
+        CQL::Telemetry.unsubscribe("migration_tx_spec")
+      end
+    end
+
+    statements.select(&.includes?("DROP")).should be_empty
+    committed_tables.call.should eq(["tx_migration_a", "tx_migration_d"])
+    committed_versions.call.should eq([TxMigrationCreateA.version, TxMigrationDropDOnDown.version])
   end
 
   it "reverts every migration and its record on the single pooled connection" do

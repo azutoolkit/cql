@@ -10,6 +10,7 @@ module Expression
       "sqlite_drop_index_prefix"    => "DROP INDEX IF EXISTS ",
       "sqlite_delete_from_prefix"   => "DELETE FROM ",
       "sqlite_rename_column_prefix" => "RENAME COLUMN ",
+      "sqlite_add_column_prefix"    => "ADD COLUMN ",
     }
 
     # SQLite uses ? for all placeholders regardless of position
@@ -109,7 +110,7 @@ module Expression
     ) : String
       # For timestamp columns, use the database function directly (without quoting)
       # SQLite requires parentheses around function expressions in DEFAULT: DEFAULT (datetime('now'))
-      if timestamp_column && default_value.is_a?(String) && default_value.matches?(/\Adatetime\('[^']*'(?:, *'[^']*')*\)\z/)
+      if timestamp_column && default_value.is_a?(String) && default_value.starts_with?("datetime(")
         build_sql(128) do |str|
           str << column_name << " " << column_type
           str << " DEFAULT (" << default_value << ")"
@@ -122,13 +123,12 @@ module Expression
     end
 
     def add_column(column_definition : String, primary_key : Bool) : String
-      raise CQL::SQLiteUnsupportedFeatureError.new("adding a PRIMARY KEY constraint to an existing table") if primary_key
-      super
-    end
+      # SQLite doesn't support adding a PRIMARY KEY constraint to an existing table
+      if primary_key
+        raise CQL::SQLiteUnsupportedFeatureError.new("adding a PRIMARY KEY constraint to an existing table")
+      end
 
-    # SQLite ignores a declared length, so every String column is TEXT.
-    def string_type(size : Int32?) : String
-      "TEXT"
+      "#{@@cached_strings["sqlite_add_column_prefix"]}#{column_definition}"
     end
 
     def drop_column(column_name : String) : String

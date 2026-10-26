@@ -62,7 +62,7 @@ CQL::Identifier.validate!("a b", "alias")
 
 - aliases: aggregates (`count(:id, as: :n)`), subqueries (`from(subquery, as: :recent)`) and window functions;
 - CTE names;
-- DDL names: index, foreign key, unique and check constraint names, rename targets, and the table and column names a foreign key references, in `CREATE`/`DROP INDEX`, `ADD`/`DROP FOREIGN KEY`, `RENAME TABLE`/`COLUMN` and the constraints of `CREATE TABLE`. `DROP INDEX` also accepts a schema qualifier.
+- DDL names: index, foreign key, unique and check constraint names, rename targets, the column `drop_column` drops, and the table and column names a foreign key references, in `CREATE`/`DROP INDEX`, `ADD`/`DROP FOREIGN KEY`, `RENAME TABLE`/`COLUMN`, `DROP COLUMN` and the constraints of `CREATE TABLE`. `DROP INDEX` also accepts a schema qualifier.
 
 A name with a hyphen, dot, space or non-ASCII character fails early with a message instead of producing broken SQL; create such an object with a plain name and rename it in the database by hand.
 

@@ -1,6 +1,6 @@
 require "../executor"
 require "./pool"
-require "./operation_kind"
+require "../operation_kind"
 require "./query_streaming"
 require "./transaction_scope"
 require "./pipeline_result"
@@ -109,7 +109,7 @@ module CQL::Postgres
     # Runs raw SQL (no rows wanted) as a telemetry-observed statement.
     # Without arguments the text may be a script of several statements.
     def exec(sql : String, args : Array(::DB::Any) = [] of ::DB::Any) : ::DB::ExecResult
-      CQL::Execution.run(self, sql, args, :ddl, track: false) do |connection|
+      CQL::Execution.run(self, sql, args, CQL::OperationKind.of(sql), track: false) do |connection|
         args.empty? ? connection.unprepared.exec(sql) : connection.exec(sql, args: args)
       end
     end
@@ -129,7 +129,7 @@ module CQL::Postgres
     end
 
     private def pipelined_statement(pinned, connection : Connection, batch : LazyBatch, sql : String, params : Array(::DB::Any), index : Int32) : PipelineResult | ServerError
-      outcome = CQL::Execution.run(pinned, sql, params, OperationKind.of(sql), track: false) do |_|
+      outcome = CQL::Execution.run(pinned, sql, params, CQL::OperationKind.of(sql), track: false) do |_|
         batch.outcome(index).tap { |result| raise result if result.is_a?(ServerError) }
       end
       PipelineResult.new(outcome.as(Result), Statement.new(connection, sql, prepared: true))

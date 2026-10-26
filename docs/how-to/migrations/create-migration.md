@@ -104,9 +104,9 @@ reads columns from that declaration:
 | :--- | :--- | :--- |
 | `add_column`, `rename_table`, `create_index`, `drop_index` | yes | n/a |
 | `rename_column` | yes | raises `KeyError` |
-| `drop_column` | yes (SQLite 3.35+) | logs an error and emits nothing |
+| `drop_column` | yes (SQLite 3.35+) | emits `DROP COLUMN`; the database raises if the column is missing |
 | `change_column :views, Int64` | `CQL::SQLiteUnsupportedFeatureError` | n/a |
-| `foreign_key [...], references: ...` | `DB::Error` | n/a |
+| `foreign_key [...], references: ...` | `CQL::SQLiteUnsupportedFeatureError` | n/a |
 | `drop_foreign_key :fk_posts_user_id` | `CQL::SQLiteUnsupportedFeatureError` | n/a |
 
 ```sql

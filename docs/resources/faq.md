@@ -84,11 +84,11 @@ Set `CQL_VALIDATE_SCHEMA_MAPPINGS=1`: each model's getter types are compared wit
 
 ### How do I add a column to an existing table?
 
-Call `add_column` inside `schema.alter` in a migration. It takes the options `column` does, so `null: false, default: ...` works on a table with rows; see [Add Columns](../how-to/migrations/add-columns.md#add-a-column-with-a-default).
+Call `add_column` inside `schema.alter` in a migration. Its `default:` fills the existing rows, so a `NOT NULL` column needs one; see [Add Columns](../how-to/migrations/add-columns.md#add-a-column-with-a-default).
 
 ### How do I roll back a migration?
 
-`migrator.rollback` reverts the newest applied migration, `rollback(2)` the two newest and `down` every one; pending migrations do not count as steps. `migrator.down_to(version)` reverts every applied migration newer than `version` and keeps `version` applied. See [Rollback Migrations](../how-to/migrations/rollback.md).
+`migrator.rollback` reverts the newest applied migration, `rollback(2)` the two newest, `down_to(version)` every one newer than `version`, and `down` every one. See [Rollback Migrations](../how-to/migrations/rollback.md).
 
 ### What if a migration fails halfway through?
 

@@ -90,8 +90,8 @@ end
 ```
 
 `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and migrator runs nest the same way. A rollback removes
-the column from both the database and `AppDB`'s declaration, so model queries keep working; that includes an `alter`
-whose savepoint committed before the outer block raised. A manual `tx.rollback` leaves the declaration as altered.
+the column from the database but not from `AppDB`'s declaration, so model queries on the table then fail with
+`no such column: users.bio` until the process restarts.
 {% endtab %}
 
 {% tab title="MySQL and CockroachDB" %}

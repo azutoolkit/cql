@@ -136,16 +136,4 @@ describe "find with a reused statement" do
   ensure
     FindStatementDB.alter(:fs_items) { add_column :note, String, null: true }
   end
-
-  it "renders again after an alter is rolled back" do
-    item = FsItem.create!(name: "before rollback", tenant_id: 1)
-
-    FindStatementDB.transaction do
-      FindStatementDB.alter(:fs_items) { add_column :rolled_back, String, null: true }
-      FsItem.find?(item.id!).should_not be_nil
-      raise DB::Rollback.new
-    end
-
-    FsItem.find?(item.id!).try(&.name).should eq("before rollback")
-  end
 end
