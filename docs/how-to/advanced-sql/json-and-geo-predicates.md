@@ -1,6 +1,8 @@
-# Query JSON and Geospatial Columns
+---
+description: "Filter on values inside a JSON column and on distance from a point; every path, value and coordinate is bound as a parameter."
+---
 
-Filter on values inside a JSON column (`json_eq`, `json_contains`), on distance from a point (`within_distance`), and case-insensitively (`ilike`). Every path, value and coordinate is bound as a parameter.
+# Query JSON and Geospatial Columns
 
 The examples use a `documents` table:
 
@@ -25,10 +27,32 @@ end
 
 ```crystal
 documents_query.where { documents.data.json_eq(["profile", "country"], "US") }
-# PostgreSQL: WHERE documents.data #>> $1::text[] = $2                    params: ["{profile,country}", "US"]
-# MySQL:      WHERE JSON_UNQUOTE(JSON_EXTRACT(documents.data, ?)) = ?    params: ["$.profile.country", "US"]
-# SQLite:     WHERE CAST(json_extract(documents.data, ?) AS TEXT) = ?    params: ["$.profile.country", "US"]
+```
 
+{% tabs %}
+{% tab title="PostgreSQL, CockroachDB" %}
+```sql
+SELECT documents.name FROM documents WHERE documents.data #>> $1::text[] = $2
+-- params: ["{profile,country}", "US"]
+```
+{% endtab %}
+
+{% tab title="MySQL" %}
+```sql
+SELECT documents.name FROM documents WHERE JSON_UNQUOTE(JSON_EXTRACT(documents.data, ?)) = ?
+-- params: ["$.profile.country", "US"]
+```
+{% endtab %}
+
+{% tab title="SQLite" %}
+```sql
+SELECT documents.name FROM documents WHERE CAST(json_extract(documents.data, ?) AS TEXT) = ?
+-- params: ["$.profile.country", "US"]
+```
+{% endtab %}
+{% endtabs %}
+
+```crystal
 documents_query.where { documents.data.json_eq(["tags", 0], "y") }.all(as: String) # SQLite path "$.tags[0]"
 documents_query.where { documents.data.json_eq("age", 40) }.all(as: String)       # => ["grace"]; binds "40"
 documents_query.where { documents.data.json_eq("ok", true) }                      # binds "true"; "1" on SQLite (json_extract gives 1/0)
@@ -47,10 +71,27 @@ documents_query.where(name: "n").where { documents.data.json_eq("k", "v") }.to_s
 
 ```crystal
 documents_query.where { documents.data.json_contains({role: "admin"}) }
-# PostgreSQL, CockroachDB: WHERE documents.data @> $1::jsonb   params: ["{\"role\":\"admin\"}"]
-# MySQL:                   WHERE JSON_CONTAINS(documents.data, ?)
-# SQLite:                  CQL::DialectError "SQLite does not support JSON containment"
 ```
+
+{% tabs %}
+{% tab title="PostgreSQL, CockroachDB" %}
+```sql
+SELECT documents.name FROM documents WHERE documents.data @> $1::jsonb
+-- params: ["{\"role\":\"admin\"}"]
+```
+{% endtab %}
+
+{% tab title="MySQL" %}
+```sql
+SELECT documents.name FROM documents WHERE JSON_CONTAINS(documents.data, ?)
+-- params: ["{\"role\":\"admin\"}"]
+```
+{% endtab %}
+
+{% tab title="SQLite" %}
+Generating the SQL raises `CQL::DialectError` ("SQLite does not support JSON containment").
+{% endtab %}
+{% endtabs %}
 
 ## Filter by Distance
 
@@ -58,42 +99,55 @@ documents_query.where { documents.data.json_contains({role: "admin"}) }
 
 ```crystal
 documents_query.where { documents.location.within_distance(-122.4, 37.8, 500) }
-# PostgreSQL, CockroachDB (PostGIS geography, so meters):
-#   WHERE ST_DWithin(documents.location::geography, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography, $3::float8)
-# MySQL 8.0.13+, an SRID 4326 column:
-#   WHERE ST_Distance_Sphere(documents.location, ST_GeomFromText(CONCAT('POINT(', ?, ' ', ?, ')'), 4326, 'axis-order=long-lat')) <= ?
-# params: [-122.4, 37.8, 500.0]
-# SQLite: CQL::DialectError "SQLite does not support geospatial distance filters"
+```
 
-# ArgumentError when the condition is built (a NaN coordinate fails the range check):
+{% tabs %}
+{% tab title="PostgreSQL, CockroachDB" %}
+A PostGIS `geography`, so the distance is in meters. PostgreSQL needs the PostGIS extension.
+
+```sql
+SELECT documents.name FROM documents
+WHERE ST_DWithin(documents.location::geography, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography, $3::float8)
+-- params: [-122.4, 37.8, 500.0]
+```
+{% endtab %}
+
+{% tab title="MySQL" %}
+Needs MySQL 8.0.13+ and an SRID 4326 column. This form has not been run against a live MySQL server.
+
+```sql
+SELECT documents.name FROM documents
+WHERE ST_Distance_Sphere(documents.location, ST_GeomFromText(CONCAT('POINT(', ?, ' ', ?, ')'), 4326, 'axis-order=long-lat')) <= ?
+-- params: [-122.4, 37.8, 500.0]
+```
+{% endtab %}
+
+{% tab title="SQLite" %}
+Generating the SQL raises `CQL::DialectError` ("SQLite does not support geospatial distance filters").
+{% endtab %}
+{% endtabs %}
+
+Out-of-range values raise `ArgumentError` when the condition is built, on every database:
+
+```crystal
+# A NaN coordinate fails the range check too
 documents_query.where { documents.location.within_distance(181.0, 0.0, 1) } # longitude must be between -180 and 180
 documents_query.where { documents.location.within_distance(0.0, -91.0, 1) } # latitude must be between -90 and 90
 documents_query.where { documents.location.within_distance(1.0, 2.0, -1) }  # distance must not be negative
 documents_query.where { documents.location.within_distance(0.0, 0.0, Float64::INFINITY) } # distance must be finite
 ```
 
-## Match Case-Insensitively
-
-```crystal
-AppDB.query.from(:customers).select(:name).where { customers.name.ilike("ad%") }
-# PostgreSQL, CockroachDB: customers.name ILIKE $1                 (not_ilike: NOT ILIKE)
-# MySQL, SQLite:           LOWER(customers.name) LIKE LOWER(?)     (not_ilike: NOT LIKE)
-```
-
 ## Use Them on Models
 
-In the typed model DSL, `JSON::Any` columns offer `json_eq` and `json_contains`, and `String` columns offer `like`, `not_like`, `ilike` and `not_ilike`. `within_distance` is not on the typed columns; reach the column expression with `table_column`:
+In the typed model DSL, `JSON::Any` columns offer `json_eq` and `json_contains`. `within_distance` is not on the typed columns; reach the column expression with `table_column`:
 
 ```crystal
 # Document: a model over documents whose data getter is JSON::Any
 Document.query.where { data.json_eq(["profile", "country"], "US") }
-User.query.where { name.ilike("a%") }
 Document.where { Document.table_column(:location).within_distance(-122.4, 37.8, 500) }
 ```
 
-{% hint style="info" %}
-`within_distance` on PostgreSQL needs the PostGIS extension. The MySQL distance form has not been run against a live MySQL server.
-{% endhint %}
+For case-insensitive matching with `ilike` and `not_ilike`, see [Match Patterns](../querying/filter-records.md#match-patterns).
 
 ## See Also
 
