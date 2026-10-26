@@ -16,7 +16,7 @@ User.where(active: true).order(name: :asc).limit(10).all
 | Execute | `CQL::Execution.run` sends the SQL and its parameters through the schema's executor: the pooled connection, or the fiber's open transaction. | With no telemetry subscriber and the monitor off, the statement is not even timed. |
 | Hydrate | Rows are decoded into models with `DB::Serializable`. | A partial `select` decodes into a lighter `Model::Row`. |
 
-In most applications the database round trip costs more than these four stages together. The benchmarks measure building and rendering on their own, so you can check that claim for your own queries.
+The benchmarks below measure building and rendering on their own, so you can compare that cost with your database's round trip.
 
 ## What Is Off by Default
 
@@ -74,4 +74,4 @@ The ActiveRecord layer picks the query that does the least work:
 
 ## Measuring It Yourself
 
-`benchmarks/sqlite_bench.cr` measures query building and ActiveRecord operations on SQLite, and `benchmarks/pg_wire_bench.cr` measures the native PostgreSQL driver. [Benchmark CQL](../how-to/performance/benchmark.md) shows how to run them and compare two versions.
+`benchmarks/sqlite_bench.cr` measures query building, `to_sql` and ActiveRecord operations on SQLite, and `benchmarks/telemetry_overhead_bench.cr` what telemetry and the performance monitor add to one statement. `pg_wire_bench.cr` and `pg_binary_params_bench.cr` measure the native PostgreSQL driver. No results ship with them, because the numbers depend on your hardware and server; [Benchmark CQL](../how-to/performance/benchmark.md) shows how to run them and compare two versions.

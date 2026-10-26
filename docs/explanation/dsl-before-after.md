@@ -48,7 +48,7 @@ An unknown association raises with the valid names ("User has no association :no
 
 ## Choosing Columns: Partial Rows Instead of Mapping Errors
 
-Before, `select(:id, :email)` still hydrated the whole model, so every non-nilable attribute that was not selected raised `DB::MappingException` at run time. Now a partial select returns lightweight `User::Row` records whose unselected columns are `nil`, and the rest of the chain still works:
+Before, `select(:id, :email)` still hydrated the whole model, which failed at run time for every non-nilable attribute that was not selected. Now a partial select returns lightweight `User::Row` records whose unselected columns are `nil`, and the rest of the chain still works:
 
 ```crystal
 rows = User.query.where { age >= 18 }.select(:id, :email).order_by(id: :asc).limit(20).to_a
@@ -58,7 +58,7 @@ rows.first.name  # => nil (not selected)
 
 ## Raw SQL: Fragments With Bound Values
 
-Before, there were no raw fragments at all, and the azu_cli templates called a `where("x = ?", v)` that did not exist. Now fragments bind every value and never interpolate:
+Before, CQL had no raw fragments. Now fragments bind every value and never interpolate:
 
 ```crystal
 User.query.where("lower(email) = ? AND age > ?", "ada@example.com", 18)         # positional
