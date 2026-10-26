@@ -1,6 +1,10 @@
+---
+description: "Every predicate the validate macro accepts, the value it takes, when it passes and its default message."
+---
+
 # Validation Options Reference
 
-Every predicate the `validate` macro accepts, the value it takes, when it passes and its default message. The message is what `errors.map(&.message)` returns.
+The default message is what `errors.map(&.message)` returns.
 
 `validate attribute, **options` (for example `validate :name, presence: true, size: 2..50, message: "Name is invalid"`) stores the options per attribute: a second `validate` for the same attribute replaces the first, so put every rule for one attribute in one call. An unknown option or an attribute without a getter is a compile-time error (`CQL validation error in User: ...`).
 
@@ -25,6 +29,9 @@ Every predicate the `validate` macro accepts, the value it takes, when it passes
 | **`on`** | `Symbol` | | Do not use: the macro accepts it, but the model then fails to compile (`undefined macro variable 'context'`). |
 
 A `nil` value fails every predicate, so rules on a nilable getter also reject `nil`. Messages interpolate the option's source text, as in `Time.utc(2020, 1, 1)`.
+
+<details>
+<summary>A model that uses every predicate</summary>
 
 ```crystal
 class User
@@ -71,6 +78,8 @@ class User
   end
 end
 ```
+
+</details>
 
 ## Methods
 

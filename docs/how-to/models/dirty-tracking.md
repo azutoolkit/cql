@@ -1,6 +1,8 @@
-# Track Changes and Update Only Changed Columns
+---
+description: "Make a model remember its saved values, so it reports what changed and update! and save send only those columns."
+---
 
-Make a model remember its saved values, so it reports what changed and `update!` and `save` send only those columns.
+# Track Changes and Update Only Changed Columns
 
 ## Enable Dirty Tracking
 

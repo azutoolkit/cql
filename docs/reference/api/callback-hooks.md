@@ -1,6 +1,10 @@
+---
+description: "The ten lifecycle callback macros, the order they run in, and which persistence calls run them."
+---
+
 # Callback Hooks Reference
 
-The ten lifecycle callback macros, the order they run in, and which persistence calls run them. Every callback names an instance method; there are no block, `if:`, `unless:` or `around_*` forms.
+Every callback names an instance method; there are no block, `if:`, `unless:` or `around_*` forms.
 
 ## Macros
 
@@ -16,6 +20,11 @@ The ten lifecycle callback macros, the order they run in, and which persistence 
 | **`after_save :method`** | Last in `save`, after `after_create` / `after_update` | later `after_save` callbacks only |
 | **`before_destroy :method`** | First in the instance `delete!` (and soft-delete `delete!` / `force_delete!`) | `delete!` returns `false`; nothing is deleted |
 | **`after_destroy :method`** | After a DELETE that removed a row, before `id` is cleared | later `after_destroy` callbacks only |
+
+Several callbacks for one event run in the order they are declared.
+
+<details>
+<summary>A model that declares all ten</summary>
 
 ```crystal
 class Post
@@ -91,7 +100,7 @@ class Post
 end
 ```
 
-Several callbacks for one event run in the order they are declared.
+</details>
 
 ## Order
 
@@ -141,8 +150,6 @@ post.delete! # before_destroy, after_destroy
 | Method | Returns | Behavior |
 | :--- | :--- | :--- |
 | `record.run_callbacks(type : Symbol)` | `Bool` | Runs the callbacks for one event (`:before_save`, ...); `false` when one returned `false`. |
-| `record.run_save_callbacks(create = true)` | `Bool` | `before_validation`, `after_validation`, `before_save`, then `before_create` or `before_update`. Not used by `save`. |
-| `record.run_after_save_callbacks(create = true)` | `Bool` | `after_create` or `after_update`, then `after_save`. Not used by `save`. |
 | `record.run_destroy_callbacks`, `record.run_after_destroy_callbacks` | `Bool` | `before_destroy` / `after_destroy`. |
 | `Model.destroy_callbacks?` | `Bool` | `true` when the model declares `before_destroy` or `after_destroy`. |
 

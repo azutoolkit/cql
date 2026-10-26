@@ -1,6 +1,8 @@
-# Set Up Has Many
+---
+description: "Declare has_many on the model whose related records hold the foreign key, such as a User with many posts."
+---
 
-Declare `has_many` on the model whose related records hold the foreign key, such as a `User` with many `Post`s.
+# Set Up Has Many
 
 ## Declare the Association
 

@@ -1,6 +1,8 @@
-# Create Records
+---
+description: "Insert rows with save, create! or insert_all, and know which of them validate."
+---
 
-Insert rows with `save`, `create!` or `insert_all`, and know which of them validate.
+# Create Records
 
 ## Build and Save
 
@@ -45,10 +47,6 @@ end
 | Saved | `true` | `true` |
 | Invalid | raises `ValidationError` | raises `ValidationError` |
 | A callback returned `false` | `false` | raises `CQL::RecordNotSaved` |
-
-{% hint style="warning" %}
-An invalid record makes `save!` raise `ValidationError`, not the `CQL::RecordInvalid` its doc comment names. `RecordInvalid` comes only when a `before_validation` or `after_validation` callback halts an invalid record.
-{% endhint %}
 
 ## Create in One Step
 

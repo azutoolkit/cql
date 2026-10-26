@@ -1,6 +1,8 @@
-# Frequently Asked Questions
+---
+description: "Short answers, each linking to the page that covers the task."
+---
 
-Short answers, each linking to the page that covers the task.
+# Frequently Asked Questions
 
 ## General
 
@@ -24,14 +26,7 @@ Use `class`: `save` assigns the generated id to the instance it is called on, wh
 
 ### Why is my primary key nullable?
 
-A new record has no id until it is saved. `CQL::ActiveRecord::Model(Int64)` provides `id` (an `Int64?`), `id!` (raises while it is `nil`) and `id=`:
-
-```crystal
-user = User.new("Ada", "ada@example.com")
-user.id  # => nil
-user.save
-user.id! # => 1
-```
+A new record has no id until it is saved. `CQL::ActiveRecord::Model(Int64)` provides `id` (an `Int64?`), `id!` (raises while it is `nil`) and `id=`; see [Define a Model](../how-to/models/define-model.md).
 
 ### How do I add a field that isn't in the database?
 
@@ -48,22 +43,7 @@ See [Define a Model](../how-to/models/define-model.md).
 
 ### How do I write raw SQL?
 
-Add a fragment with bound values. Use `?` or `:name` placeholders in one fragment, never both:
-
-```crystal
-User.where("lower(email) = ? AND age > ?", "ada@example.com", 18).all
-User.where("lower(email) = :email AND age > :age", email: "ada@example.com", age: 18).all
-```
-
-For a whole statement, use the pooled connection; `AppDB.exec(sql)` runs a statement and returns a `DB::ExecResult`, not rows:
-
-```crystal
-rows = AppDB.exec_query do |conn|
-  conn.query_all("SELECT name, age FROM users WHERE id = ?", 1, as: {String, Int32})
-end
-```
-
-See [Use Raw SQL Fragments Safely](../how-to/advanced-sql/raw-fragments.md).
+Pass a fragment with bound values, `User.where("lower(email) = ?", email)`, using `?` or `:name` placeholders but never both in one fragment. `AppDB.exec(sql)` runs a whole statement and returns a `DB::ExecResult`, not rows. See [Use Raw SQL Fragments Safely](../how-to/advanced-sql/raw-fragments.md).
 
 ### Why is my query returning an empty array?
 
@@ -71,22 +51,7 @@ Print the SQL and its parameters (next question) and compare them with your data
 
 ### How do I see the SQL a query will run?
 
-```crystal
-User.where(active: true).to_sql       # => "SELECT users.id, ... FROM users WHERE users.active = ?"
-User.where(active: true).query.to_sql # => {"SELECT ... WHERE users.active = ?", [true]}
-```
-
-To log every statement CQL runs:
-
-```crystal
-Log.setup do |c|
-  c.bind("cql.*", :debug, Log::IOBackend.new)
-end
-
-CQL::Telemetry.log_queries # one debug line per statement on the "cql.telemetry" source
-```
-
-See [Inspect Queries with to_sql and explain](../how-to/querying/explain-and-to-sql.md) and [Telemetry](../how-to/observability/telemetry.md).
+Call `to_sql` on the query; `CQL::Telemetry.log_queries` logs every statement CQL runs at debug level. See [Inspect Queries with to_sql and explain](../how-to/querying/explain-and-to-sql.md) and [Telemetry](../how-to/observability/telemetry.md).
 
 ## Relationships
 
@@ -113,57 +78,17 @@ Set `CQL_VALIDATE_SCHEMA_MAPPINGS=1`: each model's getter types are compared wit
 
 ### How do I eager load associations?
 
-`preload` loads `has_many`, `belongs_to` and `has_one` associations with one extra query each:
-
-```crystal
-users = User.preload(:posts).all # 2 queries; user.posts is already loaded
-posts = Post.preload(:user).all  # 2 queries
-```
-
-`preload` ignores `many_to_many`. Load those in batches through the join model:
-
-```crystal
-posts = Post.all
-post_ids = posts.compact_map(&.id)
-links = PostTag.where { post_id.in(post_ids) }.all
-tags = Tag.where { id.in(links.map(&.tag_id).uniq) }.all.index_by(&.id)
-```
-
-Skip a query when its id list is empty: `in([])` renders `IN ()`, which PostgreSQL and MySQL reject.
-
-See [Avoid N+1 Queries](../how-to/performance/n-plus-one.md).
+`User.preload(:posts).all` loads a `has_many`, `belongs_to` or `has_one` association with one extra query. `preload` ignores `many_to_many`; [Avoid N+1 Queries](../how-to/performance/n-plus-one.md) shows how to load those through the join model.
 
 ## Migrations
 
 ### How do I add a column to an existing table?
 
-```crystal
-class AddAvatarToUsers < CQL::Migration(5)
-  def up
-    schema.alter :users do
-      add_column :avatar_url, String, null: true
-    end
-  end
-
-  def down
-    schema.alter :users do
-      drop_column :avatar_url
-    end
-  end
-end
-```
-
-`add_column` ignores its `default:` option, so existing rows get `NULL`; fill them with an `UPDATE` in the same migration if they need a value. See [Add Columns](../how-to/migrations/add-columns.md).
+Call `add_column` inside `schema.alter` in a migration; it ignores `default:`, so see [Add Columns](../how-to/migrations/add-columns.md#add-a-column-with-a-default) for a column that needs one.
 
 ### How do I roll back a migration?
 
-```crystal
-migrator.rollback    # the newest migration
-migrator.rollback(2) # the two newest
-migrator.down        # every migration
-```
-
-Steps count back from the newest *registered* migration, so a pending migration newer than the applied ones uses up a step without rolling anything back. `down_to(version)` does not stop at `version`; see [Rollback Migrations](../how-to/migrations/rollback.md) for rolling back to a version.
+`migrator.rollback` reverts the newest migration, `rollback(2)` the two newest and `down` every one. Steps count back from the newest *registered* migration, so a pending migration newer than the applied ones uses up a step without rolling anything back. `down_to(version)` does not stop at `version`; see [Rollback Migrations](../how-to/migrations/rollback.md) for rolling back to a version.
 
 ### What if a migration fails halfway through?
 
@@ -173,17 +98,7 @@ On SQLite and PostgreSQL, `migrator.up` runs in one transaction, so a failure ro
 
 ### How do I avoid N+1 queries?
 
-Preload the association instead of reading it inside a loop:
-
-```crystal
-# ❌ One query per post
-Post.all.each { |post| puts post.user.try(&.name) }
-
-# ✅ Two queries
-Post.preload(:user).all.each { |post| puts post.user.try(&.name) }
-```
-
-See [Avoid N+1 Queries](../how-to/performance/n-plus-one.md) and [Optimize Queries](../how-to/performance/optimize-queries.md).
+Preload the association, `Post.preload(:user).all`, instead of reading it inside a loop. See [Avoid N+1 Queries](../how-to/performance/n-plus-one.md) and [Optimize Queries](../how-to/performance/optimize-queries.md).
 
 ### Should I add indexes?
 
@@ -201,17 +116,7 @@ The table was never created in this database. Run `migrator.up`, or create a dec
 
 ### Validation failed, but I don't know why
 
-`save`, `save!` and the instance method `record.create!` raise `CQL::ActiveRecord::Validations::ValidationError`, whose message joins the errors; the class method `User.create!(...)` does not validate. To inspect the errors without `rescue`:
-
-```crystal
-user = User.new("", "ada@example.com")
-unless user.valid?
-  user.errors.each { |error| puts "#{error.field}: #{error.message}" }
-end
-# name: name must be present
-```
-
-See [Fix Validation Errors](../how-to/troubleshooting/validation-errors.md).
+`save`, `save!` and the instance method `record.create!` raise `CQL::ActiveRecord::Validations::ValidationError`, whose message joins the errors; `user.errors` lists each field and message without a `rescue`. See [Fix Validation Errors](../how-to/troubleshooting/validation-errors.md).
 
 ## Best Practices
 
@@ -224,30 +129,8 @@ See [Use Callbacks](../how-to/models/use-callbacks.md).
 
 ### When should I use transactions?
 
-When several writes must succeed or fail together; an exception in the block rolls them all back:
-
-```crystal
-User.transaction do
-  user = User.create!(name: "Ada", email: "ada@example.com")
-  Profile.create!(user_id: user.id!, country: "UK")
-end
-```
-
-See [Use Transactions](../how-to/data-operations/transactions.md).
+When several writes must succeed or fail together: an exception inside `User.transaction { ... }` rolls them all back. See [Use Transactions](../how-to/data-operations/transactions.md).
 
 ### How do I test my models?
 
-Use a separate test database and empty the tables between examples; `User.delete_all` sends one `DELETE FROM users` without callbacks:
-
-```crystal
-before_each do
-  User.delete_all
-end
-
-it "creates a user" do
-  user = User.create!(name: "Test", email: "test@example.com")
-  user.id.should_not be_nil
-end
-```
-
-See [Test Models](../how-to/testing/test-models.md) and [Set Up Test Databases](../how-to/testing/test-database.md).
+Use a separate test database and empty the tables between examples, or roll each example back. See [Set Up Test Databases](../how-to/testing/test-database.md).

@@ -1,6 +1,8 @@
-# Set Up Belongs To
+---
+description: "Declare belongs_to on the model that holds the foreign key, such as a Comment with a post_id."
+---
 
-Declare `belongs_to` on the model that holds the foreign key, such as a `Comment` with a `post_id`.
+# Set Up Belongs To
 
 ## Declare the Association
 

@@ -1,6 +1,8 @@
-# Set Up Many-to-Many
+---
+description: "Link two models through a join table, such as posts that have many tags and tags that have many posts."
+---
 
-Link two models through a join table, such as `Post`s that have many `Tag`s and `Tag`s that have many `Post`s.
+# Set Up Many-to-Many
 
 ## Create the Tables
 

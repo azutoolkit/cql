@@ -1,6 +1,10 @@
+---
+description: "A repository puts all database access for one kind of record behind one object, so domain code works with plain objects that know nothing about storage."
+---
+
 # Repository Pattern
 
-A repository puts all database access for one kind of record behind one object, so domain code works with plain objects that know nothing about storage. CQL ships a generic repository, `CQL::Repository(T, Pk)`, and works well with repositories you write around a model.
+CQL ships a generic repository, `CQL::Repository(T, Pk)`, and works well with repositories you write around a model.
 
 ```text
 ┌──────────────┐  find / save   ┌──────────────┐   SQL    ┌──────────────┐
@@ -120,67 +124,4 @@ repo.active.map(&.name) # => ["Johnny"]
 
 `save` loads the stored record before changing it, so columns the entity does not carry (`active` here) keep their values instead of being reset to defaults.
 
-## Repositories Make the Domain Testable Without a Database
-
-Domain services depend on an abstract store, and tests pass an in-memory one:
-
-```crystal
-abstract class UserStore
-  abstract def find(id : Int64) : User?
-  abstract def save(user : User) : Bool
-end
-
-class InMemoryUserStore < UserStore
-  @users = {} of Int64 => User
-
-  def find(id : Int64) : User?
-    @users[id]?
-  end
-
-  def save(user : User) : Bool
-    user.id ||= @users.size.to_i64 + 1
-    @users[user.id.not_nil!] = user
-    true
-  end
-end
-
-class SignupService
-  def initialize(@store : UserStore)
-  end
-
-  def sign_up(name : String, email : String) : User
-    User.new(name, email).tap { |user| @store.save(user) }
-  end
-end
-
-SignupService.new(InMemoryUserStore.new).sign_up("Test", "test@example.com").id # => 1
-```
-
-In production, a `UserRepository < UserStore` like the one above implements the same two methods with CQL.
-
-## When to Use It
-
-| Good fit | Poor fit |
-| :--- | :--- |
-| Business rules that must not depend on storage | Simple CRUD, where the extra layer only adds code |
-| Data from more than one source behind one interface | Prototypes, where Active Record is faster to write |
-| Domain tests that should run without a database | Small projects with one data source |
-| Large teams that want a clear boundary | |
-
-The difference is small for one record and grows with the domain:
-
-```crystal
-id = user.id.not_nil!
-
-# Active Record: the object saves itself
-record = UserRecord.find!(id)
-record.name = "Updated"
-record.save
-
-# Repository: the domain object is handed to the repository
-entity = repo.find(id).not_nil!
-entity.name = "Updated"
-repo.save(entity)
-```
-
-The two patterns mix well: use models directly for plain CRUD, and a repository where the domain is complex. See [Active Record Pattern](active-record-pattern.md) for the model side.
+Use models directly for plain CRUD and a repository where business rules must not know about storage; see [Active Record Pattern](active-record-pattern.md) for the model side.

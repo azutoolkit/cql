@@ -1,6 +1,8 @@
-# Run Migrations
+---
+description: "Build a migrator for your schema, apply the pending migrations, and check what has run."
+---
 
-Build a migrator for your schema, apply the pending migrations, and check what has run.
+# Run Migrations
 
 ## Build the Migrator
 
@@ -30,10 +32,18 @@ migrator.up(2)          # only the first 2 registered migrations; applied ones c
 migrator.up_to(5_i64)   # every migration up to and including version 5; nothing if no migration has that version
 ```
 
-On SQLite and PostgreSQL the whole run, migration records included, is one transaction on one connection: a failing
-migration rolls back everything the run did. On MySQL and CockroachDB each statement commits on its own, so a failure
-leaves the run's earlier migrations applied, and building a migrator (before its `auto_sync` bootstrap writes the schema
-file), calling `up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`.
+{% tabs %}
+{% tab title="SQLite and PostgreSQL" %}
+The whole run, migration records included, is one transaction on one connection: a failing migration rolls back
+everything the run did.
+{% endtab %}
+
+{% tab title="MySQL and CockroachDB" %}
+Each statement commits on its own, so a failure leaves the run's earlier migrations applied. Building a migrator (before
+its `auto_sync` bootstrap writes the schema file), calling `up` or listing `pending_migrations` inside an open
+transaction raises `CQL::DialectError`.
+{% endtab %}
+{% endtabs %}
 
 {% hint style="warning" %}
 On PostgreSQL a run holds its DDL locks until the final commit, and `CREATE INDEX CONCURRENTLY` fails inside a migration. Use `up(steps)` or `up_to` to keep runs short.
@@ -54,8 +64,8 @@ migrator.print_applied_migrations
 
 ## Write a Migration Command
 
+{% code title="src/migrate.cr" %}
 ```crystal
-# src/migrate.cr
 require "./database"
 require "../db/migrations/*"
 
@@ -72,6 +82,7 @@ when "version" then puts migrator.applied_migrations.max_of?(&.version) || 0
 else                abort "Usage: crystal src/migrate.cr up|status|version"
 end
 ```
+{% endcode %}
 
 ```bash
 crystal src/migrate.cr up
@@ -79,6 +90,42 @@ crystal src/migrate.cr status    # Applied: 5, pending: 0
 ```
 
 [Rollback Migrations](rollback.md) adds a `rollback` command.
+
+## Deploy One Migration at a Time
+
+On SQLite and PostgreSQL, commit each migration with `up_to` so that one failure does not undo the others:
+
+{% code title="src/deploy_migrations.cr" %}
+```crystal
+require "./database"
+require "../db/migrations/*"
+
+migrator = AppDB.migrator(CQL::MigratorConfig.new(auto_sync: false))
+pending = migrator.pending_migrations
+
+if pending.empty?
+  puts "No pending migrations"
+  exit 0
+end
+
+pending.each do |migration|
+  puts "Running migration #{migration.version} (#{migration.name})..."
+  begin
+    migrator.up_to(migration.version)
+  rescue ex
+    puts "FAILED: #{ex.message}"
+    exit 1
+  end
+end
+puts "All migrations completed"
+```
+{% endcode %}
+
+```bash
+crystal src/deploy_migrations.cr   # exits 1 at the first failure; the migrations before it stay applied
+```
+
+Run it on a copy of production data first, and back the database up.
 
 ## Migrate on Startup
 

@@ -1,6 +1,8 @@
-# Set Up Has One
+---
+description: "Declare has_one on the model whose single related record holds the foreign key, such as a User with one Profile."
+---
 
-Declare `has_one` on the model whose single related record holds the foreign key, such as a `User` with one `Profile`.
+# Set Up Has One
 
 ## Declare the Association
 

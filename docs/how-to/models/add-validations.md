@@ -1,6 +1,8 @@
-# Add Validations
+---
+description: "Declare rules with validate so CQL checks a record before it saves it."
+---
 
-Declare rules with `validate` so CQL checks a record before it saves it.
+# Add Validations
 
 ## Declare Rules
 
@@ -25,21 +27,7 @@ class User
 end
 ```
 
-Each option, with the message it adds when it fails (`message:` replaces it):
-
-```crystal
-validate :name, presence: true                  # "name must be present": nil or empty fails
-validate :user_id, required: true               # "user_id is required": only nil fails
-validate :email, match: /@/                     # "email must match the pattern /@/"; needs a String property, not String?
-validate :username, size: 3..20                 # "username must have a size of 3..20"; size: 5 means exactly 5
-validate :age, gt: 0, lte: 120                  # "age must be greater than 0"; also gte:, lt:, eq:
-validate :status, in: ["active", "pending"]     # "status must be included in [\"active\", \"pending\"]"; Array or Range
-validate :role, exclude: ["admin", "root"]      # "role must not be included in [\"admin\", \"root\"]"
-validate :password_confirmation, confirmation: :password # "password_confirmation confirmation doesn't match"; nil fails
-validate :terms, accept: true                   # "terms must be accepted"; passes for true, "true", "1", "on", "yes"
-```
-
-Any other option, or a property the model does not define, fails at compile time.
+Every option (`presence`, `required`, `match`, `size`, `gt`, `in`, `confirmation`, `accept` and the rest), the value it takes and the message it adds are listed in the [Validation Options Reference](../../reference/api/validation-options.md); `message:` replaces the message. Any other option, or a property the model does not define, fails at compile time.
 
 {% hint style="warning" %}
 Rules are stored per property, so a second `validate :email, ...` replaces the first. Put all of a property's rules in one call.

@@ -1,6 +1,10 @@
+---
+description: "How CQL makes the unsafe version of a query hard to write, and where the responsibility passes back to you."
+---
+
 # Safety Guardrails
 
-CQL makes the unsafe version of a query hard to write. This page explains each guardrail and where the responsibility passes back to you; for the steps, see [Use Raw SQL Fragments Safely](../how-to/advanced-sql/raw-fragments.md) and [Write Typed Queries](../how-to/querying/typed-where-dsl.md).
+For the steps, see [Use Raw SQL Fragments Safely](../how-to/advanced-sql/raw-fragments.md) and [Write Typed Queries](../how-to/querying/typed-where-dsl.md).
 
 | Layer | Protects against | Where it stops |
 | :--- | :--- | :--- |
@@ -91,17 +95,7 @@ Quoting lets reserved words such as `order` work as names. It is off by default 
 
 ## The Compiler Catches Shape Mistakes
 
-Some mistakes cannot be compiled at all:
-
-| Code | Compile error |
-| :--- | :--- |
-| `User.query.where { agee > 1 }` | `undefined local variable or method 'agee' for User::Columns` |
-| `User.query.where { age > "old" }` | ``CQL: cannot compare a Int32 column with String using `>`; use a Int32 value or another Int32 column`` |
-| `User.query.order_by(nope: :asc)` | ``CQL order_by: User has no column `nope`. Columns: id, name, ...`` |
-| `belongs_to :user, User, :user_id` with `user_id : Int32?` and `User` keyed by `Int64` | ``CQL belongs_to error in Post: foreign key `:user_id` type Int32 does not match User.id! primary key type Int64. Change `:user_id` to Int64 or update the target model primary key type.`` |
-| `where("name = ?", :not_bindable)` | `CQL: Symbol cannot be bound as a SQL parameter (use a DB::Any type: String, Int, Float, Bool, Time, Bytes, nil)` |
-
-A missing foreign key getter and a non-literal association name are reported the same way, even when the target model is defined later in the program.
+An unknown column or a wrongly typed value in a typed `where { }` or `order_by`, a value that cannot be bound, and an association whose foreign key is missing or has the wrong type (even when the target model is defined later) are compile errors; [Write Typed Queries](../how-to/querying/typed-where-dsl.md#let-the-compiler-catch-mistakes) shows the query errors and [Error Codes](../reference/error-codes.md#compile-time-errors) lists every message.
 
 ## An Opt-In Check Compares Models With the Schema
 
@@ -122,6 +116,5 @@ The compiler does not compare a model with its schema definition. With `CQL_VALI
 
 ## Further Reading
 
-- `SECURITY_AUDIT.md` in the repository root records the 2025 audit of SQL generation and a short update for 0.0.589; its findings have not been re-audited line by line since.
 - `spec/security/ddl_identifier_spec.cr` and `spec/security/sql_injection_spec.cr` show the rules as executable examples.
 - [Filter with Where Clauses](../how-to/querying/filter-records.md)

@@ -1,6 +1,8 @@
-# Add Optimistic Locking
+---
+description: "Stop a stale copy of a record from overwriting a newer update by checking a version column on every update."
+---
 
-Stop a stale copy of a record from overwriting a newer update by checking a version column on every update.
+# Add Optimistic Locking
 
 ## Add a Version Column
 
@@ -14,14 +16,11 @@ AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3
 end
 ```
 
-On an existing table, add it in a migration:
+On an existing table, add it in a migration with raw DDL, because `add_column` drops `default:` (see [Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default)):
 
+{% code title="db/migrations/20260115_add_version_to_users.cr" %}
 ```crystal
 class AddVersionToUsers < CQL::Migration(20260115)
-  # ❌ add_column drops default: today, so the database rejects a NOT NULL column without one
-  #    add_column :version, Int32, default: 1, null: false
-
-  # ✅ Write the DDL with its DEFAULT
   def up
     schema.exec("ALTER TABLE users ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
   end
@@ -31,6 +30,7 @@ class AddVersionToUsers < CQL::Migration(20260115)
   end
 end
 ```
+{% endcode %}
 
 ## Enable Locking on the Model
 
@@ -89,21 +89,7 @@ rename(second, "Second")  # => true
 
 ## Combine With Other Modules
 
-```crystal
-class User
-  include CQL::ActiveRecord::Model(Int64)
-  include CQL::ActiveRecord::SoftDeletable
-  include CQL::ActiveRecord::OptimisticLocking
-  include CQL::ActiveRecord::DirtyTracking
-
-  property name : String = ""
-  property version : Int32 = 1
-
-  optimistic_locking version_column: :version
-end
-```
-
-With [dirty tracking](dirty-tracking.md), an unchanged record sends no `UPDATE` and keeps its version; a changed one still sends every column, because the version check covers the whole row.
+`OptimisticLocking` combines with `SoftDeletable` and `DirtyTracking`; see [Track Changes](dirty-tracking.md#combine-with-other-modules) for the includes and what a versioned, tracked record's `update!` sends.
 
 ## See Also
 

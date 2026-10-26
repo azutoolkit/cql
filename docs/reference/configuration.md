@@ -1,6 +1,8 @@
-# Configuration Reference
+---
+description: "Every setting on CQL::Configure::Config, its default in each environment, its validation message and the URL parameter it becomes, plus the environment variables CQL reads."
+---
 
-Every setting on `CQL::Configure::Config`, its default in each environment, its validation message and the URL parameter it becomes, plus the environment variables CQL reads. For the lifecycle see [Configure CQL](../how-to/configuration/configure-cql.md).
+# Configuration Reference
 
 ## Access
 
@@ -31,8 +33,6 @@ CQL.configure { |c| c.pool_size = 60 } # raises ArgumentError: pool_size must be
 
 ## Top-level settings
 
-**Inert** settings are accepted (and some validated) but nothing in `src/` reads them.
-
 ```crystal
 CQL.configure do |c|
   c.db = "postgres://app@localhost/app"   # default "sqlite3://./db/development.db"
@@ -52,9 +52,6 @@ CQL.configure do |c|
   c.sql_logging_colorize = false
   c.pool_size = 25
   c.monitor_performance = true
-  c.timezone = :utc                       # inert
-  c.auto_load = true                      # inert
-  c.sql_logging_async = false             # inert
 end
 ```
 
@@ -77,9 +74,6 @@ end
 | `sql_logging_colorize` | `Bool` | `true` | Passed as `enable_sql_logging(colorize:)`. |
 | `pool_size` | `Int32` | `10`, then 5 / 1 / 25 by environment | Writes `pool.size` too, and lowers `pool.initial_size` and `pool.max_idle_size` to at most the new size. Must be positive. |
 | `monitor_performance` | `Bool` | `false` | `CQL.configure` turns the global performance monitor on. One-way: `false` never turns it off. |
-| `timezone` | `Symbol` | `:utc` | **Inert.** Must be `:utc` or `:local`. |
-| `auto_load` | `Bool` | `true` (`false` in test and production) | **Inert.** |
-| `sql_logging_async` | `Bool` | `false` | **Inert.** SQL logging is always synchronous. |
 
 Predicates: `auto_load?`, `auto_sync?`, `bootstrap?`, `verify_schema?`, `sql_logging?`, `monitor_performance?`. Read-only blocks: `pool`, `ssl`, `postgres`, `mysql`, `sqlite`, `cache`; set their properties (`c.pool.checkout_timeout = 5.seconds`).
 
@@ -108,7 +102,6 @@ CQL.configure do |c|
   c.pool.max_retry_attempts = 3          # retry_attempts=3
   c.pool.retry_delay = 500.milliseconds  # retry_delay=0.5
   c.pool.use_prepared_statements = false # prepared_statements=false
-  c.pool.query_timeout = 10.seconds      # never emitted
 end
 ```
 
@@ -121,7 +114,6 @@ end
 | `max_retry_attempts` | `Int32` | `3` | `retry_attempts` | `max_retry_attempts must be positive` |
 | `retry_delay` | `Time::Span` | `1.second` | `retry_delay` (seconds) | none |
 | `use_prepared_statements?` | `Bool` | `true` | `prepared_statements` | none |
-| `query_timeout` | `Time::Span` | `30.seconds` | **never emitted**; nothing applies it | none |
 
 `c.pool.size =` does not update `pool_size`; use `c.pool_size =` to set both. See [Set Up Connection Pooling](../how-to/configuration/connection-pooling.md).
 
@@ -155,17 +147,33 @@ The native PostgreSQL driver rejects `sslcert` and `sslkey` (`ArgumentError: the
 
 `config.db_config` returns the block for the adapter in `db`: `postgres` (PostgreSQL and CockroachDB), `mysql` or `sqlite`. Only that block is validated and added to the URL.
 
+{% tabs %}
+{% tab title="SQLite" %}
 ```crystal
 CQL.configure do |c|
-  c.postgres.auth_methods = "scram-sha-256"  # auth_methods=scram-sha-256 (ignored by the native driver)
-  c.mysql.encoding = "utf8mb4_general_ci"    # encoding=utf8mb4_general_ci
-  c.sqlite.journal_mode = "delete"           # journal_mode=delete
-  c.sqlite.synchronous = "full"              # synchronous=full
-  c.sqlite.cache_size = -8000                # cache_size=-8000
-  c.sqlite.foreign_keys = false              # foreign_keys=0
-  c.sqlite.busy_timeout = 10_000             # busy_timeout=10000
+  c.sqlite.journal_mode = "delete" # journal_mode=delete
+  c.sqlite.synchronous = "full"    # synchronous=full
+  c.sqlite.cache_size = -8000      # cache_size=-8000
+  c.sqlite.foreign_keys = false    # foreign_keys=0
+  c.sqlite.busy_timeout = 10_000   # busy_timeout=10000
 end
 ```
+{% endtab %}
+{% tab title="PostgreSQL and CockroachDB" %}
+```crystal
+CQL.configure do |c|
+  c.postgres.auth_methods = "scram-sha-256" # auth_methods=scram-sha-256 (ignored by the native driver)
+end
+```
+{% endtab %}
+{% tab title="MySQL" %}
+```crystal
+CQL.configure do |c|
+  c.mysql.encoding = "utf8mb4_general_ci" # encoding=utf8mb4_general_ci
+end
+```
+{% endtab %}
+{% endtabs %}
 
 | Block | Setting | Type | Default | URL parameter | Validation message |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -213,8 +221,6 @@ end
 | `invalidation` | `String` | `"timestamp"` | `timestamp`, `version` or `transaction_aware` strategy | `Invalid invalidation strategy: <value>` |
 | `max_age` | `Time::Span` | `1.hour` | `timestamp` and `transaction_aware` strategies | none |
 
-**Inert** cache settings (defaults in brackets): `memory` (`true`), `memory_stats` (`true`), `auto_clear` (`true`), `fragments` (`false`), `logging` (`false`, `true` in development), `log_level` (`Debug`, `Info` in production), `auto_cleanup` (`true`), `cleanup_interval` (`5.minutes`), `batch_ops` (`true`), `middleware` (`false`), `request_id_header` (`"X-Request-ID"`). `memory`, `request_cache` and `fragments` are echoed by `cache_stats`.
-
 | Cache helper | Returns | Behavior |
 | :--- | :--- | :--- |
 | `CQL.cache_on(enabled = true)` | `Nil` | Sets `cache.on`; `true` also runs `setup_cache_system`. |
@@ -227,6 +233,18 @@ end
 | `CQL.start_request_cache(request_id = nil)`, `CQL.end_request_cache`, `CQL.with_request_cache(request_id = nil) { }` | `Nil` / block value | No-ops unless `cache.on` and `cache.request_cache`. |
 
 See [Query caching](../how-to/caching/query-cache.md).
+
+## Accepted but not read
+
+These settings are accepted, and `timezone` is validated, but nothing in `src/` reads them.
+
+| Block | Settings (default) |
+| :--- | :--- |
+| top level | `timezone` (`:utc`), `auto_load` (`true`; `false` in test and production), `sql_logging_async` (`false`; SQL logging is always synchronous) |
+| `pool` | `query_timeout` (`30.seconds`; never emitted as a URL parameter) |
+| `cache` | `memory` (`true`), `memory_stats` (`true`), `auto_clear` (`true`), `fragments` (`false`), `logging` (`false`; `true` in development), `log_level` (`Debug`; `Info` in production), `auto_cleanup` (`true`), `cleanup_interval` (`5.minutes`), `batch_ops` (`true`), `middleware` (`false`), `request_id_header` (`"X-Request-ID"`) |
+
+`cache_stats` echoes `memory`, `request_cache` and `fragments`.
 
 ## Environment strategies
 
@@ -247,7 +265,6 @@ See [Query caching](../how-to/caching/query-cache.md).
 | `auto_sync` | `true` | `true` | `false` |
 | `verify_schema` | `true` | `false` | `true` |
 | `bootstrap` | `false` | `false` | `false` |
-| `auto_load` | `true` | `false` | `false` |
 | `log_level` | `Debug` | `Error` | `Info` |
 | `sql_logging` | `true` when named, unless `CQL_NO_SQL_LOG` | `false` | `false` |
 
@@ -266,6 +283,16 @@ With the test pool of 1, `migrator.up` and `down` with `auto_sync` on raise `CQL
 | `CRYSTAL_ENV` | `Config#env`, `CacheConfig`, `CQL::Performance::Config` | Picks the environment. Unset means `development` (without SQL logging). |
 | `CQL_NO_SQL_LOG` | `Config#sql_logging?` | Present (any value) and `sql_logging` never assigned: development does not log SQL. |
 | `CQL_VALIDATE_SCHEMA_MAPPINGS` | model definitions | `1` checks model getter types and primary keys against the schema; a mismatch raises `CQL::ActiveRecord::SchemaMappingError`. The check is emitted from `macro finished`, so it runs after all other top-level code: a server that blocks in `listen` never reaches it. Run it from a spec or a script that only requires the models. |
+| `NO_COLOR` | `CQL::Performance::SQLFormatter` | Present: SQL logging is not colorized. |
+| `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` | native PostgreSQL driver | Used when the URL has no host, port, user or password (defaults `localhost`, `5432`, `postgres`, none). |
+
+`CQL.config` reads none of the cache store variables below; they apply only through `CQL::Cache::Cache.configure_from_env` or `CacheStoreConfig.from_env` (see [Redis cache](../how-to/caching/redis.md)). The performance monitor has its own options, set with `CQL::Performance.configure` or the variables below (see [Profile Queries](../how-to/observability/query-profiler.md)).
+
+<details>
+<summary>Cache store and performance monitor variables</summary>
+
+| Variable | Read by | Effect |
+| :--- | :--- | :--- |
 | `CQL_CACHE_TYPE` | `CQL::Cache::CacheStoreConfig.from_env` | `redis` or `memory`. |
 | `CQL_CACHE_TTL` | same | TTL in whole seconds. |
 | `CQL_CACHE_PREFIX` | same | Key prefix. |
@@ -275,10 +302,8 @@ With the test pool of 1, `migrator.up` and `down` with `auto_sync` on raise `CQL
 | `CQL_MEMORY_CACHE_MAX_SIZE` | same | Memory store max size. |
 | `CQL_ENV` | `CQL::Performance::Config` | Alternative to `CRYSTAL_ENV` for the performance monitor's mode. |
 | `CQL_MONITORING_ENABLED`, `CQL_SQL_LOGGING`, `CQL_SLOW_QUERY_MS` | `CQL::Performance::Config.from_env` | `true` / `true` / milliseconds. |
-| `NO_COLOR` | `CQL::Performance::SQLFormatter` | Present: SQL logging is not colorized. |
-| `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` | native PostgreSQL driver | Used when the URL has no host, port, user or password (defaults `localhost`, `5432`, `postgres`, none). |
 
-`CQL.config` reads none of the `CQL_CACHE_*`, `CQL_REDIS_*` or `CQL_MEMORY_CACHE_MAX_SIZE` variables; they apply only through `CQL::Cache::Cache.configure_from_env` or `CacheStoreConfig.from_env` (see [Redis cache](../how-to/caching/redis.md)). The performance monitor has its own options, set with `CQL::Performance.configure` (see [Profile Queries](../how-to/observability/query-profiler.md)).
+</details>
 
 ## Helpers
 

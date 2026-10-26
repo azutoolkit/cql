@@ -1,6 +1,10 @@
+---
+description: "Lock the rows a query reads with CQL::Query#lock, to claim jobs from a queue or to update a balance safely."
+---
+
 # Lock Rows
 
-Lock the rows a query reads with `CQL::Query#lock`, for example to claim jobs from a queue or to update a balance safely. Row locks work on PostgreSQL, MySQL and CockroachDB, not on SQLite.
+Row locks work on PostgreSQL, MySQL and CockroachDB, not on SQLite.
 
 ## Lock for Update
 
@@ -74,15 +78,35 @@ AppDB.query.from(:orders).select(:id).lock.merge(unlocked) # ... FOR UPDATE
 
 ## Check Each Dialect
 
+{% tabs %}
+{% tab title="PostgreSQL" %}
+```crystal
+query.lock(skip_locked: true).to_sql(for: CQL::Adapter::Postgres)  # ... FOR UPDATE SKIP LOCKED
+```
+{% endtab %}
+
+{% tab title="MySQL" %}
 ```crystal
 query.lock(:update, nowait: true).to_sql(for: CQL::Adapter::MySql)  # ... FOR UPDATE NOWAIT
-query.lock.to_sql(for: CQL::Adapter::CockroachDB)                    # ... FOR UPDATE
+```
+{% endtab %}
+
+{% tab title="CockroachDB" %}
+```crystal
+query.lock.to_sql(for: CQL::Adapter::CockroachDB)  # ... FOR UPDATE
+```
+{% endtab %}
+
+{% tab title="SQLite" %}
+```crystal
 query.lock.to_sql # on a SQLite schema: CQL::DialectError "SQLite does not support row locking (FOR UPDATE / FOR SHARE)"
 ```
 
 {% hint style="warning" %}
 SQLite has no row locks (it serializes writers), so use a plain transaction there. The error is raised when SQL is generated, so `to_sql`, `all` and `first` raise it too.
 {% endhint %}
+{% endtab %}
+{% endtabs %}
 
 {% hint style="info" %}
 `FOR SHARE`, `SKIP LOCKED` and `NOWAIT` depend on the server version; MySQL has them from 8.0.

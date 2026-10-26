@@ -1,6 +1,8 @@
-# Migration DSL Reference
+---
+description: "Every method of the migration class, the table builder, the alter-table builder, the migrator and its config, with defaults and the SQL they produce."
+---
 
-Every method of the migration class, the table builder (`CQL::Table`), the alter-table builder (`CQL::AlterTable`), `CQL::Migrator` and `CQL::MigratorConfig`, with defaults and the SQL they produce.
+# Migration DSL Reference
 
 ## Migration class
 
@@ -100,7 +102,7 @@ end
 | `null` | `Bool` | `false` | `false` adds `NOT NULL` |
 | `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings quoted, `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere |
 | `unique` | `Bool` | `false` | `UNIQUE`; with `index: true` the index is unique too |
-| `index` | `Bool` | `false` | Declares `idx_<table>_<column>`, created by `create!` after the table |
+| `index` | `Bool` | `false` | Declares `idx_<t>_<column>` (e.g. `idx_posts_slug`), created by `create!` after the table |
 | `as` | `String?` | `nil` | Alias used when the column is selected |
 | `size` | `Int32?` | `nil` | Stored, **not emitted**: `String` is always `TEXT` / `VARCHAR` / `VARCHAR(255)` |
 
@@ -130,10 +132,10 @@ end
 
 | Method | Defaults | SQL |
 | :--- | :--- | :--- |
-| **`index(columns : Array(Symbol), unique: false, name: nil)`**, `add_index(...)` | name `idx_<table>_<columns>` | `CREATE [UNIQUE] INDEX IF NOT EXISTS ...` after the table (no `IF NOT EXISTS` on MySQL). The same name again replaces the earlier index; a name over 63 characters raises `ArgumentError`. |
+| **`index(columns : Array(Symbol), unique: false, name: nil)`**, `add_index(...)` | name `idx_<t>_<columns>` | `CREATE [UNIQUE] INDEX IF NOT EXISTS ...` after the table (no `IF NOT EXISTS` on MySQL). The same name again replaces the earlier index; a name over 63 characters raises `ArgumentError`. |
 | **`unique_constraint(columns : Array(Symbol), name: nil)`** | unnamed | `CONSTRAINT <name> UNIQUE (...)` |
 | **`check_constraint(condition : String, name: nil)`** | unnamed | `CONSTRAINT <name> CHECK (...)`; raises `CQL::MySqlUnsupportedFeatureError` on MySQL |
-| **`foreign_key(columns : Array(Symbol), references:, references_columns: nil, name: nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` defaults to the referenced table's primary key (`:id` if that table is not declared) | `FOREIGN KEY (...) REFERENCES t (...) ON DELETE ... ON UPDATE ...`; unnamed unless `name:` (MySQL names it `fk_<table>_<columns>`); PostgreSQL omits `NO ACTION` clauses |
+| **`foreign_key(columns : Array(Symbol), references:, references_columns: nil, name: nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` defaults to the referenced table's primary key (`:id` if that table is not declared) | `FOREIGN KEY (...) REFERENCES t (...) ON DELETE ... ON UPDATE ...`; unnamed unless `name:` (MySQL names it `fk_<t>_<columns>`); PostgreSQL omits `NO ACTION` clauses |
 | `foreign_key(column : Symbol, references:, ...)` | | single-column form |
 
 `on_delete` / `on_update`: `:cascade`, `:restrict`, `:set_null`, `:no_action`. `references_columns` takes a `Symbol` or an `Array(Symbol)`.
@@ -175,7 +177,7 @@ AppDB.users.create_sql
 
 ## `schema.alter`
 
-Methods available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`.
+Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`.
 
 | Method | Defaults | Notes |
 | :--- | :--- | :--- |
@@ -186,7 +188,7 @@ Methods available inside `schema.alter :name do ... end`. Statements run in orde
 | **`rename_table(new_name)`** | | Renames the table object at once, but every statement renders after the block, so other operations in the same block use the new name before the rename runs. Give it its own `schema.alter` block. |
 | **`create_index(name : Symbol, columns : Array(Symbol), unique: false)`** | | No `IF NOT EXISTS` |
 | **`drop_index(name : Symbol)`** | | |
-| **`foreign_key(columns or column, references:, references_columns: nil, name : Symbol? = nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` `[:id]`, name `fk_<table>_<columns>` | Raises `DB::Error` on SQLite |
+| **`foreign_key(columns or column, references:, references_columns: nil, name : Symbol? = nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` `[:id]`, name `fk_<t>_<columns>` | Raises `DB::Error` on SQLite |
 | **`drop_foreign_key(name : Symbol)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
 
 ```crystal
@@ -217,6 +219,9 @@ def up
 end
 ```
 
+<details>
+<summary>The SQL each statement emits, per dialect</summary>
+
 | Method | SQLite | PostgreSQL / CockroachDB | MySQL |
 | :--- | :--- | :--- | :--- |
 | `add_column :phone, String` | `ALTER TABLE users ADD COLUMN phone TEXT` | `... ADD COLUMN phone VARCHAR` | `... ADD COLUMN phone VARCHAR(255)` |
@@ -229,6 +234,8 @@ end
 | `foreign_key [:team_id], references: :teams` | raises | `... ADD CONSTRAINT fk_users_team_id FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE NO ACTION ON UPDATE NO ACTION` | same |
 | `drop_foreign_key :fk_users_team_id` | raises | `... DROP CONSTRAINT fk_users_team_id` | `... DROP FOREIGN KEY fk_users_team_id` |
 | `rename_table :members` | `ALTER TABLE users RENAME TO members` | same | `RENAME TABLE users TO members` |
+
+</details>
 
 ## `Migrator`
 

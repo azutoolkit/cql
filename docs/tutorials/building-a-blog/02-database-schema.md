@@ -1,6 +1,8 @@
-# Part 2: Database Schema
+---
+description: "Write the four migrations for users, categories, posts and comments, run them, and look at the schema file the migrator generates."
+---
 
-Write the four migrations for users, categories, posts and comments, run them, and look at the schema file the migrator generates.
+# Part 2: Database Schema
 
 **You need:** the project from [Part 1](01-project-setup.md).
 
@@ -29,10 +31,12 @@ posts                    comments
 └── updated_at
 ```
 
-## Step 1: Create the users migration
+{% stepper %}
+{% step %}
+### Create the users migration
 
+{% code title="migrations/001_create_users.cr" %}
 ```crystal
-# migrations/001_create_users.cr
 class CreateUsers < CQL::Migration(1)
   def up
     schema.table :users do
@@ -56,11 +60,14 @@ class CreateUsers < CQL::Migration(1)
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 2: Create the categories migration
+{% step %}
+### Create the categories migration
 
+{% code title="migrations/002_create_categories.cr" %}
 ```crystal
-# migrations/002_create_categories.cr
 class CreateCategories < CQL::Migration(2)
   def up
     schema.table :categories do
@@ -80,11 +87,14 @@ class CreateCategories < CQL::Migration(2)
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 3: Create the posts migration
+{% step %}
+### Create the posts migration
 
+{% code title="migrations/003_create_posts.cr" %}
 ```crystal
-# migrations/003_create_posts.cr
 class CreatePosts < CQL::Migration(3)
   def up
     schema.table :posts do
@@ -116,13 +126,16 @@ class CreatePosts < CQL::Migration(3)
   end
 end
 ```
+{% endcode %}
 
 An `index [:user_id]` line inside the `table` block works too; `create!` then creates the index right after the table.
+{% endstep %}
 
-## Step 4: Create the comments migration
+{% step %}
+### Create the comments migration
 
+{% code title="migrations/004_create_comments.cr" %}
 ```crystal
-# migrations/004_create_comments.cr
 class CreateComments < CQL::Migration(4)
   def up
     schema.table :comments do
@@ -150,8 +163,11 @@ class CreateComments < CQL::Migration(4)
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 5: Run the migrations
+{% step %}
+### Run the migrations
 
 `src/blog_engine.cr` from Part 1 already requires `../migrations/*`, so the setup script runs them:
 
@@ -178,11 +194,14 @@ Setup complete!
 ```
 
 CQL's development logger adds timestamped `INFO` and `DEBUG` lines. Run the script again and it prints `Database is up to date`. Migrations run in version order, and each runs once.
+{% endstep %}
 
-## Step 6: Look at the generated schema
+{% step %}
+### Look at the generated schema
 
 With `auto_sync`, the migrator wrote the database's real tables to `src/schemas/app_schema.cr`:
 
+{% code title="src/schemas/app_schema.cr" %}
 ```crystal
 AppSchema = CQL::Schema.define(
   :app_schema,
@@ -205,12 +224,15 @@ AppSchema = CQL::Schema.define(
   # categories, posts and comments, with their foreign keys
 end
 ```
+{% endcode %}
 
 Your models use `AppSchema` from Part 3: it knows every table, so a program that never runs the migrations can still query them. Keep the file in version control and recompile after each migration.
 
 - SQLite integer keys come back as `Int32`; the models still declare `Model(Int64)`.
 - The dump holds columns and foreign keys only; unique constraints and indexes stay in the migrations.
 - The file embeds the connection URL. If the URL holds a password, set `auto_sync: false` there and keep a hand-written schema (Part 5).
+{% endstep %}
+{% endstepper %}
 
 ## Column types
 
@@ -226,6 +248,6 @@ Your models use `AppSchema` from Part 3: it knows every table, so a program that
 
 An auto-increment `primary` key becomes `INTEGER PRIMARY KEY AUTOINCREMENT` on SQLite, `BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY` on PostgreSQL and `BIGINT PRIMARY KEY AUTO_INCREMENT` on MySQL. CockroachDB follows PostgreSQL, except that `Int32` columns are `INT4`.
 
-When you write your own migrations: number them in order, implement `down`, keep one concern per migration, index foreign keys, and choose each `on_delete` on purpose.
-
-Next: [Part 3: Models and Relationships](03-models-and-relationships.md) maps these tables to classes.
+{% content-ref url="03-models-and-relationships.md" %}
+[03-models-and-relationships.md](03-models-and-relationships.md)
+{% endcontent-ref %}

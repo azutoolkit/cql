@@ -1,6 +1,8 @@
-# Use Callbacks
+---
+description: "Register methods that CQL runs before or after a record is validated, saved or deleted."
+---
 
-Register methods that CQL runs before or after a record is validated, saved or deleted.
+# Use Callbacks
 
 ## Register Callbacks
 
@@ -83,10 +85,7 @@ Only `false` halts; `nil` continues. A `false` from an `after_*` callback skips 
 
 ## Know What Skips Callbacks
 
-| Runs callbacks | Skips callbacks |
-|---|---|
-| `save`, `save!`, instance `delete!` (soft delete: `delete!`, `force_delete!`) | `User.create!(...)`, instance `create!`, `update!`, `touch` |
-| `User.where(...).delete_all` when the model declares destroy callbacks or `dependent:` associations (record by record, in one transaction) | Class-level `User.delete!(id)`, `delete_by!`, `delete_all` (a soft-deletable model runs them), `update_all` |
+`save`, `save!` and the instance `delete!` (soft delete: `delete!`, `force_delete!`) run callbacks. `create!`, `update!`, `touch` and most class-level writes skip them; the [Callback Hooks Reference](../../reference/api/callback-hooks.md) lists every call.
 
 {% hint style="info" %}
 `created_at` and `updated_at` need no callback: `save` sets them (see [Use Timestamps](timestamps.md)).

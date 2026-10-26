@@ -1,6 +1,8 @@
-# Use Transactions
+---
+description: "Make several writes succeed or fail together, and nest savepoints."
+---
 
-Make several writes succeed or fail together, nest savepoints, and observe transactions.
+# Use Transactions
 
 ## Wrap Writes in a Transaction
 
@@ -76,53 +78,42 @@ end
 An inner exception undoes the inner block. If the outer block rescues it, the outer work still commits; if it
 propagates, everything rolls back.
 
-{% hint style="warning" %}
-On MySQL and CockroachDB, DDL commits implicitly, so schema changes inside a transaction raise `CQL::DialectError` before running any DDL: `AppDB.alter`, `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and building or running a migrator. On SQLite and PostgreSQL they nest as a SAVEPOINT.
-{% endhint %}
+## Change the Schema Inside a Transaction
 
-## Set Isolation Levels (Native PostgreSQL Engine)
-
-`AppDB.transaction` and `Model.transaction` take no options. `CQL::Postgres::AsyncEngine#transaction` does; pin
-statements to it with `using`:
-
+{% tabs %}
+{% tab title="SQLite and PostgreSQL" %}
 ```crystal
-engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
-
-engine.transaction(isolation: :serializable) do |tx|
-  AppDB.insert.into(:accounts).values(name: "outer").using(tx).commit
-  tx.savepoint do |inner|
-    AppDB.insert.into(:accounts).values(name: "inner").using(inner).commit
-    raise DB::Rollback.new             # undoes only "inner"; savepoint returns nil
-  end
+AppDB.transaction do
+  AppDB.alter(:users) { add_column :bio, String } # a SAVEPOINT inside the transaction
+  AppDB.update.table(:users).set(bio: "").commit  # an exception here also undoes the column
 end
-
-engine.transaction(isolation: :repeatable_read, read_only: true, deferrable: true) do |tx|
-  AppDB.query.from(:accounts).select(:name).using(tx).all(as: String)
-end
-
-engine.transaction(synchronous_commit: false) do |tx| # SET LOCAL; a crash may lose this commit
-  AppDB.insert.into(:accounts).values(name: "audit").using(tx).commit
-end
-# isolation: :read_uncommitted, :read_committed, :repeatable_read, :serializable
-# deferrable: true raises ArgumentError on CockroachDB; a scope used after its block raises CQL::Postgres::TransactionClosed
 ```
+
+`AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and migrator runs nest the same way. A rollback removes
+the column from the database but not from `AppDB`'s declaration, so model queries on the table then fail with
+`no such column: users.bio` until the process restarts.
+{% endtab %}
+
+{% tab title="MySQL and CockroachDB" %}
+```crystal
+AppDB.transaction do
+  AppDB.alter(:users) { add_column :bio, String }
+  # CQL::DialectError: MySQL does not support schema changes inside a transaction
+end
+```
+
+DDL commits implicitly here, so `AppDB.alter`, `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and
+building or running a migrator raise before running any DDL. Run them outside the transaction.
+{% endtab %}
+{% endtabs %}
+
+## Set Isolation Levels
+
+`AppDB.transaction` and `Model.transaction` take no options; the native PostgreSQL engine's `transaction` takes `isolation:`, `read_only:`, `deferrable:` and `synchronous_commit:`, as [Transactions: Isolation and Savepoints](../postgres-native/tls-and-poolers.md#transactions-isolation-and-savepoints) shows.
 
 ## Observe Transactions
 
-```crystal
-CQL::Telemetry.subscribe_transactions("metrics") do |event|
-  # event.state    => Begin, Commit or Rollback (CQL::Telemetry::TransactionState)
-  # event.id       => shared by a Begin and its Commit/Rollback
-  # event.duration => time since Begin (zero for Begin; includes pool wait)
-  # event.nested   => true for a savepoint opened by a nested transaction { }
-  # event.error    => what caused a Rollback (DB::Rollback included)
-  Log.info { "tx #{event.id} #{event.state} #{event.duration}" }
-end
-
-CQL::Telemetry.unsubscribe_transactions("metrics")
-```
-
-The `transaction(tx)` overloads emit no events, and a manual `tx.rollback` is reported as `Commit`.
+`CQL::Telemetry.subscribe_transactions` reports each `Begin`, `Commit` and `Rollback` with its duration; see [Telemetry](../observability/telemetry.md#transactions).
 
 ## See Also
 

@@ -1,13 +1,19 @@
+---
+description: "Build one script that creates, queries, updates and deletes blog records."
+---
+
 # Part 4: CRUD Operations
 
-Build one script, `src/crud.cr`, that creates, queries, updates and deletes blog records. Each step adds to the script; run it after each step.
+Each step adds to `src/crud.cr`; run it after each step.
 
 **You need:** the project from [Part 3](03-models-and-relationships.md).
 
-## Step 1: Create records
+{% stepper %}
+{% step %}
+### Create records
 
+{% code title="src/crud.cr" %}
 ```crystal
-# src/crud.cr
 require "./blog_engine"
 
 # Start every run from empty tables; ON DELETE CASCADE removes the posts and comments
@@ -41,6 +47,7 @@ Comment.create!(content: "Nice intro.", post_id: intro.id!) # anonymous
 
 puts "Created #{User.count} users, #{Category.count} categories, #{Post.count} posts, #{Comment.count} comments"
 ```
+{% endcode %}
 
 ```bash
 crystal src/crud.cr
@@ -51,8 +58,10 @@ Created 3 users, 3 categories, 4 posts, 2 comments
 ```
 
 `save!` raises `CQL::RecordNotSaved` when a callback halts the save, and `CQL::ActiveRecord::Validations::ValidationError` for an invalid record. `create!` does not call your `initialize`, so pass every computed value, such as a slug, yourself; it also skips validations and callbacks.
+{% endstep %}
 
-## Step 2: Find records
+{% step %}
+### Find records
 
 Add to `src/crud.cr`:
 
@@ -81,8 +90,10 @@ find!: No records found with id=999999
 Latest: ["A Weekend in Lisbon", "Crystal Macros"]
 First user: alice, last post: Draft Ideas
 ```
+{% endstep %}
 
-## Step 3: Filter with blocks and associations
+{% step %}
+### Filter with blocks and associations
 
 Add to `src/crud.cr`:
 
@@ -113,8 +124,10 @@ Joined on author: ["Getting Started with Crystal", "Crystal Macros"]
 ```
 
 Inside a block, bare names such as `views_count` or `user` are the model's columns and joined associations. A local variable with the same name wins, so keep no local called `user` in scope when you write `user.username`.
+{% endstep %}
 
-## Step 4: Paginate
+{% step %}
+### Paginate
 
 Add to `src/crud.cr`:
 
@@ -134,8 +147,10 @@ Post.page(1, 3): 3 posts
 ```
 
 `Post.page(number, per_page)` neither filters nor orders, so the database picks the row order.
+{% endstep %}
 
-## Step 5: Count and aggregate
+{% step %}
+### Count and aggregate
 
 Add to `src/crud.cr`:
 
@@ -162,8 +177,10 @@ Views: total 1390, average 463.3333333333333, max 1200, min 40
   bob: 1 posts
   Jane: 1 posts
 ```
+{% endstep %}
 
-## Step 6: Update records
+{% step %}
+### Update records
 
 Add to `src/crud.cr`:
 
@@ -184,8 +201,10 @@ Bob is Bob; intro has 152 views; published 1 draft(s)
 ```
 
 `AppSchema.update` writes many rows in one `UPDATE` statement, without loading them.
+{% endstep %}
 
-## Step 7: Search
+{% step %}
+### Search
 
 Add to `src/crud.cr`:
 
@@ -206,8 +225,10 @@ Search 'crystal': ["Crystal Macros", "Getting Started with Crystal"]
 ```
 
 The pattern is bound as a parameter, so user input is safe to pass.
+{% endstep %}
 
-## Step 8: Process records in batches
+{% step %}
+### Process records in batches
 
 Add to `src/crud.cr`:
 
@@ -224,8 +245,10 @@ Post.find_each(batch_size: 2) { |post| puts "  batch: #{post.title}" }
 ```
 
 `find_each` reads `batch_size` rows per query instead of the whole table at once.
+{% endstep %}
 
-## Step 9: Delete records
+{% step %}
+### Delete records
 
 Add to `src/crud.cr`:
 
@@ -248,5 +271,9 @@ After deleting Jane: 2 posts
 ```
 
 `delete!` returns `true` when it removed a row. Deleting Jane removes her posts because of the `ON DELETE CASCADE` foreign key from Part 2: the database does it, not a `has_many ... dependent:` option. PostgreSQL and MySQL always enforce foreign keys; SQLite does only with `?foreign_keys=1` on the URL, as Part 1 set.
+{% endstep %}
+{% endstepper %}
 
-Next: [Part 5: Adding Features](05-adding-features.md) adds validations, callbacks, transactions and seed data.
+{% content-ref url="05-adding-features.md" %}
+[05-adding-features.md](05-adding-features.md)
+{% endcontent-ref %}

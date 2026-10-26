@@ -1,9 +1,12 @@
-# Define a Model
+---
+description: "Map a class to a table by including CQL::ActiveRecord::Model(Pk), where Pk is the primary key type."
+---
 
-Include `CQL::ActiveRecord::Model(Pk)` in a class to map it to a table, where `Pk` is the primary key type.
+# Define a Model
 
 ## Write the Model
 
+{% code title="src/database.cr" %}
 ```crystal
 AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
   table :users do
@@ -15,7 +18,11 @@ AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3
     timestamps
   end
 end
+```
+{% endcode %}
 
+{% code title="src/models/user.cr" %}
+```crystal
 class User
   include CQL::ActiveRecord::Model(Int64) # Pk: Int32, Int64, UUID, or String (ULID)
 
@@ -41,6 +48,7 @@ class User
   end
 end
 ```
+{% endcode %}
 
 ```crystal
 user = User.new("Ada", "ada@example.com")
@@ -92,18 +100,7 @@ When no `define` block or several declare the table, the model still compiles, a
 
 ## Check Property Types Against the Schema
 
-```bash
-CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec
-# Unhandled exception: CQL schema mapping error in User: schema column `users.active` type Bool
-# does not match model getter `active` type String. Update the schema column or the model property type.
-# (CQL::ActiveRecord::SchemaMappingError)
-```
-
-The check is opt-in, because many models leave columns out or allow nil while a record is transient. Models with an inferred schema are checked too; a model with no resolvable schema is skipped.
-
-{% hint style="warning" %}
-The check runs after the rest of the program's top-level code, so run it with a program that finishes, such as the spec suite. A server that blocks at top level never reaches it.
-{% endhint %}
+Run `CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec` to compare every model's property types with its schema columns; see [Validate Models Against the Schema](../migrations/schema-dump-and-validation.md#validate-models-against-the-schema).
 
 ## Primary Key on Another Column
 

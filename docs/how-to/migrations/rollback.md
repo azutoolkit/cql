@@ -1,6 +1,10 @@
+---
+description: "Undo applied migrations by naming the version to go back to."
+---
+
 # Rollback Migrations
 
-Undo applied migrations by version. The built-in step counts include pending migrations, so name the version.
+The built-in step counts include pending migrations, so name the version.
 
 ## Roll Back to a Version
 
@@ -70,6 +74,7 @@ A `down` that runs in a new process needs the tables and columns it touches decl
 
 ## Handle Irreversible Migrations
 
+{% code title="db/migrations/006_drop_legacy_users.cr" %}
 ```crystal
 class DropLegacyUsers < CQL::Migration(6)
   def up
@@ -80,7 +85,10 @@ class DropLegacyUsers < CQL::Migration(6)
     raise "Cannot rollback: table was dropped with data"
   end
 end
+```
+{% endcode %}
 
+```crystal
 begin
   rollback_to(migrator, 4_i64)
 rescue ex

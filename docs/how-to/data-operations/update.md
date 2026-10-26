@@ -1,6 +1,8 @@
-# Update Records
+---
+description: "Change one record with save, write columns directly with update!, or update many rows with one statement."
+---
 
-Change one record with `save`, write columns directly with `update!`, or update many rows with one statement.
+# Update Records
 
 ## Change Attributes and Save
 

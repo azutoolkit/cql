@@ -1,9 +1,12 @@
-# Create Indexes
+---
+description: "Declare indexes with a new table, add them to existing tables in migrations, and check that queries use them."
+---
 
-Declare indexes with a new table, add them to existing tables in migrations, and check that queries use them.
+# Create Indexes
 
 ## Declare Indexes With the Table
 
+{% code title="db/migrations/004_create_accounts.cr" %}
 ```crystal
 class CreateAccounts < CQL::Migration(4)
   def up
@@ -26,6 +29,7 @@ class CreateAccounts < CQL::Migration(4)
   end
 end
 ```
+{% endcode %}
 
 ```sql
 -- table.create! and schema.build run, after CREATE TABLE IF NOT EXISTS accounts (...):
@@ -35,7 +39,7 @@ CREATE INDEX IF NOT EXISTS idx_accounts_by_status ON accounts (status)
 -- MySQL has no IF NOT EXISTS for indexes: CREATE INDEX idx_accounts_email ON accounts (email)
 ```
 
-- Without `name:`, an index is named `idx_<table>_<columns>`. A name longer than 63 characters raises
+- Without `name:`, an index is named `idx_`, then the table and the columns joined by `_` (`idx_accounts_name_status`). A name longer than 63 characters raises
   `ArgumentError`; pass a shorter `name:`.
 - `IF NOT EXISTS` makes a second `create!` safe on SQLite, PostgreSQL and CockroachDB. On MySQL it fails with a
   duplicate key name error.
@@ -44,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_accounts_by_status ON accounts (status)
 
 ## Add Indexes to an Existing Table
 
+{% code title="db/migrations/005_add_user_indexes.cr" %}
 ```crystal
 class AddUserIndexes < CQL::Migration(5)
   def up
@@ -73,6 +78,7 @@ class AddUserIndexes < CQL::Migration(5)
   end
 end
 ```
+{% endcode %}
 
 `create_index` takes an explicit name and emits no `IF NOT EXISTS`, so running it again fails
 (`index idx_users_email already exists` on SQLite). A unique index also rejects duplicate rows:

@@ -1,6 +1,8 @@
-# Use Timestamps
+---
+description: "Record when each row was created and last updated with created_at and updated_at."
+---
 
-Record when each row was created and last updated with `created_at` and `updated_at`.
+# Use Timestamps
 
 ## Add the Columns and Properties
 
@@ -80,6 +82,7 @@ Post.order(created_at: :desc).limit(10).all
 
 ## Add Timestamps to an Existing Table
 
+{% code title="db/migrations/20260115_add_timestamps_to_posts.cr" %}
 ```crystal
 class AddTimestampsToPosts < CQL::Migration(20260115)
   def up
@@ -98,6 +101,7 @@ class AddTimestampsToPosts < CQL::Migration(20260115)
   end
 end
 ```
+{% endcode %}
 
 ## See Also
 

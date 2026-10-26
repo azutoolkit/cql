@@ -183,7 +183,7 @@ end
 {% step %}
 ### Run the migration
 
-Apply it with a migrator built from `CQL_MIGRATOR_CONFIG`. [Run Migrations](../../how-to/migrations/run-migrations.md) turns this script into an `up`, `status` and `version` command.
+[Run Migrations](../../how-to/migrations/run-migrations.md) extends this script into an `up`, `status` and `version` command.
 
 {% code title="src/migrate.cr" %}
 ```crystal
@@ -327,7 +327,7 @@ end
 - [Define a Model](../../how-to/models/define-model.md)
 - [Building a Blog](../building-a-blog/01-project-setup.md)
 
-The how-to guides cover each feature as a task:
+The how-to guides cover each feature:
 
 {% content-ref url="../../how-to/README.md" %}
 [README.md](../../how-to/README.md)

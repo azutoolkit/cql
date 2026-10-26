@@ -1,8 +1,22 @@
+---
+description: "The most used CQL calls, one line each, and the CQL-specific terms they use."
+---
+
 # Quick Reference
 
-The most used CQL calls, one line each. Every block below compiles and runs on SQLite in this order.
+## Terms
+
+| Term | Meaning | API |
+| :--- | :--- | :--- |
+| `QueryBuilder` | The typed, model-aware query `Model.query` and `Model.where` return | `User.where(active: true).order(id: :desc)` |
+| `CQL::Query` | The table-level SQL builder `AppDB.query` returns; CTEs and window functions live here | `AppDB.query.from(:users).where(name: "Ada")` |
+| Database context | The schema and table a model maps to; inferred from the class name when omitted | `db_context AppDB, :users` |
+| Schema file | The generated Crystal file that mirrors the database; the migrator writes it | `migrator.update_schema_file` |
+| Dialect | The per-database SQL rules: placeholders, upserts, DDL | `CQL::Adapter::Postgres.dialect` |
 
 ## Schema
+
+The blocks from here on compile and run on SQLite in this order.
 
 ```crystal
 AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
@@ -289,20 +303,7 @@ CQL.configure do |c|
 end
 ```
 
-| Database | URL |
-| :--- | :--- |
-| SQLite file / in memory | `sqlite3://./db/app.db` / `sqlite3::memory:` |
-| PostgreSQL | `postgres://user:pass@host:5432/database` (or `postgresql://`) |
-| MySQL | `mysql://user:pass@host:3306/database` |
-| CockroachDB | `cockroachdb://user:pass@host:26257/database` |
-
-## Schema mapping check
-
-```bash
-CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec
-```
-
-With the variable set to `1`, every model compares its getter types and primary key with its schema table and raises `CQL::ActiveRecord::SchemaMappingError` on a mismatch. The check runs after all other top-level code, so run it through specs or a script that only requires the models, not a server that blocks.
+For each database's URL, see [Configure Database Connection](../how-to/configuration/database-connection.md); to check models against the schema, see [Fix Schema Mapping Errors](../how-to/troubleshooting/schema-mapping-errors.md).
 
 ## See Also
 
@@ -311,4 +312,4 @@ With the variable set to `1`, every model compares its getter types and primary 
 - [Callback Hooks](api/callback-hooks.md)
 - [Configuration Reference](configuration.md)
 - [Error Codes](error-codes.md)
-- [Glossary](glossary.md)
+- [Database Support](database-support.md)

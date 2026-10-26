@@ -1,6 +1,10 @@
+---
+description: "CQL keeps the work it adds to a query small: per-statement diagnostics are opt-in, results that never change are computed once, and the ActiveRecord layer reads the fewest rows."
+---
+
 # How CQL Keeps Queries Fast
 
-CQL keeps the work it adds to a query small: diagnostics that cost time on every statement are opt-in, results that never change are computed once, and the ActiveRecord layer picks the query that reads the fewest rows. To tune an application, see [Optimize Queries](../how-to/performance/optimize-queries.md). To measure CQL itself, see [Benchmark CQL](../how-to/performance/benchmark.md).
+To tune an application, see [Optimize Queries](../how-to/performance/optimize-queries.md). To measure CQL itself, see the [benchmarks README](https://github.com/azutoolkit/cql/blob/master/benchmarks/README.md).
 
 ## A Query Is Built, Rendered, Executed and Hydrated
 
@@ -74,4 +78,4 @@ The ActiveRecord layer picks the query that does the least work:
 
 ## Measuring It Yourself
 
-`benchmarks/sqlite_bench.cr` measures query building, `to_sql` and ActiveRecord operations on SQLite, and `benchmarks/telemetry_overhead_bench.cr` what telemetry and the performance monitor add to one statement. `pg_wire_bench.cr` and `pg_binary_params_bench.cr` measure the native PostgreSQL driver. No results ship with them, because the numbers depend on your hardware and server; [Benchmark CQL](../how-to/performance/benchmark.md) shows how to run them and compare two versions.
+`benchmarks/sqlite_bench.cr` measures query building, `to_sql` and ActiveRecord operations on SQLite, and `benchmarks/telemetry_overhead_bench.cr` what telemetry and the performance monitor add to one statement. `pg_wire_bench.cr` and `pg_binary_params_bench.cr` measure the native PostgreSQL driver. No results ship with them, because the numbers depend on your hardware and server. The [benchmarks README](https://github.com/azutoolkit/cql/blob/master/benchmarks/README.md) shows how to run them, and [Contributing](../resources/contributing.md#compare-two-versions) how to compare two versions.

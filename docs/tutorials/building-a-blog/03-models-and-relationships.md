@@ -1,13 +1,17 @@
-# Part 3: Models and Relationships
+---
+description: "Map the four tables to model classes, connect them with associations, and try them out."
+---
 
-Map the four tables to model classes, connect them with associations, and try them out.
+# Part 3: Models and Relationships
 
 **You need:** the project from [Part 2](02-database-schema.md), with `src/schemas/app_schema.cr` generated. Every model points at that `AppSchema` with `db_context`.
 
-## Step 1: Create the User model
+{% stepper %}
+{% step %}
+### Create the User model
 
+{% code title="src/models/user.cr" %}
 ```crystal
-# src/models/user.cr
 class User
   include CQL::ActiveRecord::Model(Int64) # adds the id primary key
   db_context AppSchema, :users
@@ -36,13 +40,16 @@ class User
   end
 end
 ```
+{% endcode %}
 
 Each `property` maps the column of the same name. Models are classes, not structs, so that `save` can set the new `id` on the instance you hold.
+{% endstep %}
 
-## Step 2: Create the Category model
+{% step %}
+### Create the Category model
 
+{% code title="src/models/category.cr" %}
 ```crystal
-# src/models/category.cr
 class Category
   include CQL::ActiveRecord::Model(Int64)
   db_context AppSchema, :categories
@@ -64,11 +71,14 @@ class Category
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 3: Create the Post model
+{% step %}
+### Create the Post model
 
+{% code title="src/models/post.cr" %}
 ```crystal
-# src/models/post.cr
 class Post
   include CQL::ActiveRecord::Model(Int64)
   db_context AppSchema, :posts
@@ -112,11 +122,14 @@ class Post
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 4: Create the Comment model
+{% step %}
+### Create the Comment model
 
+{% code title="src/models/comment.cr" %}
 ```crystal
-# src/models/comment.cr
 class Comment
   include CQL::ActiveRecord::Model(Int64)
   db_context AppSchema, :comments
@@ -138,13 +151,16 @@ class Comment
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 5: Load the models in the entry point
+{% step %}
+### Load the models in the entry point
 
 Replace `src/blog_engine.cr`:
 
+{% code title="src/blog_engine.cr" %}
 ```crystal
-# src/blog_engine.cr
 require "./database"
 require "./schemas/app_schema"
 require "./models/*"
@@ -172,15 +188,18 @@ module BlogEngine
   end
 end
 ```
+{% endcode %}
 
 The migrator now runs on `AppSchema` too, because it knows the existing tables. Later migrations that alter or drop a table need that: on the empty `AppDB`, `schema.alter :posts` raises `Table 'posts' not found` and `schema.posts.drop!` raises `KeyError`.
 
 Associations may name a model that is required later, such as `User` naming `Post`. CQL checks every `belongs_to` and `has_many` once all files are loaded, and reports a missing target model, or a foreign key whose type does not match the target's primary key, as a compile-time error.
+{% endstep %}
 
-## Step 6: Try the models
+{% step %}
+### Try the models
 
+{% code title="src/test_models.cr" %}
 ```crystal
-# src/test_models.cr
 require "./blog_engine"
 
 BlogEngine.setup
@@ -217,6 +236,7 @@ alice.delete!
 tech.delete!
 puts "Cleaned up: #{Post.count} posts, #{Comment.count} comments left"
 ```
+{% endcode %}
 
 ```bash
 crystal src/test_models.cr
@@ -236,6 +256,8 @@ Cleaned up: 0 posts, 0 comments left
 ```
 
 The ID grows on each run.
+{% endstep %}
+{% endstepper %}
 
 ## What the associations add
 
@@ -246,4 +268,6 @@ The ID grows on each run.
 
 To filter one user's posts in the database, query the model: `Post.where(user_id: user.id!, published: true).all`.
 
-Next: [Part 4: CRUD Operations](04-crud-operations.md) creates, queries, updates and deletes records.
+{% content-ref url="04-crud-operations.md" %}
+[04-crud-operations.md](04-crud-operations.md)
+{% endcontent-ref %}

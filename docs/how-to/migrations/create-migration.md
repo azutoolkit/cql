@@ -1,12 +1,13 @@
-# Create a Migration
+---
+description: "Write a CQL::Migration(version) subclass with up and down; defining the class registers it with CQL::Migrator."
+---
 
-A migration is a `CQL::Migration(version)` subclass with `up` and `down`; defining the class registers it with
-`CQL::Migrator`.
+# Create a Migration
 
 ## Write a Migration
 
+{% code title="db/migrations/001_create_users.cr" %}
 ```crystal
-# db/migrations/001_create_users.cr
 class CreateUsers < CQL::Migration(1)
   def up
     users.create!   # CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, ...)
@@ -27,6 +28,7 @@ class CreateUsers < CQL::Migration(1)
   end
 end
 ```
+{% endcode %}
 
 ```crystal
 # CQL::Migration(2)               the version is an Int64, unique, applied in ascending order
@@ -42,6 +44,7 @@ declares the table (your `CQL::Schema.define` block or the generated schema file
 
 ## Create a Table With Foreign Keys and Indexes
 
+{% code title="db/migrations/002_create_posts.cr" %}
 ```crystal
 class CreatePosts < CQL::Migration(2)
   def up
@@ -68,9 +71,11 @@ class CreatePosts < CQL::Migration(2)
   end
 end
 ```
+{% endcode %}
 
 ## Change an Existing Table
 
+{% code title="db/migrations/003_change_users.cr" %}
 ```crystal
 class ChangeUsers < CQL::Migration(3)
   def up
@@ -90,6 +95,7 @@ class ChangeUsers < CQL::Migration(3)
   end
 end
 ```
+{% endcode %}
 
 `schema.alter` raises `CQL::Schema::Error` ("Table 'users' not found") unless the schema declares the table, and it
 reads columns from that declaration:
@@ -114,6 +120,7 @@ On SQLite, declare foreign keys in the `schema.table` block and recreate the tab
 
 ## Make a Migration Irreversible
 
+{% code title="db/migrations/004_drop_legacy_field.cr" %}
 ```crystal
 class DropLegacyField < CQL::Migration(4)
   def up
@@ -127,6 +134,7 @@ class DropLegacyField < CQL::Migration(4)
   end
 end
 ```
+{% endcode %}
 
 The exception aborts the rollback; on SQLite and PostgreSQL nothing is reverted.
 

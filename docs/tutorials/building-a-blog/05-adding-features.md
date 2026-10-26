@@ -1,10 +1,14 @@
-# Part 5: Adding Features
+---
+description: "Add validations, callbacks and transactions, seed sample data, print statistics, and prepare for production."
+---
 
-Add validations, callbacks and transactions, seed sample data, print statistics, and prepare for production.
+# Part 5: Adding Features
 
 **You need:** the project from [Part 4](04-crud-operations.md).
 
-## Step 1: Add validations
+{% stepper %}
+{% step %}
+### Add validations
 
 A rule that needs the database, such as uniqueness, is a custom validator. At the top of `src/models/user.cr`, above `class User`:
 
@@ -46,8 +50,8 @@ Inside `class Post` in `src/models/post.cr`, below the associations:
 
 Try them in a new script:
 
+{% code title="src/features.cr" %}
 ```crystal
-# src/features.cr
 require "./blog_engine"
 
 User.delete_all
@@ -63,6 +67,7 @@ rescue ex : CQL::ActiveRecord::Validations::ValidationError
   puts "save raised: #{ex.message}"
 end
 ```
+{% endcode %}
 
 ```bash
 crystal src/features.cr
@@ -76,8 +81,10 @@ save raised: username must have a size of 3..50,email must match the pattern /\A
 ```
 
 `save` and `save!` raise on an invalid record, so call `valid?` first to report errors. `create!` skips validations.
+{% endstep %}
 
-## Step 2: Add callbacks
+{% step %}
+### Add callbacks
 
 Inside `class User`, below `use UniqueUserValidator`:
 
@@ -139,8 +146,10 @@ Stored title: "Hello, CQL"
 {% hint style="warning" %}
 A callback that returns `false` halts the operation, and `save` returns `false`. End a callback with `nil` or `true` when its last expression can be `false`.
 {% endhint %}
+{% endstep %}
 
-## Step 3: Use transactions
+{% step %}
+### Use transactions
 
 Add to `src/features.cr`:
 
@@ -182,11 +191,13 @@ DB::Rollback: 0 posts, no exception
 ```
 
 An exception rolls the block back and propagates; `DB::Rollback` rolls back silently. `transaction` returns the block's value or `nil`, so the method returns `post` itself.
+{% endstep %}
 
-## Step 4: Write a seeder
+{% step %}
+### Write a seeder
 
+{% code title="src/seeders.cr" %}
 ```crystal
-# src/seeders.cr
 module Seeders
   USERS = [
     {username: "alice", email: "alice@example.com", first_name: "Alice", last_name: "Johnson"},
@@ -235,15 +246,18 @@ module Seeders
   end
 end
 ```
+{% endcode %}
 
 Users go through `save!`, so their validations and callbacks run. Step 6 runs the seeder.
+{% endstep %}
 
-## Step 5: Print statistics
+{% step %}
+### Print statistics
 
 `CQL::Telemetry.alert_on_slow` calls a block for every slow statement.
 
+{% code title="src/monitoring.cr" %}
 ```crystal
-# src/monitoring.cr
 module Monitoring
   def self.watch_slow_queries
     CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
@@ -277,11 +291,14 @@ module Monitoring
   end
 end
 ```
+{% endcode %}
+{% endstep %}
 
-## Step 6: Run the demo
+{% step %}
+### Run the demo
 
+{% code title="src/demo.cr" %}
 ```crystal
-# src/demo.cr
 require "./blog_engine"
 require "./seeders"
 require "./monitoring"
@@ -300,6 +317,7 @@ Post.where(published: true).order(created_at: :desc, id: :desc).limit(2).all.eac
   puts "    #{post.excerpt(60)}"
 end
 ```
+{% endcode %}
 
 ```bash
 crystal src/demo.cr
@@ -332,13 +350,15 @@ Recent posts:
 ```
 
 A `Slow query` line appears only for a statement that takes 100 ms.
+{% endstep %}
 
-## Step 7: Prepare for production
+{% step %}
+### Prepare for production
 
 Pick the adapter from the environment; `require "cql"` already includes a PostgreSQL driver:
 
+{% code title="src/database.cr" %}
 ```crystal
-# src/database.cr
 require "cql"
 require "sqlite3" # development; drop it when you only run on PostgreSQL
 
@@ -355,11 +375,12 @@ MIGRATOR_CONFIG = CQL::MigratorConfig.new(
   auto_sync: false # keep the hand edit below
 )
 ```
+{% endcode %}
 
-The generated `AppSchema` hard-codes the adapter and URL it was dumped from, so edit those two lines too. With `auto_sync: false` the migrator stops rewriting the file; add new tables to it yourself:
+The generated `AppSchema` hard-codes the adapter and URL it was dumped from, so edit those two lines by hand. With `auto_sync: false` the migrator stops rewriting the file; add new tables to it yourself:
 
+{% code title="src/schemas/app_schema.cr" %}
 ```crystal
-# src/schemas/app_schema.cr, edited by hand
 AppSchema = CQL::Schema.define(
   :app_schema,
   adapter: ENV["CRYSTAL_ENV"]? == "production" ? CQL::Adapter::Postgres : CQL::Adapter::SQLite,
@@ -367,6 +388,7 @@ AppSchema = CQL::Schema.define(
   # ... generated table definitions ...
 end
 ```
+{% endcode %}
 
 ```bash
 export CRYSTAL_ENV=production
@@ -374,8 +396,12 @@ export DATABASE_URL=postgres://user:pass@host:5432/blog_production
 ```
 
 Check: without those variables, `crystal src/demo.cr` still prints the Step 6 output on SQLite.
+{% endstep %}
+{% endstepper %}
 
-| Before deploying | Where |
+## Before deploying
+
+| Practice | Guide |
 | :--- | :--- |
 | CQL binds every value as a parameter; keep raw SQL to literals you control | [Use Raw SQL Fragments Safely](../../how-to/advanced-sql/raw-fragments.md) |
 | Index the columns you filter and join on | [Create Indexes](../../how-to/migrations/indexes.md) |
@@ -388,6 +414,12 @@ Check: without those variables, `crystal src/demo.cr` still prints the Step 6 ou
 
 A blog engine with migrations, associated models, validations, callbacks, transactions, seed data and statistics. Next:
 
-- [Migration Workflows](../real-world-examples/migration-workflows.md) adds tags and a `featured` flag.
-- [Performance Monitoring](../real-world-examples/performance-monitoring.md) finds N+1 queries and profiles it.
-- The [How-to Guides](../../how-to/README.md), [Reference](../../reference/README.md) and [Explanation](../../explanation/README.md) cover each feature.
+- [Run Migrations](../../how-to/migrations/run-migrations.md) applies and tracks the migrations you add as the schema grows.
+- [Monitor Performance](../../how-to/observability/monitoring.md) adds logs, alerts, metrics and health checks for production.
+- [Reference](../../reference/README.md) and [Explanation](../../explanation/README.md) cover each feature in depth.
+
+The how-to guides cover each feature as a task:
+
+{% content-ref url="../../how-to/README.md" %}
+[README.md](../../how-to/README.md)
+{% endcontent-ref %}

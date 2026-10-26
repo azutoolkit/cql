@@ -1,6 +1,8 @@
-# Contributing
+---
+description: "How to report a bug, the checks CI runs, and the conventions a pull request is reviewed against."
+---
 
-Bug reports, fixes, features and documentation improvements are welcome. This page lists the checks CI runs and the conventions a pull request is reviewed against.
+# Contributing
 
 ## Report a Bug or Request a Feature
 
@@ -52,7 +54,22 @@ DATABASE_URL=postgres://example:example@localhost:5432/example crystal spec
 
 **Changelog and docs.** Record behavior changes under `[Unreleased]` in `CHANGELOG.md`. A behavior change updates the matching page in `docs/` in the same change. The docs follow Diátaxis (tutorials, how-to, reference, explanation); every page is listed in `docs/SUMMARY.md` and linked from its section `README.md`, and every class, method and option a page cites must exist in `src/`.
 
-**Review before committing.** `CLAUDE.md` requires every commit that changes `src/`, `spec/`, `playground/` or `benchmarks/` to be reviewed by the `code-reviewer` agent (`.claude/agents/code-reviewer.md`) on the staged diff first, and every blocking finding to be fixed. Docs-only and changelog-only commits are exempt.
+## Compare Two Versions
+
+For a change that may affect speed, build the benchmark from `master` and from your branch into separate binaries, then run them alternately so both see the same machine conditions:
+
+```bash
+git worktree add ../cql-base master
+(cd ../cql-base && shards install --ignore-crystal-version && crystal build --release -o /tmp/bench_base benchmarks/sqlite_bench.cr)
+crystal build --release -o /tmp/bench_new benchmarks/sqlite_bench.cr
+
+for i in 1 2; do
+  BENCH_ONLY=join /tmp/bench_base
+  BENCH_ONLY=join /tmp/bench_new
+done
+```
+
+Always build with `--release`. Timings drift by several percent between runs, so trust a difference that shows in every round, and in bytes per iteration where it applies. The [benchmarks README](https://github.com/azutoolkit/cql/blob/master/benchmarks/README.md) lists every benchmark and setting.
 
 ## Open a Pull Request
 

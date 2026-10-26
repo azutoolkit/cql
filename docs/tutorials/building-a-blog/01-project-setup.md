@@ -1,6 +1,10 @@
+---
+description: "Create the blog_engine project, add CQL and connect it to SQLite."
+---
+
 # Part 1: Project Setup
 
-Create the `blog_engine` project, add CQL and connect it to SQLite. Parts 2 to 5 build on this project, so keep it.
+Parts 2 to 5 build on this project, so keep it.
 
 **You need:** Crystal 1.12.2 or later and the SQLite 3 development library. [Your First CQL App](../getting-started/your-first-cql-app.md) is a shorter introduction.
 
@@ -14,7 +18,9 @@ User ──< Post >── Category        User ──< Comment >── Post
 - A category holds many posts; a post may have no category.
 - A post has many comments; a comment may be anonymous (no user).
 
-## Step 1: Create the project
+{% stepper %}
+{% step %}
+### Create the project
 
 ```bash
 crystal init app blog_engine
@@ -22,27 +28,33 @@ cd blog_engine
 ```
 
 Check: `shard.yml` and `src/blog_engine.cr` exist.
+{% endstep %}
 
-## Step 2: Add the dependencies
+{% step %}
+### Add the dependencies
 
 Add to `shard.yml`:
 
+{% code title="shard.yml" %}
 ```yaml
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.589"
+    version: ~> 0.0.808
   sqlite3:
     github: crystal-lang/crystal-sqlite3
 ```
+{% endcode %}
 
 ```bash
 shards install
 ```
 
 Check: the output lists `Installing cql` and `Installing sqlite3`.
+{% endstep %}
 
-## Step 3: Create the directories
+{% step %}
+### Create the directories
 
 ```bash
 mkdir -p src/models src/schemas migrations db
@@ -57,11 +69,13 @@ blog_engine/
     ├── models/    # models, Part 3
     └── schemas/   # schema written by the migrator, Part 2
 ```
+{% endstep %}
 
-## Step 4: Configure the database
+{% step %}
+### Configure the database
 
+{% code title="src/database.cr" %}
 ```crystal
-# src/database.cr
 require "cql"
 require "sqlite3"
 
@@ -80,6 +94,7 @@ MIGRATOR_CONFIG = CQL::MigratorConfig.new(
   auto_sync: true
 )
 ```
+{% endcode %}
 
 | Setting | Meaning |
 | :--- | :--- |
@@ -87,13 +102,15 @@ MIGRATOR_CONFIG = CQL::MigratorConfig.new(
 | `uri` | Connection URL. A relative SQLite path starts from the directory you run the program in. |
 | `schema_file_path`, `schema_name`, `schema_symbol` | Where the migrator writes the generated schema, and the constant and symbol it defines. |
 | `auto_sync` | Rewrite that file when the migrator starts and after every `up` and `down`. |
+{% endstep %}
 
-## Step 5: Write the entry point
+{% step %}
+### Write the entry point
 
 Replace the generated `src/blog_engine.cr`:
 
+{% code title="src/blog_engine.cr" %}
 ```crystal
-# src/blog_engine.cr
 require "./database"
 require "../migrations/*"
 
@@ -119,13 +136,16 @@ module BlogEngine
   end
 end
 ```
+{% endcode %}
 
 `require` runs at compile time, so the migrations are required at the top of the file.
+{% endstep %}
 
-## Step 6: Write the setup script
+{% step %}
+### Write the setup script
 
+{% code title="src/setup.cr" %}
 ```crystal
-# src/setup.cr
 require "./blog_engine"
 
 puts "Setting up Blog Engine..."
@@ -133,15 +153,18 @@ BlogEngine.setup
 BlogEngine.migrate
 puts "Setup complete!"
 ```
+{% endcode %}
 
 {% hint style="info" %}
 `src/setup.cr` compiles only once a migration exists, so you run it in Part 2.
 {% endhint %}
+{% endstep %}
 
-## Step 7: Check the connection
+{% step %}
+### Check the connection
 
+{% code title="src/verify.cr" %}
 ```crystal
-# src/verify.cr
 require "./database"
 
 begin
@@ -152,6 +175,7 @@ rescue ex
   exit 1
 end
 ```
+{% endcode %}
 
 ```bash
 crystal src/verify.cr
@@ -162,5 +186,9 @@ Database connection: OK
 ```
 
 `db/blog_development.db` now exists.
+{% endstep %}
+{% endstepper %}
 
-Next: [Part 2: Database Schema](02-database-schema.md) adds the tables.
+{% content-ref url="02-database-schema.md" %}
+[02-database-schema.md](02-database-schema.md)
+{% endcontent-ref %}

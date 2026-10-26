@@ -1,6 +1,10 @@
+---
+description: "Every error class CQL defines, what raises it, and its message."
+---
+
 # Error Codes
 
-Every error class CQL defines, what raises it, and its message. CQL's own classes inherit from `CQL::Error < Exception`, except `CQL::ActiveRecord::Validations::ValidationError`, which inherits from `Exception`.
+CQL's own classes inherit from `CQL::Error < Exception`, except `CQL::ActiveRecord::Validations::ValidationError`, which inherits from `Exception`.
 
 ```crystal
 begin
@@ -98,7 +102,10 @@ All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain cre
 | `UnsupportedValue` | A valid PostgreSQL value Crystal cannot represent (infinite or far-out dates) |
 | `ServerError` | The server sent an ErrorResponse; fields `severity`, `sqlstate`, `server_message`, `detail`, `hint`, `position`, `schema`, `table`, `column`, `constraint`, `routine`; `stale_plan?` |
 
-`ServerError.from` picks a subclass by SQLSTATE, then by SQLSTATE class:
+`ServerError.from` picks a subclass by SQLSTATE, then by SQLSTATE class.
+
+<details>
+<summary>ServerError subclasses by SQLSTATE</summary>
 
 | Subclass | SQLSTATE | Parent |
 | :--- | :--- | :--- |
@@ -111,6 +118,8 @@ All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain cre
 | `InvalidAuthorization` | class `28` | `ServerError` |
 | `QueryCanceled` | `57014` | `ServerError` |
 | `LocalCancel` | a cancel the driver issued itself | `QueryCanceled` |
+
+</details>
 
 `message` keeps the server's wording only for value-free SQLSTATE classes (`08 0A 23 25 28 3D 53 54 55 57 58`); otherwise it is a fixed title such as `"ERROR: syntax error (SQLSTATE 42601)"`. See the [native PostgreSQL driver guide](../how-to/postgres-native/README.md).
 
@@ -164,24 +173,11 @@ The compiler stops with these messages; there is no runtime class.
 | `CQL validation error in User:` | Unsupported predicate; `validate` on an unknown attribute; missing `confirmation` target |
 | `CQL order_by: User has no column` | `order_by` with an unknown column |
 | `CQL: cannot compare a String column with an integer` | A typed `where { }` comparison with the wrong value type |
+| `CQL: Symbol cannot be bound as a SQL parameter` | A raw fragment value that is not a `DB::Any` type, as in `where("name = ?", :admin)` |
 
 ## Defined, not raised by CQL
 
-Available to rescue or raise in your own code.
-
-| Class | Message format |
-| :--- | :--- |
-| `CQL::RecordNotFound` | free text |
-| `CQL::RecordNotFoundError.new(model_class, id)` | `"Couldn't find User with id=1"` |
-| `CQL::ValidationError.new(errors : Hash(String, Array(String)))` | `"Validation failed: name is blank"` |
-| `CQL::ConnectionError.new(message)` | `"Database connection error: refused"` |
-| `CQL::QueryError.new(message, sql, params)` | `"Query error: bad\nSQL: SELECT 1\nParams: [1]"` |
-| `CQL::TransactionError.new(message, state)` | `"Transaction error: bad (state: open)"` |
-| `CQL::MigrationError.new(message, version, direction)` | `"Migration error (version: 1) during up: bad"` |
-| `CQL::AttributeError.new(name, message)` | `"Attribute 'name': bad"` |
-| `CQL::PersistenceError.new(operation, message, model_class)` | `"Persistence error during save for User: bad"` |
-| `CQL::CallbackError.new(name, type, message)` | `"Callback before_save 'x' failed: bad"` |
-| `CQL::Schema::VersionConflictError`, `CQL::Schema::ConnectionError` | free text |
+These `CQL::` classes are defined, and some are rescued, but nothing in CQL raises them: `RecordNotFound`, `RecordNotFoundError`, `ValidationError` (not the Active Record one above), `ConnectionError`, `QueryError`, `TransactionError`, `MigrationError`, `AttributeError`, `PersistenceError`, `CallbackError`, `Schema::VersionConflictError` and `Schema::ConnectionError`.
 
 ## See Also
 

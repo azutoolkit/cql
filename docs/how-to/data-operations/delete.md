@@ -1,6 +1,8 @@
-# Delete Records
+---
+description: "Delete one record with its callbacks, or many rows with one statement."
+---
 
-Delete one record with its callbacks, or many rows with one statement, and soft delete when rows must stay.
+# Delete Records
 
 ## Delete One Record
 
@@ -62,38 +64,7 @@ only when the connection enables them: `uri: "sqlite3://./app.db?foreign_keys=tr
 
 ## Soft Delete
 
-With `include CQL::ActiveRecord::SoftDeletable` and a nullable `deleted_at` column:
-
-```crystal
-user = User.find!(1)
-user.delete!          # => true; UPDATE users SET deleted_at = ? WHERE users.id = ?
-user.deleted?         # => true; the id stays
-User.find(1)          # => nil: default queries skip deleted rows
-User.with_deleted.find(1)
-User.only_deleted.count
-
-user.restore!         # => true; deleted_at = NULL
-User.restore!(1)      # by id
-user.force_delete!    # DELETE FROM users WHERE users.id = ?
-
-User.delete_all       # soft deletes every active row (Int64)
-User.restore_all
-User.force_delete_all
-```
-
-```crystal
-# ❌ A soft-deleted record is not persisted?, so save INSERTs a second row
-user.delete!
-user.save             # => true; user.id is now the new row's, also marked deleted
-
-# ✅ Restore it first
-user.restore!
-user.save
-```
-
-{% hint style="warning" %}
-`dependent:` strategies still run on a soft delete, and `restore!` does not undo them.
-{% endhint %}
+To keep rows and set a `deleted_at` timestamp instead, include `CQL::ActiveRecord::SoftDeletable`; see [Implement Soft Deletes](../models/soft-delete.md).
 
 ## See Also
 

@@ -1,74 +1,47 @@
-# Installation
+---
+description: "Add CQL and your database's driver to a Crystal project, then check that it connects."
+icon: "download"
+---
 
-Add CQL and your database's driver to a Crystal project, then check that it connects.
+# Installation
 
 CQL needs Crystal 1.12.2 or later (`shard.yml`); CI builds with Crystal 1.22.0.
 
 ## 1. Add the Shards
 
+Each tab shows one database's `shard.yml` dependencies, `require` lines, and the adapter and URL its schema takes.
+
+{% tabs %}
+{% tab title="SQLite" %}
+{% code title="shard.yml" %}
 ```yaml
-# shard.yml
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.798
-
-  # SQLite
+    version: ~> 0.0.808
   sqlite3:
     github: crystal-lang/crystal-sqlite3
-
-  # MySQL
-  mysql:
-    github: crystal-lang/crystal-mysql
-
-  # PostgreSQL and CockroachDB: no driver shard; CQL ships one
 ```
-
-```bash
-shards install   # also installs db (crystal-db), ulid and redis, which CQL depends on
-```
-
-## 2. Require CQL and the Driver
+{% endcode %}
 
 ```crystal
-require "cql"     # CQL and its PostgreSQL/CockroachDB driver
-require "sqlite3" # SQLite only
-require "mysql"   # MySQL only
-
-# Adapter and URL for each database
-CQL::Adapter::SQLite      # "sqlite3://./db/app.db"
-CQL::Adapter::Postgres    # "postgres://app:secret@localhost:5432/app" (or postgresql://)
-CQL::Adapter::MySql       # "mysql://app:secret@localhost:3306/app"
-CQL::Adapter::CockroachDB # "cockroachdb://root@localhost:26257/app"
-```
-
-## 3. Check the Connection
-
-```crystal
-# src/check_cql.cr
 require "cql"
 require "sqlite3"
 
-AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
-  table :users do
-    primary :id, Int64, auto_increment: true
-    text :name
-  end
-end
-
-AppDB.users.create! # CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)
-id = AppDB.insert.into(:users).values(name: "Ada").last_insert_id
-puts AppDB.query.from(:users).select(:name).where(id: id).get(as: String)
+CQL::Adapter::SQLite # "sqlite3://./db/app.db"
 ```
+{% endtab %}
 
-```bash
-crystal run src/check_cql.cr
-# Ada
+{% tab title="PostgreSQL" %}
+{% code title="shard.yml" %}
+```yaml
+dependencies:
+  cql:
+    github: azutoolkit/cql
+    version: ~> 0.0.808
+  # No driver shard: CQL ships its own PostgreSQL driver
 ```
-
-For another database, change `adapter:` and `uri:` and add its `require`. The [first tutorial](tutorials/getting-started/your-first-cql-app.md) continues from here with models and migrations.
-
-## PostgreSQL and CockroachDB
+{% endcode %}
 
 ```crystal
 require "cql" # postgres:// and postgresql:// URLs now open through CQL's driver
@@ -87,8 +60,79 @@ end
 {% hint style="info" %}
 If your app requires the `pg` shard anywhere, that shard serves `postgres://` URLs instead. Compile with `-Dcql_no_postgres_driver` to keep CQL's driver out of crystal-db's registry.
 {% endhint %}
+{% endtab %}
 
-A schema with `CQL::Adapter::CockroachDB` and a `cockroachdb://` URL uses the native driver as is; `DB.open("cockroachdb://...")` needs `CQL::Postgres::Driver.register_cockroachdb` or `-Dcql_postgres_driver_cockroachdb`.
+{% tab title="MySQL" %}
+{% code title="shard.yml" %}
+```yaml
+dependencies:
+  cql:
+    github: azutoolkit/cql
+    version: ~> 0.0.808
+  mysql:
+    github: crystal-lang/crystal-mysql
+```
+{% endcode %}
+
+```crystal
+require "cql"
+require "mysql"
+
+CQL::Adapter::MySql # "mysql://app:secret@localhost:3306/app"
+```
+{% endtab %}
+
+{% tab title="CockroachDB" %}
+{% code title="shard.yml" %}
+```yaml
+dependencies:
+  cql:
+    github: azutoolkit/cql
+    version: ~> 0.0.808
+  # No driver shard: CQL's PostgreSQL driver also serves CockroachDB
+```
+{% endcode %}
+
+```crystal
+require "cql"
+
+CQL::Adapter::CockroachDB # "cockroachdb://root@localhost:26257/app"
+```
+
+A schema with this adapter and URL uses the native driver as is; `DB.open("cockroachdb://...")` needs `CQL::Postgres::Driver.register_cockroachdb` or `-Dcql_postgres_driver_cockroachdb`.
+{% endtab %}
+{% endtabs %}
+
+```bash
+shards install   # also installs db (crystal-db), ulid and redis, which CQL depends on
+```
+
+## 2. Check the Connection
+
+{% code title="src/check_cql.cr" %}
+```crystal
+require "cql"
+require "sqlite3"
+
+AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+  table :users do
+    primary :id, Int64, auto_increment: true
+    text :name
+  end
+end
+
+AppDB.users.create! # CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)
+id = AppDB.insert.into(:users).values(name: "Ada").last_insert_id
+puts AppDB.query.from(:users).select(:name).where(id: id).get(as: String)
+```
+{% endcode %}
+
+```bash
+crystal run src/check_cql.cr
+# Ada
+```
+
+For another database, change `adapter:` and `uri:` and the `require` lines to the ones in its tab. The [first tutorial](tutorials/getting-started/your-first-cql-app.md) continues from here with models and migrations.
 
 ## Troubleshooting
 

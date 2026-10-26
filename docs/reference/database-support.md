@@ -1,6 +1,10 @@
+---
+description: "What each adapter supports and the SQL it generates, from the dialects in src/dialects/."
+---
+
 # Database Support
 
-What each adapter supports and the SQL it generates, from the dialects in `src/dialects/`. "raises" means `CQL::DialectError` (or the subclass named) when the SQL is generated.
+In the tables, "raises" means CQL raises `CQL::DialectError` (or the subclass named) when it generates the SQL.
 
 ## Adapters and dialects
 
@@ -77,14 +81,14 @@ CTEs and window functions are on `CQL::Query` (`AppDB.query`), not on `QueryBuil
 | Auto-increment key | `INTEGER PRIMARY KEY AUTOINCREMENT` | `GENERATED ALWAYS AS IDENTITY` | `AUTO_INCREMENT` | `GENERATED ALWAYS AS IDENTITY` |
 | `Bool` default | `1` / `0` | `TRUE` / `FALSE` | `TRUE` / `FALSE` | `TRUE` / `FALSE` |
 | `check_constraint` | yes | yes | raises `MySqlUnsupportedFeatureError` | yes |
-| Unnamed `foreign_key` in a table | unnamed | unnamed | `fk_<table>_<columns>` | unnamed |
+| Unnamed `foreign_key` in a table | unnamed | unnamed | `fk_<t>_<columns>` | unnamed |
 | `add_column` | `ADD COLUMN` | `ADD COLUMN` | `ADD COLUMN` | `ADD COLUMN` |
 | `drop_column` | `DROP COLUMN` (3.35+) | yes | yes | yes |
 | `rename_column` | `RENAME COLUMN` | `RENAME COLUMN` | `CHANGE old new <type>` | `RENAME COLUMN` |
 | `change_column` | raises `SQLiteUnsupportedFeatureError` | `ALTER COLUMN ... TYPE` | `MODIFY COLUMN` | `ALTER COLUMN ... TYPE` |
 | `foreign_key` in `schema.alter` | raises `DB::Error` | `ADD CONSTRAINT` | `ADD CONSTRAINT` | `ADD CONSTRAINT` |
 | `drop_foreign_key` | raises `SQLiteUnsupportedFeatureError` | `DROP CONSTRAINT` | `DROP FOREIGN KEY` | `DROP CONSTRAINT` |
-| `drop_index` | `DROP INDEX IF EXISTS` | `DROP INDEX IF EXISTS` | `DROP INDEX ... ON <table>` | `DROP INDEX IF EXISTS` |
+| `drop_index` | `DROP INDEX IF EXISTS` | `DROP INDEX IF EXISTS` | `DROP INDEX ... ON <t>` | `DROP INDEX IF EXISTS` |
 | `rename_table` | `ALTER TABLE ... RENAME TO` | same | `RENAME TABLE ... TO` | same as PostgreSQL |
 | Schema change inside an open transaction | SAVEPOINT | SAVEPOINT | raises | raises |
 | Failed migration run | rolled back | rolled back | earlier statements stay | earlier statements stay |

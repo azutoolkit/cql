@@ -1,6 +1,8 @@
-# Upsert Records
+---
+description: "Insert a row, or update the existing one when it collides with a unique key, with Insert#on_conflict and Insert#upsert."
+---
 
-Insert a row, or update the existing one when it collides with a unique key, with `Insert#on_conflict` and `Insert#upsert`.
+# Upsert Records
 
 The examples use an `accounts` table with a unique `email`:
 
@@ -78,20 +80,38 @@ insert.on_conflict(:email).do_update(:name).back(:id) # RETURNING comes after th
 ```crystal
 upsert = AppDB.insert.into(:accounts).values(email: "a@x.io", name: "Ada")
   .on_conflict(:email).do_update(:name, visits: 9)
+```
 
-upsert.to_sql(Expression::Generator.new(CQL::Adapter::Postgres)) # also CockroachDB; SQLite (3.24+) binds ?
-# ... ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, visits = $3
-upsert.to_sql(Expression::Generator.new(CQL::Adapter::MySql))
-# ... ON DUPLICATE KEY UPDATE name = VALUES(name), visits = ?
-# MySQL do_nothing: ... ON DUPLICATE KEY UPDATE email = email
+{% tabs %}
+{% tab title="PostgreSQL and CockroachDB" %}
+```crystal
+upsert.to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
+# INSERT INTO accounts (email, name) VALUES ($1, $2) ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, visits = $3
 
 upsert.to_sql(Expression::Generator.new(CQL::Adapter::Postgres, quote_identifiers: true))
 # INSERT INTO "accounts" ("email", "name") ... ON CONFLICT ("email") DO UPDATE SET "name" = EXCLUDED."name", "visits" = $3
+```
+{% endtab %}
+
+{% tab title="SQLite" %}
+```crystal
+upsert.to_sql(Expression::Generator.new(CQL::Adapter::SQLite)) # SQLite 3.24+
+# INSERT INTO accounts (email, name) VALUES (?, ?) ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, visits = ?
+```
+{% endtab %}
+
+{% tab title="MySQL" %}
+```crystal
+upsert.to_sql(Expression::Generator.new(CQL::Adapter::MySql))
+# INSERT INTO accounts (email, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), visits = ?
+# do_nothing: ... ON DUPLICATE KEY UPDATE email = email
 ```
 
 {% hint style="warning" %}
 MySQL ignores the conflict target: any unique key that collides triggers `ON DUPLICATE KEY UPDATE`.
 {% endhint %}
+{% endtab %}
+{% endtabs %}
 
 ## Avoid These Errors
 
@@ -113,4 +133,3 @@ A statement from `build` is a snapshot: a later `do_update` on the same `Insert`
 - [Create Records](create.md)
 - [Use Transactions](transactions.md)
 - [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
-- [The query DSL: before and after](../../explanation/dsl-before-after.md)

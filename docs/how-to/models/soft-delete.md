@@ -1,6 +1,8 @@
-# Implement Soft Deletes
+---
+description: "Mark records as deleted with a deleted_at timestamp instead of removing their rows."
+---
 
-Mark records as deleted with a `deleted_at` timestamp instead of removing their rows.
+# Implement Soft Deletes
 
 ## Enable Soft Deletes
 
