@@ -26,7 +26,7 @@ CQL::Telemetry.unsubscribe("metrics")
 CQL::Telemetry.reset!                  # in specs: drops every subscriber, the tracer and capture_params
 ```
 
-Events cover queries, inserts, updates, deletes, `Schema#exec` and `explain`; `Schema#alter` and migrations publish none. Subscribers run inline before the statement returns. One that raises is logged and never affects the query or other subscribers.
+Events cover queries, inserts, updates, deletes, `Schema#exec` and `explain`; `Schema#alter` and migrations publish none. Raw SQL (`Schema#exec`, the native engine's `exec` and `pipeline`) is labeled by its first statement: `schema.exec("SELECT 1")` is a `:select`, an `INSERT` an `:insert`, and any other statement (`CREATE`, `ALTER`, `SET`, `PRAGMA`) `:ddl`. Subscribers run inline before the statement returns. One that raises is logged and never affects the query or other subscribers.
 
 ## Alert on Slow Queries and Log SQL
 

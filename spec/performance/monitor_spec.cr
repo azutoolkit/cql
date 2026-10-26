@@ -968,12 +968,12 @@ describe "CQL::Performance::Monitor with CQL::Execution.run" do
     monitor.profiler.not_nil!.statistics.should be_empty
   end
 
-  it "does not record DDL run through Schema#exec" do
+  it "does not record raw SQL run through Schema#exec" do
     monitor = profiling_monitor.call
 
     with_global_monitor(monitor) { UserDB.exec("SELECT 1") }
 
-    events.map(&.operation).should eq([:ddl])
+    events.map(&.operation).should eq([:select])
     monitor.profiler.not_nil!.statistics.should be_empty
   end
 
