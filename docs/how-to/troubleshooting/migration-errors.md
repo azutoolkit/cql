@@ -10,7 +10,7 @@ migrator = CQL.build_migrator(AppDB)     # tracking table schema_migrations (tes
 
 migrator.applied_migrations.map(&.version) # => [1]
 migrator.pending_migrations.map(&.version) # => [2]
-migrator.last                              # => CreateUsers (the newest applied migration class), or nil
+migrator.last                              # => CreateUsers (class of the last recorded migration), or nil
 migrator.print_pending_migrations          # table of pending migrations
 ```
 

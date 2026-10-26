@@ -37,7 +37,7 @@ AppDB = CQL.build_schema(:app) do
 end
 ```
 
-`db_context` reads the constant when the model's class body runs, so `CQL.configure` must load before any model.
+The first model's `db_context` builds the constant, and `CQL.build_schema` reads `CQL.config` at that moment, so `CQL.configure` must load before any model.
 
 ## 3. Point models at the schema
 
@@ -94,8 +94,8 @@ CQL.build_migrator(AppDB, CQL.migrator_config(migrations_table: :my_migrations))
 
 # With auto_sync on, a migrator writes the schema file when constructed and after each up/down.
 # bootstrap = true dumps the file from the live database. verify_schema = true (development and
-# production) compares it, logs "Schema file is out of sync with database", and rewrites it
-# when auto_sync is on.
+# production) compares it and logs "Schema file is out of sync with database"; with auto_sync on,
+# the file was already rewritten when the migrator was built, so the comparison always passes.
 ```
 
 ## Complete example
