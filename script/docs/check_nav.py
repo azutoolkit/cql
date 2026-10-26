@@ -1,5 +1,7 @@
-"""Checks the docs navigation: every page is listed in docs/SUMMARY.md and linked from its section README.md, every
-SUMMARY entry exists, and every redirect in docs/.gitbook.yaml points at a page that exists without shadowing one.
+"""Check the docs navigation, the section READMEs and the redirects.
+
+Every page must be listed in docs/SUMMARY.md and linked from its section README.md, every SUMMARY entry must exist,
+and every redirect in docs/.gitbook.yaml must point at a page that exists without shadowing one.
 
 Usage: python3 script/docs/check_nav.py   (from the repository root; exits 1 on any problem)
 """
@@ -14,7 +16,7 @@ LINK = re.compile(r'(?:\]\(|href="|url=")([^)"#\s]+\.md)')
 
 
 def linked_pages(readme):
-    """The docs pages *readme* links to, as paths relative to docs/."""
+    """Return the docs pages *readme* links to, as paths relative to docs/."""
     base = os.path.dirname(readme)
     text = open(os.path.join(DOCS, readme), encoding="utf-8").read()
     return {os.path.normpath(os.path.join(base, target)) for target in LINK.findall(text)}

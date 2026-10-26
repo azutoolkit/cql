@@ -22,7 +22,7 @@ FENCE_LINE = re.compile(r"^\s*(```+|~~~+)")
 
 
 def pages(args):
-    """The pages named on the command line, or every docs page except SUMMARY.md."""
+    """Return the pages named on the command line, or every docs page except SUMMARY.md."""
     if args:
         return args
     out = []
@@ -32,12 +32,12 @@ def pages(args):
 
 
 def target_exists(page, target):
-    """Whether a relative link *target* in *page* points at an existing file."""
+    """Tell whether a relative link *target* in *page* points at an existing file."""
     return os.path.exists(os.path.normpath(os.path.join(os.path.dirname(page), target.split("#")[0])))
 
 
 def split_frontmatter(text):
-    """Returns (raw frontmatter or None, body, errors)."""
+    """Return (raw frontmatter or None, body, errors)."""
     if not text.startswith("---\n"):
         return None, text, ["missing frontmatter"]
     end = text.find("\n---\n", 4)
@@ -47,7 +47,7 @@ def split_frontmatter(text):
 
 
 def frontmatter_errors(raw, page):
-    """Checks the description (present, quoted), icon (landing pages only) and that no other key is set."""
+    """Check the description (present, quoted), the icon (landing pages only) and that no other key is set."""
     try:
         meta = yaml.safe_load(raw) or {}
     except yaml.YAMLError as exc:
@@ -67,7 +67,7 @@ def frontmatter_errors(raw, page):
 
 
 def opening_tag_errors(name, attrs, stack, page):
-    """Checks one opening block tag against the blocks already open (*stack*) and its required attributes."""
+    """Check one opening block tag against the blocks already open (*stack*) and its required attributes."""
     errors = []
     if name in PARENT and (not stack or stack[-1][0] != PARENT[name]):
         errors.append(f"{name} outside {PARENT[name]}")
@@ -90,6 +90,7 @@ class BlockChecker:
     """Walks a page body line by line, tracking open GitBook blocks, fenced code and <details>."""
 
     def __init__(self, page):
+        """Start with no open blocks, fences or <details> on *page*."""
         self.page = page
         self.errors = []
         self.stack = []  # (block name, line) of each open block
@@ -98,7 +99,7 @@ class BlockChecker:
         self.details_depth = 0
 
     def check(self, body):
-        """Returns the block-structure errors in *body*."""
+        """Return the block-structure errors in *body*."""
         for lineno, line in enumerate(body.splitlines(), 1):
             if FENCE_LINE.match(line):
                 self.fence(line)
@@ -114,13 +115,13 @@ class BlockChecker:
         return self.errors
 
     def fence(self, _line):
-        """A fence line opens or closes a code block; one opened inside {% code %} is counted."""
+        """Open or close a fenced block; count one opened inside {% code %}."""
         if not self.in_fence and self.stack and self.stack[-1][0] == "code":
             self.code_fences[-1] += 1
         self.in_fence = not self.in_fence
 
     def details(self, lineno, line):
-        """Tracks <details> nesting; GitBook cannot render one inside tabs or a stepper."""
+        """Track <details> nesting; GitBook cannot render one inside tabs or a stepper."""
         if re.match(r"^\s*<details", line):
             if any(name in ("tabs", "stepper") for name, _ in self.stack):
                 self.errors.append(f"{lineno}: <details> inside tabs or stepper")
@@ -129,7 +130,7 @@ class BlockChecker:
             self.details_depth -= 1
 
     def tag(self, lineno, closing, name, attrs):
-        """Checks one {% name %} or {% endname %} tag."""
+        """Check one {% name %} or {% endname %} tag."""
         if name not in BLOCKS:
             return
         if closing:
@@ -141,7 +142,7 @@ class BlockChecker:
         self.stack.append((name, lineno))
 
     def close(self, lineno, name):
-        """Closes the innermost block, which must be *name*; a code block must have wrapped one fenced block."""
+        """Close the innermost block, which must be *name*; a code block must wrap one fenced block."""
         if not self.stack or self.stack[-1][0] != name:
             self.errors.append(f"{lineno}: end{name} without matching {name}")
             return
@@ -151,7 +152,7 @@ class BlockChecker:
 
 
 def card_errors(body, page):
-    """Checks card targets, <table> balance and the hint budget."""
+    """Check card targets, <table> balance and the hint budget."""
     errors = [f"card href missing: {href}" for href in re.findall(r'<a href="([^"]+)"', body)
               if not re.match(r"^[a-z]+:", href) and not target_exists(page, href)]
     if body.count("<table") != body.count("</table>"):
@@ -163,7 +164,7 @@ def card_errors(body, page):
 
 
 def lint(page):
-    """Returns every problem found in *page*."""
+    """Return every problem found in *page*."""
     with open(page, encoding="utf-8") as source:
         raw, body, errors = split_frontmatter(source.read())
     if raw is not None:
@@ -172,7 +173,7 @@ def lint(page):
 
 
 def main():
-    """Lints the pages and exits 1 when any has a problem."""
+    """Lint the pages and exit 1 when any has a problem."""
     failed = 0
     files = pages(sys.argv[1:])
     for page in files:
