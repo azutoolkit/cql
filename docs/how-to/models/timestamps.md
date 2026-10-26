@@ -30,13 +30,13 @@ end
 ```crystal
 post = Post.new("Draft")
 post.save!
-post.created_at   # => 2026-10-26 10:30:00 UTC
-post.updated_at   # => 2026-10-26 10:30:00 UTC
+post.created_at   # => 2026-10-26 10:30:00Z
+post.updated_at   # => 2026-10-26 10:30:00Z
 
 post.title = "Published"
 post.save!
-post.created_at   # => 2026-10-26 10:30:00 UTC (unchanged)
-post.updated_at   # => 2026-10-26 11:45:00 UTC
+post.created_at   # => 2026-10-26 10:30:00Z (unchanged)
+post.updated_at   # => 2026-10-26 11:45:00Z
 ```
 
 `save` and `save!` set `created_at` on a new record and `updated_at` on every save, before the callbacks run, whenever the table has those columns. Other writes do not:

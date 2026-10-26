@@ -1,190 +1,114 @@
 # Add Optimistic Locking
 
-This guide shows you how to add optimistic locking to prevent concurrent updates from overwriting each other.
+Stop a stale copy of a record from overwriting a newer update by checking a version column on every update.
 
-## When to Use
-
-Use optimistic locking when:
-- Multiple users might edit the same record simultaneously
-- Conflicts are rare but data integrity is important
-- You want to avoid database-level row locks
-
-## Prerequisites
-
-Your table needs a version column:
+## Add a Version Column
 
 ```crystal
-schema.table :users do
-  primary :id, Int64, auto_increment: true
-  column :name, String
-  lock_version :version  # Adds integer column with default 1
-  timestamps
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+  table :users do
+    primary :id, Int64, auto_increment: true
+    column :name, String
+    lock_version :version   # Int32, NOT NULL, default 1
+  end
 end
-schema.users.create!
 ```
 
-Or add to an existing table:
+On an existing table, add it in a migration:
 
 ```crystal
-class AddVersionToUsers < CQL::Migration(20240115)
+class AddVersionToUsers < CQL::Migration(20260115)
+  # ❌ add_column drops default: today, so the database rejects a NOT NULL column without one
+  #    add_column :version, Int32, default: 1, null: false
+
+  # ✅ Write the DDL with its DEFAULT
   def up
-    schema.alter :users do
-      add_column :version, Int32, default: 1, null: false
-    end
+    schema.exec("ALTER TABLE users ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
   end
 
   def down
-    schema.alter :users do
-      drop_column :version
-    end
+    schema.exec("ALTER TABLE users DROP COLUMN version")
   end
 end
 ```
 
-## Enable Optimistic Locking
-
-Include the module and configure the version column. The version is an `Int32` (the column `lock_version` creates), whatever the primary key type:
+## Enable Locking on the Model
 
 ```crystal
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
   include CQL::ActiveRecord::OptimisticLocking
 
-  db_context MyDB, :users
-
-  property id : Int64?
-  property name : String
-  property version : Int32?
+  property name : String = ""
+  property version : Int32 = 1          # Int32 whatever the primary key type
 
   optimistic_locking version_column: :version
-
-  def initialize(@name : String)
-  end
 end
 ```
 
-## Handle Updates
+{% hint style="warning" %}
+Always pass `version_column:`. The macro defaults to `:lock_version`, while the `lock_version` schema helper names its column `:version`.
+{% endhint %}
 
-Updates automatically check the version:
+## Update and Handle Conflicts
+
+`update!`, `update!(**attributes)` and `save` check the version and write the next one:
 
 ```crystal
-user = User.find!(1)
-user.name = "Updated Name"
+first = User.find!(1)     # version 1
+second = User.find!(1)    # version 1
 
-begin
-  user.update!
-  puts "Updated! New version: #{user.version}"
-rescue CQL::OptimisticLockError
-  puts "Someone else updated this record!"
-end
+first.name = "First"
+first.save                # UPDATE users SET name = ?, version = ? WHERE (users.id = ?) AND (users.version = ?)
+first.version             # => 2
+
+second.name = "Second"
+second.save               # raises CQL::OptimisticLockError: Record has been modified by another process
 ```
 
-## Handle Conflicts
-
-When a conflict occurs, reload and retry:
+Reload and reapply the change, with a retry limit:
 
 ```crystal
-user = User.find!(1)
-user.name = "My Changes"
-
-begin
-  user.update!
-rescue CQL::OptimisticLockError
-  user.reload!  # Get latest data from database
-  user.name = "My Changes"  # Re-apply changes
-  user.update!  # Try again
-end
-```
-
-## Retry with Limit
-
-Implement retry logic with a maximum attempts:
-
-```crystal
-def update_with_retry(user, max_retries = 3)
-  attempts = 0
-
-  loop do
-    attempts += 1
-    user.name = "Updated Name"
-
+def rename(user : User, name : String, attempts = 3) : Bool
+  attempts.times do
+    user.name = name
     begin
       user.update!
       return true
     rescue CQL::OptimisticLockError
-      if attempts >= max_retries
-        puts "Max retries reached"
-        return false
-      end
-
-      puts "Conflict, retrying (#{attempts}/#{max_retries})..."
-      user.reload!
+      user.reload!          # latest values and version
     end
   end
+  false
 end
+
+rename(second, "Second")  # => true
 ```
 
-## How It Works
+`update!` raises `CQL::Error` on an unsaved record or a `nil` version. The class method `User.update!(id, attributes)` writes the row directly and skips the check.
 
-1. Record is loaded with current version (e.g., version 5)
-2. When updating, CQL generates: `UPDATE users SET name = ?, version = 6 WHERE id = ? AND version = 5`
-3. If another process updated first (version is now 6), the WHERE clause matches 0 rows
-4. CQL raises `OptimisticLockError`
-5. Your code handles by reloading and retrying
-
-## Combine with Soft Deletes
-
-You can use both modules together:
+## Combine With Other Modules
 
 ```crystal
-struct User
+class User
   include CQL::ActiveRecord::Model(Int64)
   include CQL::ActiveRecord::SoftDeletable
   include CQL::ActiveRecord::OptimisticLocking
+  include CQL::ActiveRecord::DirtyTracking
 
-  db_context MyDB, :users
-
-  property id : Int64?
-  property name : String
-  property version : Int32?
+  property name : String = ""
+  property version : Int32 = 1
 
   optimistic_locking version_column: :version
-
-  def initialize(@name : String)
-  end
 end
 ```
 
-## Verify It Works
+With [dirty tracking](dirty-tracking.md), an unchanged record sends no `UPDATE` and keeps its version; a changed one still sends every column, because the version check covers the whole row.
 
-```crystal
-# Load same record twice (simulating two users)
-user1 = User.find!(1)
-user2 = User.find!(1)
+## See Also
 
-# First update succeeds
-user1.name = "User 1's change"
-user1.update!  # Works, version now 2
-
-# Second update fails
-user2.name = "User 2's change"
-begin
-  user2.update!  # Raises OptimisticLockError
-rescue CQL::OptimisticLockError
-  puts "Conflict detected!"
-end
-```
-
-## Best Practices
-
-1. **Always reload after conflict** - Get latest data before retrying
-2. **Limit retries** - Avoid infinite loops
-3. **Inform users** - In UIs, tell users the data changed
-4. **Use for important data** - Not every table needs locking
-5. **Test conflict scenarios** - Write tests that simulate concurrent updates
-
-## Related
-
-- [Define a Model](define-model.md)
+- [Track Changes and Update Only Changed Columns](dirty-tracking.md)
 - [Implement Soft Deletes](soft-delete.md)
+- [Lock Rows](../querying/row-locking.md)
 - [Use Transactions](../data-operations/transactions.md)
+- [Define a Model](define-model.md)

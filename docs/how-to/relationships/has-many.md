@@ -1,285 +1,132 @@
 # Set Up Has Many
 
-This guide shows you how to set up a has_many relationship where one model has multiple related records.
+Declare `has_many` on the model whose related records hold the foreign key, such as a `User` with many `Post`s.
 
-## When to Use
-
-Use `has_many` when:
-- A User has many Posts
-- A Post has many Comments
-- A Category has many Products
-
-## Options
+## Declare the Association
 
 ```crystal
-has_many :posts, Post                                  # foreign key defaults to user_id (owner name + _id, without its namespace: Blog::User -> user_id)
-has_many :posts, Post, :user_id                        # third argument is the foreign key
-has_many :posts, Post, foreign_key: :author_id, dependent: :destroy
-```
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+  table :users do
+    primary :id, Int64, auto_increment: true
+    column :name, String
+  end
 
-`dependent` accepts `:destroy`, `:delete_all`, `:nullify` and `:restrict_with_error`. When you declare it, deleting the parent applies it (see [When the Parent Is Deleted](#when-the-parent-is-deleted)). The collection's `clear` follows it too, and nullifies when it is not declared.
+  table :posts do
+    primary :id, Int64, auto_increment: true
+    column :user_id, Int64, null: true
+    column :title, String
+    column :published, Bool, default: false
+    foreign_key [:user_id], references: :users, references_columns: [:id]
+    index [:user_id]
+  end
+end
 
-## Compile-Time Safety
+class User
+  include CQL::ActiveRecord::Model(Int64)
 
-CQL validates `has_many` declarations during compilation:
+  property name : String = ""
 
-- The association name must be a symbol literal.
-- The `foreign_key` option must be a symbol literal when provided.
-- The `dependent` option must be one of `:destroy`, `:delete_all`, `:nullify`, or `:restrict_with_error`.
-- If the target model is available during compilation, the target foreign key type must match the parent model primary key type.
-- The foreign key must not be the target's primary key (`id`, or the column named by `db_context ..., primary_key:`): shared-primary-key associations are not supported.
+  has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
+end
 
-Example:
-
-```crystal
 class Post
   include CQL::ActiveRecord::Model(Int64)
 
-  has_many :comments, Comment, foreign_key: :post_id
-end
-
-class Comment
-  include CQL::ActiveRecord::Model(Int32)
-
-  property post_id : Int32?
-end
-```
-
-This fails at compile time because `Comment#post_id` is `Int32` while `Post` uses an `Int64` primary key. Change `post_id` to `Int64?` or change the parent primary key type.
-
-## Schema Setup
-
-```crystal
-schema.table :users do
-  primary :id, Int64, auto_increment: true
-  column :name, String
-  timestamps
-end
-schema.users.create!
-
-schema.table :posts do
-  primary :id, Int64, auto_increment: true
-  column :user_id, Int64, null: false
-  column :title, String
-  column :body, String
-  column :published, Bool, default: false
-  column :views_count, Int64, default: 0_i64
-  timestamps
-
-  foreign_key [:user_id], references: :users, references_columns: [:id]
-end
-schema.posts.create!
-
-# Index the foreign key (indexes are created with schema.alter, see Create Indexes)
-schema.alter :posts do
-  create_index :idx_posts_user_id, [:user_id]
-end
-```
-
-## Define the Relationship
-
-Add `has_many` to the parent model:
-
-```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
-
-  property id : Int64?
-  property name : String
-
-  has_many :posts, Post, foreign_key: :user_id
-
-  def initialize(@name : String)
-  end
-end
-
-struct Post
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :posts
-
-  property id : Int64?
-  property user_id : Int64
-  property title : String
-  property body : String
+  property user_id : Int64?
+  property title : String = ""
   property published : Bool = false
-  property views_count : Int64 = 0_i64
-  property created_at : Time?
 
   belongs_to :user, User, :user_id
 
-  def initialize(@title : String, @body : String, @user_id : Int64 = 0_i64)
+  def initialize(@title : String = "", @published : Bool = false)
   end
 end
 ```
 
-## Query Related Records
+```crystal
+has_many :posts, Post                     # foreign key user_id: owner name + _id (Blog::User -> user_id)
+has_many :posts, Post, :author_id         # or foreign_key: :author_id
+has_many :posts, Post, dependent: :nullify # :destroy, :delete_all, :nullify or :restrict_with_error
+```
 
-### Get All Related Records
+These fail to compile: a non-literal name or `foreign_key`, another `dependent:` value, a foreign key whose type differs from the owner's key type (`Post#user_id : Int32?` against `Model(Int64)`), and a foreign key that is the target's own primary key.
+
+## Read the Posts
 
 ```crystal
 user = User.find!(1)
-posts = user.posts.all
+user.posts.all              # => Array(Post), loaded once and cached on the collection
+user.reload_posts           # forgets the cache after posts were written elsewhere
+user.posts.count            # => Int64: SELECT COUNT(*) unless already loaded
+user.posts_count            # same
+user.posts_any?             # => Bool
+user.posts.find(title: "Hello")       # => Array(Post)
+user.posts.find_by(title: "Hello")    # => Post?
+user.posts.exists?(published: true)   # => Bool
 
-posts.each do |post|
-  puts post.title
-end
+# where, order, limit and offset return a CQL::Query scoped to the user
+user.posts.where(published: true).order(id: :desc).limit(5).all(Post)
+
+# For the typed DSL and scopes, query the model
+Post.where(user_id: user.id!).where { title.like("H%") }.all
+
+User.preload(:posts).all    # one extra query per chunk of the bind limit
 ```
 
-### Count Related Records
+## Add Posts
 
 ```crystal
-user = User.find!(1)
-count = user.posts.count
-puts "User has #{count} posts"
+user = User.create!(name: "Ada")   # the parent must be saved, or UnsavedRecord is raised
 
-user.posts_count   # Same count, as a generated method
-user.posts_any?    # => Bool
+user.posts.create(title: "First")  # Post.new(title: "First"), user_id set, validated INSERT
+user.posts.build(title: "Draft")   # same, not saved
+user.posts << Post.new("Second")   # sets user_id and INSERTs without validation
+user.create_posts([Post.new("Third")])
+
+# One multi-row INSERT per chunk; no validations or callbacks; returns the row count
+user.insert_posts_all([{title: "Fourth"}, {title: "Fifth"}])  # => 2
 ```
 
-### Filter Related Records
+`insert_posts_all` sets `user_id` on every row, replacing any value a row gives, and takes hashes or named tuples and `batch_size:` as `insert_all` does; the foreign key counts toward the bind-parameter limit.
 
-`user.posts.where`, `order`, `limit` and `offset` return a plain `CQL::Query` already scoped to the user, so finish with `.all(Post)`:
+## Remove Posts
 
 ```crystal
-user = User.find!(1)
-
-# Published posts only
-published = user.posts.where(published: true).all(Post)
-
-# Most recent posts
-recent = user.posts.order(created_at: :desc).limit(5).all(Post)
-
-# Look up within the user's posts
-user.posts.find(title: "First Post")        # => Array(Post)
-user.posts.find_by(title: "First Post")     # => Post?
+user.posts.delete(post)      # => Bool: DELETE of that post if it is the user's, without callbacks
+user.posts.delete_all        # => Int64: one DELETE ... WHERE posts.user_id = ?, without callbacks
+user.posts.nullify_all       # => Int64: one UPDATE ... SET user_id = NULL
+user.posts.clear             # follows dependent: (nullifies when undeclared or :restrict_with_error)
+user.posts.ids = [3_i64, 4_i64] # points those posts at the user
 ```
-
-For the typed `where { ... }` DSL, scopes and `preload`, query the model directly: `Post.where(user_id: user.id!).where { views_count > 100 }.all`.
-
-### Eager Load Related Records
-
-```crystal
-users = User.preload(:posts).all
-users.each { |u| puts u.posts.size }   # no extra query per user
-```
-
-## Create Related Records
-
-```crystal
-user = User.create!(name: "John")
-
-# Create posts through the collection (sets user_id for you; the model needs a default for it)
-post1 = user.posts.create(title: "First Post", body: "Hello world")
-
-# Or build, then add
-post2 = Post.new("Second Post", "Another post", user.id!)
-user.posts << post2
-
-# Or create directly with the foreign key
-Post.create!(title: "Third Post", body: "Yet another", user_id: user.id!)
-
-user.posts.count  # => 3
-```
-
-The parent must be saved first; `user.posts` raises `CQL::ActiveRecord::Relations::BaseRelation::UnsavedRecord` otherwise.
-
-### Insert Many Related Rows at Once
-
-`insert_<name>_all` inserts rows of column values with `Model.insert_all` (multi-row INSERTs, in chunks under the bind-parameter limit), sets the foreign key on every row to the parent's id, and returns how many rows were inserted:
-
-```crystal
-user.insert_posts_all([
-  {title: "First Post", body: "Hello world"},
-  {title: "Second Post", body: "Another post"},
-]) # => 2
-```
-
-It sends one statement per chunk instead of one per post, but like `insert_all` it runs no validations or callbacks and returns no records; use `user.posts.create` or `create_posts` when those matter. The foreign key (`foreign_key:`, `user_id` here) is set on every row, replacing any value a row gives, and an association's `scope:` is not applied: rows are inserted as given, so a scoped association only returns those that match its scope. Rows may be hashes or named tuples, and `batch_size:` caps the rows per statement as in `insert_all` (the foreign key counts toward the bind-parameter limit). The parent must be saved first.
-
-## Delete Related Records
-
-### Delete Specific Posts
-
-```crystal
-user = User.find!(1)
-Post.where(user_id: user.id!, published: false).all.each(&.delete!)
-```
-
-### Delete All Posts
-
-```crystal
-user = User.find!(1)
-user.posts.all.each(&.delete!)
-
-# or in one statement, without callbacks
-user.posts.delete_all
-```
-
-`user.posts.clear` follows the association's `dependent` option (`:nullify` when none is declared, which sets `user_id` to NULL; it needs a nullable column).
 
 ## When the Parent Is Deleted
 
-Declare `dependent:` to choose what `user.delete!` does with the user's posts:
+`dependent:` chooses what `user.delete!` does with the user's posts. It reads them from the database, so it covers posts never loaded or added since `user.posts` was loaded:
 
-```crystal
-has_many :posts, Post, foreign_key: :user_id, dependent: :destroy
-```
-
-| `dependent:` | Effect on the posts when the user is deleted |
+| `dependent:` | Effect on the posts |
 |---|---|
-| `:destroy` | Loads each post and calls its `delete!`, so its callbacks and its own `dependent:` associations run; a post whose `before_destroy` halts raises `RelationError` and nothing is deleted |
+| `:destroy` | Calls each post's `delete!`, so its callbacks and own `dependent:` associations run. A halting `before_destroy` raises `RelationError` and nothing is deleted. |
 | `:delete_all` | One `DELETE ... WHERE user_id = ?`, without callbacks |
 | `:nullify` | One `UPDATE ... SET user_id = NULL`; the column must be nullable |
 | `:restrict_with_error` | Raises `CQL::ActiveRecord::Relations::BaseRelation::RelationError` while the user has posts |
-| not declared | Nothing; the database's foreign key decides (see below) |
+| not declared | Nothing; the database's foreign key decides |
 
-The strategy reads the posts from the database, so it covers posts that were never loaded or were added after `user.posts` was loaded.
+- **Order.** `:restrict_with_error` is checked first, before `before_destroy` and before anything is deleted. The other strategies run after the callbacks, in declaration order, and the user's row goes last.
+- **Transaction.** The strategies and the user's `DELETE` run in one transaction, or a savepoint inside an open one, so an error leaves the posts and the user unchanged.
+- **Soft deletes.** A [soft-deletable](../models/soft-delete.md) user applies them on `delete!` and `force_delete!`.
+- **Bulk deletes.** `User.where(...).delete_all` deletes record by record, in one transaction, when the model declares any `dependent:`. The class-level `User.delete!(id)`, `delete_by!` and `delete_all` skip the strategies, except that a soft-deletable model's `delete!(id)` and `delete_by!` go through each record's `delete!`.
 
-- **Order.** `:restrict_with_error` associations are checked first, before the `before_destroy` callbacks and before anything is deleted. The other strategies run after the callbacks, in declaration order, and the user's row is deleted last.
-- **Transaction.** The strategies and the user's DELETE run in one transaction. If you already have one open, they run in a savepoint inside it, so a rollback restores everything, and an error in a strategy leaves both the posts and the user unchanged.
-- **Soft deletes.** A [soft-deletable](../models/soft-delete.md) parent applies the strategies on `delete!` as well as `force_delete!`.
-- **Bulk deletes.** `User.where(...).delete_all` deletes record by record, in one transaction, when the model declares any `dependent:` association, so it is slower than the bulk path. The class-level `User.delete!(id)`, `User.delete_by!` and `User.delete_all` write SQL directly and skip the strategies, except on a soft-deletable model, where `delete!(id)` and `delete_by!` soft delete each record through its `delete!` and apply them.
-
-## Cascade Delete with Foreign Keys
-
-Configure foreign key to cascade deletes:
+To cover the class-level deletes too, let the database cascade, and leave `dependent:` undeclared if it should do the work alone:
 
 ```crystal
-schema.table :posts do
-  # ...
-  foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
-end
+foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
 ```
 
-Now when a user row is deleted, the database deletes their posts. This also covers the class-level deletes (`User.delete!(id)`, `User.delete_by!`, `User.delete_all`), which skip `dependent:`. Leave `dependent:` undeclared if the foreign key should do the work alone.
-
-## Check for Related Records
-
-```crystal
-user = User.find!(1)
-
-if user.posts.count > 0
-  puts "User has posts"
-else
-  puts "User has no posts"
-end
-```
-
-## Verify It Works
-
-```crystal
-user = User.create!(name: "Test User")
-
-Post.create!(title: "Post 1", body: "Body 1", user_id: user.id!)
-Post.create!(title: "Post 2", body: "Body 2", user_id: user.id!)
-
-user.posts.count  # => 2
-user.posts.all.map(&.title)  # => ["Post 1", "Post 2"]
-```
-
-## Related
+## See Also
 
 - [Set Up Belongs To](belongs-to.md)
 - [Set Up Has One](has-one.md)
 - [Set Up Many-to-Many](many-to-many.md)
+- [Delete Records](../data-operations/delete.md)
+- [Avoid N+1 Queries](../performance/n-plus-one.md)
+- [Implement Soft Deletes](../models/soft-delete.md)

@@ -62,7 +62,7 @@ Without `db_context`, CQL infers both at compile time:
 ```crystal
 # Table: the type name's last segment, underscored and pluralized
 #   User -> :users, OrderItem -> :order_items, Shop::OrderItem -> :order_items,
-#   Category -> :categories, Box -> :boxes, Person -> :persons
+#   Category -> :categories, Address -> :addresses, Person -> :persons
 # Schema: the one CQL::Schema.define constant, in the model's enclosing namespaces or at the
 #   top level, whose block contains `table :users do ... end`
 
@@ -90,16 +90,20 @@ Write `db_context` when:
 When no `define` block or several declare the table, the model still compiles, and `User.schema` raises `CQL::ActiveRecord::SchemaMappingError` on its first call. See [Fix Schema Mapping Errors](../troubleshooting/schema-mapping-errors.md).
 {% endhint %}
 
-## Check Property Types at Boot
+## Check Property Types Against the Schema
 
 ```bash
-CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec
 # Unhandled exception: CQL schema mapping error in User: schema column `users.active` type Bool
 # does not match model getter `active` type String. Update the schema column or the model property type.
 # (CQL::ActiveRecord::SchemaMappingError)
 ```
 
 The check is opt-in, because many models leave columns out or allow nil while a record is transient. Models with an inferred schema are checked too; a model with no resolvable schema is skipped.
+
+{% hint style="warning" %}
+The check runs after the rest of the program's top-level code, so run it with a program that finishes, such as the spec suite. A server that blocks at top level never reaches it.
+{% endhint %}
 
 ## Primary Key on Another Column
 

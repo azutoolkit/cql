@@ -1,208 +1,109 @@
 # Set Up Belongs To
 
-This guide shows you how to set up a belongs_to relationship where one model references another via a foreign key.
+Declare `belongs_to` on the model that holds the foreign key, such as a `Comment` with a `post_id`.
 
-## When to Use
-
-Use `belongs_to` when:
-- A Comment belongs to a Post
-- An Order belongs to a User
-- A Photo belongs to an Album
-
-The model with `belongs_to` holds the foreign key.
-
-## Options
+## Declare the Association
 
 ```crystal
-belongs_to :post, Post, :post_id                       # optional: true, cache: true (defaults)
-belongs_to :post, Post, :post_id, optional: false      # raise instead of returning nil
-belongs_to :post, Post, :post_id, cache: false         # look the parent up on every call
-```
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+  table :posts do
+    primary :id, Int64, auto_increment: true
+    column :title, String
+  end
 
-The third argument is the foreign key (a symbol literal). With `optional: true` (the default) the getter returns `Post?`; with `optional: false` it returns `Post` and raises when the foreign key is `nil` or `0` or the parent row is missing.
+  table :comments do
+    primary :id, Int64, auto_increment: true
+    column :body, String
+    column :post_id, Int64, null: true
+    foreign_key [:post_id], references: :posts, references_columns: [:id]
+  end
+end
 
-## Compile-Time Safety
-
-CQL validates `belongs_to` declarations during compilation:
-
-- The association name must be a symbol literal.
-- The foreign key must be a symbol literal.
-- The model must define a getter/property for the foreign key.
-- If the target model is available during compilation, the foreign key type must match the target model primary key type.
-
-This catches mistakes before the application starts:
-
-```crystal
-class User
+class Post
   include CQL::ActiveRecord::Model(Int64)
+
+  property title : String = ""
+
+  def initialize(@title : String = "")
+  end
 end
 
 class Comment
-  include CQL::ActiveRecord::Model(Int32)
-
-  property user_id : Int32?
-
-  # Raises at compile time because user_id is Int32 but User uses Int64 IDs.
-  belongs_to :user, User, :user_id
-end
-```
-
-The error message tells you which foreign key is wrong and which type to use. Forward-declared targets are also checked after all model files are loaded, provided the target type is required before compilation finishes.
-
-## Schema Setup
-
-Create tables with a foreign key column:
-
-```crystal
-schema.table :posts do
-  primary :id, Int64, auto_increment: true
-  column :title, String
-  timestamps
-end
-schema.posts.create!
-
-schema.table :comments do
-  primary :id, Int64, auto_increment: true
-  column :body, String
-  column :post_id, Int64, null: false
-  timestamps
-
-  foreign_key [:post_id], references: :posts, references_columns: [:id]
-end
-schema.comments.create!
-```
-
-## Define the Relationship
-
-Add `belongs_to` to the child model:
-
-```crystal
-struct Comment
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :comments
 
-  property id : Int64?
-  property body : String
-  property post_id : Int64?
+  property body : String = ""
+  property post_id : Int64?          # nilable even when the column is NOT NULL
 
+  belongs_to :post, Post, :post_id   # or foreign_key: :post_id
+
+  def initialize(@body : String = "", @post_id : Int64? = nil)
+  end
+end
+```
+
+Declare the foreign key nilable: `post=`, `create_post`, `delete_post` and `clear_post` assign `nil` to it, and they do not compile against an `Int64` property.
+
+| Option | Default | Effect |
+|---|---|---|
+| `optional:` | `true` | `comment.post` returns `Post?`. With `false` it returns `Post` and raises `InvalidAssociation` when the foreign key is `nil` or `0`, or `DB::NoResultsError` when the post is missing. |
+| `cache:` | `true` | The post is cached on the comment after the first read. With `false` it is read on every call, and `preload(:post)` silently skips it. |
+
+## Read the Parent
+
+```crystal
+comment = Comment.find!(1)
+comment.post.try(&.title)   # => "Hello" (Post?, read once, then cached)
+comment.post_loaded?        # => true
+comment.reload_post         # reads it again
+
+# 2 queries for any number of comments: the comments, then
+# SELECT ... FROM posts WHERE posts.id IN (?, ...) per chunk of the bind limit
+Comment.preload(:post).all.each { |c| c.post.try(&.title) }
+```
+
+## Set and Change the Parent
+
+```crystal
+post = Post.create!(title: "Hello")
+
+Comment.create!(body: "First", post_id: post.id!)   # set the foreign key directly
+
+comment = Comment.new("Second")
+comment.post = post         # sets post_id; the post must be saved, or UnsavedRecord is raised
+comment.save!
+
+comment = Comment.new("Third")
+comment.build_post(title: "Draft")     # Post.new(title: "Draft"): not saved, post_id unset
+comment.create_post(title: "New")      # validates and INSERTs the post, sets post_id
+comment.save!                          # the comment itself is not saved by create_post
+
+comment.update_post(title: "Edited")   # assigns and save!s the post; AssociationNotFound if none
+comment.delete_post                    # => Bool, DELETE without callbacks; clears post_id
+comment.clear_post                     # post_id = nil (InvalidAssociation with optional: false)
+```
+
+`build_post` and `create_post` call `Post.new` with the arguments you pass, so `Post` needs a matching `initialize`.
+
+## Rely on Compile-Time Checks
+
+```crystal
+class Reply
+  include CQL::ActiveRecord::Model(Int64)
+
+  property post_id : Int32?
+
+  # Error: CQL belongs_to error in Reply: foreign key `:post_id` type Int32 does not match
+  # Post.id! primary key type Int64. Change `:post_id` to Int64 or update the target model primary key type.
   belongs_to :post, Post, :post_id
-
-  def initialize(@body : String, @post_id : Int64? = nil)
-  end
 end
 ```
 
-Declare the foreign key property nilable (`Int64?`) even when the column is `NOT NULL`: the generated `post=`, `create_post`, `delete_post` and `clear_post` assign `nil` to it, and they do not compile against an `Int64` property.
+The association name and foreign key must be Symbol literals, and the foreign key needs a getter. A target declared later is checked once all files are loaded.
 
-## Access the Parent
-
-```crystal
-comment = Comment.find!(1)
-post = comment.post  # Returns Post?
-
-if post
-  puts "Comment on: #{post.title}"
-end
-```
-
-The parent is loaded on first access and cached on the instance. Use `comment.reload_post` to fetch it again and `comment.post_loaded?` to check whether it is cached.
-
-`Comment.preload(:post).all` loads every comment's parent with one extra query (per chunk of the database's bind limit) and caches it, so `comment.post` runs no query. This needs the default `cache: true`; an association declared with `cache: false` is not preloaded. See [Fix N+1 Queries](../performance/n-plus-one.md).
-
-## Create with Parent
-
-### Set Foreign Key Directly
-
-```crystal
-post = Post.create!(title: "My Post")
-
-comment = Comment.new("Great post!", post.id!)
-comment.save!
-```
-
-### Set via Association
-
-```crystal
-post = Post.create!(title: "My Post")
-
-comment = Comment.new("Great post!", 0_i64)
-comment.post = post  # Sets post_id automatically (the post must already be saved)
-comment.save!
-```
-
-## Build Associated Parent
-
-Build a parent without saving:
-
-```crystal
-comment = Comment.new("My comment", 0_i64)
-post = comment.build_post(title: "New Post")
-
-# Save parent, then child
-post.save!
-comment.post = post
-comment.save!
-```
-
-## Create Associated Parent
-
-Create and save parent in one step:
-
-```crystal
-comment = Comment.new("My comment", 0_i64)
-post = comment.create_post(title: "New Post")
-
-comment.save!  # post_id is now set
-```
-
-## Update and Remove the Parent
-
-```crystal
-comment.update_post(title: "Edited title")  # Updates the parent and saves it
-comment.delete_post                          # Deletes the parent row, returns Bool
-comment.clear_post                           # Clears the foreign key (optional associations only)
-```
-
-## Optional Belongs To
-
-Associations are optional by default. Make the foreign key nullable as well:
-
-```crystal
-schema.table :comments do
-  # ...
-  column :user_id, Int64, null: true  # Optional
-end
-
-struct Comment
-  # ...
-  property user_id : Int64?
-
-  belongs_to :user, User, :user_id
-
-  def initialize(@body : String, @post_id : Int64, @user_id : Int64? = nil)
-  end
-end
-
-comment = Comment.find!(1)
-if user = comment.user
-  puts "By: #{user.name}"
-else
-  puts "Anonymous"
-end
-```
-
-## Verify It Works
-
-```crystal
-post = Post.create!(title: "Test Post")
-comment = Comment.create!(body: "Test Comment", post_id: post.id!)
-
-comment.post.try(&.title)  # => "Test Post"
-comment.post_id == post.id  # => true
-```
-
-## Related
+## See Also
 
 - [Set Up Has Many](has-many.md)
 - [Set Up Has One](has-one.md)
+- [Avoid N+1 Queries](../performance/n-plus-one.md)
 - [Define a Model](../models/define-model.md)
+- [Add Validations](../models/add-validations.md)

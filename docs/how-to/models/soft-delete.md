@@ -1,227 +1,113 @@
 # Implement Soft Deletes
 
-This guide shows you how to implement soft deletes so records are marked as deleted rather than permanently removed.
-
-## Prerequisites
-
-Your table needs a `deleted_at` timestamp column:
-
-```crystal
-schema.table :users do
-  primary :id, Int64, auto_increment: true
-  column :name, String
-  column :deleted_at, Time, null: true
-  timestamps
-end
-schema.users.create!
-```
+Mark records as deleted with a `deleted_at` timestamp instead of removing their rows.
 
 ## Enable Soft Deletes
 
-Include the `SoftDeletable` module in your model:
-
 ```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  include CQL::ActiveRecord::SoftDeletable
-
-  db_context MyDB, :users
-
-  property id : Int64?
-  property name : String
-  property created_at : Time?
-  property updated_at : Time?
-  # deleted_at is declared by SoftDeletable (property deleted_at : Time?)
-
-  def initialize(@name : String)
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+  table :users do
+    primary :id, Int64, auto_increment: true
+    column :name, String
+    column :email, String
+    column :deleted_at, Time, null: true
+    index [:deleted_at]               # every query filters on it
   end
+end
+
+class User
+  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::SoftDeletable # adds property deleted_at : Time?
+
+  property name : String = ""
+  property email : String = ""
 end
 ```
 
-## Soft Delete Records
-
-### Delete a Single Record
+## Delete and Restore
 
 ```crystal
 user = User.find!(1)
-user.delete!       # Sets deleted_at to current time
-
+user.delete!       # => true: UPDATE users SET deleted_at = ? WHERE users.id = ?
 user.deleted?      # => true
-user.deleted_at    # => 2024-01-15 10:30:00 UTC
-```
+user.deleted_at    # => 2026-10-26 10:30:00Z
+user.delete!       # => false: already deleted, no callbacks, deleted_at kept
 
-### Delete by ID
-
-```crystal
-User.delete!(user_id)
-```
-
-### Delete by Attributes
-
-```crystal
-User.delete_by!(email: "spam@example.com")
-```
-
-This loads the matching records and soft deletes each one, in one transaction, so `before_destroy`/`after_destroy`
-callbacks and the `dependent:` strategies of the associations run. `User.delete!(user_id)` soft deletes through the
-instance `delete!` too.
-
-### Delete All Records
-
-```crystal
-User.delete_all   # Soft deletes all active users and returns how many
-```
-
-Without `before_destroy`/`after_destroy` callbacks or `dependent:` associations this sets `deleted_at` in bulk (one
-SELECT of the ids, then one UPDATE per chunk of the database's bind limit). Otherwise it soft deletes record by record,
-in one transaction, so they run.
-
-Rows that are already soft deleted are left alone, also through `with_deleted.delete_all`, `User.delete_ids` and
-`user.delete!` (which returns false without running callbacks when the instance is already marked deleted): they keep
-their first `deleted_at` and are not counted. A parent's `dependent: :destroy` treats such children as already deleted.
-
-### Associations
-
-`delete!` applies the `dependent:` strategy of the record's associations, as a hard delete does (see
-[When the Parent Is Deleted](../relationships/has-many.md#when-the-parent-is-deleted)): a `restrict_with_error`
-association with records raises before `deleted_at` is set, and the other strategies run in the same transaction as the
-UPDATE. `force_delete!` applies them too. `restore!` does not undo them: posts nullified or hard-deleted with the user
-stay that way, so prefer `dependent: :destroy` towards soft-deletable children, which are soft deleted with the parent.
-has_many's `:delete_all` hard deletes the children even when they are soft-deletable.
-
-## Restore Records
-
-### Restore a Single Record
-
-```crystal
-user.restore!
-
+user.restore!      # => true: the same UPDATE, binding NULL
 user.deleted?      # => false
-user.deleted_at    # => nil
+
+User.delete!(1)                            # => Bool, through the instance delete!
+User.delete_by!(email: "spam@example.com") # each match's delete!, in one transaction;
+                                           # its DB::ExecResult reports rows_affected = 0
+User.delete_all                            # => Int64, active rows soft deleted
+User.restore!(1)                           # => Bool
+User.restore_all                           # => Int64, no callbacks
 ```
 
-### Restore by ID
+The instance, `delete!(id)` and `delete_by!` run `before_destroy`/`after_destroy` callbacks and the `dependent:` strategies. `delete_all` does too when the model declares any; otherwise it sets `deleted_at` in bulk: one `SELECT` of the ids, then one `UPDATE` per chunk of the bind limit. `restore_all` works in bulk the same way.
+
+Rows already soft deleted keep their first `deleted_at` and are not counted, also through `with_deleted.delete_all` and `delete_ids`.
+
+{% hint style="warning" %}
+A soft-deleted record reports `persisted? == false`, so `save` on it inserts a new row. Call `restore!` before changing and saving it.
+{% endhint %}
+
+## Query Around Deleted Rows
 
 ```crystal
-User.restore!(user_id)
+User.all                     # WHERE users.deleted_at IS NULL is added to every query
+User.count                   # active rows only
+User.find(1)                 # => nil when user 1 is soft deleted
+
+User.with_deleted.all        # every row
+User.with_deleted.find(1)
+User.only_deleted.all        # WHERE users.deleted_at IS NOT NULL
+User.count_with_deleted      # same as User.with_deleted.count
+User.count_only_deleted      # same as User.only_deleted.count
+
+# Both are scopes, so keep chaining
+User.only_deleted.where(name: "Ada").order(deleted_at: :desc).all
 ```
 
-### Restore All Deleted Records
+## Delete Permanently
 
 ```crystal
-User.restore_all   # Returns how many records were restored
+user.force_delete!                                # DELETE FROM users WHERE users.id = ?
+User.force_delete!(1)
+User.force_delete_by!(email: "spam@example.com")
+User.force_delete_all
+
+# Purge rows soft deleted more than a year ago
+User.only_deleted.where { deleted_at < 1.year.ago }.all.each(&.force_delete!)
 ```
 
-Restoring runs no callbacks, so `restore_all` clears `deleted_at` in bulk: one SELECT of the ids, then one UPDATE per
-chunk.
+`force_delete!` runs the destroy callbacks and `dependent:` strategies; the class methods do not.
 
-## Query Records
+## Cascade to Associations
 
-By default, queries exclude soft-deleted records:
-
-```crystal
-User.all           # Only active users
-User.count         # Only counts active users
-User.find(1)       # Returns nil if user is deleted
-```
-
-### Include Deleted Records
+`delete!` and `force_delete!` apply each association's `dependent:` strategy, as a hard delete does (see [When the Parent Is Deleted](../relationships/has-many.md#when-the-parent-is-deleted)):
 
 ```crystal
-User.with_deleted.all        # All users including deleted
-User.with_deleted.find(1)    # Finds even if deleted
-User.with_deleted.count      # Counts all users
-User.count_with_deleted      # Same, as a class method
-```
-
-### Query Only Deleted Records
-
-```crystal
-User.only_deleted.all        # Only deleted users
-User.only_deleted.count      # Count of deleted users
-User.count_only_deleted      # Same, as a class method
-```
-
-`with_deleted` and `only_deleted` are scopes, so you can keep chaining: `User.only_deleted.where(role: "admin").order(deleted_at: :desc).all`.
-
-## Permanently Delete
-
-To actually remove records from the database:
-
-```crystal
-user.force_delete!           # Permanently removes from database
-User.force_delete!(user_id)  # By ID
-User.force_delete_by!(email: "spam@example.com")  # By attributes
-User.force_delete_all        # Permanently delete all records
-```
-
-## Add Index for Performance
-
-Every query adds `WHERE deleted_at IS NULL`, so add an index on the `deleted_at` column:
-
-```crystal
-schema.alter :users do
-  create_index :idx_users_deleted_at, [:deleted_at]
-end
-```
-
-## Cleanup Old Records
-
-Create a job to permanently delete old soft-deleted records:
-
-```crystal
-def cleanup_old_deleted_records
-  cutoff = 1.year.ago
-  old_records = User.only_deleted
-    .where { deleted_at < cutoff }
-    .all
-
-  old_records.each(&.force_delete!)
-  puts "Deleted #{old_records.size} old records"
-end
-```
-
-## Cascade Soft Deletes
-
-Soft delete related records when a parent is deleted by declaring `dependent: :destroy` towards a soft-deletable model:
-
-```crystal
-struct Post
+class Post
   include CQL::ActiveRecord::Model(Int64)
   include CQL::ActiveRecord::SoftDeletable
 
-  db_context MyDB, :posts
+  property title : String = ""
 
   # Comment includes SoftDeletable too, so each comment's delete! sets its deleted_at
   has_many :comments, Comment, foreign_key: :post_id, dependent: :destroy
 end
+
+post.delete!    # soft deletes the comments, then the post, in one transaction
+post.restore!   # restores only the post: restore the comments yourself
 ```
 
-`post.delete!` soft deletes the comments and then the post, in one transaction. `post.restore!` restores only the post;
-restore the comments yourself.
+A `:restrict_with_error` association with records raises before `deleted_at` is set; the other strategies run in the same transaction as the `UPDATE`. `dependent: :destroy` skips children that are already soft deleted. `:nullify` and has_many's `:delete_all` (a hard delete, even of soft-deletable children) are not undone by `restore!`, so prefer `:destroy`.
 
-## Verify It Works
+## See Also
 
-```crystal
-# Create a user
-user = User.create!(name: "John")
-
-# Soft delete
-user.delete!
-User.count           # => 0
-User.with_deleted.count  # => 1
-
-# Restore
-user.restore!
-User.count           # => 1
-
-# Permanent delete
-user.force_delete!
-User.with_deleted.count  # => 0
-```
-
-## Related
-
-- [Define a Model](define-model.md)
+- [Delete Records](../data-operations/delete.md)
+- [Set Up Has Many](../relationships/has-many.md)
 - [Use Callbacks](use-callbacks.md)
 - [Add Optimistic Locking](optimistic-locking.md)
+- [Create Query Scopes](../querying/scopes.md)
