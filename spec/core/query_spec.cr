@@ -275,6 +275,61 @@ describe CQL::Query do
       select_query.should eq({output.strip, [1, 2, 3, 1000]})
     end
 
+    it "matches NULL for a nil keyword value in WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name)
+        .where(name: nil)
+        .to_sql
+
+      select_query.should eq({"SELECT customers.name FROM customers WHERE customers.name IS NULL", [] of DB::Any})
+    end
+
+    it "matches NULL for a nil hash value in WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name)
+        .where({"name" => nil} of String | Symbol => DB::Any | Array(DB::Any))
+        .to_sql
+
+      select_query.should eq({"SELECT customers.name FROM customers WHERE customers.name IS NULL", [] of DB::Any})
+    end
+
+    it "matches NULL for a nil held in a nilable variable" do
+      city : String? = nil
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name)
+        .where(city: city)
+        .to_sql
+
+      select_query.should eq({"SELECT customers.name FROM customers WHERE customers.city IS NULL", [] of DB::Any})
+    end
+
+    it "binds only the non-nil values next to a nil value in WHERE clause" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name, :balance)
+        .where(name: nil, balance: 1000)
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name, customers.balance FROM customers WHERE (customers.name IS NULL) AND (customers.balance = ?)
+      SQL
+
+      select_query.should eq({output.strip, [1000]})
+    end
+
+    it "numbers PostgreSQL placeholders without a slot for a nil value" do
+      query = Northwind.query.from(:customers).select(:name).where(name: nil, balance: 1000)
+      generator = Expression::Generator.new(CQL::Adapter::Postgres)
+
+      query.to_sql(generator).should eq({
+        "SELECT customers.name FROM customers WHERE (customers.name IS NULL) AND (customers.balance = $1)",
+        [1000] of DB::Any,
+      })
+    end
+
     it "handles array values in chained WHERE clauses" do
       select_query = Northwind.query
         .from(:customers)
