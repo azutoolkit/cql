@@ -1,15 +1,13 @@
 module CQL
   module ActiveRecord
     module Attributes
-      # Define instance-level methods for querying and manipulating data
-      # Fetch the record's ID or raise an error if it's nil
-      # - **@return** [PrimaryKey] The ID
+      # The record's attributes, keyed by column name
+      # - **@return** [Hash(Symbol, DB::Any)] The attributes
       #
       # **Example** Fetching the record's attributes
       #
       # ```
-      # user.attributes
-      # -> { id: 1, name: "Alice", email: " [email protected]" }
+      # user.attributes[:name] # => "Alice"
       # ```
       def attributes
         hash = Hash(Symbol, DB::Any).new
@@ -36,7 +34,7 @@ module CQL
       # **Example** Setting the record's attributes
       #
       # ```
-      # user.attributes = {name: "Alice", email: "[email protected]"}
+      # user.attributes({:name => "Alice", :email => "alice@example.com"} of Symbol => DB::Any)
       # ```
       #
       # The primary key is not assigned: mass assignment must not re-point a record at another row.
@@ -52,7 +50,7 @@ module CQL
       # **Example** Setting the record's attributes
       #
       # ```
-      # user.attributes(name: "Alice", email: "[email protected]")
+      # user.attributes(name: "Alice", email: "alice@example.com")
       # ```
       #
       # Like `attributes(Hash)`, this never assigns the primary key.

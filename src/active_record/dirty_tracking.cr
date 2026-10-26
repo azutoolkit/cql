@@ -8,18 +8,22 @@ module CQL
     # Include it after `CQL::ActiveRecord::Model`:
     #
     # ```
-    # class User
+    # class Profile
     #   include CQL::ActiveRecord::Model(Int64)
     #   include CQL::ActiveRecord::DirtyTracking
-    #   db_context schema: AppDB, table: :users
+    #   db_context AcmeDB, :users
     #
     #   property name : String = ""
+    #   property updated_at : Time?
+    #
+    #   def initialize
+    #   end
     # end
     #
-    # user = User.find!(1)
-    # user.name = "Ada"
-    # user.changes # => {:name => {"Grace", "Ada"}}
-    # user.save    # UPDATE users SET name = ?, updated_at = ? WHERE users.id = ?
+    # profile = Profile.find_by!(name: "Ada")
+    # profile.name = "Ada Lovelace"
+    # profile.changes # => {:name => {"Ada", "Ada Lovelace"}}
+    # profile.save    # UPDATE users SET name = ?, updated_at = ? WHERE users.id = ?
     # ```
     #
     # Changes are found by comparing values, so assignments through setters, `attributes`

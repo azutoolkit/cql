@@ -9,35 +9,22 @@ module CQL
     # - Touch functionality for updating timestamps without callbacks
     # - Bulk timestamp updates for multiple records
     #
-    # **Example** Using timestamp management
+    # **Example** Using timestamp management (the `users` table has `created_at`/`updated_at` columns)
     #
     # ```
-    # struct User
-    #   include CQL::ActiveRecord::Model(Int64)
-    #   db_context AcmeDB, :users
-    #
-    #   getter id : Int64?
-    #   getter name : String
-    #   getter created_at : Time?
-    #   getter updated_at : Time?
-    #
-    #   def initialize(@name : String)
-    #   end
-    # end
-    #
-    # user = User.new("Alice")
+    # user = User.new("Alice", "alice@example.com")
     # user.save  # Automatically sets created_at and updated_at
     # user.touch # Updates updated_at without running callbacks
     # ```
     module TimestampManager
       # Check if the model has a timestamp column
       # - **@param** column_name [Symbol] The timestamp column name
-      # - **@return** [Bool] True if the column exists
+      # - **@return** [CQL::BaseColumn?] The column, or nil if the table has none by that name
       #
       # **Example** Checking for timestamp column
       #
       # ```
-      # has_timestamp_column?(:created_at) # => true
+      # has_timestamp_column?(:created_at) # the column, or nil
       # ```
       macro has_timestamp_column?(column_name)
         {{@type.id}}.schema.tables[{{@type.id}}.table].columns[{{column_name}}]?
@@ -51,8 +38,7 @@ module CQL
       # **Example** Setting timestamps
       #
       # ```
-      # timestamp_attrs = prepare_timestamps(new_record: true)
-      # # => {created_at: Time.utc, updated_at: Time.utc}
+      # timestamp_attrs = prepare_timestamps(new_record?)
       # ```
       macro prepare_timestamps(is_new_record)
         current_time = Time.utc

@@ -3,8 +3,6 @@ module CQL
     module Queryable
       # The QueryBuilder class provides a chainable interface for building queries
       # while maintaining type safety and integration with the CQL::Query system.
-      # The QueryBuilder class provides a chainable interface for building queries
-      # while maintaining type safety and integration with the CQL::Query system.
       class QueryBuilder(T)
         @query : CQL::Query
         @model_class : T.class
@@ -436,8 +434,7 @@ module CQL
         #
         # **Example**
         # ```
-        # User.preload(:posts).all                     # Preload single association
-        # User.preload(:posts, :comments).all          # Preload multiple associations
+        # User.preload(:posts).all                     # Preload an association
         # User.where(active: true).preload(:posts).all # Chain with where
         # ```
         def preload(*associations : Symbol) : self

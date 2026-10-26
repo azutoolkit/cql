@@ -27,29 +27,24 @@ module CQL
     # ## Examples
     #
     # ```
-    # class User < CQL::ActiveRecord::Model
-    #   db_context AcmeDB, :users
+    # # Basic queries
+    # User.where(active: true).all
+    # User.select(:name, :email).where(age: 18).all
+    # User.order(:created_at).limit(10).all
     #
-    #   # Basic queries
-    #   User.where(active: true)
-    #   User.select(:name, :email).where(age: 18..65)
-    #   User.order(:created_at).limit(10)
+    # # Joins through associations
+    # User.query.joins(:posts) { posts.published == true }.all
     #
-    #   # Complex queries with joins
-    #   User.joins(:posts).where(posts: {published: true})
-    #   User.left_joins(:profile).select(users: [:name], profile: [:bio])
+    # # Aggregations
+    # User.count
+    # User.where(active: true).count
     #
-    #   # Aggregations
-    #   User.count
-    #   User.where(active: true).count
-    #   User.group(:role).count
-    #
-    #   # Method chaining
-    #   User.where(active: true)
-    #       .order(:created_at)
-    #       .limit(20)
-    #       .offset(10)
-    #       .all
+    # # Method chaining
+    # User.where(active: true)
+    #   .order(:created_at)
+    #   .limit(20)
+    #   .offset(10)
+    #   .all
     # ```
     module Queryable
       macro included
@@ -175,8 +170,7 @@ module CQL
         #
         # **Example**
         # ```
-        # User.preload(:posts).all           # Preload single association
-        # User.preload(:posts, :comments).all # Preload multiple associations
+        # User.preload(:posts).all                     # Preload an association
         # User.where(active: true).preload(:posts).all # Chain with where
         # ```
         def self.preload(*associations : Symbol)

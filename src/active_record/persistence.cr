@@ -6,7 +6,7 @@ module CQL
       macro included
         include CQL::ActiveRecord::TimestampManager
         # Reload the record from the database
-        # - **@return** [Nil]
+        # - **@return** [self] The record, with its stored values
         #
         # **Example** Reloading a record
         #
@@ -64,7 +64,7 @@ module CQL
         # **Example** Touch specific timestamp fields
         #
         # ```
-        # user.touch(:last_seen_at, :updated_at)
+        # user.touch(:created_at, :updated_at)
         # ```
         #
         # **Example** Touch with a specific time
@@ -126,7 +126,7 @@ module CQL
           touch(:updated_at, time: time)
         end
 
-                # Class method to touch multiple records by IDs without callbacks
+        # Class method to touch multiple records by IDs without callbacks
         # Updates the specified timestamp fields for multiple records
         # - **@param** ids [Array(Pk)] The IDs of the records to touch
         # - **@param** *fields [Symbol] The timestamp fields to update (defaults to :updated_at)
@@ -136,8 +136,8 @@ module CQL
         # **Example** Touch multiple records
         #
         # ```
-        # User.touch_all([1, 2, 3])
-        # User.touch_all([1, 2, 3], :last_seen_at, :updated_at)
+        # User.touch_all([1_i64, 2_i64, 3_i64])
+        # User.touch_all([1_i64, 2_i64, 3_i64], :created_at, :updated_at)
         # ```
         def self.touch_all(ids : Array(Pk), *fields, time : Time = Time.utc)
           return 0_i64 if ids.empty?
@@ -230,7 +230,7 @@ module CQL
 
         # Save the record to the database or update it if it already exists
         # Raises an exception if the record cannot be saved
-        # - **@return** [Bool] Always returns true when successful
+        # - **@return** [Bool] True when saved
         # - **@raise** [CQL::RecordInvalid] If the record is invalid (as `Validations::ValidationError`)
         # - **@raise** [CQL::RecordNotSaved] If a callback halts the save
         #

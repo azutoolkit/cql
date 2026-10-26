@@ -32,33 +32,26 @@ module CQL
     # **Example** Using the Model module
     #
     # ```
-    # struct Post
-    #   include CQL::ActiveRecord::Model
+    # class Article
+    #   include CQL::ActiveRecord::Model(Int64)
     #   db_context AcmeDB, :posts
     #
-    #   # Define attributes
-    #   getter id : Int64?
-    #   getter title : String
-    #   getter body : String
-    #   getter published_at : Time
+    #   property title : String = ""
+    #   property body : String?
+    #   property user_id : Int64 = 0_i64
+    #   property published : Bool = false
     #
-    #   # Define validations
-    #   validates :title, presence: true, length: {minimum: 3, maximum: 100}
-    #   validates :body, presence: true
+    #   validate :title, presence: true, size: 3..100
     #
-    #   # Define callbacks
-    #   before_save :set_published_at
+    #   before_validation :strip_title
     #
-    #   # Define relationships
-    #   has_many :comments, Comment, foreign_key: :post_id
+    #   belongs_to :user, User, :user_id
     #
-    #   # Constructor
-    #   def initialize(@title : String, @body : String, @published_at : Time = Time.utc)
+    #   def initialize(@title : String = "", @user_id : Int64 = 0_i64)
     #   end
     #
-    #   # Callback method
-    #   private def set_published_at
-    #     @published_at = Time.utc if @published_at.nil?
+    #   private def strip_title
+    #     @title = @title.strip
     #   end
     # end
     # ```

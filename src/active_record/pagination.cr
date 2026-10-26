@@ -63,7 +63,8 @@ module CQL
         # **Example** Previous page navigation
         #
         # ```
-        # previous_page = User.before_cursor(current_first_id, limit: 10)
+        # page = User.after_cursor(20_i64, limit: 10)
+        # previous_page = User.before_cursor(page.first.id!, limit: 10)
         # ```
         def self.before_cursor(cursor_id : Pk, limit : Int32 = 10)
           query.where_lt(primary_key_column, CQL::ActiveRecord::IdChunks.bound(cursor_id))
@@ -84,8 +85,8 @@ module CQL
         # **Example** Paginate by created_at timestamp
         #
         # ```
-        # # Get events after a specific timestamp
-        # recent_events = Event.paginate_by(:created_at, last_event.created_at, limit: 20)
+        # # Users created after a specific time
+        # recent_users = User.paginate_by(:created_at, Time.utc - 1.day, limit: 20)
         # ```
         def self.paginate_by(column : Symbol, after_value, limit : Int32 = 10)
           query.where_gt(column, after_value.as(DB::Any))

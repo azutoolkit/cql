@@ -16,24 +16,24 @@ module CQL
     # - For Int32/Int64 primary keys, the database handles ID generation via
     #   auto-increment, so rollbacks do not waste IDs at the application level.
     #
-    # **Example with transactions:**
+    # **Example with transactions** (for a model with a UUID key):
     # ```
     # User.transaction do |tx|
-    #   user = User.create!(name: "Alice") # UUID generated here
-    #   tx.rollback                        # UUID is "wasted" but harmless
+    #   User.create!(name: "Alice", email: "alice@example.com") # UUID generated here
+    #   tx.rollback                                             # UUID is "wasted" but harmless
     # end
     # ```
     module Insertable
       macro included
         # Find a record by attributes or create it if not found
-        # - **param** : attributes (Hash(Symbol, String | Int64) | NamedTuple)
-        # - **return** : Target
-        # - **raise** : CQL::Error on creation failure
+        # - **@param** attributes [NamedTuple] The attributes to match, and to create with
+        #   (an overload takes a `Hash(Symbol, DB::Any)`)
+        # - **@return** [{{@type.id}}] The found or created record
         #
         # **Example**
         #
         # ```
-        # user = User.find_or_create_by(email: "user@example.com")
+        # user = User.find_or_create_by(name: "Alice", email: "alice@example.com")
         # ```
         def self.find_or_create_by(**attributes) : {{@type.id}}
           find_by(**attributes) || create!(**attributes)
@@ -62,11 +62,12 @@ module CQL
         # Like `insert_all`, but a row whose *on_conflict* columns match an existing row updates it:
         # the *update* columns take the incoming values (by default every inserted column except
         # the conflict columns, the primary key and `created_at`; `[] of Symbol` leaves the row as it is).
+        # The *on_conflict* columns need a unique index or constraint.
         # Returns the rows affected as the database reports them (MySQL counts a changed row twice and
         # an unchanged one as zero).
         #
         # ```
-        # Product.upsert_all([{sku: "a1", price: 10}], on_conflict: :sku, update: [:price])
+        # User.upsert_all([{email: "ada@example.com", name: "Ada"}], on_conflict: :email, update: [:name])
         # ```
         def self.upsert_all(rows : Array(Hash(Symbol, DB::Any)), on_conflict : Symbol | Array(Symbol), update : Array(Symbol)? = nil, batch_size : Int32? = nil) : Int64
           target = on_conflict.is_a?(Symbol) ? [on_conflict] : on_conflict
@@ -98,7 +99,7 @@ module CQL
         # **Example** Creating a new record
         #
         # ```
-        # user = User.create!({:name => "Alice".as(DB::Any)})
+        # user = User.create!({:name => "Alice", :email => "alice@example.com"} of Symbol => DB::Any)
         # ```
         def self.create!(attrs : Hash(Symbol, DB::Any)) : {{@type.id}}
           # The including model's, which a subclass shares
@@ -152,15 +153,15 @@ module CQL
           create!(attrs)
         end
 
-        # Create a new record from a model instance
-        # - **@param** record [T] The record to create
-        # - **@return** [PrimaryKey] The ID of the new record
+        # Insert a model instance, without validations or callbacks, and set its new id
+        # - **@param** record [{{@type.id}}] The record to create
+        # - **@return** [{{@type.id}}] The record, with its new id
         #
         # **Example** Creating a new record from a model instance
         #
         # ```
         # user = User.new(name: "Alice", email: "alice@example.com")
-        # User.create(user)
+        # User.create!(user)
         # ```
         def self.create!(record : {{@type.id}}) : {{@type.id}}
           attrs = record.attributes
@@ -220,7 +221,7 @@ module CQL
         # Validate this record as `:create` and insert it, with its timestamps set as `save` sets them
         # (`set_timestamps!` comes from `Persistence`); no callbacks run.
         # - **@return** [{{@type.id}}] The record, with its new id
-        # - **@raise** [ValidationError] If validation fails
+        # - **@raise** [CQL::RecordInvalid] If validation fails
         def create!
           set_timestamps!
           validate!(:create)
