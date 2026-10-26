@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.916] - 2026-10-26
+
 ### Upgrade notes
 
 - Code that relied on `QueryBuilder#merge` changing its receiver should use the builder it returns.
