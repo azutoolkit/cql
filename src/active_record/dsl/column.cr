@@ -92,7 +92,7 @@ module CQL
       private def widen(value : Int) : T
         T.new(value)
       rescue OverflowError
-        raise ArgumentError.new("#{value} does not fit a #{T} column (#{@expression})")
+        raise ArgumentError.new("#{value} does not fit a #{T} column (#{@expression.alias_name}.#{@expression.column.name})")
       end
 
       private def compare(operator : String, value : T) : Expression::ConditionBuilder
@@ -106,7 +106,7 @@ module CQL
         {% elsif T < Int %}
           value.to_i64.as(DB::Any)
         {% else %}
-          value.to_s
+          value.to_s.as(DB::Any)
         {% end %}
       end
 

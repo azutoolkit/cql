@@ -51,6 +51,20 @@ describe "Eager Loading / Preload" do
     end
   end
 
+  describe "an unknown association" do
+    it "raises before any query runs" do
+      expect_raises(ArgumentError, "TestUser has no association :postz. Associations: profile, posts") do
+        TestUser.preload(:postz)
+      end
+      expect_raises(ArgumentError, "TestUser has no association :name") { TestUser.where(age: 25).preload(:posts, :name) }
+    end
+
+    it "accepts a declared association it cannot preload, such as a many_to_many" do
+      Movie.preload(:actors).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(Movie))
+      Actor.preload(:movies).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(Actor))
+    end
+  end
+
   describe "Queryable.preload" do
     it "provides class-level preload method" do
       builder = TestUser.preload(:posts)

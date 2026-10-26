@@ -198,6 +198,14 @@ describe "UUID Primary Key Support" do
 
       UuidSession.query.where { id == uuid }.to_a.map(&.token).should eq(["typed"])
     end
+
+    it "filters on a list of UUID primary keys" do
+      session = UuidSession.create!(token: "listed", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+      other = UuidSession.create!(token: "other", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
+
+      UuidSession.query.where { id.in([session.id!, UUID.random]) }.to_a.map(&.token).should eq(["listed"])
+      UuidSession.query.where { id.not_in([session.id!]) }.to_a.map(&.id).should eq([other.id])
+    end
   end
 
   describe ".create!" do

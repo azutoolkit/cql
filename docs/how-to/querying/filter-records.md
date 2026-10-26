@@ -14,6 +14,7 @@ User.where(active: true, role: "admin").all        # ... WHERE (users.active = ?
 User.where(active: true).where(role: "admin").all  # chained calls are ANDed the same way
 User.where(age: 18..65).all                        # ... WHERE users.age BETWEEN ? AND ?
 User.where(role: ["admin", "moderator"]).all       # ... WHERE users.role IN (?, ?)
+User.where(role: [] of String).all                 # ... WHERE 1 = 0: an empty list matches no row
 User.where(deleted_at: nil).all                    # ... WHERE users.deleted_at IS NULL
 ```
 

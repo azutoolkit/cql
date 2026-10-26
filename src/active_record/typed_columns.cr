@@ -110,6 +110,15 @@ module CQL
               [{% for column in columns %}:{{ column[0].id }}, {% end %}] of Symbol
             end
 
+            # The names of every association the model declares, many_to_many included.
+            def self.cql_association_names : Array(Symbol)
+              {% names = associations.map(&.constant(:ASSOCIATION).id.stringify) %}
+              {% if owner.has_constant?(:DEPENDENT_ASSOCIATIONS) %}
+                {% names = (names + owner.constant(:DEPENDENT_ASSOCIATIONS).map(&.id.stringify)).uniq %}
+              {% end %}
+              [{% for name in names %}:{{ name.id }}, {% end %}] of Symbol
+            end
+
             # The joined table and ON condition for an association, used by `joins`.
             def self.cql_association(name : Symbol) : {Symbol, Proc(::Expression::FilterBuilder, ::Expression::ConditionBuilder)}
               case name

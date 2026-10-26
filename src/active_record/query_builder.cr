@@ -441,9 +441,18 @@ module CQL
         # User.where(active: true).preload(:posts).all # Chain with where
         # ```
         def preload(*associations : Symbol) : self
+          associations.each { |assoc| check_association(assoc) }
           builder = clone_builder
           associations.each { |assoc| builder.@preload_specs << assoc }
           builder
+        end
+
+        # Raises for a name the model declares no association by, before any query runs. A declared
+        # association that cannot be preloaded (many_to_many, `cache: false`) is skipped later.
+        private def check_association(name : Symbol) : Nil
+          names = T.cql_association_names
+          return if names.includes?(name)
+          raise ArgumentError.new("#{T} has no association #{name.inspect}. Associations: #{names.empty? ? "none" : names.join(", ")}")
         end
 
         # Execute the query and return all results
@@ -518,9 +527,7 @@ module CQL
         # Execute the query and return the last result, raises if not found
         # - **@return** [T] Last model instance
         def last!(as as_kind = T)
-          result = last
-          raise "No records found" unless result
-          result
+          last(as_kind) || raise DB::NoResultsError.new("No records found")
         end
 
         # Execute the query and return a scalar value
@@ -891,7 +898,7 @@ module CQL
         end
 
         def last!(as as_kind = T::Row)
-          last(as_kind) || raise "No records found"
+          last(as_kind) || raise DB::NoResultsError.new("No records found")
         end
 
         def each(& : T::Row ->)

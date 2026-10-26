@@ -128,9 +128,7 @@ All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain cre
 
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
-| `DB::NoResultsError` | `find!`, `find_by!` (class and `QueryBuilder`); `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, ``"No records found with conditions: {email: "x"}"``, `"The insert returned no row"` |
-| `NilAssertionError` | `first!` with no matching row | |
-| `Exception` | `QueryBuilder#last!` / `Model.last!` with no matching row | `"No records found"` |
+| `DB::NoResultsError` | `find!`, `find_by!`, `first!` and `last!` (class and `QueryBuilder`); `Repository#find!`; `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, ``"No records found with conditions: {email: "x"}"``, `"No records found"`, `"The insert returned no row"` |
 | `DB::ConnectionRefused` | Opening a connection fails (crystal-db's first connect; the native driver maps transport and TLS failures to it) | |
 | `DB::PoolTimeout`, `DB::PoolRetryAttemptsExceeded` | A saturated pool; a failed lazy reconnect | |
 | `DB::Error` | `foreign_key` in `schema.alter` on SQLite | |
@@ -155,6 +153,7 @@ There is no `ConfigurationError`, `TableNotFound` or `ColumnNotFound` class. The
 | An index name longer than 63 characters | ``"Index name "..." is longer than 63 characters; give the index a shorter name"`` |
 | `find_each` / `find_in_batches` / `insert_all` with `batch_size <= 0` | `"batch_size must be positive, got 0"` |
 | `preload` after a partial `select` | `"preload is not supported after a partial select"` |
+| `preload` with a name the model declares no association by | `"User has no association :postz. Associations: profile, posts"` |
 | A scope called with the wrong arguments or returning a non-query | `"Scope 'active' expects no arguments ..."` |
 | `CQL::Schema.new(..., source:)` with a source bound to another adapter | `"the connection source speaks ..."` |
 | Native PostgreSQL driver: unsupported `sslmode`, libpq-only options, `sslrootcert` without `verify-full`, non-numeric pool options | `"the sslcert option is not supported by this driver"` |

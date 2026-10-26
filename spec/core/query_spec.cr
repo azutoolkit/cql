@@ -227,10 +227,21 @@ describe CQL::Query do
         .to_sql
 
       output = <<-SQL
-        SELECT customers.name, customers.city FROM customers WHERE customers.id IN ()
+        SELECT customers.name, customers.city FROM customers WHERE 1 = 0
       SQL
 
       select_query.should eq({output.strip, [] of DB::Any})
+    end
+
+    it "renders an empty list as a condition no row matches, on PostgreSQL and MySQL too" do
+      postgres = Expression::Generator.new(CQL::Adapter::Postgres)
+      mysql = Expression::Generator.new(CQL::Adapter::MySql)
+      query = Northwind.query.from(:customers).select(:name).where(id: [] of Int32)
+      negated = Northwind.query.from(:customers).select(:name).where { customers.id.not_in([] of Int32) }
+
+      query.to_sql(postgres).should eq({"SELECT customers.name FROM customers WHERE 1 = 0", [] of DB::Any})
+      query.to_sql(mysql).should eq({"SELECT customers.name FROM customers WHERE 1 = 0", [] of DB::Any})
+      negated.to_sql(postgres).should eq({"SELECT customers.name FROM customers WHERE NOT (1 = 0)", [] of DB::Any})
     end
 
     it "handles single element array in WHERE clause" do
