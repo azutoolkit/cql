@@ -33,17 +33,88 @@ module Expression
       end
     end
 
+    describe "#structure_dump_command" do
+      it "runs pg_dump on the URI's host, port, user and database, with the password only in PGPASSWORD" do
+        PostgresDialect.new.structure_dump_command(URI.parse("postgres://app%40corp:p%40ss@db.internal:6543/my%20shop")) do |command|
+          command.command.should eq("pg_dump")
+          command.args.should eq([
+            "--schema-only", "--no-comments", "--no-password",
+            "--host=db.internal", "--port=6543", "--username=app@corp", "--dbname=my shop",
+          ])
+          command.env.should eq({"PGPASSWORD" => "p@ss"})
+        end
+      end
+
+      it "leaves out what the URI does not name" do
+        PostgresDialect.new.structure_dump_command(URI.parse("postgres://localhost/shop")) do |command|
+          command.args.should eq(["--schema-only", "--no-comments", "--no-password", "--host=localhost", "--dbname=shop"])
+          command.env.should be_empty
+        end
+      end
+
+      it "keeps the URI's sslmode in PGSSLMODE, so the dump is not less secure than the connection" do
+        PostgresDialect.new.structure_dump_command(URI.parse("postgres://app:pw@db.internal/shop?sslmode=verify-full&pool_size=5")) do |command|
+          command.env.should eq({"PGPASSWORD" => "pw", "PGSSLMODE" => "verify-full"})
+        end
+      end
+
+      it "does not show the password when inspected" do
+        command = StructureDumpCommand.new("pg_dump", ["--dbname=shop"], {"PGPASSWORD" => "s3cret"})
+
+        command.inspect.should_not contain("s3cret")
+        command.to_s.should_not contain("s3cret")
+        command.pretty_inspect.should_not contain("s3cret")
+        command.inspect.should contain("PGPASSWORD")
+      end
+    end
+
     describe "#structure_dump" do
-      it "uses pg_dump for structure dumps" do
-        dialect = PostgresDialect.new
-        uri = URI.parse("postgres://user:pass@localhost:5432/mydb")
+      uri = URI.parse("postgres://app:p%40ss@db.internal:6543/shop")
 
-        # This is a bit tricky to test directly since it calls an external process
-        # We'll test that the command includes the expected parameters
-        # In a real environment, you might want to mock Process.new
+      it "returns what pg_dump printed" do
+        FakeTools.with_tool("pg_dump", "echo 'CREATE TABLE users ();'") do
+          PostgresDialect.new.structure_dump(uri).should eq("CREATE TABLE users ();\n")
+        end
+      end
 
-        # For now, we'll just verify the method exists and returns a string
-        dialect.structure_dump(uri).should be_a(String)
+      it "gives pg_dump the decoded password in PGPASSWORD" do
+        FakeTools.with_tool("pg_dump", %(printf '%s' "$PGPASSWORD")) do
+          PostgresDialect.new.structure_dump(uri).should eq("p@ss")
+        end
+      end
+
+      it "reads a dump larger than a pipe buffer" do
+        FakeTools.with_tool("pg_dump", "yes 'CREATE TABLE users ();' | head -c 200000") do
+          PostgresDialect.new.structure_dump(uri).size.should eq(200_000)
+        end
+      end
+
+      it "raises CQL::Error with pg_dump's stderr when it fails" do
+        FakeTools.with_tool("pg_dump", "echo 'pg_dump: error: connection refused' >&2; exit 1") do
+          expect_raises(CQL::Error, "pg_dump failed (exit code 1): pg_dump: error: connection refused") do
+            PostgresDialect.new.structure_dump(uri)
+          end
+        end
+      end
+
+      it "names the signal that killed pg_dump" do
+        FakeTools.with_tool("pg_dump", "kill -KILL $$") do
+          expect_raises(CQL::Error, "pg_dump failed (signal KILL): ") { PostgresDialect.new.structure_dump(uri) }
+        end
+      end
+
+      it "passes only options the installed pg_dump accepts, so it gets as far as connecting" do
+        pending!("pg_dump is not installed") unless Process.find_executable("pg_dump")
+        error = expect_raises(CQL::Error) { PostgresDialect.new.structure_dump(URI.parse("postgres://app@127.0.0.1:1/shop")) }
+
+        error.message.to_s.should_not contain("unrecognized option")
+        error.message.to_s.should contain("127.0.0.1")
+      end
+
+      it "raises CQL::Error when pg_dump is not installed" do
+        FakeTools.with_path("/nonexistent") do
+          expect_raises(CQL::Error, /pg_dump could not be started/) { PostgresDialect.new.structure_dump(uri) }
+        end
       end
     end
 

@@ -12,7 +12,7 @@ jobs:
   compile:
     runs-on: ubuntu-latest
     container:
-      image: crystallang/crystal:1.22.0
+      image: crystallang/crystal:1.22.1
     steps:
       - uses: actions/checkout@v4
       - name: Compile CQL against every supported crystal-db

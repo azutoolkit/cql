@@ -9,11 +9,10 @@ shards install --ignore-crystal-version   # install dependencies
 crystal spec                              # full suite (Postgres/Redis specs go pending without servers)
 crystal spec spec/core/query_spec.cr      # one file
 crystal tool format --check src spec      # CI format check
-bin/ameba                                 # CI lint (build with `shards build ameba` if missing)
+crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec   # CI lint, as CI runs it
+python3 script/docs/check_links.py && python3 script/docs/check_nav.py && python3 script/docs/gitbook_lint.py  # CI docs
+python3 script/docs/compile_snippets.py docs/how-to/models/timestamps.md   # compile a page's programs (CI: all pages)
 ```
-
-Baseline on a machine without MySQL tools: one spec errors because `mysqldump` is not installed
-(`spec/integration/dialects/mysql_dialect_spec.cr:15`). That is an environment issue, not a regression.
 
 ## Required: code review before every commit
 

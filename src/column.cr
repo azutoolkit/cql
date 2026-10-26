@@ -33,6 +33,8 @@ module CQL
     property table : Table? = nil
     # :nodoc:
     property length : Int32? = nil
+    # The most characters a `String` column holds; nil uses the dialect's default length.
+    getter size : Int32? = nil
     # :nodoc:
     property? index : Index? = nil
     # :nodoc:
@@ -97,7 +99,7 @@ module CQL
     end
 
     def type
-      @table.not_nil!.schema.adapter.sql_type(Type)
+      @table.not_nil!.schema.adapter.sql_type(Type, @size)
     end
   end
 

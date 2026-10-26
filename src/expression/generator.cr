@@ -596,22 +596,7 @@ module Expression
 
         definitions = [] of String
 
-        # Define columns
-        columns_sql = node.table.columns.map do |_, column|
-          if column.is_a?(CQL::PrimaryKey)
-            @dialect.auto_increment_primary_key(column, column.type)
-          else
-            @dialect.define_column(
-              column.name.to_s,
-              column.type,
-              column.default,
-              column.null?,
-              column.unique?,
-              is_auto_timestamp_column?(column)
-            )
-          end
-        end
-        definitions.concat(columns_sql)
+        definitions.concat(node.table.columns.map { |_, column| column_definition(column) })
 
         # Define foreign keys (if any)
         unless node.table.foreign_keys.empty?
@@ -661,13 +646,14 @@ module Expression
     end
 
     def visit(node : AddColumn) : String
-      @dialect.add_column(
-        node.column.name.to_s,
-        node.column.type,
-        node.column.is_a?(CQL::PrimaryKey),
-        node.column.null?,
-        node.column.unique?
-      )
+      @dialect.add_column(column_definition(node.column), node.column.is_a?(CQL::PrimaryKey))
+    end
+
+    # A column as CREATE TABLE and ADD COLUMN both declare it.
+    private def column_definition(column : CQL::BaseColumn) : String
+      return @dialect.auto_increment_primary_key(column, column.type) if column.is_a?(CQL::PrimaryKey)
+
+      @dialect.define_column(column.name.to_s, column.type, column.default, column.null?, column.unique?, is_auto_timestamp_column?(column))
     end
 
     def visit(node : DropColumn) : String

@@ -61,12 +61,16 @@ SQLite3::Exception: Cannot add a NOT NULL column with default value NULL
 CQL::Postgres::NotNullViolation: ERROR: column "name" of relation "users" contains null values (SQLSTATE 23502)
 ```
 
+**Cause:** existing rows need a value for the new column.
+
 ```crystal
-# ✅ add_column ignores default:, so write the column in SQL with its default
-schema.exec("ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT 'Unknown'")
+# ✅ Give the column a default; existing rows take it
+schema.alter :users do
+  add_column :name, String, null: false, default: "Unknown" # ADD COLUMN name TEXT DEFAULT 'Unknown' NOT NULL
+end
 ```
 
-[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) explains the cause and the nullable-then-backfill alternative.
+[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) also covers a value computed per row.
 
 ## Column cannot be dropped
 

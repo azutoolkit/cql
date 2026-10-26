@@ -71,7 +71,7 @@ config = CQL::MigratorConfig.new(
   schema_symbol: :app_schema,
   auto_sync: true
 )
-migrator = AppDB.migrator(config)  # writes the file now
+migrator = AppDB.migrator(config)  # writes the file now if it is missing
 migrator.up                        # and again after every up and down
 migrator.update_schema_file        # on demand; bootstrap_schema does the same
 ```
@@ -79,42 +79,33 @@ migrator.update_schema_file        # on demand; bootstrap_schema does the same
 ## Check the File for Drift
 
 ```crystal
-# ❌ auto_sync: true rewrites the file when the migrator is built, so a stale file passes
-AppDB.migrator(config).verify_schema_consistency  # => true
-
-# ✅ Check with a migrator that leaves the file alone
-check = AppDB.migrator(CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  auto_sync: false
-))
+check = AppDB.migrator(config)  # leaves an existing file alone, even with auto_sync: true
 abort "src/schemas/app_schema.cr is out of date" unless check.verify_schema_consistency
+
+CQL.verify_schema(AppDB)                 # the same check, configured from CQL.configure
+CQL.verify_schema(AppDB, auto_fix: true) # with auto_sync on, rewrites a stale file and returns true
 ```
 
 `verify_schema_consistency` regenerates the text and compares it exactly, so hand edits count as drift. It returns
-`false` when the file is missing, differs, or the database cannot be read. `CQL.verify_schema(AppDB)` builds its
-migrator from `CQL.configure`, so it only detects drift with `auto_sync = false`, and then `auto_fix: true` has
-nothing to fix with.
+`false` when the file is missing, differs, or the database cannot be read. Check before `up` or `down`: with
+`auto_sync: true` they rewrite the file.
 
 ## Dump Raw DDL
 
-{% tabs %}
-{% tab title="PostgreSQL" %}
-```bash
-pg_dump --schema-only --no-comments --username=app app_db > db/structure.sql
+```crystal
+File.write("db/structure.sql", AppDB.dialect.structure_dump(URI.parse(AppDB.uri)))
 ```
-{% endtab %}
 
-{% tab title="MySQL" %}
-```bash
-mysqldump --no-data --skip-comments --compact --user=app -p app_db > db/structure.sql
-```
-{% endtab %}
-{% endtabs %}
+| Adapter | `structure_dump(uri)` runs |
+| :--- | :--- |
+| PostgreSQL | `pg_dump --schema-only --no-comments --no-password --host=... --port=... --username=... --dbname=...`, with the password in `PGPASSWORD` and the URL's `sslmode` in `PGSSLMODE` |
+| MySQL | `mysqldump --defaults-extra-file=<temporary 0600 file holding the password> --no-data --skip-comments --compact --host=... --port=... --user=... --protocol=tcp <database>` (`--protocol=tcp` only with a port) |
+| SQLite | nothing: returns `""` |
+| CockroachDB | nothing: raises `CQL::DialectError` (run `SHOW CREATE ALL TABLES`) |
 
-Run the tools yourself. The dialects' `structure_dump(uri)` returns `""` on SQLite, raises `CQL::DialectError` on
-CockroachDB, and on PostgreSQL and MySQL currently returns the pipe's description (`#<IO::FileDescriptor:...>`),
-not the DDL.
+The host, port, user, password and database come from the URI, percent-decoded, and the password never appears on
+the command line. Of the URL's query parameters only PostgreSQL's `sslmode` is used; the others are ignored. The tool
+must be on `PATH`; when it is missing or fails, `structure_dump` raises `CQL::Error` with its stderr.
 
 ## Validate Models Against the Schema
 

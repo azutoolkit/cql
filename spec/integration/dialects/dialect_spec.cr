@@ -157,22 +157,42 @@ module Expression
         sqlite_col.should contain("DEFAULT 1") # SQLite uses 1/0 for booleans
       end
 
-      it "generates correct add column syntax" do
-        postgres = create_dialect(:postgres)
+      it "renders a timestamp column's default as SQL only when it is the current-time function" do
         mysql = create_dialect(:mysql)
         sqlite = create_dialect(:sqlite)
 
-        # Test add column
-        postgres_add = postgres.add_column("email", "VARCHAR(255)", false, false, true)
-        postgres_add.should eq("ADD COLUMN email VARCHAR(255) NOT NULL UNIQUE")
+        mysql.define_column("created_at", "DATETIME(3)", "NOW(3)", false, false, true)
+          .should eq("created_at DATETIME(3) DEFAULT NOW(3) NOT NULL")
+        mysql.define_column("created_at", "DATETIME(3)", "NOW(); DROP TABLE users", false, false, true)
+          .should eq("created_at DATETIME(3) DEFAULT 'NOW(); DROP TABLE users' NOT NULL")
+        sqlite.define_column("created_at", "TIMESTAMP", "datetime('now', 'localtime')", false, false, true)
+          .should eq("created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')) NOT NULL")
+        sqlite.define_column("created_at", "TIMESTAMP", "datetime('now')); DROP TABLE users; --", false, false, true)
+          .should eq("created_at TIMESTAMP DEFAULT 'datetime(''now'')); DROP TABLE users; --' NOT NULL")
+      end
 
-        mysql_add = mysql.add_column("email", "VARCHAR(255)", false, false, true)
-        mysql_add.should eq("ADD COLUMN email VARCHAR(255) NOT NULL UNIQUE")
+      it "adds a column with the definition CREATE TABLE gives it" do
+        definition = "status VARCHAR(20) DEFAULT 'active' NOT NULL"
+
+        create_dialect(:postgres).add_column(definition, primary_key: false).should eq("ADD COLUMN #{definition}")
+        create_dialect(:mysql).add_column(definition, primary_key: false).should eq("ADD COLUMN #{definition}")
+        create_dialect(:sqlite).add_column(definition, primary_key: false).should eq("ADD COLUMN #{definition}")
 
         # SQLite doesn't support adding a PRIMARY KEY column
         expect_raises(CQL::SQLiteUnsupportedFeatureError) do
-          sqlite.add_column("id", "INTEGER", true, false, false)
+          create_dialect(:sqlite).add_column("id INTEGER PRIMARY KEY AUTOINCREMENT", primary_key: true)
         end
+      end
+
+      it "declares a String column's length where the dialect has one" do
+        create_dialect(:postgres).string_type(50).should eq("VARCHAR(50)")
+        create_dialect(:postgres).string_type(nil).should eq("VARCHAR")
+        create_dialect(:mysql).string_type(50).should eq("VARCHAR(50)")
+        create_dialect(:mysql).string_type(nil).should eq("VARCHAR(255)") # MySQL requires a length
+        create_dialect(:sqlite).string_type(50).should eq("TEXT")
+        create_dialect(:sqlite).string_type(nil).should eq("TEXT")
+        CQL::Adapter::CockroachDB.sql_type(String, 50).should eq("VARCHAR(50)")
+        CQL::Adapter::MySql.sql_type(String).should eq("VARCHAR(255)")
       end
 
       it "generates correct drop column syntax" do

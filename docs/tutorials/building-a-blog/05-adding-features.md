@@ -362,10 +362,10 @@ Pick the adapter from the environment; `require "cql"` already includes a Postgr
 require "cql"
 require "sqlite3" # development; drop it when you only run on PostgreSQL
 
-adapter = ENV["CRYSTAL_ENV"]? == "production" ? CQL::Adapter::Postgres : CQL::Adapter::SQLite
-uri = ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db?foreign_keys=1"
+DATABASE_ADAPTER = ENV["CRYSTAL_ENV"]? == "production" ? CQL::Adapter::Postgres : CQL::Adapter::SQLite
+DATABASE_URL     = ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db?foreign_keys=1"
 
-AppDB = CQL::Schema.define(:app_db, adapter: adapter, uri: uri) do
+AppDB = CQL::Schema.define(:app_db, adapter: DATABASE_ADAPTER, uri: DATABASE_URL) do
 end
 
 MIGRATOR_CONFIG = CQL::MigratorConfig.new(

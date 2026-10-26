@@ -27,6 +27,7 @@ No driver registration is needed for a schema: `CQL::Adapter::CockroachDB` rewri
 
 ## Connect with `Schema.define`
 
+<!-- docs-check: new-program -->
 ```crystal
 # Ignores CQL.config and uses the URI as given
 AppDB = CQL::Schema.define(
@@ -39,6 +40,7 @@ end
 
 ## Connect with `AsyncEngine`
 
+<!-- docs-check: new-program -->
 ```crystal
 # Picks the CockroachDB adapter from the cockroachdb:// scheme; no registration needed
 engine = CQL::Postgres::AsyncEngine.connect("cockroachdb://app:secret@crdb.internal:26257/app?pool_size=10")
@@ -73,10 +75,11 @@ crystal build -Dcql_postgres_driver_cockroachdb src/app.cr
 
 CockroachDB answers a protocol 3.2 startup with HTTP/2 bytes instead of an error. The driver then retries at 3.0, so each new connection pays one failed attempt unless the URL pins 3.0:
 
+<!-- docs-check: new-program -->
 ```crystal
 # DB.open and AsyncEngine.connect default cockroachdb:// URLs to max_protocol_version=3.0.
 # A schema (CQL.build_schema or Schema.define) opens a postgres:// URL, which starts at 3.2: pin it.
-uri = "cockroachdb://app:secret@crdb.internal:26257/app?max_protocol_version=3.0"
+DATABASE_URL = "cockroachdb://app:secret@crdb.internal:26257/app?max_protocol_version=3.0"
 ```
 
 ## Expect these differences
@@ -84,7 +87,7 @@ uri = "cockroachdb://app:secret@crdb.internal:26257/app?max_protocol_version=3.0
 `Expression::CockroachDialect` inherits `Expression::PostgresDialect`: `$n` placeholders, `RETURNING`, `ON CONFLICT`, `DISTINCT ON`, `ILIKE`, row locking, CTEs and window functions render as on PostgreSQL.
 
 ```crystal
-AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::CockroachDB, uri: uri) do
+AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::CockroachDB, uri: DATABASE_URL) do
   table :counters do
     primary :id, Int64
     integer :hits
@@ -100,7 +103,7 @@ AppDB.transaction { AppDB.alter(:counters) { add_column :note, String, null: tru
 # CQL::DialectError: CockroachDB does not support schema changes inside a transaction
 # Outside a transaction DDL is not atomic either: a failed migration run keeps the migrations it already applied.
 
-CQL::Adapter::CockroachDB.dialect.structure_dump(URI.parse(uri))
+CQL::Adapter::CockroachDB.dialect.structure_dump(URI.parse(DATABASE_URL))
 # CQL::DialectError: CockroachDB does not support pg_dump-style structure dumps
 # Workaround: Run `SHOW CREATE ALL TABLES` instead.
 ```

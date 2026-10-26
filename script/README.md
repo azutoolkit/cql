@@ -1,7 +1,8 @@
 # Scripts
 
-Helpers that check CQL's native PostgreSQL driver against real servers, poolers and `crystal-db` versions, for
-maintainers and CI. Run them from the repository root.
+Helpers for maintainers and CI: checks of CQL's native PostgreSQL driver against real servers, poolers and
+`crystal-db` versions, the docs checks, the release step and the API reference build. Run them from the repository
+root.
 
 > [!CAUTION]
 > `pg-matrix`, `pgbouncer-matrix` and `tls-probes` start throwaway servers that trust local connections (the
@@ -137,6 +138,21 @@ status is the number of failed probes. A `FAIL` is a finding about the pooler (o
 so read the detail. Results for PgBouncer, Odyssey, pgcat and pgpool-II are in
 [Poolers](../docs/how-to/postgres-native/tls-and-poolers.md#poolers); run the probes against your own pooler and
 settings before relying on them.
+
+## Docs, Release and API Reference
+
+| Script | Does | Run by |
+| --- | --- | --- |
+| `docs/check_links.py`, `docs/check_nav.py`, `docs/gitbook_lint.py` | check links and anchors, the docs navigation and redirects, and GitBook markup | the `docs` CI job |
+| `docs/compile_snippets.py` | compiles the programs and tutorials in `README.md` and `docs/` | the `docs-snippets` CI job |
+| `release VERSION [--dry-run]` | sets `shard.yml`, moves `[Unreleased]` under the version, commits, tags that commit, publishes the GitHub release | the `release` CI job on `master` |
+| `api-docs VERSION [DIR]` | builds the API reference from the doc comments in `src/` | the `api-docs` CI job, before the Pages deploy |
+
+The Pages deploy needs **Settings → Pages → Source: GitHub Actions** set once in the repository; until then the
+`deploy-api-docs` job fails after the release is already published.
+
+How to steer `compile_snippets.py` with `<!-- docs-check: ... -->` comments is in
+[the docs style guide](../.claude/docs-style-guide.md#verifying-examples) and the script's header.
 
 ## See Also
 

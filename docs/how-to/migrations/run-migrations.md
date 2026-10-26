@@ -20,16 +20,16 @@ migrator = AppDB.migrator(config)
 config.migration_table_name    # => :cql_schema_migrations, created by AppDB.migrator
 ```
 
-With `auto_sync: true`, the migrator writes the schema file from the live database when it is built and after every
-`up` and `down`, creating missing directories. Pass `auto_sync: false` in production and in tests so the file is left
+With `auto_sync: true`, the migrator writes the schema file from the live database when it is built and the file is
+missing, and again after every `up` and `down`, creating missing directories. Pass `auto_sync: false` in production and in tests so the file is left
 alone.
 
 ## Apply Pending Migrations
 
 ```crystal
 migrator.up             # every pending migration, in version order, then prints the applied table
-migrator.up(2)          # only the first 2 registered migrations; applied ones count towards the 2
-migrator.up_to(5_i64)   # every migration up to and including version 5; nothing if no migration has that version
+migrator.up(2)          # the 2 oldest pending migrations
+migrator.up_to(5_i64)   # every pending migration up to and including version 5; nothing if no migration has that version
 ```
 
 {% tabs %}

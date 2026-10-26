@@ -498,9 +498,12 @@ module CQL
     migrator
   end
 
-  # Verify schema consistency with auto-fix option
+  # Verify schema consistency with auto-fix option. Builds the migrator without `auto_sync` or `build_migrator`'s
+  # startup behaviors, so a stale or missing schema file is reported, not written, before it is compared.
   def self.verify_schema(schema : Schema, auto_fix : Bool = false) : Bool
-    migrator = build_migrator(schema)
+    verify_config = config.migrator_config
+    verify_config.auto_sync = false
+    migrator = schema.migrator(verify_config)
     consistent = migrator.verify_schema_consistency
 
     if !consistent && auto_fix && config.auto_sync?

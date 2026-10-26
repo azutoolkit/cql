@@ -15,7 +15,7 @@ crystal run examples/basic/simple_cache_demo.cr           # one example
 | --- | --- | --- |
 | [basic/](basic/README.md) | memory cache, fragment cache and invalidation strategies; a Redis cache | Redis for one example |
 | [caching/](caching/README.md) | fragment caching on models, per-request query cache, cache configuration, Redis store | SQLite; Redis for one example |
-| [configuration/](configuration/README.md) | `CQL.configure` settings and migrator configuration | nothing (one example reads `DATABASE_URL`) |
+| [configuration/](configuration/README.md) | `CQL.configure` settings and migrator configuration | nothing |
 | [migrations/](migrations/README.md) | migrations with a schema file kept in sync: up, rollback, redo | PostgreSQL |
 | [framework-integration/](framework-integration/README.md) | the Azu per-request cache middleware, with mock requests | SQLite |
 | [utilities/](utilities/README.md) | `Beautify`, the console helpers several examples print with | nothing |
@@ -29,7 +29,6 @@ examples were also run.
 | --- | --- |
 | everything not listed below | compiles and runs |
 | `migrations/generated_schema.cr`, `utilities/beautify.cr` | not programs: a sample generated schema file and a helper module |
-| `configuration/configuration_showcase.cr` | runs only with `DATABASE_URL` set (any value; nothing connects), otherwise raises `KeyError` |
 | `migrations/schema_migration_workflow_pg.cr` | compiles; needs a PostgreSQL server (not run) |
 
 `caching/advanced_caching_example.cr` prints nothing unless you pass it `run`.

@@ -60,7 +60,7 @@ Methods available inside `schema.table :name do ... end` (and on a `CQL::Table`)
 | `double(name, ...)` | `Float64` | |
 | `real(name, ...)` | `Float64` | |
 | `text(name, ..., size: nil)` | `String` | |
-| `varchar(name, ..., size: 1000)` | `String` | |
+| `varchar(name, ..., size: nil)` | `String` | |
 | `boolean(name, ...)` | `Bool` | |
 | `timestamp(name, ...)` | `Time` | |
 | `date(name, ...)` | `Time`, declared `DATE` | |
@@ -100,11 +100,11 @@ end
 | Option | Type | Default | SQL |
 | :--- | :--- | :--- | :--- |
 | `null` | `Bool` | `false` | `false` adds `NOT NULL` |
-| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings quoted, `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere |
-| `unique` | `Bool` | `false` | `UNIQUE`; with `index: true` the index is unique too |
+| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings single-quoted with `'` doubled (and `\` doubled on MySQL), `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere |
+| `unique` | `Bool` | `false` | `UNIQUE`; with `index: true` there are both the constraint and a unique index |
 | `index` | `Bool` | `false` | Declares `idx_<t>_<column>` (e.g. `idx_posts_slug`), created by `create!` after the table |
 | `as` | `String?` | `nil` | Alias used when the column is selected |
-| `size` | `Int32?` | `nil` | Stored, **not emitted**: `String` is always `TEXT` / `VARCHAR` / `VARCHAR(255)` |
+| `size` | `Int32?` | `nil` | A `String` column's length: `VARCHAR(n)` on PostgreSQL, MySQL and CockroachDB; SQLite keeps `TEXT`. Other types ignore it |
 
 ### Column types
 
@@ -117,6 +117,7 @@ end
 | `Float32` | `FLOAT` | `REAL` | `FLOAT` | `REAL` |
 | `Float64` | `DOUBLE` | `DOUBLE PRECISION` | `DOUBLE` | `DOUBLE PRECISION` |
 | `String` | `TEXT` | `VARCHAR` | `VARCHAR(255)` | `VARCHAR` |
+| `String` with `size: 50` | `TEXT` | `VARCHAR(50)` | `VARCHAR(50)` | `VARCHAR(50)` |
 | `Bool` | `BOOLEAN` | `BOOLEAN` | `TINYINT(1)` | `BOOLEAN` |
 | `Time` | `TIMESTAMP` | `TIMESTAMP` | `DATETIME(3)` | `TIMESTAMP` |
 | `Time` via `date` | `DATE` | `DATE` | `DATE` | `DATE` |
@@ -177,11 +178,11 @@ AppDB.users.create_sql
 
 ## `schema.alter`
 
-Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`.
+Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`. On SQLite and PostgreSQL, a rollback of that transaction or of an enclosing one also restores the table's declared name, columns and indexes.
 
 | Method | Defaults | Notes |
 | :--- | :--- | :--- |
-| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | **`default`, `index` and `size` are ignored**: no `DEFAULT` clause and no index are emitted, so `null: false` fails on a table with rows (SQLite: `Cannot add a NOT NULL column with default value NULL`). Use raw DDL for a default, below. |
+| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | Declares the column as [`column`](#column-options) does, `DEFAULT` and length included; `index: true` then runs `CREATE INDEX idx_<t>_<name>`. SQLite rejects `unique: true` (`Cannot add a UNIQUE column`) |
 | **`drop_column(name)`** | | An undeclared column only logs an error |
 | **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column |
 | **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
@@ -196,6 +197,7 @@ Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. 
 schema.alter :users do
   add_column :phone, String
   add_column :age, Int32, null: true
+  add_column :level, Int32, null: false, default: 1, index: true
   rename_column :name, :full_name
   change_column :age, Int64
   create_index :idx_users_phone, [:phone], unique: true
@@ -210,22 +212,15 @@ schema.alter :users do
 end
 ```
 
-A column with a default, added with raw DDL and then declared so the schema knows it:
-
-```crystal
-def up
-  schema.exec "ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 1 NOT NULL"
-  schema.users.integer :level, default: 1 # declares only; runs no SQL
-end
-```
-
 <details>
 <summary>The SQL each statement emits, per dialect</summary>
 
 | Method | SQLite | PostgreSQL / CockroachDB | MySQL |
 | :--- | :--- | :--- | :--- |
 | `add_column :phone, String` | `ALTER TABLE users ADD COLUMN phone TEXT` | `... ADD COLUMN phone VARCHAR` | `... ADD COLUMN phone VARCHAR(255)` |
-| `add_column :age, Int32, null: false, unique: true` | `... ADD COLUMN age INTEGER NOT NULL UNIQUE` | `... age INTEGER NOT NULL UNIQUE` (`INT4` on CockroachDB) | `... age INT NOT NULL UNIQUE` |
+| `add_column :age, Int32, null: false, unique: true` | `... ADD COLUMN age INTEGER NOT NULL UNIQUE`, which SQLite rejects | `... age INTEGER NOT NULL UNIQUE` (`INT4` on CockroachDB) | `... age INT NOT NULL UNIQUE` |
+| `add_column :level, Int32, null: false, default: 1, index: true` | `... ADD COLUMN level INTEGER DEFAULT 1 NOT NULL`, then `CREATE INDEX idx_users_level ON users (level)` | `... level INTEGER DEFAULT 1 NOT NULL` (`INT4` on CockroachDB), then the same index | `... level INT DEFAULT 1 NOT NULL`, then the same index |
+| `add_column :code, String, size: 20` | `... ADD COLUMN code TEXT` | `... code VARCHAR(20)` | `... code VARCHAR(20)` |
 | `drop_column :bio` | `... DROP COLUMN bio` (SQLite 3.35+) | `... DROP COLUMN bio` | `... DROP COLUMN bio` |
 | `rename_column :nick, :handle` | `... RENAME COLUMN nick TO handle` | same | `... CHANGE nick handle VARCHAR(255)` |
 | `change_column :score, Int64` | raises | `... ALTER COLUMN score TYPE BIGINT` | `... MODIFY COLUMN score BIGINT` |
@@ -252,13 +247,13 @@ migrator.up_to(20250125001401_i64)  # apply up to and including this version
 
 | Method | Behavior |
 | :--- | :--- |
-| `schema.migrator`, `schema.migrator(config)`, `CQL::Migrator.new(schema, config = MigratorConfig.new)` | Builds the migrator: with `auto_sync` dumps the schema file, then creates the migrations table (`ddl_transaction`). |
-| **`up(steps = all)`** | Takes the first `steps` migrations in version order and applies the pending ones, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints the applied list. |
-| **`down(steps = all)`** | Takes the newest `steps` *defined* migrations and reverts the applied ones, in one `ddl_transaction`; then rewrites the schema file and prints what was rolled back. |
-| **`rollback(steps = 1)`** | `down(steps)`. When the newest defined migration is pending, it does nothing. |
+| `schema.migrator`, `schema.migrator(config)`, `CQL::Migrator.new(schema, config = MigratorConfig.new)` | Builds the migrator: creates the migrations table (`ddl_transaction`), then with `auto_sync` writes the schema file if it is missing. |
+| **`up(steps = all)`** | Applies the `steps` oldest pending migrations in version order, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints the applied list. |
+| **`down(steps = all)`** | Reverts the `steps` newest applied migrations, newest first, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints what was rolled back. |
+| **`rollback(steps = 1)`** | `down(steps)`. |
 | `redo` | `rollback`, then `up`. |
-| `up_to(version : Int64)` | `up(position + 1)` where `position` is the index of `version` in all migrations: applies up to and including it. Unknown versions do nothing. |
-| `down_to(version : Int64)` | `down(position + 1)`: reverts `position + 1` migrations from the newest, so `down_to(first)` reverts only the newest and `down_to(newest)` reverts all. Prefer `down(n)`. |
+| `up_to(version : Int64)` | Applies every pending migration up to and including `version`. Unknown versions do nothing. |
+| `down_to(version : Int64)` | Reverts every applied migration newer than `version`; `version` stays applied. `down_to(0_i64)` reverts every migration; other unknown versions do nothing. |
 | `pending_migrations` | `Array(BaseMigration.class)` in version order. |
 | `applied_migrations` | `Array(CQL::MigrationRecord)` (`id`, `name`, `version`). |
 | `last` | The newest applied migration class, or `nil`. |
@@ -276,7 +271,7 @@ migrator.up_to(20250125001401_i64)  # apply up to and including this version
 | `schema_name` | `Symbol` | `:AppSchema` (constant in the generated file) |
 | `schema_symbol` | `Symbol` | `:app_schema` |
 | `migration_table_name` | `Symbol` | `:cql_schema_migrations` |
-| `auto_sync?` | `Bool` | `true`: rewrite the schema file when the migrator is built and after `up` / `down` |
+| `auto_sync?` | `Bool` | `true`: write the schema file when the migrator is built and it is missing, and rewrite it after `up` / `down` |
 
 `CQL.build_migrator(schema)` builds the config from `CQL.configure` instead (table `:schema_migrations`); see the [Configuration Reference](../configuration.md#helpers).
 

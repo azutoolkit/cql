@@ -16,15 +16,16 @@ module Expression
       (PLACEHOLDERS[param_index]? if param_index >= 0) || "$#{param_index}"
     end
 
-    def structure_dump(uri : URI) : String
-      args = [
-        "--no-data",
-        "--no-comments",
-        "--schema-only",
-        "--username=#{uri.user}",
-        "--dbname=#{uri.path[1..-1]}",
-      ]
-      Process.new("pg_dump", args: args, output: Process::Redirect::Pipe).output.to_s
+    # pg_dump, with the password in PGPASSWORD and the URI's `sslmode` in PGSSLMODE; other query
+    # parameters are ignored. `--no-password` makes it fail rather than prompt.
+    def structure_dump_command(uri : URI, &)
+      args = ["--schema-only", "--no-comments", "--no-password"]
+      args.concat(connection_options(uri, "--username"))
+      args << "--dbname=#{database_name(uri)}"
+      env = {} of String => String
+      uri.password.presence.try { |password| env["PGPASSWORD"] = password }
+      uri.query_params["sslmode"]?.presence.try { |mode| env["PGSSLMODE"] = mode }
+      yield StructureDumpCommand.new("pg_dump", args, env)
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
@@ -95,21 +96,6 @@ module Expression
         end
       else
         build_column_definition(column_name, column_type, default_value, nullable, unique)
-      end
-    end
-
-    def add_column(
-      column_name : String,
-      column_type : String,
-      primary_key : Bool,
-      nullable : Bool,
-      unique : Bool,
-    ) : String
-      build_sql(64) do |str|
-        str << "ADD COLUMN " << column_name << " " << column_type
-        str << " PRIMARY KEY" if primary_key
-        str << " NOT NULL" unless nullable
-        str << " UNIQUE" if unique
       end
     end
 

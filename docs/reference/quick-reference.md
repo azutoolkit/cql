@@ -4,6 +4,8 @@ description: "The most used CQL calls, one line each, and the CQL-specific terms
 
 # Quick Reference
 
+The full signatures of every type and method are in the generated [API reference](https://azutoolkit.github.io/cql/).
+
 ## Terms
 
 | Term | Meaning | API |

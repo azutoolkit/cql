@@ -19,7 +19,7 @@ In the tables, "raises" means CQL raises `CQL::DialectError` (or the subclass na
 | :--- | :--- |
 | `adapter.dialect` | The shared dialect instance |
 | `adapter.postgres_compatible?` | `true` for PostgreSQL and CockroachDB |
-| `adapter.sql_type(Int64)` | The column type (see [Column types](api/migration-dsl.md#column-types)) |
+| `adapter.sql_type(Int64)`, `adapter.sql_type(String, 50)` | The column type (see [Column types](api/migration-dsl.md#column-types)); the size sets a `String`'s length |
 | `adapter.driver_uri(uri)` | `cockroachdb://` rewritten to `postgres://`; others unchanged |
 | `query.to_sql(for: CQL::Adapter::Postgres)` | `{sql, params}` for another adapter, without a connection |
 
@@ -40,7 +40,9 @@ Only SQLite runs live in CQL's specs; the other dialects are checked through gen
 | `supports_returning?` (`create!` reads the row from its INSERT) | `false` | `true` | `false` | `true` |
 | `supports_transactional_ddl?` (`ddl_transaction`, used by `alter`, `build`, `create!`/`drop!`/`truncate!` and the migrator, rolls DDL back) | `true` | `true` | `false` | `false` |
 | `current_timestamp` | `datetime('now')` | `CURRENT_TIMESTAMP` | `NOW(3)` | `CURRENT_TIMESTAMP` |
-| `structure_dump(uri)` | `""` | starts `pg_dump` but returns the pipe's description (`#<IO::FileDescriptor…>`), not the DDL | same, with `mysqldump` | raises |
+| `string_type(size)`, `string_type(nil)` | `TEXT`, `TEXT` | `VARCHAR(size)`, `VARCHAR` | `VARCHAR(size)`, `VARCHAR(255)` | same as PostgreSQL |
+| `structure_dump(uri)` | `""` | `pg_dump`'s output; password in `PGPASSWORD`, `sslmode` in `PGSSLMODE`; `CQL::Error` with stderr when it fails | `mysqldump`'s output; password in a temporary 0600 defaults file; `CQL::Error` with stderr when it fails | raises `DialectError` |
+| `structure_dump_command(uri) { \|command\| ... }` | raises `DialectError` | yields `pg_dump`'s `command`, `args` and `env` | yields `mysqldump`'s, deleting the defaults file after the block | raises `DialectError` |
 | Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |
 
 ## Queries

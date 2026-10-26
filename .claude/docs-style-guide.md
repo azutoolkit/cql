@@ -131,6 +131,25 @@ Never nest a block inside one of the same kind, and never put `<details>` inside
 
 ## Verifying examples
 
+CI runs these on every pull request; run them from the repo root before you push (`check_nav.py` and
+`gitbook_lint.py` need PyYAML):
+
+```bash
+python3 script/docs/check_links.py      # links, anchors, docs/ links leaving docs/, GitHub alerts in docs/
+python3 script/docs/check_nav.py        # SUMMARY.md, section READMEs, .gitbook.yaml redirects
+python3 script/docs/gitbook_lint.py     # frontmatter and GitBook blocks (this guide's rules)
+python3 script/docs/compile_snippets.py docs/how-to/configuration/cockroachdb.md   # compiles the page's programs
+```
+
+`compile_snippets.py` compiles every block that requires `cql`, with the untitled blocks after it, and replays each
+tutorial: titled files are written in order and each `crystal src/x.cr` the page shows is compiled. A program that
+uses `AppDB` or `User` without defining them gets a small prelude. An HTML comment on the line before a block steers
+it: `<!-- docs-check: skip -->` leaves out a fragment that cannot compile, `<!-- docs-check: new-program -->` starts an
+alternative as its own program, and `<!-- docs-check: run -->` runs a tutorial's shell block, for a step that generates
+a file a later step needs. Blocks marked `# ❌` or holding a bare `...` line are left out on their own.
+
+To check what a snippet prints:
+
 - Use the Crystal version CI uses (`.github/workflows/crystal.yml`) and run `shards install
   --ignore-crystal-version`. Build from the repo root so `lib/` resolves.
 - Put the page's snippets in a scratch script outside the repo that requires `src/cql` by a relative
