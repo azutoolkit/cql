@@ -54,6 +54,14 @@ module CQL::Performance
     def initialize(@type, @severity, @message, @details = {} of String => String,
                    @timestamp = Time.utc)
     end
+
+    def critical? : Bool
+      severity == :critical
+    end
+
+    def high_priority? : Bool
+      severity.in?(:critical, :high)
+    end
   end
 
   # Base report formatter

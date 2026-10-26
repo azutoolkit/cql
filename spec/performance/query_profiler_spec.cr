@@ -1,5 +1,15 @@
 require "../spec_helper"
 
+# Records a statement while `slowest_queries` sorts outside the lock, as a concurrent fiber or thread could.
+private class RecordDuringSortProfiler < CQL::Performance::QueryProfiler
+  property during_sort : Proc(Nil)? = nil
+
+  private def slowest_first(queries : Array(CQL::Performance::QueryData)) : Array(CQL::Performance::QueryData)
+    during_sort.try(&.call)
+    super
+  end
+end
+
 describe CQL::Performance::QueryData do
   describe "#initialize" do
     it "creates a QueryData with required fields" do
@@ -529,6 +539,46 @@ describe CQL::Performance::QueryProfiler do
       second_result = profiler.slowest_queries
       second_result.size.should eq(2)
       second_result[0].execution_time.should eq(200.milliseconds)
+    end
+
+    it "drops the cached sort on clear" do
+      config = CQL::Performance::Config::Profiling.new
+      config.log_slow_queries = false
+      profiler = CQL::Performance::QueryProfiler.new(config)
+      profiler.record_query("SELECT * FROM users", [] of DB::Any, 2.seconds)
+      profiler.slowest_queries
+
+      profiler.clear
+
+      profiler.slowest_queries.should be_empty
+    end
+
+    it "does not cache a sort that a slow query recorded meanwhile would make stale" do
+      config = CQL::Performance::Config::Profiling.new
+      config.log_slow_queries = false
+      profiler = RecordDuringSortProfiler.new(config)
+      profiler.record_query("SELECT * FROM users", [] of DB::Any, 2.seconds)
+      profiler.during_sort = -> { profiler.record_query("SELECT * FROM orders", [] of DB::Any, 3.seconds) }
+
+      profiler.slowest_queries.map(&.sql).should eq(["SELECT * FROM users"])
+      profiler.during_sort = nil
+
+      profiler.slowest_queries.map(&.sql).should eq(["SELECT * FROM orders", "SELECT * FROM users"])
+    end
+
+    it "sorts what is left after the slow queries are trimmed" do
+      config = CQL::Performance::Config::Profiling.new
+      config.log_slow_queries = false
+      profiler = CQL::Performance::QueryProfiler.new(config)
+      max = CQL::Performance::QueryProfiler::MAX_SLOW_QUERIES
+      max.times { |i| profiler.record_query("SELECT #{i}", [] of DB::Any, (200 + i).milliseconds) }
+      profiler.slowest_queries(max).size.should eq(max)
+
+      profiler.record_query("SELECT * FROM users", [] of DB::Any, 150.milliseconds)
+
+      slowest = profiler.slowest_queries(max)
+      slowest.size.should eq((max * 0.8).to_i)
+      slowest.last.sql.should eq("SELECT * FROM users")
     end
   end
 
