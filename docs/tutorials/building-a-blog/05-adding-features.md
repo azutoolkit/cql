@@ -374,12 +374,12 @@ export DATABASE_URL=postgres://user:pass@host:5432/blog_production
 
 | Before deploying | Where |
 | :--- | :--- |
-| Values are bound as parameters by every CQL query; keep raw SQL to literals you control | [Raw SQL Fragments](../../how-to/querying/raw-fragments.md) |
+| Values are bound as parameters by every CQL query; keep raw SQL to literals you control | [Use Raw SQL Fragments Safely](../../how-to/querying/raw-fragments.md) |
 | Index the columns you filter and join on | [Create Indexes](../../how-to/migrations/indexes.md) |
 | Load associations with `preload` instead of in a loop | [Avoid N+1 Queries](../../how-to/performance/n-plus-one.md) |
 | Paginate every list | [Paginate Results](../../how-to/querying/pagination.md) |
 | Cache expensive queries | [Enable Query Caching](../../how-to/caching/query-cache.md) |
-| Size the connection pool | [Connection Pooling](../../how-to/configuration/connection-pooling.md) |
+| Size the connection pool | [Set Up Connection Pooling](../../how-to/configuration/connection-pooling.md) |
 
 Authentication, authorization and rate limiting belong to your web framework.
 

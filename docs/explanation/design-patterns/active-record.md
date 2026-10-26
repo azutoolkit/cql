@@ -76,7 +76,7 @@ draft.save                  # raises CQL::ActiveRecord::Validations::ValidationE
 | `user.create!` | raises `ValidationError` | callbacks do not run |
 | `User.create!(name: "", email: "x")` | inserts without validating | callbacks do not run |
 
-`save` validates once, before `before_save`, so a value a callback sets is not validated. A callback halts the save only by returning `false`; any other value, including `nil`, lets it continue. See [Add Validations](../../how-to/models/add-validations.md) and [Use Callbacks](../../how-to/models/use-callbacks.md).
+`save` validates once, before `before_save`, so a value a callback sets is not validated. A callback halts the save only by returning `false`; any other value, including `nil`, lets it continue. Beyond `presence` and `match`, `validate` accepts `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `size`, `required`, `confirmation` and `accept`, and the hooks run before and after validation, save, create, update and destroy. See [Add Validations](../../how-to/models/add-validations.md), [Use Callbacks](../../how-to/models/use-callbacks.md) and [Callback Hooks](../../reference/api/callback-hooks.md).
 
 ## Associations Are Declared on the Model
 

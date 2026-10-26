@@ -173,7 +173,7 @@ module BlogEngine
 end
 ```
 
-The migrator now runs on `AppSchema` too, because it knows the existing tables. Later migrations that `alter` or drop a table need that: on the empty `AppDB` they raise `Table 'posts' not found`.
+The migrator now runs on `AppSchema` too, because it knows the existing tables. Later migrations that alter or drop a table need that: on the empty `AppDB`, `schema.alter :posts` raises `Table 'posts' not found` and `schema.posts.drop!` raises `KeyError`.
 
 Associations may name a model that is required later, such as `User` naming `Post`. CQL checks every `belongs_to` and `has_many` once all files are loaded, and reports a missing target model, or a foreign key whose type does not match the target's primary key, as a compile-time error.
 

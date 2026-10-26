@@ -222,7 +222,7 @@ Post.find_each(batch_size: 2) { |post| puts "  batch: #{post.title}" }
   batch: Draft Ideas
 ```
 
-`find_each` loads `batch_size` rows per query, so memory stays flat on large tables.
+`find_each` reads `batch_size` rows per query instead of the whole table at once.
 
 ## Step 9: Delete records
 
