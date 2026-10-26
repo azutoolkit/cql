@@ -151,10 +151,10 @@ module CQL
     # **Example** Updating a record by ID
     #
     # ```
-    # user_repo.update(1, active: true)
+    # user_repo.update(1, {:active => true} of Symbol => DB::Any)
     # ```
     def update(id : Pk, attrs : Hash(Symbol, DB::Any))
-      update.set(**attrs).where(id: id).commit
+      update.set(attrs).where(id: id).commit
     end
 
     # Update a record by ID with given fields
@@ -177,13 +177,13 @@ module CQL
     # **Example** Updating records by email
     #
     # ```
-    # user_repo.update_by(email: " [email protected]", active: true)
+    # user_repo.update_by({:email => "alice@example.com"} of Symbol => DB::Any, {:active => true} of Symbol => DB::Any)
     # ```
     def update_by(
       where_attrs : Hash(Symbol, DB::Any),
       update_attrs : Hash(Symbol, DB::Any),
     )
-      update.set(**update_attrs).where(**where_attrs).commit
+      update.set(update_attrs).where(where_attrs).commit
     end
 
     # Update all records with given attributes
@@ -192,10 +192,10 @@ module CQL
     # **Example** Updating all records
     #
     # ```
-    # user_repo.update_all(active: true)
+    # user_repo.update_all({:active => true} of Symbol => DB::Any)
     # ```
     def update_all(attrs : Hash(Symbol, DB::Any))
-      update.set(**attrs).commit
+      update.set(attrs).commit
     end
 
     # Delete a record by ID
