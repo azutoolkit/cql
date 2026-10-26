@@ -196,7 +196,7 @@ File.write("tmp/perf.html", CQL::Performance.report("html"))
 File.write("tmp/perf.json", CQL::Performance.report("json"))
 ```
 
-`UnifiedReportGenerator` renders a `PerformanceReport` with one formatter per format: `text`, `json`, `html`, `console` and `logger` (an alias of `console`). An unknown format falls back to `text`. Every format shows the overall latency: a `Latency: p50 … / p95 … / p99 …` line in `text` and `console`, a p95 card in `html`, and `p50_ms`, `p95_ms` and `p99_ms` under `metrics` in `json` (`PerformanceReport#latency`, and `"latency"` in its `to_h`). Each per-statement tracker in a report's `stats` adds `p50_time_ms`, `p95_time_ms` and `p99_time_ms`.
+`UnifiedReportGenerator` renders a `PerformanceReport` with one formatter per format: `text`, `json`, `html`, `console` and `logger` (an alias of `console`). An unknown format falls back to `text`. The `html` format escapes issue messages and details, so SQL in an issue's message or details shows as text instead of running as markup. Every format shows the overall latency: a `Latency: p50 … / p95 … / p99 …` line in `text` and `console`, a p95 card in `html`, and `p50_ms`, `p95_ms` and `p99_ms` under `metrics` in `json` (`PerformanceReport#latency`, and `"latency"` in its `to_h`). Each per-statement tracker in a report's `stats` adds `p50_time_ms`, `p95_time_ms` and `p99_time_ms`.
 
 ### Add Your Own Format
 

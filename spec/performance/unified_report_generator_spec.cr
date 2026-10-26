@@ -209,6 +209,31 @@ describe CQL::Performance::HTMLReportFormatter do
     output.should contain("issue-high")
   end
 
+  it "escapes issue messages and details, which carry SQL text" do
+    issue = build_test_issue(
+      message: "<script>alert(1)</script>",
+      details: {"<b>sql</b>" => "SELECT * FROM users WHERE name = '<img src=x onerror=alert(1)>'"},
+    )
+    output = CQL::Performance::HTMLReportFormatter.new.format(build_test_report(issues: [issue]))
+
+    output.should contain("<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>")
+    output.should contain("<li><strong>&lt;b&gt;sql&lt;/b&gt;:</strong> SELECT * FROM users WHERE name = &#39;&lt;img src=x onerror=alert(1)&gt;&#39;</li>")
+    output.should_not contain("<script>")
+    output.should_not contain("<img")
+  end
+
+  it "escapes markup that recorded SQL carries into a monitor's report" do
+    profiler = CQL::Performance::QueryProfiler.new
+    101.times { profiler.record_query("SELECT 1 /* <script>alert(1)</script> */", [] of DB::Any, 60.milliseconds) }
+    config = CQL::Performance::Config.new
+    config.logging.enabled = false
+
+    output = CQL::Performance::Monitor.new(config: config, profiler: profiler).generate_report("html")
+
+    output.should contain("<li><strong>sql:</strong> SELECT ? /* &lt;script&gt;alert(?)&lt;/script&gt; */</li>")
+    output.should_not contain("<script>")
+  end
+
   it "output contains metrics div" do
     report = build_test_report
     formatter = CQL::Performance::HTMLReportFormatter.new
