@@ -1064,7 +1064,7 @@ describe "CQL::Performance::MonitorCounters" do
 
     exported = monitor.metrics.to_h["monitor"].as_h
 
-    exported.keys.sort!.should eq(["observed_statements", "overhead_ms", "p95_pool_wait_ms"])
+    exported.keys.sort!.should eq(["dropped_events", "observed_statements", "overhead_ms", "p95_pool_wait_ms"])
     exported["observed_statements"].as_i64.should eq(1)
   end
 end
@@ -1236,6 +1236,26 @@ describe "CQL::Performance::Monitor async recording" do
     spy.fibers.each(&.should_not(eq(Fiber.current)))
   end
 
+  it "drops statements instead of blocking when the queue is full" do
+    gate = Channel(Nil).new
+    spy = AsyncSpyProfiler.new(gate)
+    with_async_monitor(spy, capacity: 1) do |monitor|
+      returned = Channel(Nil).new
+      spawn { 3.times { monitor.record(statement_event, [] of DB::Any) }; returned.send(nil) }
+      select
+      when returned.receive
+      when timeout(2.seconds) then fail "Monitor#record blocked on a full queue"
+      end
+
+      gate.close
+      monitor.flush(1.second).should be_true
+      dropped = monitor.counters.dropped_events
+      dropped.should be >= 1_i64
+      (spy.fibers.size + dropped).should eq(3)
+      monitor.metrics_summary["monitor_dropped_events"].should eq(dropped)
+    end
+  end
+
   it "copies the params so a caller that mutates them afterwards changes nothing" do
     gate = Channel(Nil).new
     spy = AsyncSpyProfiler.new(gate)
@@ -1251,6 +1271,30 @@ describe "CQL::Performance::Monitor async recording" do
     end
   end
 
+  it "copies an empty params array too, so a caller that appends to it afterwards changes nothing" do
+    gate = Channel(Nil).new
+    spy = AsyncSpyProfiler.new(gate)
+    with_async_monitor(spy) do |monitor|
+      params = [] of DB::Any
+      monitor.record(statement_event(params), params)
+      params << 1
+      gate.close
+      monitor.flush(1.second).should be_true
+
+      spy.seen_params.should eq([[] of DB::Any])
+    end
+  end
+
+  it "restores the statement's telemetry context around the background recording" do
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |monitor|
+      CQL::Telemetry.with_context("req-1") { monitor.record(statement_event, [] of DB::Any) }
+      monitor.flush(1.second).should be_true
+    end
+
+    spy.contexts.should eq(["req-1"] of String?)
+  end
+
   it "records synchronously again after close, and flush without a queue returns true" do
     spy = AsyncSpyProfiler.new
     with_async_monitor(spy) do |monitor|
@@ -1260,5 +1304,54 @@ describe "CQL::Performance::Monitor async recording" do
       spy.fibers.should eq([Fiber.current])
       monitor.flush.should be_true
     end
+  end
+
+  it "records synchronously once the global monitor is replaced, because the replaced one is closed" do
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |old|
+      with_global_monitor(old) do
+        CQL::Performance.monitor = CQL::Performance::Monitor.new(config: CQL::Performance::Config.new)
+      end
+      old.record(statement_event, [] of DB::Any)
+
+      spy.fibers.should eq([Fiber.current])
+    end
+  end
+
+  it "clears the drops of a live queue" do
+    gate = Channel(Nil).new
+    spy = AsyncSpyProfiler.new(gate)
+    with_async_monitor(spy, capacity: 1) do |monitor|
+      3.times { monitor.record(statement_event, [] of DB::Any) }
+      monitor.counters.dropped_events.should be >= 1_i64
+
+      monitor.clear
+      gate.close
+      monitor.flush(1.second).should be_true
+      monitor.counters.dropped_events.should eq(0)
+    end
+  end
+
+  it "reuses the event's own copy of the params when telemetry captured them" do
+    CQL::Telemetry.capture_params = true
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |monitor|
+      params = [1] of DB::Any
+      event = statement_event(params)
+      monitor.record(event, params)
+      monitor.flush(1.second).should be_true
+
+      spy.seen_params.first.should be(event.params)
+    end
+  ensure
+    CQL::Telemetry.capture_params = false
+  end
+
+  it "reports no dropped events for a synchronous monitor" do
+    monitor = CQL::Performance::Monitor.new(config: CQL::Performance::Config.new)
+
+    monitor.flush.should be_true
+    monitor.counters.dropped_events.should eq(0)
+    monitor.metrics_summary["monitor_dropped_events"].should eq(0_i64)
   end
 end

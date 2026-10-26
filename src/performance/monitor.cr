@@ -24,6 +24,9 @@ module CQL::Performance
 
     private alias Statement = {CQL::Telemetry::QueryEvent, Array(DB::Any)}
 
+    # Shared by every queued statement without params, so none holds an array its caller may reuse; never mutated.
+    private EMPTY_PARAMS = [] of DB::Any
+
     @config : Config
     @queue : CQL::Telemetry::EventQueue(Statement)?
     @profiler : QueryProfilerInterface?
@@ -37,6 +40,7 @@ module CQL::Performance
     @overhead_samples : Atomic(Int64) = Atomic(Int64).new(0)
     @pool_wait : StatsTracker = StatsTracker.new
     @free_checkouts : Atomic(Int64) = Atomic(Int64).new(0)
+    @closed_queue_drops : Atomic(Int64) = Atomic(Int64).new(0)
 
     def initialize(
       config : Config = Config.from_env,
@@ -71,7 +75,7 @@ module CQL::Performance
     # Records a statement `CQL::Execution.run` has already timed, on the async queue's fiber when monitoring is async.
     def record(event : CQL::Telemetry::QueryEvent, params : Array(DB::Any)) : Nil
       if queue = @queue
-        queue.push({event, params.empty? ? params : params.map(&.dup)})
+        queue.push({event, event.params || (params.empty? ? EMPTY_PARAMS : params.map(&.dup))})
       else
         record_event(event, params)
       end
@@ -85,7 +89,10 @@ module CQL::Performance
 
     # Stops the async queue, skipping the statements it still holds; `record` is synchronous afterwards.
     def close : Nil
-      @queue.try(&.close)
+      if queue = @queue
+        queue.close
+        @closed_queue_drops.add(queue.dropped)
+      end
       @queue = nil
     end
 
@@ -139,7 +146,8 @@ module CQL::Performance
     # and `pool_wait` counts a wait under 1 µs (a free connection) as zero.
     def counters : MonitorCounters
       observed = @observed_statements.get
-      MonitorCounters.new(observed, estimated_overhead(observed), pool_wait_percentiles)
+      dropped = @closed_queue_drops.get + (@queue.try(&.dropped) || 0_i64)
+      MonitorCounters.new(observed, estimated_overhead(observed), pool_wait_percentiles, dropped)
     end
 
     # Get metrics summary
@@ -177,6 +185,7 @@ module CQL::Performance
 
     # Clear all data
     def clear
+      restart_queue
       @profiler.try(&.clear)
       @detector.try(&.clear)
       @error_count.set(0)
@@ -185,6 +194,7 @@ module CQL::Performance
       @overhead_samples.set(0)
       @pool_wait.reset
       @free_checkouts.set(0)
+      @closed_queue_drops.set(0)
     end
 
     # Check if monitoring is enabled
@@ -198,9 +208,20 @@ module CQL::Performance
       reconfigure_components
     end
 
+    # Drops the statements still queued, and the queue's drop count, by starting a new queue.
+    private def restart_queue : Nil
+      return unless @queue
+      close
+      @queue = build_queue
+    end
+
     private def build_queue : CQL::Telemetry::EventQueue(Statement)
       CQL::Telemetry::EventQueue(Statement).new(@config.monitoring.async_queue_capacity) do |(event, params)|
-        record_event(event, params)
+        if context = event.context
+          CQL::Telemetry.with_context(context) { record_event(event, params) }
+        else
+          record_event(event, params)
+        end
       end
     end
 
@@ -393,8 +414,11 @@ module CQL::Performance
     @@monitor ||= Monitor.new
   end
 
+  # Replacing the global monitor closes the old one, whose later statements are recorded inline.
   def self.monitor=(monitor : Monitor)
+    previous = @@monitor
     @@monitor = monitor
+    previous.close if previous && !previous.same?(monitor)
   end
 
   # Convenience methods
