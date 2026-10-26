@@ -216,7 +216,7 @@ module CQL::ActiveRecord::Relations
 
           records.each do |record|
              record.attributes({ :{{fk}} => parent_id })
-             record.create!
+             record.new_record? ? record.create! : record.save!
              created_records << record
            end
 

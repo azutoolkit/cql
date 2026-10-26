@@ -87,7 +87,7 @@ PostTag.create!(post_id: post.id!, tag_id: Tag.create!(name: "SQL").id!) # or wr
 post.tags_ids = [crystal.id!, orm.id!]   # replaces the whole set; also post.tags.ids = [...]
 ```
 
-Linking needs both records saved, or `UnsavedRecord` is raised.
+Linking needs both records saved, or `UnsavedRecord` is raised. A soft-deleted record counts as saved: it is linked, and stays hidden from the collection.
 
 ## Read Linked Records
 

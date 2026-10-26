@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Insert#query(...).back(...)` on SQLite now raises `CQL::SQLiteUnsupportedFeatureError` when the SQL is generated, like `back` on a VALUES insert; it used to drop the RETURNING clause silently.
 - An `AlterTable#foreign_key` with no `references_columns` against a table whose primary key is not `id` now references that primary key. Pass `references_columns: [:id]` to keep the old target.
 - A native-engine URL with `max_pool_size` or `initial_pool_size` used to fail on the first connection; it now sizes the pool. Check those values, or drop them and keep `pool_size` and `pool_min_size`. `prepared_statements=false` has no effect on the engine: use `statement_cache_size=0` to turn the statement cache off.
+- `has_many` `<<`, `collection.create(record)` and `create_<name>(records)` with a saved record now update its foreign key through `save!`, so its validations and update callbacks run and an invalid record raises `CQL::RecordInvalid`. Before, they inserted a copy of the record and gave the instance the copy's id.
 
 ### Removed
 
@@ -37,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `RedisCache#stats` no longer holds the cache's lock while it waits for Redis `INFO`, so `get`, `set` and `delete` in other fibers keep running during the round trip.
 - `FragmentCache#cache_query` reads a cached integer above `Int32::MAX` back as `Int64` instead of raising `OverflowError`. It now shares the reader `Cache.get` uses: integers that fit come back as `Int32`, as before, and a nested array or object comes back as its JSON text.
 - `CQL::Postgres::AsyncEngine.connect` and `EngineSource.connect` accept a URL built by `CQL.config.full_db_url`. They read crystal-db's `max_pool_size` as `pool_size` and `initial_pool_size` as `pool_min_size`; the engine's own key wins when the URL names both. They ignore `max_idle_pool_size`, `retry_attempts`, `retry_delay`, `prepared_statements` and `prepared_statements_cache` instead of sending them to the server, which rejected them with SQLSTATE 42704.
+- `has_many` `<<`, `collection.create(record)` and `create_<name>(records)` with a saved record link it instead of inserting a duplicate row and switching the instance to the copy's id; `<<` of a record already in a loaded collection no longer lists it twice. A new record is still inserted as before.
+- A soft-deleted record can be associated: `<<` on `has_many` and `many_to_many` and the `belongs_to` setter link it. Before, many_to_many `<<` and the `belongs_to` setter raised `UnsavedRecord`, and has_many `<<` inserted a copy. The record stays out of a loaded collection, as a reload would show it.
 
 ## [0.0.907] - 2026-10-26
 

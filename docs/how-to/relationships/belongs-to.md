@@ -71,7 +71,7 @@ post = Post.create!(title: "Hello")
 Comment.create!(body: "First", post_id: post.id!)   # set the foreign key directly
 
 comment = Comment.new("Second")
-comment.post = post         # sets post_id; the post must be saved, or UnsavedRecord is raised
+comment.post = post         # sets post_id; the post must be saved (soft-deleted counts), or UnsavedRecord is raised
 comment.save!
 
 comment = Comment.new("Third")

@@ -78,7 +78,7 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
     end
   end
 
-  describe "ensure_persisted macro" do
+  describe "ensure_saved macro" do
     it "validates that a record is persisted" do
       user = TestUser.create!(name: "Test User", email: "test@example.com", age: 25, password: "password123")
 

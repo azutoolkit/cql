@@ -128,11 +128,12 @@ post.delete! # before_destroy, after_destroy
 | Call | Callbacks | Validates |
 | :--- | :--- | :--- |
 | `record.save`, `record.save!` | save callbacks | yes (`save` returns `false`, `save!` raises `ValidationError`) |
+| `has_many` `collection << record`, `collection.create(record)`, `create_<name>` with a saved record | save callbacks (through `save!`) | yes |
 | `record.delete!`; soft-delete `delete!`, `force_delete!` | destroy callbacks | no |
 | `Post.where(...).delete_all` when the model declares destroy callbacks, `dependent:` or `many_to_many` | each record's destroy callbacks, in one transaction | no |
 | `has_many` / `has_one ..., dependent: :destroy` | the child's destroy callbacks | no |
 | `record.create!`, `collection.create(**attrs)` | none | yes |
-| `Model.create!(**attrs)`, `Model.create!(record)`, `collection.create(record)` | none | no |
+| `Model.create!(**attrs)`, `Model.create!(record)`, `collection.create(record)` and `collection << record` with a new record | none | no |
 | `record.update!`, `Model.update!(id, attrs)`, `Model.update_by`, `Model.update_all` | none | no |
 | `Model.delete!(id)`, `Model.delete_by!`, `Model.delete_all`, `Post.where(...).delete_all` otherwise | none | no |
 | `record.touch`, `restore!`, `insert_all`, `upsert_all` | none | no |
