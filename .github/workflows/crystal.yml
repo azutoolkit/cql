@@ -71,10 +71,33 @@ jobs:
         env:
           DATABASE_URL: postgres://example:example@postgres:5432/example
         run: crystal spec
+  # The oldest tested Crystal: a construct newer compilers accept and 1.19 rejects fails here instead of in every
+  # application that builds with 1.19.
+  build-crystal-1-19:
+    runs-on: ubuntu-latest
+    container:
+      image: crystallang/crystal:1.19.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SQLite and the database clients
+        run: |
+          apt-get update
+          apt-get install -y sqlite3 libsqlite3-dev postgresql-client mysql-client
+      - name: Create SQLite databases
+        run: |
+          for db in northwind data billing tabledb; do
+            touch ./spec/support/db/$db.db
+            chmod 664 ./spec/support/db/$db.db
+          done
+      - name: Install shards
+        run: shards install --ignore-crystal-version
+      - name: Run tests (SQLite; server dialects are pending without their servers)
+        run: crystal spec
   release:
     runs-on: ubuntu-latest
     needs:
       - build
+      - build-crystal-1-19
     if: ${{ success() && github.event_name == 'push' }}
     steps:
       - name: Checkout
