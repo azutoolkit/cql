@@ -95,7 +95,7 @@ from `CQL.configure`.
 ## Dump Raw DDL
 
 ```crystal
-ddl = AppDB.dialect.structure_dump(URI.parse("postgres://app:secret@db.internal:5432/app_db"))
+ddl = CQL::Adapter::Postgres.dialect.structure_dump(URI.parse("postgres://app:secret@db.internal:5432/app_db"))
 File.write("db/structure.sql", ddl)
 ```
 

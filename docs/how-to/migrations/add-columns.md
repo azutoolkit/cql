@@ -101,8 +101,9 @@ transaction. If `email` is unique, addresses that differ only in case collide; f
 
 ```crystal
 schema.alter :users do
-  add_column :deleted_at, Time, index: true            # ADD COLUMN deleted_at TIMESTAMP, for SoftDeletable,
-end                                                    # then CREATE INDEX idx_users_deleted_at ON users (deleted_at)
+  # ADD COLUMN deleted_at TIMESTAMP, for SoftDeletable, then CREATE INDEX idx_users_deleted_at ON users (deleted_at)
+  add_column :deleted_at, Time, index: true
+end
 
 schema.alter :posts do
   add_column :slug, String
