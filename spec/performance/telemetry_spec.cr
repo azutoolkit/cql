@@ -112,9 +112,11 @@ describe CQL::Telemetry do
       events.last.rows_affected.should eq(1)
     end
 
-    it "reports DDL run through Schema#exec" do
+    it "labels raw SQL run through Schema#exec by its statement" do
       UserDB.exec("SELECT 1")
-      events.last.operation.should eq(:ddl)
+      UserDB.exec("INSERT INTO users (name, email, age, password) VALUES ('ada', 'ada@x.io', 30, 'pw')")
+      UserDB.exec("DROP TABLE IF EXISTS no_such_table")
+      events.map(&.operation).should eq([:select, :insert, :ddl])
     end
 
     it "reports plans as :explain and ActiveRecord ids as selects" do
