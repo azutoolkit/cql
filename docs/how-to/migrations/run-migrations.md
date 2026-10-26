@@ -39,6 +39,8 @@ migrator.print_pending_migrations   # table of pending migrations
 migrator.print_applied_migrations   # table of applied migrations
 ```
 
+These only read the migrations table, so they also work inside an open transaction on MySQL and CockroachDB.
+
 ## Run to Specific Version
 
 ```crystal

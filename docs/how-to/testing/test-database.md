@@ -143,6 +143,8 @@ end
 
 `Schema#transaction` pins the fiber to one connection and swallows `DB::Rollback`, so queries issued by the example run inside the transaction.
 
+On MySQL and CockroachDB, create the tables (`MyDB.build`, `MyDB.users.create!`) before the first example, not inside the wrapped block: `build`, `create!`, `drop!` and `truncate!` raise `CQL::DialectError` inside a transaction there, because the DDL would commit it. On SQLite and PostgreSQL they nest as a SAVEPOINT and roll back with the example.
+
 **Note:** This won't work if your tests use multiple connections or spawn fibers, because other fibers do not see the transaction's connection.
 
 ### Delete Strategy
