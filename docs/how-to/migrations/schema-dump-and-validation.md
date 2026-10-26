@@ -1,6 +1,8 @@
-# Dump and Validate Your Schema
+---
+description: "Generate a schema file from a live database, keep it in sync with migrations, and check that models still match it."
+---
 
-Generate a schema file from a live database, keep it in sync with migrations, and check that models still match it.
+# Dump and Validate Your Schema
 
 | Tool | Compares or reads | Gives |
 | :--- | :--- | :--- |
@@ -21,8 +23,8 @@ dumper.dump_to_file                                          # ./src/schemas/sch
 dumper.close
 ```
 
+{% code title="src/schemas/myapp_schema.cr" %}
 ```crystal
-# src/schemas/myapp_schema.cr
 MyApp = CQL::Schema.define(
   :myapp,
   adapter: CQL::Adapter::SQLite,
@@ -47,6 +49,7 @@ MyApp = CQL::Schema.define(
 
 end
 ```
+{% endcode %}
 
 - SQLite, MySQL, PostgreSQL and CockroachDB (through the PostgreSQL path) are read. Unknown types become `text`.
 - A one-column primary key gets `primary`; a composite key gets none. SQLite reports every `INTEGER PRIMARY KEY` as
@@ -95,10 +98,19 @@ nothing to fix with.
 
 ## Dump Raw DDL
 
+{% tabs %}
+{% tab title="PostgreSQL" %}
 ```bash
 pg_dump --schema-only --no-comments --username=app app_db > db/structure.sql
+```
+{% endtab %}
+
+{% tab title="MySQL" %}
+```bash
 mysqldump --no-data --skip-comments --compact --user=app -p app_db > db/structure.sql
 ```
+{% endtab %}
+{% endtabs %}
 
 Run the tools yourself. The dialects' `structure_dump(uri)` returns `""` on SQLite, raises `CQL::DialectError` on
 CockroachDB, and on PostgreSQL and MySQL currently returns the pipe's description (`#<IO::FileDescriptor:...>`),
