@@ -430,16 +430,16 @@ describe CQL::Postgres::AsyncEngine do
     server = FakePG.start do |client|
       client.read_startup
       client.ok_handshake
-      2.times { client.expect('P'); client.expect('D'); client.expect('S') }
-      2.times do
+      4.times { client.expect('P'); client.expect('D'); client.expect('S') }
+      4.times do
         client.send('1'); client.parameter_description([] of UInt32); client.send('n'); client.ready
       end
-      6.times { client.read_message }
-      client.send('2'); client.command_complete("INSERT 0 1"); client.ready
-      client.send('2'); client.command_complete("DELETE 1"); client.ready
+      12.times { client.read_message }
+      {"INSERT 0 1", "DELETE 1", "EXPLAIN", "SET"}.each { |tag| client.send('2'); client.command_complete(tag); client.ready }
     end
-    engine_for(server).pipeline([{"INSERT INTO t DEFAULT VALUES", [] of ::DB::Any}, {"  delete from t", [] of ::DB::Any}])
-    events.map(&.operation).should eq [:insert, :delete]
+    engine_for(server).pipeline([{"INSERT INTO t DEFAULT VALUES", [] of ::DB::Any}, {"  delete from t", [] of ::DB::Any},
+                                 {"EXPLAIN SELECT 1", [] of ::DB::Any}, {"SET search_path TO app", [] of ::DB::Any}])
+    events.map(&.operation).should eq [:insert, :delete, :explain, :ddl]
   end
 
   it "returns nothing, without borrowing a connection, for an empty pipeline" do
@@ -461,6 +461,20 @@ describe CQL::Postgres::AsyncEngine do
     engine_for(server).exec("CREATE TABLE t (id int)")
     events.map(&.operation).should eq [:ddl]
     events.first.sql.should eq "CREATE TABLE t (id int)"
+  end
+
+  it "labels raw SQL run with exec by its statement" do
+    events = [] of CQL::Telemetry::QueryEvent
+    CQL::Telemetry.subscribe("wire") { |event| events << event }
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('Q')
+      client.command_complete("INSERT 0 1")
+      client.ready
+    end
+    engine_for(server).exec("INSERT INTO t DEFAULT VALUES")
+    events.map(&.operation).should eq [:insert]
   end
 
   it "closes its pool" do

@@ -1,4 +1,5 @@
 require "./executor"
+require "./operation_kind"
 # Standard Lib
 require "db"
 require "uri"
@@ -253,7 +254,7 @@ module CQL
     # schema.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     # ```
     def exec(sql : String)
-      Execution.run(self, sql, [] of DB::Any, :ddl, track: false) { |connection| connection.exec(sql) }
+      Execution.run(self, sql, [] of DB::Any, OperationKind.of(sql), track: false) { |connection| connection.exec(sql) }
     end
 
     # Yields the fiber's transaction connection, or else one pooled connection, to pin statements to it with `using(connection)`
