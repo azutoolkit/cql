@@ -599,14 +599,7 @@ module Expression
           if column.is_a?(CQL::PrimaryKey)
             @dialect.auto_increment_primary_key(column, column.type)
           else
-            @dialect.define_column(
-              column.name.to_s,
-              column.type,
-              column.default,
-              column.null?,
-              column.unique?,
-              is_auto_timestamp_column?(column)
-            )
+            column_definition(column)
           end
         end
         definitions.concat(columns_sql)
@@ -659,13 +652,12 @@ module Expression
     end
 
     def visit(node : AddColumn) : String
-      @dialect.add_column(
-        node.column.name.to_s,
-        node.column.type,
-        node.column.is_a?(CQL::PrimaryKey),
-        node.column.null?,
-        node.column.unique?
-      )
+      @dialect.add_column(column_definition(node.column), node.column.is_a?(CQL::PrimaryKey))
+    end
+
+    # A column as declared in CREATE TABLE and ALTER TABLE ... ADD COLUMN: name, type, default and constraints.
+    private def column_definition(column : CQL::BaseColumn) : String
+      @dialect.define_column(column.name.to_s, column.type, column.default, column.null?, column.unique?, is_auto_timestamp_column?(column))
     end
 
     def visit(node : DropColumn) : String

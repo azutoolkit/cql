@@ -140,21 +140,6 @@ module Expression
       end
     end
 
-    def add_column(
-      column_name : String,
-      column_type : String,
-      primary_key : Bool,
-      nullable : Bool,
-      unique : Bool,
-    ) : String
-      build_sql(64) do |str|
-        str << "ADD COLUMN " << column_name << " " << column_type
-        str << " PRIMARY KEY" if primary_key
-        str << " NOT NULL" unless nullable
-        str << " UNIQUE" if unique
-      end
-    end
-
     def drop_column(column_name : String) : String
       "DROP COLUMN #{column_name}"
     end

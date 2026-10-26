@@ -2,7 +2,7 @@
 
 This guide shows you how to add columns to existing tables using migrations.
 
-`schema.alter` columns are nullable by default (`null: true`), unlike `column` in a `schema.table` block. Supported `add_column` options are `null:`, `default:`, `unique:`, `size:` and `as:`; the `index:` option is accepted but ignored, so create indexes with `create_index`.
+`schema.alter` columns are nullable by default (`null: true`), unlike `column` in a `schema.table` block. Supported `add_column` options are `null:`, `default:`, `unique:`, `size:`, `index:` and `as:`. `size:` is the length of a `String` column (`VARCHAR(size)` on PostgreSQL, CockroachDB and MySQL; SQLite's `TEXT` has no length and other types ignore it).
 
 ## Add a Single Column
 
@@ -62,17 +62,19 @@ class AddActiveToUsers < CQL::Migration(7)
 end
 ```
 
+The default fills the existing rows, so a `NOT NULL` column can be added to a table that already has data. On PostgreSQL this runs:
+
+```sql
+ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT TRUE NOT NULL
+```
+
 ## Add Column with Index
 
 ```crystal
 class AddSlugToPosts < CQL::Migration(8)
   def up
     schema.alter :posts do
-      add_column :slug, String, null: true
-    end
-
-    schema.alter :posts do
-      create_index :idx_posts_slug, [:slug], unique: true
+      add_column :slug, String, null: true, index: true
     end
   end
 
@@ -84,6 +86,8 @@ class AddSlugToPosts < CQL::Migration(8)
   end
 end
 ```
+
+`index: true` creates `idx_posts_slug` right after adding the column. For a unique index, put `create_index :idx_posts_slug, [:slug], unique: true` in the same block instead: `unique: true` on `add_column` also declares the column `UNIQUE`, which SQLite cannot add to an existing table.
 
 ## Add Foreign Key Column
 
@@ -139,11 +143,7 @@ end
 class AddDeletedAtToUsers < CQL::Migration(11)
   def up
     schema.alter :users do
-      add_column :deleted_at, Time, null: true
-    end
-
-    schema.alter :users do
-      create_index :idx_users_deleted_at, [:deleted_at]
+      add_column :deleted_at, Time, null: true, index: true
     end
   end
 

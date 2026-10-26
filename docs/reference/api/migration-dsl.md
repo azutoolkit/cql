@@ -89,7 +89,7 @@ column :score, Int32, default: 0
 | `default` | T | Default value |
 | `unique` | Bool | Add unique constraint |
 | `index` | Bool | Index the column; `create!` creates it after the table (see [index](#index)) |
-| `size` | Int32 | Column size (for VARCHAR) |
+| `size` | Int32 | Length of a `String` column: `VARCHAR(size)` on PostgreSQL, CockroachDB and MySQL. SQLite's `TEXT` and other types ignore it |
 | `as` | String | Alias used when selecting the column |
 
 ### Type-Specific Column Methods
@@ -134,7 +134,7 @@ lock_version                              # Int32 `version` column for optimisti
 | `Slice(UInt8)` | BYTEA | BYTEA | BLOB | BLOB |
 | `JSON::Any` | JSONB | JSONB | JSON | TEXT |
 
-`UInt32` and `UInt64` are also mapped. See `CQL::DB_TYPE_MAPPING`.
+`UInt32` and `UInt64` are also mapped. See `CQL::DB_TYPE_MAPPING`. A `String` column declared with `size:` (or `varchar ..., size:`) is `VARCHAR(size)` on PostgreSQL, CockroachDB and MySQL; without it, `varchar` is the plain `String` type above. `change_column` takes no size, so it declares the plain type.
 
 ### timestamps
 
@@ -240,7 +240,7 @@ end
 
 | Method | Description |
 |--------|-------------|
-| `add_column :name, Type, options` | Add a new column |
+| `add_column :name, Type, options` | Add a new column; takes the `column` options (`null:` defaults to `true` here) and emits its `DEFAULT`. `index: true` also creates `idx_<table>_<column>` |
 | `drop_column :name` | Remove a column |
 | `rename_column :old, :new` | Rename a column |
 | `change_column :name, NewType` | Change column type |

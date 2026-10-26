@@ -56,7 +56,15 @@ module CQL
       new_column.table = @table
       @table.columns[name] = new_column
       @actions << Expression::AddColumn.new(new_column)
+      add_column_index(new_column, unique) if index
       @table.columns_changed!
+    end
+
+    # Like `create_index`, the index is created but not recorded in the table's declared indexes.
+    private def add_column_index(column : BaseColumn, unique : Bool) : Nil
+      column_index = Index.new(@table, [column.name], unique)
+      column.index = column_index
+      @actions << Expression::CreateIndex.new(column_index)
     end
 
     # Drops a column from the table.

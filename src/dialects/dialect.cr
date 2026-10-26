@@ -83,15 +83,6 @@ module Expression
       timestamp_column : Bool,
     ) : String
 
-    # Generates SQL to add a column to a table.
-    abstract def add_column(
-      column_name : String,
-      column_type : String,
-      primary_key : Bool,
-      nullable : Bool,
-      unique : Bool,
-    ) : String
-
     # Generates SQL to drop a column from a table.
     abstract def drop_column(column_name : String) : String
 
@@ -417,6 +408,17 @@ module Expression
         str << "CONSTRAINT #{constraint.name} " if constraint.name
         str << "CHECK (" << constraint.condition << ")"
       end
+    end
+
+    # Generates the ALTER TABLE action that adds a column, from its `define_column` definition.
+    def add_column(column_definition : String, primary_key : Bool) : String
+      "ADD COLUMN #{column_definition}#{" PRIMARY KEY" if primary_key}"
+    end
+
+    # The SQL type of a column declared with *size*: VARCHAR takes it as its length, other types ignore it.
+    def sized_type(column_type : String, size : Int32?) : String
+      return column_type unless size && column_type.starts_with?("VARCHAR")
+      "VARCHAR(#{size})"
     end
 
     # Generates SQL to create an index that is skipped when it already exists.

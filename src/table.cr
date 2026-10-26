@@ -403,7 +403,7 @@ module CQL
 
     # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    def varchar(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = 1000, index : Bool = false)
+    def varchar(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
       col = Column(String).new(name, as_name, null, default, unique, size)
       col.table = self
       @columns[name] = col

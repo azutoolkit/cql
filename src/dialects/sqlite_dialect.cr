@@ -122,23 +122,13 @@ module Expression
       end
     end
 
-    def add_column(
-      column_name : String,
-      column_type : String,
-      primary_key : Bool,
-      nullable : Bool,
-      unique : Bool,
-    ) : String
+    def add_column(column_definition : String, primary_key : Bool) : String
       # SQLite doesn't support adding a PRIMARY KEY constraint to an existing table
       if primary_key
         raise CQL::SQLiteUnsupportedFeatureError.new("adding a PRIMARY KEY constraint to an existing table")
       end
 
-      build_sql(64) do |str|
-        str << "#{@@cached_strings["sqlite_add_column_prefix"]}#{column_name} #{column_type}"
-        str << " NOT NULL" unless nullable
-        str << " UNIQUE" if unique
-      end
+      "#{@@cached_strings["sqlite_add_column_prefix"]}#{column_definition}"
     end
 
     def drop_column(column_name : String) : String
