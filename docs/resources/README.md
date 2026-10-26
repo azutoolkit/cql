@@ -1,14 +1,9 @@
 # Resources
 
-Additional resources to support your CQL journey.
+Help, community and contribution information for CQL.
 
-## Support
+- [FAQ](faq.md): short answers to common questions, each linked to the page that covers it
+- [Community](community.md): where to ask questions, report bugs and follow releases
+- [Contributing](contributing.md): the checks CI runs and the conventions a pull request follows
 
-- [FAQ](faq.md) - Frequently asked questions
-- [Community](community.md) - Get help and connect with other CQL users
-- [Contributing](contributing.md) - How to contribute to CQL
-
-## External Links
-
-- [GitHub Repository](https://github.com/azutoolkit/cql) - Source code and issue tracking
-- [Crystal Language](https://crystal-lang.org/) - The language CQL is built with
+The source code and issue tracker are in the [azutoolkit/cql](https://github.com/azutoolkit/cql) repository on GitHub.

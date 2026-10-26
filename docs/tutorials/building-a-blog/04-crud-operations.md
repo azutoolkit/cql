@@ -1,462 +1,251 @@
 # Part 4: CRUD Operations
 
-In this part, you'll learn how to create, read, update, and delete records in your blog engine. You'll also explore querying patterns, bulk operations, and best practices for working with data.
+Build one script, `src/crud.cr`, that creates, queries, updates and deletes blog records. Each step adds to the script; run it after each step.
 
-## What You'll Learn
+**You need:** the project from [Part 3](03-models-and-relationships.md).
 
-- Creating records (single and bulk)
-- Reading and querying records
-- Updating records
-- Deleting records
-- Using query scopes
-- Aggregation and counting
-
-## Prerequisites
-
-- Completed [Part 3: Models and Relationships](03-models-and-relationships.md)
-
-## Create Operations
-
-### Creating a Single Record
-
-There are several ways to create records:
+## Step 1: Create records
 
 ```crystal
-# Method 1: new + save (runs validations and callbacks)
-user = User.new(username: "john", email: "john@example.com")
-if user.save
-  puts "User created with ID: #{user.id}"
-else
-  puts "Failed to create user" # a callback halted the save
-end
+# src/crud.cr
+require "./blog_engine"
 
-# Method 2: save! (raises CQL::RecordNotSaved when a callback halts the save, and CQL::ActiveRecord::Validations::ValidationError for an invalid record)
-user = User.new(username: "bob", email: "bob@example.com")
-user.save!
-puts "User created" if user.persisted?
+# Start every run from empty tables; ON DELETE CASCADE removes the posts and comments
+User.delete_all
+Category.delete_all
 
-# Method 3: create! (inserts the given columns and returns the stored record)
-user = User.create!(
-  username: "jane",
-  email: "jane@example.com",
-  first_name: "Jane"
-)
+# new + save: runs validations and callbacks; returns false when a callback halts it
+alice = User.new(username: "alice", email: "alice@example.com", first_name: "Alice")
+alice.save
+
+# save!: raises instead of returning false
+bob = User.new(username: "bob", email: "bob@example.com")
+bob.save!
+
+# create!: inserts exactly the columns you pass and returns the stored record
+jane = User.create!(username: "jane", email: "jane@example.com", first_name: "Jane")
+
+# Category.new runs initialize, which builds the slug; create! would skip it
+tech, lifestyle, travel = ["Technology", "Lifestyle", "Travel"].map { |name| Category.new(name).tap(&.save!) }
+
+intro = Post.create!(title: "Getting Started with Crystal", content: "Crystal is fast and friendly.",
+  user_id: alice.id!, category_id: tech.id, published: true, views_count: 150_i64)
+Post.create!(title: "Crystal Macros", content: "Macros run at compile time.",
+  user_id: alice.id!, category_id: tech.id, published: true, views_count: 1200_i64)
+Post.create!(title: "A Weekend in Lisbon", content: "Tram 28 and pastel de nata.",
+  user_id: jane.id!, category_id: travel.id, published: true, views_count: 40_i64)
+Post.create!(title: "Draft Ideas", content: "Not ready yet.", user_id: bob.id!, category_id: lifestyle.id)
+
+Comment.create!(content: "Welcome to blogging!", post_id: intro.id!, user_id: bob.id)
+Comment.create!(content: "Nice intro.", post_id: intro.id!) # anonymous
+
+puts "Created #{User.count} users, #{Category.count} categories, #{Post.count} posts, #{Comment.count} comments"
 ```
 
-`create!` writes exactly the columns you pass and lets the database fill in defaults; it does not go through your `initialize`, so anything `initialize` computes (like the category slug) must be passed explicitly or created with `new` + `save`. It also runs no validations or callbacks.
-
-### Creating with Relationships
-
-```crystal
-# Create a user first
-author = User.create!(username: "alice", email: "alice@example.com")
-
-# Create a category (new + save so initialize generates the slug)
-tech = Category.new(name: "Technology")
-tech.save!
-
-# Create a post with relationships
-post = Post.create!(
-  title: "My First Post",
-  content: "Hello, world! This is my first blog post.",
-  user_id: author.id.not_nil!,
-  category_id: tech.id,
-  published: true
-)
-
-# Create a comment on the post
-comment = Comment.create!(
-  content: "Welcome to blogging!",
-  post_id: post.id.not_nil!,
-  user_id: author.id
-)
+```bash
+crystal src/crud.cr
 ```
 
-### Creating Multiple Records
-
-```crystal
-# Create sample categories
-categories = ["Technology", "Lifestyle", "Travel", "Food"].map do |name|
-  Category.new(name).tap(&.save!)
-end
-
-puts "Created #{categories.size} categories"
+```text
+Created 3 users, 3 categories, 4 posts, 2 comments
 ```
 
-## Read Operations
+`save!` raises `CQL::RecordNotSaved` when a callback halts the save, and `CQL::ActiveRecord::Validations::ValidationError` for an invalid record. `create!` does not call your `initialize`, so pass every computed value, such as a slug, yourself; it also skips validations and callbacks.
 
-### Finding by ID
+## Step 2: Find records
+
+Add to `src/crud.cr`:
 
 ```crystal
-# find returns nil if not found
-user = User.find(1)
-if user
-  puts "Found: #{user.username}"
-else
-  puts "User not found"
-end
+puts User.find(alice.id!).try(&.username)          # find: nil when missing
+puts User.find_by(email: "jane@example.com").try(&.display_name)
+puts Post.find_by(published: false, user_id: bob.id!).try(&.title)
 
-# find! raises DB::NoResultsError if not found
 begin
-  user = User.find!(999)
+  User.find!(999_999)                                 # find!: raises when missing
 rescue ex : DB::NoResultsError
-  puts "User not found: #{ex.message}"
+  puts "find!: #{ex.message}"
 end
+
+latest = Post.where(published: true).order(created_at: :desc, id: :desc).limit(2).all
+puts "Latest: #{latest.map(&.title)}"
+puts "First user: #{User.first.try(&.username)}, last post: #{Post.last.try(&.title)}"
 ```
 
-### Finding by Attributes
-
-```crystal
-# Find first matching record
-user = User.find_by(email: "alice@example.com")
-puts "Found user: #{user.try(&.username)}"
-
-# Find with multiple conditions
-post = Post.find_by(published: true, user_id: 1)
+```text
+...
+alice
+Jane
+Draft Ideas
+find!: No records found with id=999999
+Latest: ["A Weekend in Lisbon", "Crystal Macros"]
+First user: alice, last post: Draft Ideas
 ```
 
-### Querying Multiple Records
+## Step 3: Filter with blocks and associations
+
+Add to `src/crud.cr`:
 
 ```crystal
-# Get all records
-all_users = User.all
-puts "Total users: #{all_users.size}"
-
-# Filter with where
-active_users = User.where(active: true).all
-published_posts = Post.where(published: true).all
-
-# Chain conditions
-recent_published = Post
-  .where(published: true)
-  .order(created_at: :desc)
-  .limit(10)
-  .all
-
-# Get first/last
-first_user = User.first
-last_post = Post.last
-```
-
-### Complex Queries
-
-```crystal
-# Multiple conditions
-posts = Post
-  .where(published: true)
-  .where(user_id: author.id)
-  .order(views_count: :desc)
-  .all
-
-# Using blocks for complex conditions (bare column names, typed against the schema)
-popular_posts = Post.where { views_count > 100 }.all
-recent_posts = Post.where { created_at > 1.week.ago }.all
+# Block conditions use the model's typed columns
+popular = Post.where { views_count > 100 }.order(views_count: :desc).all
+puts "Popular: #{popular.map(&.title)}"
 extremes = Post.where { (views_count < 5) | (views_count > 1000) }.all
+puts "Extremes: #{extremes.map(&.title)}"
+recent = Post.where(published: true).where { created_at > 1.week.ago }.count
+puts "Published this week: #{recent}"
 
-# Combining conditions
-featured = Post
-  .where(published: true)
-  .where { views_count > 50 }
-  .order(created_at: :desc)
-  .limit(5)
-  .all
-```
-
-### Querying Through Relationships
-
-```crystal
-# Get user's posts
-user = User.find!(1)
-user_posts = user.posts.all
-
-# Filter user's posts at the database
-published_user_posts = Post.where(user_id: user.id!, published: true).all
-
-# Get post's comments
-post = Post.find!(1)
-comments = post.comments.all
-
-# Get posts in a category
-category = Category.find_by(slug: "technology")
-tech_posts = Post.where(category_id: category.id!, published: true).all if category
-```
-
-To filter on the other side of an association, join it and write the condition against the joined table:
-
-```crystal
+# Through associations
+puts "Alice wrote #{alice.posts.count} posts; the intro has #{intro.comments.all.size} comments"
+puts "Tech posts: #{Post.where(category_id: tech.id!, published: true).count}"
 by_alice = Post.query.joins(:user) { user.username == "alice" }.to_a
+puts "Joined on author: #{by_alice.map(&.title)}"
 ```
 
-Inside these blocks, bare names such as `user` or `views_count` are the model's typed columns and associations. A local variable with the same name takes precedence, so don't have a local called `user` in scope when you write `user.username`.
+```text
+...
+Popular: ["Crystal Macros", "Getting Started with Crystal"]
+Extremes: ["Crystal Macros", "Draft Ideas"]
+Published this week: 3
+Alice wrote 2 posts; the intro has 2 comments
+Tech posts: 2
+Joined on author: ["Getting Started with Crystal", "Crystal Macros"]
+```
 
-### Pagination
+Inside a block, bare names such as `views_count` or `user` are the model's columns and joined associations. A local variable with the same name wins, so keep no local called `user` in scope when you write `user.username`.
+
+## Step 4: Paginate
+
+Add to `src/crud.cr`:
 
 ```crystal
-# Built-in helper (no filter and no ORDER BY, so the database picks the row order)
-first_page = Post.page(1, 10)
-
-# Filtered and ordered pagination
-page = 1
-per_page = 10
-
-posts = Post
-  .where(published: true)
-  .order(created_at: :desc)
-  .limit(per_page)
-  .offset((page - 1) * per_page)
-  .all
-
-# Get total for pagination info
+page, per_page = 2, 2
+page_two = Post.where(published: true).order(created_at: :desc, id: :desc)
+  .limit(per_page).offset((page - 1) * per_page).all
 total = Post.where(published: true).count
-total_pages = (total / per_page.to_f).ceil.to_i
+puts "Page #{page} of #{(total / per_page.to_f).ceil.to_i}: #{page_two.map(&.title)}"
+puts "Post.page(1, 3): #{Post.page(1, 3).size} posts"
 ```
 
-## Update Operations
-
-### Updating a Single Record
-
-```crystal
-# Method 1: Change attributes and save
-user = User.find(1)
-if user
-  user.first_name = "Alice"
-  user.last_name = "Smith"
-  user.save
-  puts "User updated"
-end
-
-# Method 2: update! with attributes
-post = Post.find(1)
-post.try(&.update!(published: true, views_count: 100_i64))
-
-# Method 3: Update by primary key without loading the record
-Post.update!(1_i64, published: true)
+```text
+...
+Page 2 of 2: ["Getting Started with Crystal"]
+Post.page(1, 3): 3 posts
 ```
 
-### Incrementing Values
+`Post.page(number, per_page)` neither filters nor orders, so the database picks the row order.
+
+## Step 5: Count and aggregate
+
+Add to `src/crud.cr`:
 
 ```crystal
-# Increment view count
-post = Post.find(1)
-if post
-  post.views_count += 1
-  post.save
-end
+published = Post.where(published: true)
+puts "Views: total #{published.sum(:views_count)}, average #{published.avg(:views_count)}, " \
+     "max #{published.max(:views_count)}, min #{published.min(:views_count)}"
 
-# Or use a custom method (defined in model)
-post.try(&.increment_views!)
-```
-
-### Bulk Updates
-
-```crystal
-# Publish all draft posts by a user with a single UPDATE statement
-BlogSchema.update
-  .table(:posts)
-  .set(published: true)
-  .where(user_id: 1, published: false)
-  .commit
-
-# Deactivate users who haven't posted (loads each user: fine for small tables)
-User.where(active: true).each do |user|
-  if user.posts.count == 0
-    user.active = false
-    user.save
-  end
-end
-```
-
-## Delete Operations
-
-### Deleting a Single Record
-
-```crystal
-# Method 1: Find and delete
-user = User.find(1)
-user.try(&.delete!)
-puts "User deleted"
-
-# delete! runs the before_destroy / after_destroy callbacks and
-# returns true when a row was removed
-post = Post.find(1)
-post.try(&.delete!)
-
-# Delete by primary key without loading the record
-Post.delete!(2_i64)
-```
-
-### Deleting with Conditions
-
-```crystal
-# Delete all comments on a post (one DELETE statement)
-Comment.delete_by!(post_id: 1)
-
-# Delete all unpublished posts
-Post.delete_by!(published: false)
-
-# Delete old comments with the lower-level delete builder
-BlogSchema.delete
-  .from(:comments)
-  .where { comments.created_at < 1.year.ago }
-  .commit
-```
-
-### Cascading Deletes
-
-Remember our foreign key setup? Deleting a user cascades to their posts, which cascade to comments:
-
-```crystal
-# This deletes the user AND all their posts AND all comments on those posts
-user = User.find(1)
-user.try(&.delete!)
-```
-
-The cascade comes from the `ON DELETE CASCADE` foreign keys, so the database performs it. (The `dependent:` option of `has_many` is not what removes the rows here.) PostgreSQL and MySQL always enforce foreign keys; SQLite only does when the connection asks for it, which is why Part 1 put `?foreign_keys=1` on the database URL.
-
-## Aggregations
-
-### Counting
-
-```crystal
-# Count all
-total_users = User.count
-total_posts = Post.count
-
-# Count with conditions
-published_count = Post.where(published: true).count
-active_users = User.where(active: true).count
-
-# Count through relationships
-user = User.find(1)
-post_count = user.posts.count if user
-```
-
-### Sum, Average, Min, Max
-
-```crystal
-# Total views across all published posts
-total_views = Post.where(published: true).sum(:views_count)
-
-# Average views
-avg_views = Post.where(published: true).avg(:views_count)
-
-# Most views
-max_views = Post.where(published: true).max(:views_count)
-
-# Least views
-min_views = Post.where(published: true).min(:views_count)
-```
-
-### Grouping and Statistics
-
-```crystal
-# Posts per category
-Category.all.each do |category|
-  count = Post.where(category_id: category.id!, published: true).count
-  puts "#{category.name}: #{count} posts"
-end
-
-# Most active authors: one GROUP BY query instead of one count per user
-counts = BlogSchema.query
+# Posts per author in one GROUP BY query, instead of one count per user
+counts = AppSchema.query
   .from(:posts)
   .select(:user_id, count: :id)
   .group(:user_id)
   .all(as: {Int64, Int64})
-
-counts.sort_by { |_, total| -total }.first(5).each do |user_id, total|
-  puts "#{User.find!(user_id).display_name}: #{total} posts"
+counts.sort_by { |_, total| -total }.each do |user_id, total|
+  puts "  #{User.find!(user_id).display_name}: #{total} posts"
 end
 ```
 
-## Batch Processing
-
-For large datasets, process records in batches:
-
-```crystal
-# Process all posts in batches
-Post.find_each(batch_size: 100) do |post|
-  # Process each post
-  puts "Processing: #{post.title}"
-end
+```text
+...
+Views: total 1390, average 463.3333333333333, max 1200, min 40
+  Alice: 2 posts
+  bob: 1 posts
+  Jane: 1 posts
 ```
 
-## Practical Examples
+## Step 6: Update records
 
-### Blog Dashboard Data
+Add to `src/crud.cr`:
 
 ```crystal
-def dashboard_stats
-  {
-    total_users: User.count,
-    active_users: User.where(active: true).count,
-    total_posts: Post.count,
-    published_posts: Post.where(published: true).count,
-    draft_posts: Post.where(published: false).count,
-    total_comments: Comment.count,
-    total_views: Post.sum(:views_count)
-  }
-end
+bob.first_name = "Bob"
+bob.save                                               # assign, then save
+intro.update!(views_count: 151_i64)                    # assign and write in one call
+Post.update!(intro.id!, published: true)               # by primary key, without loading
+intro.increment_views!                                 # the model method from Part 3
 
-stats = dashboard_stats
-puts "Users: #{stats[:total_users]} (#{stats[:active_users]} active)"
-puts "Posts: #{stats[:published_posts]} published, #{stats[:draft_posts]} drafts"
-puts "Total views: #{stats[:total_views]}"
+drafts = AppSchema.update.table(:posts).set(published: true).where(user_id: bob.id!, published: false).commit
+puts "Bob is #{User.find!(bob.id!).full_name}; intro has #{Post.find!(intro.id!).views_count} views; published #{drafts.rows_affected} draft(s)"
 ```
 
-### Recent Activity Feed
-
-```crystal
-def recent_activity(limit = 10)
-  posts = Post.where(published: true)
-              .order(created_at: :desc)
-              .limit(limit)
-              .all
-
-  posts.map do |post|
-    {
-      type: "post",
-      title: post.title,
-      author: post.user.try(&.display_name) || "Unknown",
-      date: post.created_at
-    }
-  end
-end
+```text
+...
+Bob is Bob; intro has 152 views; published 1 draft(s)
 ```
 
-### Search Posts
+`AppSchema.update` writes many rows in one `UPDATE` statement, without loading them.
+
+## Step 7: Search
+
+Add to `src/crud.cr`:
 
 ```crystal
-def search_posts(query : String)
+def search_posts(term : String)
   Post.where(published: true)
-      .where { title.like("%#{query}%") | content.like("%#{query}%") }
-      .order(views_count: :desc)
-      .all
+    .where { title.like("%#{term}%") | content.like("%#{term}%") }
+    .order(views_count: :desc)
+    .all
 end
-
-results = search_posts("crystal")
-puts "Found #{results.size} posts matching 'crystal'"
+puts "Search 'crystal': #{search_posts("Crystal").map(&.title)}"
 ```
 
-## Summary
+```text
+...
+Search 'crystal': ["Crystal Macros", "Getting Started with Crystal"]
+```
 
-In this part, you learned:
+The pattern is bound as a parameter, so user input is safe to pass.
 
-1. **Create**: `new` + `save`/`save!`, and `create!`
-2. **Read**: `find`, `find_by`, `where`, `order`, `limit`
-3. **Update**: attribute assignment + `save`, `update!`, bulk updates
-4. **Delete**: `delete!`, `delete_by!`, bulk deletes
-5. **Aggregate**: `count`, `sum`, `avg`, `min`, `max`
-6. **Batch**: `find_each` for large datasets
+## Step 8: Process records in batches
 
-## Next Steps
+Add to `src/crud.cr`:
 
-In [Part 5: Adding Features](05-adding-features.md), you'll add validations, callbacks, and performance monitoring to complete your blog engine.
+```crystal
+Post.find_each(batch_size: 2) { |post| puts "  batch: #{post.title}" }
+```
 
----
+```text
+...
+  batch: Getting Started with Crystal
+  batch: Crystal Macros
+  batch: A Weekend in Lisbon
+  batch: Draft Ideas
+```
 
-**Tutorial Navigation:**
-- [Part 1: Project Setup](01-project-setup.md)
-- [Part 2: Database Schema](02-database-schema.md)
-- [Part 3: Models and Relationships](03-models-and-relationships.md)
-- Part 4: CRUD Operations (current)
-- [Part 5: Adding Features](05-adding-features.md)
+`find_each` loads `batch_size` rows per query, so memory stays flat on large tables.
+
+## Step 9: Delete records
+
+Add to `src/crud.cr`:
+
+```crystal
+puts "delete!: #{intro.comments.all.first.delete!}"          # one record, runs destroy callbacks
+puts "delete_by!: #{Comment.delete_by!(post_id: intro.id!).rows_affected}"  # one DELETE statement
+puts "Post.delete!: #{Post.delete!(intro.id!).rows_affected}"
+AppSchema.delete.from(:comments).where { comments.created_at < 1.year.ago }.commit
+
+jane.delete!                                                 # cascades to her posts and their comments
+puts "After deleting Jane: #{Post.count} posts"
+```
+
+```text
+...
+delete!: true
+delete_by!: 1
+Post.delete!: 1
+After deleting Jane: 2 posts
+```
+
+`delete!` returns `true` when it removed a row. Deleting Jane removes her posts because of the `ON DELETE CASCADE` foreign key from Part 2: the database does it, not a `has_many ... dependent:` option. PostgreSQL and MySQL always enforce foreign keys; SQLite does only with `?foreign_keys=1` on the URL, as Part 1 set.
+
+Next: [Part 5: Adding Features](05-adding-features.md) adds validations, callbacks, transactions and seed data.

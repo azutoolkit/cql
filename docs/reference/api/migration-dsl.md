@@ -183,7 +183,7 @@ Methods available inside `schema.alter :name do ... end`. Statements run in orde
 | **`drop_column(name)`** | | An undeclared column only logs an error |
 | **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column |
 | **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
-| **`rename_table(new_name)`** | | Also renames the schema entry |
+| **`rename_table(new_name)`** | | Renames the table object at once, but every statement renders after the block, so other operations in the same block use the new name before the rename runs. Give it its own `schema.alter` block. |
 | **`create_index(name : Symbol, columns : Array(Symbol), unique: false)`** | | No `IF NOT EXISTS` |
 | **`drop_index(name : Symbol)`** | | |
 | **`foreign_key(columns or column, references:, references_columns: nil, name : Symbol? = nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` `[:id]`, name `fk_<table>_<columns>` | Raises `DB::Error` on SQLite |
@@ -201,7 +201,10 @@ schema.alter :users do
   drop_foreign_key :fk_users_team_id
   drop_index :idx_users_phone
   drop_column :phone
-  rename_table :members
+end
+
+schema.alter :users do
+  rename_table :members # alone: see the note on rename_table
 end
 ```
 

@@ -1,31 +1,21 @@
 # Explanation
 
-**Understanding-oriented** discussions that clarify concepts, explain design decisions, and provide background knowledge. Read these to deepen your understanding of CQL and ORMs in general.
+Background on how CQL works and why it is designed the way it is. For step-by-step tasks, see the [How-to Guides](../how-to/README.md).
 
 ## Concepts
 
-Fundamental concepts and ideas:
-
-- [What is an ORM?](concepts/what-is-orm.md) - Understanding Object-Relational Mapping
+- [What is an ORM?](concepts/what-is-orm.md): what object-relational mapping does, what it buys you, and CQL's exits when it gets in the way
 
 ## Design Patterns
 
-Architectural patterns supported by CQL:
-
-- [Active Record Pattern](design-patterns/active-record.md) - The primary pattern in CQL
-- [Repository Pattern](design-patterns/repository.md) - Alternative data access approach
+- [Active Record Pattern](design-patterns/active-record.md): the pattern CQL's models follow
+- [Repository Pattern](design-patterns/repository.md): `CQL::Repository` and repositories written around a model
 
 ## Query DSL
 
-- [Typed Query DSL: Before and After](dsl-before-after.md) - What the typed DSL catches at compile time
-- [Safety Guardrails](safety-guardrails.md) - Parameter binding, identifier validation and compile-time checks
+- [Typed Query DSL: Before and After](dsl-before-after.md): what the typed DSL checks at compile time, side by side with the old forms
+- [Safety Guardrails](safety-guardrails.md): parameter binding, identifier validation and compile-time checks
 
 ## Architecture
 
-How CQL works internally:
-
-- [How CQL Keeps Queries Fast](performance-design.md) - What happens on each query, what is opt-in, and what is computed once
-
----
-
-**Ready to apply this knowledge?** Head to the [How-to Guides](../how-to/README.md) for practical instructions.
+- [How CQL Keeps Queries Fast](performance-design.md): the stages of a query, what is off by default, and what is computed once

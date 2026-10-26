@@ -1,31 +1,16 @@
 # Part 3: Models and Relationships
 
-In this part, you'll create Active Record models for your blog engine and define the relationships between them. You'll learn how to map database tables to Crystal classes and navigate between related records.
+Map the four tables to model classes, connect them with associations, and try them out.
 
-## What You'll Learn
+**You need:** the project from [Part 2](02-database-schema.md), with `src/schemas/app_schema.cr` generated. Every model points at that `AppSchema` with `db_context`.
 
-- Creating Active Record models
-- Defining model properties
-- Setting up belongs_to relationships
-- Setting up has_many relationships
-- Adding custom model methods
-- Navigating between related records
-
-## Prerequisites
-
-- Completed [Part 2: Database Schema](02-database-schema.md)
-
-## Step 0: Models Use the Generated Schema
-
-In Part 2 the migrator generated `src/schemas/blog_schema.cr`, which defines `BlogSchema`. Models point at it with `db_context`, so every model below says `db_context BlogSchema, :users` (and so on).
-
-## Step 1: Create the User Model
+## Step 1: Create the User model
 
 ```crystal
 # src/models/user.cr
 class User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context BlogSchema, :users
+  include CQL::ActiveRecord::Model(Int64) # adds the id primary key
+  db_context AppSchema, :users
 
   property username : String
   property email : String
@@ -35,28 +20,15 @@ class User
   property created_at : Time?
   property updated_at : Time?
 
-  # Relationships
   has_many :posts, Post, :user_id
   has_many :comments, Comment, :user_id
 
-  def initialize(
-    @username : String,
-    @email : String,
-    @first_name : String? = nil,
-    @last_name : String? = nil,
-    @active : Bool = true
-  )
+  def initialize(@username : String, @email : String,
+                 @first_name : String? = nil, @last_name : String? = nil, @active : Bool = true)
   end
 
-  # Custom methods
   def full_name : String
-    if first_name && last_name
-      "#{first_name} #{last_name}"
-    elsif name = first_name
-      name
-    else
-      username
-    end
+    [first_name, last_name].compact.join(" ").presence || username
   end
 
   def display_name : String
@@ -65,86 +37,61 @@ class User
 end
 ```
 
-Key points:
-- `include CQL::ActiveRecord::Model(Int64)` - Makes this an Active Record model with Int64 primary key
-- `db_context BlogSchema, :users` - Connects model to the `users` table in the generated `BlogSchema`
-- `property` defines model attributes matching database columns (the `id` primary key is provided by the `Model(Int64)` module, so it is not declared)
-- Models are classes rather than structs so that `save` can assign the new `id` to the instance you hold
-- `has_many` defines one-to-many relationships
-- Custom methods add business logic
+Each `property` maps the column of the same name. Models are classes, not structs, so that `save` can set the new `id` on the instance you hold.
 
-## Step 2: Create the Category Model
+## Step 2: Create the Category model
 
 ```crystal
 # src/models/category.cr
 class Category
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogSchema, :categories
+  db_context AppSchema, :categories
 
   property name : String
   property slug : String
   property created_at : Time?
   property updated_at : Time?
 
-  # Relationships
   has_many :posts, Post, :category_id
 
   def initialize(@name : String, slug : String? = nil)
     @slug = slug || Category.generate_slug(@name)
   end
 
-  # Generate URL-friendly slug from name
+  # "Web Development" -> "web-development"
   def self.generate_slug(text : String) : String
-    text.downcase
-        .gsub(/[^a-z0-9\s-]/, "")
-        .gsub(/\s+/, "-")
-        .gsub(/-+/, "-")
-        .strip("-")
+    text.downcase.gsub(/[^a-z0-9\s-]/, "").gsub(/\s+/, "-").gsub(/-+/, "-").strip("-")
   end
 end
 ```
 
-The `generate_slug` method automatically creates URL-friendly slugs from category names.
-
-## Step 3: Create the Post Model
+## Step 3: Create the Post model
 
 ```crystal
 # src/models/post.cr
 class Post
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogSchema, :posts
+  db_context AppSchema, :posts
 
   property title : String
   property content : String
   property published : Bool = false
   property views_count : Int64 = 0_i64
   property user_id : Int64
-  property category_id : Int64?
+  property category_id : Int64? # nilable: a post may have no category
   property created_at : Time?
   property updated_at : Time?
 
-  # Relationships
   belongs_to :user, User, :user_id
   belongs_to :category, Category, :category_id
   has_many :comments, Comment, :post_id
 
-  def initialize(
-    @title : String,
-    @content : String,
-    @user_id : Int64,
-    @category_id : Int64? = nil,
-    @published : Bool = false,
-    @views_count : Int64 = 0_i64
-  )
+  def initialize(@title : String, @content : String, @user_id : Int64,
+                 @category_id : Int64? = nil, @published : Bool = false, @views_count : Int64 = 0_i64)
   end
 
-  # Custom methods
   def published? : Bool
     published
-  end
-
-  def draft? : Bool
-    !published
   end
 
   def word_count : Int32
@@ -152,15 +99,11 @@ class Post
   end
 
   def reading_time_minutes : Int32
-    (word_count / 200.0).ceil.to_i  # Assuming 200 words per minute
+    (word_count / 200.0).ceil.to_i # 200 words per minute
   end
 
   def excerpt(length : Int32 = 150) : String
-    if content.size <= length
-      content
-    else
-      content[0, length].rstrip + "..."
-    end
+    content.size <= length ? content : content[0, length].rstrip + "..."
   end
 
   def increment_views!
@@ -170,75 +113,53 @@ class Post
 end
 ```
 
-Key points:
-- `belongs_to` defines many-to-one relationships
-- `category_id` is nilable (`Int64?`) because category is optional
-- Custom methods provide useful functionality like word count and excerpts
-
-## Step 4: Create the Comment Model
+## Step 4: Create the Comment model
 
 ```crystal
 # src/models/comment.cr
 class Comment
   include CQL::ActiveRecord::Model(Int64)
-  db_context BlogSchema, :comments
+  db_context AppSchema, :comments
 
   property content : String
   property post_id : Int64
-  property user_id : Int64?  # Nullable for anonymous comments
+  property user_id : Int64? # nil for anonymous comments
   property created_at : Time?
   property updated_at : Time?
 
-  # Relationships
   belongs_to :post, Post, :post_id
   belongs_to :user, User, :user_id
 
-  def initialize(
-    @content : String,
-    @post_id : Int64,
-    @user_id : Int64? = nil
-  )
-  end
-
-  # Custom methods
-  def anonymous? : Bool
-    user_id.nil?
+  def initialize(@content : String, @post_id : Int64, @user_id : Int64? = nil)
   end
 
   def author_name : String
-    if u = user
-      u.display_name
-    else
-      "Anonymous"
-    end
+    user.try(&.display_name) || "Anonymous"
   end
 end
 ```
 
-## Step 5: Update the Main File
+## Step 5: Load the models in the entry point
 
-Update `blog_engine.cr` to require all models:
+Replace `src/blog_engine.cr`:
 
 ```crystal
 # src/blog_engine.cr
 require "./database"
-require "./schemas/blog_schema"
-require "./models/user"
-require "./models/category"
-require "./models/post"
-require "./models/comment"
+require "./schemas/app_schema"
+require "./models/*"
 require "../migrations/*"
 
 module BlogEngine
   VERSION = "0.1.0"
 
   def self.setup
-    BlogSchema.exec("SELECT 1")
+    AppSchema.exec("SELECT 1")
     puts "Database connected"
   end
 
   def self.migrate
-    migrator = BlogSchema.migrator(MIGRATOR_CONFIG)
+    migrator = AppSchema.migrator(MIGRATOR_CONFIG)
     pending = migrator.pending_migrations.size
 
     if pending > 0
@@ -252,13 +173,11 @@ module BlogEngine
 end
 ```
 
-From now on the migrator runs against `BlogSchema` too (`BlogSchema.migrator(...)` above), because it already knows the existing tables. That matters for later migrations that `alter` or drop a table: `BlogDB`'s empty schema block would raise `Table 'posts' not found` for those.
+The migrator now runs on `AppSchema` too, because it knows the existing tables. Later migrations that `alter` or drop a table need that: on the empty `AppDB` they raise `Table 'posts' not found`.
 
-Note: associations may point at models that are required later (for example `User` mentions `Post` before `post.cr` is loaded). All the model files just have to be required before compilation finishes; CQL checks every `belongs_to` and `has_many` then, and reports a missing target model or a foreign key whose type does not match the target's primary key as a compile-time error.
+Associations may name a model that is required later, such as `User` naming `Post`. CQL checks every `belongs_to` and `has_many` once all files are loaded, and reports a missing target model, or a foreign key whose type does not match the target's primary key, as a compile-time error.
 
-## Step 6: Test the Models
-
-Create a test script:
+## Step 6: Try the models
 
 ```crystal
 # src/test_models.cr
@@ -266,149 +185,65 @@ require "./blog_engine"
 
 BlogEngine.setup
 
-puts "Testing Models"
-puts "=============="
+alice = User.new(username: "alice", email: "alice@example.com", first_name: "Alice", last_name: "Johnson")
+alice.save!
+puts "Created user: #{alice.full_name} (ID: #{alice.id})"
 
-# Create a user
-alice = User.new(
-  username: "alice",
-  email: "alice@example.com",
-  first_name: "Alice",
-  last_name: "Johnson"
-)
+tech = Category.new("Technology")
+tech.save!
+puts "Created category: #{tech.name} (slug: #{tech.slug})"
 
-if alice.save
-  puts "Created user: #{alice.full_name} (ID: #{alice.id})"
-else
-  puts "Failed to create user" # a before_* callback halted the save
-  exit 1
-end
-
-# Create a category
-tech = Category.new(name: "Technology")
-if tech.save
-  puts "Created category: #{tech.name} (slug: #{tech.slug})"
-end
-
-# Create a post
 post = Post.new(
   title: "Getting Started with Crystal",
   content: "Crystal is a wonderful programming language...",
-  user_id: alice.id.not_nil!,
+  user_id: alice.id!,
   category_id: tech.id,
   published: true
 )
+post.save!
+puts "Created post: #{post.title} (#{post.word_count} words, #{post.reading_time_minutes} min read)"
 
-if post.save
-  puts "Created post: #{post.title}"
-  puts "  Word count: #{post.word_count}"
-  puts "  Reading time: #{post.reading_time_minutes} min"
-end
+comment = Comment.new(content: "Great article!", post_id: post.id!, user_id: alice.id)
+comment.save!
+puts "Created comment by: #{comment.author_name}"
 
-# Create a comment
-comment = Comment.new(
-  content: "Great article!",
-  post_id: post.id.not_nil!,
-  user_id: alice.id
-)
-
-if comment.save
-  puts "Created comment by: #{comment.author_name}"
-end
-
-# Test relationships
-puts ""
-puts "Testing Relationships"
-puts "====================="
-
-# User -> Posts
-puts "#{alice.full_name}'s posts:"
-alice.posts.all.each do |p|
-  puts "  - #{p.title}"
-end
-
-# Post -> User (author)
-puts ""
+puts "Alice's posts: #{alice.posts.all.map(&.title)}"
 puts "Post author: #{post.user.try(&.full_name)}"
-
-# Post -> Category
 puts "Post category: #{post.category.try(&.name)}"
+puts "Post comments: #{post.comments.count}"
 
-# Post -> Comments
-puts "Post comments: #{post.comments.all.size}"
-
-# Comment -> User
-puts "Comment author: #{comment.author_name}"
-
-puts ""
-puts "All tests passed!"
+# Clean up so the script can run again: the ON DELETE CASCADE keys remove Alice's posts and comments
+alice.delete!
+tech.delete!
+puts "Cleaned up: #{Post.count} posts, #{Comment.count} comments left"
 ```
 
-Run it:
-
-```shell
+```bash
 crystal src/test_models.cr
 ```
 
-## Understanding Relationships
-
-### belongs_to
-
-```crystal
-belongs_to :user, User, :user_id
+```text
+Database connected
+Created user: Alice Johnson (ID: 1)
+Created category: Technology (slug: technology)
+Created post: Getting Started with Crystal (6 words, 1 min read)
+Created comment by: Alice
+Alice's posts: ["Getting Started with Crystal"]
+Post author: Alice Johnson
+Post category: Technology
+Post comments: 1
+Cleaned up: 0 posts, 0 comments left
 ```
 
-This creates a `user` method that returns the associated User (or nil):
+The ID grows on each run.
 
-```crystal
-post = Post.find!(1)
-author = post.user  # Returns User?
-```
+## What the associations add
 
-### has_many
+| Declaration | Adds | Use |
+| :--- | :--- | :--- |
+| `belongs_to :user, User, :user_id` | `post.user`, a `User?` | `post.user.try(&.full_name)` |
+| `has_many :posts, Post, :user_id` | `user.posts`, a collection scoped to the user | `user.posts.all` (an `Array(Post)`), `user.posts.count` (a `COUNT(*)` query) |
 
-```crystal
-has_many :posts, Post, :user_id
-```
+To filter one user's posts in the database, query the model: `Post.where(user_id: user.id!, published: true).all`.
 
-This creates a `posts` method that returns a collection scoped to the user:
-
-```crystal
-user = User.find!(1)
-all_posts = user.posts.all           # Array(Post)
-count = user.posts.count             # COUNT(*) query
-
-# Filter at the database with the model itself
-published = Post.where(user_id: user.id!, published: true).all
-```
-
-## Model Best Practices
-
-1. **Keep models focused**: Business logic belongs in models, not controllers
-2. **Use meaningful method names**: `published?` is clearer than `is_published`
-3. **Validate early**: Add validations to catch errors before database operations
-4. **Handle nil safely**: Use `try(&.method)` when accessing optional relationships
-5. **Add useful computed properties**: Like `full_name`, `word_count`, etc.
-
-## Summary
-
-In this part, you:
-
-1. Created four Active Record models: User, Category, Post, Comment
-2. Defined properties matching database columns
-3. Set up belongs_to and has_many relationships
-4. Added custom methods for business logic
-5. Tested model creation and relationship navigation
-
-## Next Steps
-
-In [Part 4: CRUD Operations](04-crud-operations.md), you'll learn how to create, read, update, and delete records efficiently, including bulk operations and querying patterns.
-
----
-
-**Tutorial Navigation:**
-- [Part 1: Project Setup](01-project-setup.md)
-- [Part 2: Database Schema](02-database-schema.md)
-- Part 3: Models and Relationships (current)
-- [Part 4: CRUD Operations](04-crud-operations.md)
-- [Part 5: Adding Features](05-adding-features.md)
+Next: [Part 4: CRUD Operations](04-crud-operations.md) creates, queries, updates and deletes records.

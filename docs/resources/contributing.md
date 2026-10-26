@@ -27,11 +27,11 @@ Without a MySQL client, one spec errors because `mysqldump` is not installed (`s
 
 `.github/workflows/crystal.yml` runs on every push and pull request to `master`, in the `crystallang/crystal:1.22.0` image:
 
-1. Installs SQLite, the PostgreSQL client and the MySQL client.
-2. `shards install --ignore-crystal-version`.
-3. `crystal tool format --check ./src`.
-4. `crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec`.
-5. `crystal spec` against a PostgreSQL service, with `DATABASE_URL=postgres://example:example@postgres:5432/example`.
+- installs SQLite, the PostgreSQL client and the MySQL client;
+- `shards install --ignore-crystal-version`;
+- `crystal tool format --check ./src`;
+- `crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec`;
+- `crystal spec` against a PostgreSQL service, with `DATABASE_URL=postgres://example:example@postgres:5432/example`.
 
 After a green build on `master`, the same workflow bumps the version in `shard.yml` and tags a release. `.github/workflows/db-compat.yml` compiles CQL against every supported `crystal-db` version with `script/check_db_compat 0.13.1 0.14.0 0.15.0 latest`, also weekly.
 
@@ -56,9 +56,6 @@ DATABASE_URL=postgres://example:example@localhost:5432/example crystal spec
 
 ## Open a Pull Request
 
-1. Fork the repository and create a branch from `master`.
-2. Make the change with its specs, changelog entry and docs.
-3. Run the checks above.
-4. Push the branch and open a pull request against `master`. It is merged after review and a green CI run.
+Branch from `master` in your fork, ship the change with its specs, changelog entry and docs, run the checks above, and open the pull request against `master`. It is merged after review and a green CI run.
 
 Questions about a contribution can go in an [issue](https://github.com/azutoolkit/cql/issues).

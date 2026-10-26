@@ -1,75 +1,26 @@
 # Community
 
-Get help and connect with other CQL users.
+CQL is developed in the open in the [azutoolkit/cql](https://github.com/azutoolkit/cql) repository on GitHub. Questions, bug reports and feature requests all go through its issue tracker.
 
-## Getting Help
+## Get Help
 
-### GitHub Issues
+| Need | Where |
+| :--- | :--- |
+| A question, a bug or a feature request | [GitHub issues](https://github.com/azutoolkit/cql/issues), opened from the [issue templates](https://github.com/azutoolkit/cql/issues/new/choose) |
+| These docs | [azutopia.gitbook.io/cql](https://azutopia.gitbook.io/cql), built from the repository's `docs/` folder |
+| What changed in a version | [Releases](https://github.com/azutoolkit/cql/releases), and `CHANGELOG.md` in the repository root, whose **Upgrade notes** list the changes an application may need to act on |
 
-Report bugs or request features on the [CQL GitHub repository](https://github.com/azutoolkit/cql/issues).
+A useful bug report names the CQL, Crystal and database versions and includes the smallest code that reproduces the problem, the expected behavior and the full error output. [Contributing](contributing.md) describes how to send a fix.
 
-When reporting issues, please include:
-- CQL version
-- Crystal version
-- Database type and version
-- Minimal code to reproduce the issue
-- Error messages and stack traces
+## Related Projects
 
-### GitHub Discussions
+- [Azu](https://github.com/azutoolkit/azu), a toolkit from the same organization. `examples/framework-integration/azu_query_cache_demo.cr` in the CQL repository shows CQL's per-request query cache middleware written for it.
 
-For questions and discussions, use [GitHub Discussions](https://github.com/azutoolkit/cql/discussions).
+## Crystal and Database Documentation
 
-## Contributing
-
-### How to Contribute
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Write or update tests
-5. Submit a pull request
-
-### Code Style
-
-Follow Crystal's standard style guide. Run `crystal tool format src spec` before committing; CI runs `crystal tool format --check`.
-
-### Running Tests
-
-```shell
-shards install --ignore-crystal-version
-crystal spec
-```
-
-See the [contributing guide](contributing.md) for the full workflow.
-
-### Documentation
-
-Documentation improvements are always welcome. The docs are in the `/docs` directory.
-
-## Resources
-
-### Crystal Language
-
-- [Crystal Language](https://crystal-lang.org/) - Official Crystal website
-- [Crystal API Docs](https://crystal-lang.org/api/) - Standard library documentation
-- [Crystal Forum](https://forum.crystal-lang.org/) - Community forum
-
-### Database Documentation
-
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [MySQL Documentation](https://dev.mysql.com/doc/)
-- [SQLite Documentation](https://www.sqlite.org/docs.html)
+- [Crystal](https://crystal-lang.org/), its [API reference](https://crystal-lang.org/api/) and the [Crystal forum](https://forum.crystal-lang.org/)
+- [PostgreSQL](https://www.postgresql.org/docs/), [MySQL](https://dev.mysql.com/doc/), [SQLite](https://www.sqlite.org/docs.html) and [CockroachDB](https://www.cockroachlabs.com/docs/)
 
 ## Support the Project
 
-### Star on GitHub
-
-If you find CQL useful, consider starring the [repository](https://github.com/azutoolkit/cql).
-
-### Spread the Word
-
-Share your experience with CQL on social media or write blog posts about it.
-
-### Contribute Code
-
-Bug fixes, new features, and documentation improvements are always welcome.
+Star the [repository](https://github.com/azutoolkit/cql) if CQL is useful to you, and send fixes or documentation improvements through [Contributing](contributing.md).

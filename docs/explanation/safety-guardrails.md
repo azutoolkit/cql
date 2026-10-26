@@ -14,9 +14,9 @@ CQL makes the unsafe version of a query hard to write. This page explains each g
 A value passed to `where`, `insert`, `update`, `delete` or the typed DSL never becomes part of the SQL text. The statement holds a placeholder and the value travels separately:
 
 ```crystal
-sql, params = AppDB.query.from(:users).where(name: "admin' OR '1'='1").to_sql
+sql, values = AppDB.query.from(:users).where(name: "admin' OR '1'='1").to_sql
 sql    # => "SELECT users.id, ... FROM users WHERE users.name = ?"
-params # => ["admin' OR '1'='1"]
+values # => ["admin' OR '1'='1"]
 ```
 
 The hostile string stays a string, which is why `to_sql` returns SQL and parameters as a pair.
@@ -39,7 +39,7 @@ Table, column, alias and constraint names are part of the statement's structure,
 
 ### Resolved Against the Schema
 
-Column names given to `where(attr: value)`, `order`, `where_like` and similar methods are looked up in the query's tables. An unknown name raises `ArgumentError` ("Column 'bogus' not found in any tables/aliases: users") before any SQL exists, so `order(params["sort"])` with a bogus value fails instead of injecting. That still leaves two jobs to you: handle the error, and keep an allow list, because a real column the user should not sort by is still a real column.
+Column names given to `where(attr: value)`, `order`, `where_like` and similar methods are looked up in the query's tables. An unknown name raises `ArgumentError` ("Column 'bogus' not found in any tables/aliases: users") before any SQL exists, so `order(params["sort"])` with a bogus value fails instead of injecting. You still handle the error and keep an allow list: a real column the user should not sort by is still a real column.
 
 ### Validated With `CQL::Identifier`
 
@@ -60,7 +60,7 @@ CQL::Identifier.validate!("a b", "alias")
 - CTE names;
 - DDL names: index, foreign key, unique and check constraint names, rename targets, and the table and column names a foreign key references, in `CREATE`/`DROP INDEX`, `ADD`/`DROP FOREIGN KEY`, `RENAME TABLE`/`COLUMN` and the constraints of `CREATE TABLE`. `DROP INDEX` also accepts a schema qualifier.
 
-A name with a hyphen, dot, space or non-ASCII character used to produce broken unquoted SQL; now it fails early with a message. To use such a name, create the object with a plain identifier and rename it in the database by hand.
+A name with a hyphen, dot, space or non-ASCII character fails early with a message instead of producing broken SQL; create such an object with a plain name and rename it in the database by hand.
 
 ### Quoted, When You Opt In
 
@@ -83,7 +83,7 @@ AppDB.query.from(:orders).select(:order).where(order: 1).to_sql
 | PostgreSQL, SQLite, CockroachDB | `"order"` |
 | MySQL | `` `order` `` |
 
-Quoting lets reserved words work as names, such as a column called `order` or a window alias `rank` on MySQL. It is off by default so existing SQL does not change, and it covers queries and DML, not DDL; DDL names rely on validation.
+Quoting lets reserved words such as `order` work as names. It is off by default so existing SQL does not change, and it covers queries and DML, not DDL, whose names rely on validation.
 
 ## Raw SQL Is a Deliberate Exit
 
@@ -101,7 +101,7 @@ Some mistakes cannot be compiled at all:
 | `belongs_to :user, User, :user_id` with `user_id : Int32?` and `User` keyed by `Int64` | ``CQL belongs_to error in Post: foreign key `:user_id` type Int32 does not match User.id! primary key type Int64. Change `:user_id` to Int64 or update the target model primary key type.`` |
 | `where("name = ?", :not_bindable)` | `CQL: Symbol cannot be bound as a SQL parameter (use a DB::Any type: String, Int, Float, Bool, Time, Bytes, nil)` |
 
-A missing foreign key getter and a non-literal association name are reported the same way. The association check also works when the target model is defined later, as long as it is required before compilation finishes.
+A missing foreign key getter and a non-literal association name are reported the same way, even when the target model is defined later in the program.
 
 ## An Opt-In Check Compares Models With the Schema
 
@@ -118,7 +118,7 @@ The compiler does not compare a model with its schema definition. With `CQL_VALI
 
 - It does not sanitize the text of raw fragments or of `Schema#exec`.
 - It does not check authorization. A well-formed query for the wrong tenant is still a valid query.
-- It does not validate identifiers that come from your own code and schema definitions, only the places listed above where a name could plausibly come from outside.
+- It does not validate identifiers from your own code and schema definitions, only the places above where a name could come from outside.
 
 ## Further Reading
 

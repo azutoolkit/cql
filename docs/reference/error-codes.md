@@ -118,7 +118,7 @@ All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain cre
 
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
-| `DB::NoResultsError` | `find!`, `find_by!` (class and `QueryBuilder`); `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, `"No records found with conditions: {email: \"x\"}"`, `"The insert returned no row"` |
+| `DB::NoResultsError` | `find!`, `find_by!` (class and `QueryBuilder`); `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, ``"No records found with conditions: {email: "x"}"``, `"The insert returned no row"` |
 | `NilAssertionError` | `first!` with no matching row | |
 | `Exception` | `QueryBuilder#last!` / `Model.last!` with no matching row | `"No records found"` |
 | `DB::ConnectionRefused` | Opening a connection fails (crystal-db's first connect; the native driver maps transport and TLS failures to it) | |
@@ -137,12 +137,12 @@ There is no `ConfigurationError`, `TableNotFound` or `ColumnNotFound` class. The
 | `insert.into`, `update.table`, `delete.from` / `using` with an unknown table | `"Table users not found"` |
 | `query.from` with an unknown table | `"Table 'users' not found in schema"` |
 | An unknown column in `values` or `set` / in `where` or `select` | `"Column nope not found in users"` / `"Column 'nope' not found in any tables/aliases: users"` |
-| A table, column, index, constraint or foreign key name with characters other than letters, digits and `_` | `"Invalid foreign key name \"bad name\": only letters, digits and underscores are allowed, ..."` |
+| A table, column, index, constraint or foreign key name with characters other than letters, digits and `_` | ``"Invalid foreign key name "bad name": only letters, digits and underscores are allowed, ..."`` |
 | `lock(skip_locked: true, nowait: true)`; `lock(:other)` | `"Use skip_locked or nowait, not both"`, `"Unknown lock mode :other (use :update or :share)"` |
 | `do_update` / `do_nothing` without `on_conflict`, or `on_conflict` without columns | `"Call on_conflict(...) before do_update"` |
-| `Insert#get` without `back` | `"Insert#get needs the columns to return; call `back` first"` |
+| `Insert#get` without `back` | ``"Insert#get needs the columns to return; call `back` first"`` |
 | `foreign_key` with mismatched column counts | `"Number of columns (...) must match number of referenced columns (...)"` |
-| An index name longer than 63 characters | `"Index name \"...\" is longer than 63 characters; give the index a shorter name"` |
+| An index name longer than 63 characters | ``"Index name "..." is longer than 63 characters; give the index a shorter name"`` |
 | `find_each` / `find_in_batches` / `insert_all` with `batch_size <= 0` | `"batch_size must be positive, got 0"` |
 | `preload` after a partial `select` | `"preload is not supported after a partial select"` |
 | A scope called with the wrong arguments or returning a non-query | `"Scope 'active' expects no arguments ..."` |

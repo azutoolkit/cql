@@ -27,7 +27,7 @@ Features that would tax every statement do nothing until you turn them on.
 | Performance monitor (profiler, N+1 detector) | `config.monitor_performance = true`, `CQL::Performance.enable_monitoring`, `CQL::Performance.enable_sql_logging`, `CQL_MONITORING_ENABLED=true`, or `CRYSTAL_ENV` / `CQL_ENV` set to `development` when the monitor is first used | Each statement is timed and recorded, and its SQL is normalized for grouping (at most 512 normalized statements are cached). |
 | SQL log | `CQL.build_schema` with `config.sql_logging = true`, or with development named (`CRYSTAL_ENV=development` or `config.env = "development"`, and `CQL_NO_SQL_LOG` unset); `CQL::Performance.enable_sql_logging`; the monitor's development default | One log line per statement, formatted only when its level is emitted. Bound values are left out unless `logging.include_params` is on. |
 | Telemetry | `CQL::Telemetry.subscribe`, `log_queries` or `alert_on_slow` | One event per statement for each subscriber. Bound values are attached only with `CQL::Telemetry.capture_params = true`. |
-| Per-request query cache | `CQL::Cache::RequestQueryCacheHelper.start_request`, or `RequestQueryCacheHelper.enabled = true` | Results are stored for the request, at most `max_size` entries (1,000 by default). |
+| Per-request query cache | `CQL::Cache::RequestQueryCacheHelper.start_request`, or `RequestQueryCacheHelper.enabled = true` | Each statement is recorded by its SQL and a hash of its values, to count repeats within the request; results are not stored. At most `max_size` entries (1,000 by default). |
 
 An unset `CRYSTAL_ENV` turns none of these on. See the [Configuration Reference](../reference/configuration.md) for every switch.
 
