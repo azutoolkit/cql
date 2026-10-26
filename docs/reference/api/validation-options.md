@@ -6,7 +6,7 @@ description: "Every predicate the validate macro accepts, the value it takes, wh
 
 The default message is what `errors.map(&.message)` returns.
 
-`validate attribute, **options` (for example `validate :name, presence: true, size: 2..50, message: "Name is invalid"`) stores the options per attribute: a second `validate` for the same attribute replaces the first, so put every rule for one attribute in one call. An unknown option or an attribute without a getter is a compile-time error (`CQL validation error in User: ...`).
+`validate attribute, **options` (for example `validate :name, presence: true, size: 2..50, message: "Name is invalid"`) adds rules for the attribute; several calls on one attribute all apply. An unknown option or an attribute without a getter is a compile-time error (`CQL validation error in User: ...`).
 
 ## Predicates
 
@@ -26,7 +26,7 @@ The default message is what `errors.map(&.message)` returns.
 | **`confirmation`** | `Symbol` (another getter) | the two getters are equal | `password_confirmation confirmation doesn't match` |
 | **`accept`** | `true`, a value, or an `Array` | `true`: one of `true "true" "1" "on" "yes"`; otherwise equal to the value or in the array | `terms must be accepted` |
 | **`message`** | `String` | | Replaces the default message of every failing rule in that call |
-| **`on`** | `Symbol` | | Do not use: the macro accepts it, but the model then fails to compile (`undefined macro variable 'context'`). |
+| **`on`** | `:create`, `:update` or another `Symbol` | | Runs the call's rules only in that context: `on: :create` while the record is new, `on: :update` once it is saved |
 
 A `nil` value fails every predicate, so rules on a nilable getter also reject `nil`. Messages interpolate the option's source text, as in `Time.utc(2020, 1, 1)`.
 
@@ -91,7 +91,7 @@ end
 | `save`, `save!`, instance `create!`, `collection.create(**attrs)` | | Call `validate!`, so an invalid record raises instead of returning `false`. |
 | `Model.create!(**attrs)`, `update!`, `insert_all`, `upsert_all` | | Do not validate. |
 
-`errors`, `valid?` and `validate!` take an optional context argument; with `on:` unusable it has no effect.
+`errors`, `valid?` and `validate!` take an optional context. Without one, a model uses `:create` for a new record and `:update` for a saved one, the contexts `save` uses; a class that includes only `Validations` then runs only the rules without `on:`.
 
 ```crystal
 user = User.new

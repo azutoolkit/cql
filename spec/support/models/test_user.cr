@@ -21,7 +21,6 @@ class TestUser
   validate :name, presence: true, size: 2..50, message: "Name is invalid"
   validate :email, required: true, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i, message: "Email format is invalid"
   validate :age, gt: 1, lt: 120, message: "Age must be between a reasonable range"
-  validate :password_confirmation, presence: true, message: "Password confirmation is required"
   validate :password_confirmation, confirmation: :password, message: "doesn't match Password"
 
   # Define callbacks

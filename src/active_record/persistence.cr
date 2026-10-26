@@ -41,6 +41,11 @@ module CQL
           id.nil?
         end
 
+        # `valid?` and `errors` check a record as `save` will: one without an id as `:create`, others as `:update`.
+        private def default_validation_context : Symbol?
+          new_record? ? :create : :update
+        end
+
         # Touch one or more timestamp attributes without triggering callbacks
         # Updates the specified timestamp fields to the current time and saves
         # directly to the database without running validations or callbacks.

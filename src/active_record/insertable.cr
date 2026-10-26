@@ -226,7 +226,7 @@ module CQL
         #
         def create!
           # Validate before creating
-          validate!
+          validate!(:create)
 
           # Create the record using the class method
           {{@type.id}}.create!(self)

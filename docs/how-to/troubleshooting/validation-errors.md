@@ -90,21 +90,13 @@ There is no `uniqueness` predicate, so a unique index raises these; to report a 
 ```text
 Error: CQL validation error in Signup: unsupported predicate `format` for `:email`. Supported predicates: "eq, exclude, gt, gte, in, lt, lte, match, size, presence, required, confirmation, accept".
 Error: CQL validation error in Signup: unknown attribute `:emial`. Define a readable property or getter for `:emial` before calling `validate ::emial`.
-Error: undefined macro variable 'context'
 ```
 
-Use `match:` for formats and `gt:`/`lt:` for numbers, and declare the property before `validate`. The last error comes from any `on:` option: contexts do not compile yet, so remove `on:`. `valid?`, `errors` and `validate!` accept a context argument, but without `on:` it changes nothing.
+Use `match:` for formats and `gt:`/`lt:` for numbers, and declare the property before `validate`.
 
-## Fix a validation that never fails
+## Fix a rule that runs only sometimes
 
-```crystal
-# ❌ The second call replaces the first: "jo" passes, because size: is gone
-validate :username, size: 3..20
-validate :username, required: true
-
-# ✅ One call per attribute, with every predicate
-validate :username, required: true, size: 3..20
-```
+A rule declared with `on: :create` runs only while the record is new, and `on: :update` only once it is saved. `valid?` and `errors` follow the record's state, so check a new record with `user.valid?(:update)` to see the update rules.
 
 ## Test validations
 

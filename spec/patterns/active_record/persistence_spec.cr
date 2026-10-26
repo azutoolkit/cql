@@ -61,6 +61,26 @@ class PersistenceArticle
   end
 end
 
+# Rules that apply only when the record is created, or only once it is saved
+class ContextValidatedUser
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: PersistenceTestDB, table: :persistence_users
+
+  property name : String = ""
+  property email : String = ""
+  property age : Int32? = nil
+  property active : Bool = true
+  property created_at : Time?
+  property updated_at : Time?
+
+  validate :email, presence: true, on: :create, message: "Email is required to sign up"
+  validate :name, presence: true, on: :update, message: "Name is required once saved"
+
+  def initialize(@name : String = "", @email : String = "")
+  end
+end
+
 describe CQL::ActiveRecord::Persistence do
   before_each do
     begin
@@ -397,6 +417,39 @@ describe CQL::ActiveRecord::Persistence do
 
       result = user.save
       result.should be_true # Should pass since no validations are defined
+    end
+  end
+
+  describe "validation contexts" do
+    it "applies on: :create rules to a new record" do
+      user = ContextValidatedUser.new("Ada")
+
+      user.valid?.should be_false
+      user.errors.map(&.message).should eq(["Email is required to sign up"])
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Email is required to sign up") { user.save }
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Email is required to sign up") { user.create! }
+    end
+
+    it "applies on: :update rules once the record is saved" do
+      user = ContextValidatedUser.new("", "ada@example.com")
+      user.valid?.should be_true
+      user.save.should be_true
+
+      user.valid?.should be_false
+      user.errors.map(&.message).should eq(["Name is required once saved"])
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Name is required once saved") { user.save }
+
+      user.name = "Ada"
+      user.email = ""
+      user.save.should be_true
+    end
+
+    it "applies on: :create rules in create! even when the record already has an id" do
+      user = ContextValidatedUser.new("Ada")
+      user.id = 99_i64
+
+      user.valid?.should be_true
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Email is required to sign up") { user.create! }
     end
   end
 
