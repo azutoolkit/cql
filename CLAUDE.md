@@ -9,7 +9,7 @@ shards install --ignore-crystal-version   # install dependencies
 crystal spec                              # full suite (Postgres/Redis specs go pending without servers)
 crystal spec spec/core/query_spec.cr      # one file
 crystal tool format --check src spec      # CI format check
-bin/ameba                                 # CI lint (build with `shards build ameba` if missing)
+crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec   # CI lint, as CI runs it
 ```
 
 Baseline on a machine without MySQL tools: one spec errors because `mysqldump` is not installed

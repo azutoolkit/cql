@@ -26,8 +26,8 @@ CQL.configure do |config|
   # Environment detection
   config.env = "production"
 
-  # Database from environment
-  config.db = ENV["DATABASE_URL"]
+  # Database from environment (SQLite when DATABASE_URL is unset)
+  config.db = ENV["DATABASE_URL"]? || "sqlite3://./db/production.db"
 
   # Performance tuning
   config.pool_size = 25
