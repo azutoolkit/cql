@@ -1,134 +1,112 @@
+---
+description: "Add validations, callbacks and transactions, seed sample data, print statistics, and prepare for production."
+---
+
 # Part 5: Adding Features
 
-In this final part, you'll enhance your blog engine with validations, callbacks, transactions, and performance monitoring. You'll also learn how to seed data and prepare your application for production.
+**You need:** the project from [Part 4](04-crud-operations.md).
 
-## What You'll Learn
+{% stepper %}
+{% step %}
+### Add validations
 
-- Adding model validations
-- Using lifecycle callbacks
-- Implementing transactions
-- Seeding sample data
-- Performance monitoring basics
-- Production considerations
-
-## Prerequisites
-
-- Completed [Part 4: CRUD Operations](04-crud-operations.md)
-
-## Step 1: Add Validations
-
-Validations ensure data integrity before records are saved.
-
-### User Validations
-
-Declare rules with `validate :attribute, predicate: value`. The available predicates are `presence`, `required`, `size`, `match`, `eq`, `gt`, `gte`, `lt`, `lte`, `in`, `exclude`, `confirmation` and `accept`; add `message:` to override the default text.
-
-Rules that need the database, such as uniqueness, go in a custom validator: a subclass of `CQL::ActiveRecord::Validations::CustomValidator` registered with `use`.
+A rule that needs the database, such as uniqueness, is a custom validator. At the top of `src/models/user.cr`, above `class User`:
 
 ```crystal
-# src/models/user.cr
+# Uniqueness needs the database, so it is a custom validator
 class UniqueUserValidator < CQL::ActiveRecord::Validations::CustomValidator
   def initialize(@record : User)
   end
 
   def valid? : Array(CQL::ActiveRecord::Validations::Error)
     errors = [] of CQL::ActiveRecord::Validations::Error
-
     if (other = User.find_by(username: @record.username)) && other.id != @record.id
-      errors << CQL::ActiveRecord::Validations::Error.new(:username, "has already been taken")
+      errors << CQL::ActiveRecord::Validations::Error.new(:username, "username has already been taken")
     end
     if (other = User.find_by(email: @record.email)) && other.id != @record.id
-      errors << CQL::ActiveRecord::Validations::Error.new(:email, "has already been taken")
+      errors << CQL::ActiveRecord::Validations::Error.new(:email, "email has already been taken")
     end
-
     errors
   end
 end
-
-class User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context BlogSchema, :users
-
-  # ... existing properties ...
-
-  # Validations
-  validate :username, presence: true, size: 3..50
-  validate :email, presence: true, match: /\A[\w+\-.]+@[a-z\d\-]+(\.[a-z\d\-]+)*\.[a-z]+\z/i
-  use UniqueUserValidator
-end
 ```
 
-### Post Validations
+Inside `class User`, below the associations:
 
 ```crystal
-# src/models/post.cr
-class Post
-  include CQL::ActiveRecord::Model(Int64)
-  db_context BlogSchema, :posts
+  # Predicates: presence, required, size, match, eq, gt, gte, lt, lte, in, exclude,
+  # confirmation, accept; message: "..." replaces the default text
+  validate :username, presence: true, size: 3..50
+  validate :email, presence: true, match: /\A[^@\s]+@[^@\s]+\z/
+  use UniqueUserValidator
+```
 
-  # ... existing properties ...
+Inside `class Post` in `src/models/post.cr`, below the associations:
 
-  # Validations
+```crystal
   validate :title, presence: true, size: 1..200
   validate :content, presence: true
-end
 ```
 
-### Using Validations
+Try them in a new script:
 
-`valid?` returns a Bool and `errors` returns an array of errors with a `field` and a `message`. `save` and `save!` run the validations too, and raise `CQL::ActiveRecord::Validations::ValidationError` when the record is invalid, so check `valid?` first when you want to report problems instead of rescuing:
-
+{% code title="src/features.cr" %}
 ```crystal
+require "./blog_engine"
+
+User.delete_all
+Category.delete_all
+
 user = User.new(username: "ab", email: "invalid")
+puts "valid? #{user.valid?}"
+user.errors.each { |error| puts "  #{error.field}: #{error.message}" }
 
-if user.valid?
+begin
   user.save
-else
-  puts "Validation errors:"
-  user.errors.each do |error|
-    puts "  #{error.field}: #{error.message}"
-  end
+rescue ex : CQL::ActiveRecord::Validations::ValidationError
+  puts "save raised: #{ex.message}"
 end
 ```
+{% endcode %}
 
-## Step 2: Add Callbacks
+```bash
+crystal src/features.cr
+```
 
-Callbacks let you run code at specific points in a model's lifecycle.
+```text
+valid? false
+  username: username must have a size of 3..50
+  email: email must match the pattern /\A[^@\s]+@[^@\s]+\z/
+save raised: username must have a size of 3..50,email must match the pattern /\A[^@\s]+@[^@\s]+\z/
+```
 
-Register callbacks with `before_validation`, `after_validation`, `before_save`, `after_save`, `before_create`, `after_create`, `before_update`, `after_update`, `before_destroy` and `after_destroy`. A callback that returns `false` halts the operation (`save` then returns `false`); any other return value continues. Note that `before_save` runs after validation.
+`save` and `save!` raise on an invalid record, so call `valid?` first to report errors. `create!` skips validations.
+{% endstep %}
 
-### User Callbacks
+{% step %}
+### Add callbacks
+
+Inside `class User`, below `use UniqueUserValidator`:
 
 ```crystal
-# src/models/user.cr
-class User
-  # ... existing code ...
-
-  # Callbacks
-  before_save :normalize_email
+  # save runs: before_validation, after_validation, the validate rules, before_save,
+  # before_create or before_update, after_create or after_update, after_save.
+  # delete! runs before_destroy and after_destroy; create! runs none.
+  before_validation :normalize_email
   after_create :send_welcome_notification
 
   private def normalize_email
-    @email = @email.downcase.strip
+    @email = @email.strip.downcase
   end
 
   private def send_welcome_notification
-    # In a real app, this would send an email or create a notification
-    puts "Welcome, #{display_name}! Your account has been created."
+    puts "Welcome, #{display_name}!"
   end
-end
 ```
 
-### Post Callbacks
-
-`created_at` and `updated_at` are filled in automatically on save when the table has those columns, so no callback is needed for them.
+Inside `class Post`, below the validations:
 
 ```crystal
-# src/models/post.cr
-class Post
-  # ... existing code ...
-
-  # Callbacks
   before_save :clean_title
   after_save :notify_subscribers
 
@@ -137,196 +115,149 @@ class Post
   end
 
   private def notify_subscribers
-    if @published
-      # Notify subscribers about new post
-      puts "Notifying subscribers about: #{@title}"
-    end
+    puts "Notifying subscribers about: #{title}" if published?
   end
-end
 ```
 
-### Category Callbacks
+`save` sets `created_at` and `updated_at` itself. Add to `src/features.cr`:
 
 ```crystal
-# src/models/category.cr
-class Category
-  # ... existing code ...
+dana = User.new(username: "dana", email: "  Dana@Example.COM ", first_name: "Dana")
+dana.save!
+puts "Stored email: #{User.find!(dana.id!).email}"
 
-  before_save :generate_slug_if_blank
+copy = User.new(username: "dana", email: "dana@example.com")
+puts "Duplicate: #{copy.errors.map(&.message)}"
 
-  private def generate_slug_if_blank
-    @slug = Category.generate_slug(@name) if @slug.blank?
-  end
-end
+post = Post.new(title: "  Hello, CQL  ", content: "First post.", user_id: dana.id!, published: true)
+post.save!
+puts "Stored title: #{post.title.inspect}"
 ```
 
-## Step 3: Implement Transactions
+```text
+...
+Welcome, Dana!
+Stored email: dana@example.com
+Duplicate: ["username has already been taken", "email has already been taken"]
+Notifying subscribers about: Hello, CQL
+Stored title: "Hello, CQL"
+```
 
-Transactions ensure multiple operations succeed or fail together.
+{% hint style="warning" %}
+A callback that returns `false` halts the operation, and `save` returns `false`. End a callback with `nil` or `true` when its last expression can be `false`.
+{% endhint %}
+{% endstep %}
 
-### Creating a Post with Comments
+{% step %}
+### Use transactions
+
+Add to `src/features.cr`:
 
 ```crystal
-def create_post_with_comments(author : User, title : String, content : String, comment_texts : Array(String))
+def publish_with_comments(author : User, title : String, content : String, comments : Array(String)) : Post
+  post = Post.new(title: title, content: content, user_id: author.id!, published: true)
   Post.transaction do
-    post = Post.create!(
-      title: title,
-      content: content,
-      user_id: author.id.not_nil!,
-      published: true
-    )
-
-    comment_texts.each do |text|
-      Comment.create!(
-        content: text,
-        post_id: post.id.not_nil!,
-        user_id: author.id
-      )
-    end
-
-    puts "Created post with #{comment_texts.size} comments"
-    post
+    post.save!
+    comments.each { |text| Comment.create!(content: text, post_id: post.id!, user_id: author.id) }
   end
+  post
 end
-```
 
-### User Registration with Profile
+welcome = publish_with_comments(dana, "Welcome", "Thanks for reading.", ["First!", "Great start."])
+puts "#{welcome.title} has #{welcome.comments.count} comments"
 
-```crystal
-def register_user(username : String, email : String, bio : String?)
-  User.transaction do
-    user = User.create!(
-      username: username,
-      email: email
-    )
-
-    # Create welcome post
-    Post.create!(
-      title: "Welcome to my blog!",
-      content: "Hi, I'm #{user.display_name}. #{bio || "Welcome to my blog!"}",
-      user_id: user.id.not_nil!,
-      published: true
-    )
-
-    user
+begin
+  Post.transaction do
+    Post.create!(title: "Half done", content: "Never committed.", user_id: dana.id!)
+    raise "something failed"
   end
 rescue ex
-  puts "Registration failed: #{ex.message}"
-  nil
+  puts "Rolled back (#{ex.message}): #{Post.where(title: "Half done").count} posts titled Half done"
 end
+
+Post.transaction do
+  Post.create!(title: "Also half done", content: "Never committed.", user_id: dana.id!)
+  raise DB::Rollback.new
+end
+puts "DB::Rollback: #{Post.where(title: "Also half done").count} posts, no exception"
 ```
 
-## Step 4: Create a Seeder
+```text
+...
+Notifying subscribers about: Welcome
+Welcome has 2 comments
+Rolled back (something failed): 0 posts titled Half done
+DB::Rollback: 0 posts, no exception
+```
 
-Create a script to populate your database with sample data:
+An exception rolls the block back and propagates; `DB::Rollback` rolls back silently. `transaction` returns the block's value or `nil`, so the method returns `post` itself.
+{% endstep %}
 
+{% step %}
+### Write a seeder
+
+{% code title="src/seeders.cr" %}
 ```crystal
-# src/seeders.cr
-require "./blog_engine"
-
 module Seeders
-  def self.run
-    puts "Seeding database..."
+  USERS = [
+    {username: "alice", email: "alice@example.com", first_name: "Alice", last_name: "Johnson"},
+    {username: "bob", email: "bob@example.com", first_name: "Bob", last_name: "Smith"},
+    {username: "charlie", email: "charlie@example.com", first_name: "Charlie", last_name: "Brown"},
+  ]
+  CATEGORIES = ["Technology", "Lifestyle", "Travel", "Food", "Programming"]
 
-    # Create users
-    users = create_users
-    puts "Created #{users.size} users"
+  def self.run(random = Random.new(42)) # a fixed seed gives the same data on every run
+    User.delete_all
+    Category.delete_all
 
-    # Create categories
-    categories = create_categories
-    puts "Created #{categories.size} categories"
+    users = USERS.map { |attrs| User.new(**attrs).tap(&.save!) }
+    categories = CATEGORIES.map { |name| Category.new(name).tap(&.save!) }
+    posts = create_posts(users, categories, random)
+    comments = create_comments(users, posts, random)
 
-    # Create posts
-    posts = create_posts(users, categories)
-    puts "Created #{posts.size} posts"
-
-    # Create comments
-    comments = create_comments(users, posts)
-    puts "Created #{comments.size} comments"
-
-    puts "Seeding complete!"
+    puts "Seeded #{users.size} users, #{categories.size} categories, #{posts.size} posts, #{comments} comments"
   end
 
-  private def self.create_users
-    [
-      {username: "alice", email: "alice@example.com", first_name: "Alice", last_name: "Johnson"},
-      {username: "bob", email: "bob@example.com", first_name: "Bob", last_name: "Smith"},
-      {username: "charlie", email: "charlie@example.com", first_name: "Charlie", last_name: "Brown"},
-    ].map do |attrs|
-      User.create!(
-        username: attrs[:username],
-        email: attrs[:email],
-        first_name: attrs[:first_name],
-        last_name: attrs[:last_name]
-      )
-    end
-  end
-
-  private def self.create_categories
-    ["Technology", "Lifestyle", "Travel", "Food", "Programming"].map do |name|
-      Category.new(name).tap(&.save!)
-    end
-  end
-
-  private def self.create_posts(users : Array(User), categories : Array(Category))
-    posts = [] of Post
-
-    users.each do |user|
-      rand(2..5).times do |i|
-        category = categories.sample
-        posts << Post.create!(
-          title: "#{user.display_name}'s Post ##{i + 1}",
-          content: "This is a sample blog post by #{user.full_name}. " * 10,
-          user_id: user.id.not_nil!,
-          category_id: category.id,
-          published: rand < 0.8,  # 80% published
-          views_count: rand(0_i64..500_i64)
+  # create! skips validations and callbacks, which keeps seeding fast and quiet
+  private def self.create_posts(users, categories, random) : Array(Post)
+    users.flat_map do |user|
+      (1..random.rand(2..4)).map do |number|
+        Post.create!(
+          title: "#{user.display_name}'s Post ##{number}",
+          content: "A sample post by #{user.full_name}. " * 10,
+          user_id: user.id!,
+          category_id: categories.sample(random).id,
+          published: random.rand < 0.8,
+          views_count: random.rand(0_i64..500_i64)
         )
       end
     end
-
-    posts
   end
 
-  private def self.create_comments(users : Array(User), posts : Array(Post))
-    comments = [] of Comment
-
-    posts.select(&.published?).each do |post|
-      rand(0..5).times do
-        commenter = rand < 0.9 ? users.sample : nil  # 10% anonymous
-        comments << Comment.create!(
-          content: "Great post! " + ["I learned a lot.", "Thanks for sharing.", "Very helpful!"].sample,
-          post_id: post.id.not_nil!,
-          user_id: commenter.try(&.id)
-        )
+  private def self.create_comments(users, posts, random) : Int32
+    posts.select(&.published?).sum do |post|
+      count = random.rand(0..3)
+      count.times do
+        commenter = random.rand < 0.9 ? users.sample(random) : nil # 10% anonymous
+        Comment.create!(content: "Great post!", post_id: post.id!, user_id: commenter.try(&.id))
       end
+      count
     end
-
-    comments
   end
 end
-
-# Run when this file is the program being compiled
-if PROGRAM_NAME.includes?("seeders")
-  BlogEngine.setup
-  Seeders.run
-end
 ```
+{% endcode %}
 
-Run the seeder:
+Users go through `save!`, so their validations and callbacks run. Step 6 runs the seeder.
+{% endstep %}
 
-```shell
-crystal src/seeders.cr
-```
+{% step %}
+### Print statistics
 
-## Step 5: Add Performance Monitoring
+`CQL::Telemetry.alert_on_slow` calls a block for every slow statement.
 
-CQL publishes every statement it runs to `CQL::Telemetry`. Subscribe once at startup to log slow queries, and print a few statistics to see how the blog is doing:
-
+{% code title="src/monitoring.cr" %}
 ```crystal
-# src/monitoring.cr
-require "./blog_engine"
-
 module Monitoring
   def self.watch_slow_queries
     CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
@@ -335,232 +266,160 @@ module Monitoring
   end
 
   def self.print_stats
-    puts ""
-    puts "Blog Statistics"
-    puts "==============="
-    puts ""
-
-    # Basic counts
-    puts "Content:"
-    puts "  Users: #{User.count} (#{User.where(active: true).count} active)"
-    puts "  Categories: #{Category.count}"
-    puts "  Posts: #{Post.count} (#{Post.where(published: true).count} published)"
-    puts "  Comments: #{Comment.count}"
-    puts ""
-
-    # Engagement
     published = Post.where(published: true)
     published_count = published.count
     total_views = published.sum(:views_count)
-    avg_views = published_count > 0 ? total_views.to_f / published_count : 0.0
+    average = published_count > 0 ? total_views.to_f / published_count : 0.0
 
-    puts "Engagement:"
-    puts "  Total views: #{total_views}"
-    puts "  Average views per post: #{avg_views.round(1)}"
-    puts ""
+    puts "Users: #{User.count} | Posts: #{Post.count} (#{published_count} published) | Comments: #{Comment.count}"
+    puts "Views: #{total_views} total, #{average.round(1)} per published post"
 
-    # Top content
-    puts "Top Posts by Views:"
-    Post.where(published: true)
-        .order(views_count: :desc)
-        .limit(5)
-        .all
-        .each do |post|
-      author = post.user.try(&.display_name) || "Unknown"
-      puts "  #{post.views_count} views - \"#{post.title}\" by #{author}"
+    puts "Top posts:"
+    published.order(views_count: :desc).limit(3).all.each do |post|
+      puts "  #{post.views_count} views - #{post.title}"
     end
-    puts ""
 
-    # Most active authors: one GROUP BY query
-    puts "Most Active Authors:"
-    counts = BlogSchema.query
+    puts "Most active authors:"
+    AppSchema.query
       .from(:posts)
       .select(:user_id, count: :id)
       .where(published: true)
       .group(:user_id)
       .all(as: {Int64, Int64})
-
-    counts.sort_by { |_, total| -total }.first(5).each do |user_id, total|
-      puts "  #{total} posts - #{User.find!(user_id).full_name}"
-    end
+      .sort_by { |_, total| -total }
+      .each { |user_id, total| puts "  #{total} posts - #{User.find!(user_id).full_name}" }
   end
 end
-
-# Run when this file is the program being compiled
-if PROGRAM_NAME.includes?("monitoring")
-  BlogEngine.setup
-  Monitoring.watch_slow_queries
-  Monitoring.print_stats
-end
 ```
+{% endcode %}
+{% endstep %}
 
-To find N+1 patterns and profile queries in more depth, see the [performance monitoring tutorial](../real-world-examples/performance-monitoring.md).
+{% step %}
+### Run the demo
 
-## Step 6: Create the Complete Demo
-
-Put everything together:
-
+{% code title="src/demo.cr" %}
 ```crystal
-# src/demo.cr
 require "./blog_engine"
 require "./seeders"
 require "./monitoring"
 
-puts "="*60
-puts "CQL Blog Engine Demo"
-puts "="*60
-puts ""
-
-# Setup
 BlogEngine.setup
 BlogEngine.migrate
 Monitoring.watch_slow_queries
 
-# Seed data if database is empty
-if User.count == 0
-  Seeders.run
-end
-
-# Show statistics
+Seeders.run
 Monitoring.print_stats
 
-# Demonstrate queries
-puts ""
-puts "Recent Published Posts:"
-puts "-"*40
-
-Post.where(published: true)
-    .order(created_at: :desc)
-    .limit(5)
-    .all
-    .each do |post|
-  author = post.user.try(&.full_name) || "Unknown"
-  comment_count = post.comments.count
-  puts ""
-  puts "#{post.title}"
-  puts "  by #{author}"
-  puts "  #{post.word_count} words | #{post.views_count} views | #{comment_count} comments"
-  puts "  #{post.excerpt(100)}"
+puts "Recent posts:"
+Post.where(published: true).order(created_at: :desc, id: :desc).limit(2).all.each do |post|
+  puts "  #{post.title} by #{post.user.try(&.full_name)}"
+  puts "    #{post.word_count} words | #{post.views_count} views | #{post.comments.count} comments"
+  puts "    #{post.excerpt(60)}"
 end
-
-puts ""
-puts "="*60
-puts "Demo complete!"
-puts "="*60
 ```
+{% endcode %}
 
-Run the demo:
-
-```shell
+```bash
 crystal src/demo.cr
 ```
 
-## Production Considerations
-
-### Database Configuration
-
-For production, switch to PostgreSQL. `require "cql"` already includes a native PostgreSQL driver, so no extra shard is needed for `postgres://` URLs:
-
-```crystal
-# src/database.cr
-require "cql"
-require "sqlite3" # development only; drop it when you only run on PostgreSQL
-
-adapter = if ENV["CRYSTAL_ENV"]? == "production"
-  CQL::Adapter::Postgres
-else
-  CQL::Adapter::SQLite
-end
-
-uri = ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db?foreign_keys=1"
-
-BlogDB = CQL::Schema.define(:blog_db, adapter: adapter, uri: uri) do
-end
+```text
+Database connected
+Database is up to date
+Welcome, Alice!
+Welcome, Bob!
+Welcome, Charlie!
+Seeded 3 users, 5 categories, 10 posts, 17 comments
+Users: 3 | Posts: 10 (9 published) | Comments: 17
+Views: 2063 total, 229.2 per published post
+Top posts:
+  491 views - Charlie's Post #2
+  489 views - Charlie's Post #3
+  381 views - Alice's Post #1
+Most active authors:
+  4 posts - Charlie Brown
+  3 posts - Bob Smith
+  2 posts - Alice Johnson
+Recent posts:
+  Charlie's Post #4 by Charlie Brown
+    60 words | 304 views | 3 comments
+    A sample post by Charlie Brown. A sample post by Charlie Bro...
+  Charlie's Post #3 by Charlie Brown
+    60 words | 489 views | 1 comments
+    A sample post by Charlie Brown. A sample post by Charlie Bro...
 ```
 
-Your models use `BlogSchema`, and the generated `src/schemas/blog_schema.cr` hard-codes the adapter and URL it was generated from. Before deploying, edit those two lines to read from the environment and stop the migrator from overwriting your edit:
+A `Slow query` line appears only for a statement that takes 100 ms.
+{% endstep %}
 
+{% step %}
+### Prepare for production
+
+Pick the adapter from the environment; `require "cql"` already includes a PostgreSQL driver:
+
+{% code title="src/database.cr" %}
 ```crystal
-# src/schemas/blog_schema.cr (edited by hand for production)
-BlogSchema = CQL::Schema.define(
-  :blog_schema,
-  adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]) do
+require "cql"
+require "sqlite3" # development; drop it when you only run on PostgreSQL
+
+adapter = ENV["CRYSTAL_ENV"]? == "production" ? CQL::Adapter::Postgres : CQL::Adapter::SQLite
+uri = ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db?foreign_keys=1"
+
+AppDB = CQL::Schema.define(:app_db, adapter: adapter, uri: uri) do
+end
+
+MIGRATOR_CONFIG = CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  schema_symbol: :app_schema,
+  auto_sync: false # keep the hand edit below
+)
+```
+{% endcode %}
+
+The generated `AppSchema` hard-codes the adapter and URL it was dumped from, so edit those two lines by hand. With `auto_sync: false` the migrator stops rewriting the file; add new tables to it yourself:
+
+{% code title="src/schemas/app_schema.cr" %}
+```crystal
+AppSchema = CQL::Schema.define(
+  :app_schema,
+  adapter: ENV["CRYSTAL_ENV"]? == "production" ? CQL::Adapter::Postgres : CQL::Adapter::SQLite,
+  uri: ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db?foreign_keys=1") do
   # ... generated table definitions ...
 end
 ```
+{% endcode %}
 
-```crystal
-# src/database.cr
-MIGRATOR_CONFIG = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/blog_schema.cr",
-  schema_name: :BlogSchema,
-  schema_symbol: :blog_schema,
-  auto_sync: false
-)
-```
-
-### Environment Variables
-
-```shell
-# Production
+```bash
 export CRYSTAL_ENV=production
 export DATABASE_URL=postgres://user:pass@host:5432/blog_production
 ```
 
-### Security Checklist
+Check: without those variables, `crystal src/demo.cr` still prints the Step 6 output on SQLite.
+{% endstep %}
+{% endstepper %}
 
-1. **Input Validation**: All user input is validated
-2. **Parameterized Queries**: CQL uses parameterized queries by default
-3. **Authentication**: Add authentication before deploying (not covered in this tutorial)
-4. **Authorization**: Ensure users can only modify their own content
-5. **Rate Limiting**: Add rate limiting for API endpoints
+## Before deploying
 
-### Performance Checklist
+| Practice | Guide |
+| :--- | :--- |
+| CQL binds every value as a parameter; keep raw SQL to literals you control | [Use Raw SQL Fragments Safely](../../how-to/advanced-sql/raw-fragments.md) |
+| Index the columns you filter and join on | [Create Indexes](../../how-to/migrations/indexes.md) |
+| Load associations with `preload` instead of in a loop | [Avoid N+1 Queries](../../how-to/performance/n-plus-one.md) |
+| Paginate every list | [Paginate Results](../../how-to/querying/pagination.md) |
+| Cache expensive queries | [Enable Query Caching](../../how-to/caching/query-cache.md) |
+| Size the connection pool | [Set Up Connection Pooling](../../how-to/configuration/connection-pooling.md) |
 
-1. **Indexes**: Ensure indexes on frequently queried columns
-2. **N+1 Queries**: Use eager loading for relationships
-3. **Pagination**: Always paginate large result sets
-4. **Caching**: Add caching for expensive queries
-5. **Connection Pooling**: Configure appropriate pool sizes
+## What you built
 
-## Summary
+A blog engine with migrations, associated models, validations, callbacks, transactions, seed data and statistics. Next:
 
-In this tutorial series, you built a complete blog engine:
+- [Run Migrations](../../how-to/migrations/run-migrations.md) applies and tracks the migrations you add as the schema grows.
+- [Monitor Performance](../../how-to/observability/monitoring.md) adds logs, alerts, metrics and health checks for production.
+- [Reference](../../reference/README.md) and [Explanation](../../explanation/README.md) cover each feature in depth.
 
-1. **Part 1**: Set up the project and configured CQL
-2. **Part 2**: Designed and created the database schema
-3. **Part 3**: Built models with relationships
-4. **Part 4**: Implemented CRUD operations
-5. **Part 5**: Added validations, callbacks, transactions, and monitoring
+The how-to guides cover each feature as a task:
 
-## What's Next?
-
-Continue learning with:
-
-- [How-to Guides](../../how-to/README.md) - Task-specific instructions
-- [Reference](../../reference/README.md) - API documentation
-- [Explanation](../../explanation/README.md) - Conceptual deep-dives
-
-### Ideas for Extending Your Blog
-
-- Add user authentication
-- Implement post tagging
-- Add image uploads
-- Create an RSS feed
-- Build a REST API
-- Add full-text search
-- Implement caching
-
----
-
-**Tutorial Navigation:**
-- [Part 1: Project Setup](01-project-setup.md)
-- [Part 2: Database Schema](02-database-schema.md)
-- [Part 3: Models and Relationships](03-models-and-relationships.md)
-- [Part 4: CRUD Operations](04-crud-operations.md)
-- Part 5: Adding Features (current)
-
----
-
-Congratulations on completing the Building a Blog tutorial series!
+{% content-ref url="../../how-to/README.md" %}
+[README.md](../../how-to/README.md)
+{% endcontent-ref %}

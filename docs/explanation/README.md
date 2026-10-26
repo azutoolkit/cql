@@ -1,31 +1,15 @@
-# Explanation
-
-**Understanding-oriented** discussions that clarify concepts, explain design decisions, and provide background knowledge. Read these to deepen your understanding of CQL and ORMs in general.
-
-## Concepts
-
-Fundamental concepts and ideas:
-
-- [What is an ORM?](concepts/what-is-orm.md) - Understanding Object-Relational Mapping
-
-## Design Patterns
-
-Architectural patterns supported by CQL:
-
-- [Active Record Pattern](design-patterns/active-record.md) - The primary pattern in CQL
-- [Repository Pattern](design-patterns/repository.md) - Alternative data access approach
-
-## Query DSL
-
-- [Typed Query DSL: Before and After](dsl-before-after.md) - What the typed DSL catches at compile time
-- [Safety Guardrails](safety-guardrails.md) - Parameter binding, identifier validation and compile-time checks
-
-## Architecture
-
-How CQL works internally:
-
-- [How CQL Keeps Queries Fast](performance-design.md) - What happens on each query, what is opt-in, and what is computed once
-
+---
+description: "How CQL works and why it is designed the way it is."
+icon: "lightbulb"
 ---
 
-**Ready to apply this knowledge?** Head to the [How-to Guides](../how-to/README.md) for practical instructions.
+# Explanation
+
+For step-by-step tasks, see the [How-to Guides](../how-to/README.md).
+
+<table data-view="cards"><thead><tr><th></th><th></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody>
+<tr><td><strong>Active Record Pattern</strong></td><td>The pattern CQL models follow, and where CQL differs.</td><td><a href="active-record-pattern.md">active-record-pattern.md</a></td></tr>
+<tr><td><strong>Repository Pattern</strong></td><td>CQL::Repository and repositories written around a model.</td><td><a href="repository-pattern.md">repository-pattern.md</a></td></tr>
+<tr><td><strong>Safety Guardrails</strong></td><td>Parameter binding, identifier validation and compile-time checks.</td><td><a href="safety-guardrails.md">safety-guardrails.md</a></td></tr>
+<tr><td><strong>How CQL Keeps Queries Fast</strong></td><td>The stages of a query, what is off by default, and what is computed once.</td><td><a href="performance-design.md">performance-design.md</a></td></tr>
+</tbody></table>

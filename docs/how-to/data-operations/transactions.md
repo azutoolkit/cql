@@ -1,257 +1,124 @@
+---
+description: "Make several writes succeed or fail together, and nest savepoints."
+---
+
 # Use Transactions
 
-This guide shows you how to use database transactions to ensure multiple operations succeed or fail together.
-
-## Basic Transaction
-
-Wrap operations in a transaction block:
+## Wrap Writes in a Transaction
 
 ```crystal
-User.transaction do
+profile = User.transaction do
   user = User.create!(name: "John", email: "john@example.com")
-  Profile.create!(user_id: user.id.not_nil!, bio: "Hello")
+  Profile.create!(user_id: user.id!, bio: "Hello")
 end
-# Both records created, or neither
+profile # => Profile, the block's value
 ```
 
-`Model.transaction` delegates to `Schema#transaction`, yields the `DB::Transaction` (the block may ignore it), and returns the block's value (`nil` when the block raised `DB::Rollback`).
+`Model.transaction` is `AppDB.transaction` on the model's schema. It yields the `DB::Transaction` (the block may
+ignore it) and returns the block's value. Every statement the block runs on the same fiber joins the transaction:
+model calls, `AppDB.query`, `AppDB.exec`, and `AppDB.alter` on SQLite and PostgreSQL. Fibers spawned inside it check
+out their own connection and do not see its uncommitted rows.
 
-## Automatic Rollback on Error
-
-If any operation fails, all changes are rolled back:
-
-```crystal
-User.transaction do
-  user = User.create!(name: "John", email: "john@example.com")
-  raise "Something went wrong!"  # Triggers rollback
-  Profile.create!(user_id: user.id.not_nil!, bio: "Hello")
-end
-# Neither record is created
-```
-
-The exception is re-raised after the rollback, so wrap the call in `begin`/`rescue` if the caller should keep running.
-
-## Handle Transaction Errors
+## Roll Back
 
 ```crystal
+# Any exception rolls back, then propagates
 begin
   User.transaction do
-    user = User.create!(name: "John", email: "john@example.com")
-    # ... more operations
+    User.create!(name: "John", email: "john@example.com")
+    raise "Something went wrong!"
   end
-  puts "Transaction successful"
 rescue ex
-  puts "Transaction failed: #{ex.message}"
+  puts "Transaction failed: #{ex.message}"   # no user was created
 end
+
+# DB::Rollback rolls back quietly; the call returns nil
+result = User.transaction do
+  User.create!(name: "John", email: "john@example.com")
+  raise DB::Rollback.new("changed my mind")
+end
+result # => nil
 ```
 
-## Transfer Between Records
-
-Classic use case - moving money between accounts:
-
 ```crystal
-def transfer(from_id : Int64, to_id : Int64, amount : BigDecimal)
+def transfer(from_id : Int64, to_id : Int64, cents : Int64)
   Account.transaction do
     from = Account.find!(from_id)
     to = Account.find!(to_id)
+    raise "Insufficient funds" if from.balance_cents < cents
 
-    raise "Insufficient funds" if from.balance < amount
-
-    from.balance -= amount
-    to.balance += amount
-
+    from.balance_cents -= cents
+    to.balance_cents += cents
     from.save!
     to.save!
   end
 end
 ```
 
-## Create Related Records
+## Nest Savepoints
 
 ```crystal
-def create_post_with_comments(author : User, title : String, comments : Array(String))
-  Post.transaction do
-    post = Post.create!(
-      title: title,
-      body: "Post body",
-      user_id: author.id.not_nil!
-    )
-
-    comments.each do |comment_text|
-      Comment.create!(
-        body: comment_text,
-        post_id: post.id.not_nil!,
-        user_id: author.id
-      )
-    end
-
-    post
-  end
-end
-```
-
-## Operations Inside One Transaction
-
-Everything run on the same fiber inside the block, including `schema.exec` and queries, joins the same transaction:
-
-```crystal
-User.transaction do
-  user = User.create!(name: "John", email: "john@example.com")
-
-  # These are all part of the same transaction
-  3.times do |i|
-    Post.create!(
-      title: "Post #{i + 1}",
-      body: "Content",
-      user_id: user.id.not_nil!
-    )
-  end
-end
-```
-
-## Manual Rollback
-
-Raise `DB::Rollback` to roll back without an error propagating (the block ends quietly):
-
-```crystal
-User.transaction do
-  user = User.create!(name: "John", email: "john@example.com")
-
-  raise DB::Rollback.new("changed my mind") if some_condition_fails
-
-  # Continue with more operations
-end
-```
-
-Any other exception also rolls back, but is re-raised. Calling `tx.rollback` on the yielded transaction rolls back too; note that `Telemetry` still reports such a transaction as `Commit` (see below).
-
-## Transaction with Return Value
-
-The block's value is returned (`nil` after a `DB::Rollback`):
-
-```crystal
-result = User.transaction do
-  user = User.create!(name: "John", email: "john@example.com")
-  profile = Profile.create!(user_id: user.id.not_nil!)
-  {user: user, profile: profile}
-end
-
-puts "Created user: #{result.try(&.[:user].name)}"
-```
-
-## Savepoints (Nested Transactions)
-
-Pass the outer transaction to `Model.transaction` to open a savepoint. Rolling back the inner block leaves the outer work intact:
-
-```crystal
-User.transaction do |tx|
-  User.create!(name: "Outer")
-
-  User.transaction(tx) do |inner|
-    User.create!(name: "Inner")
-    inner.rollback            # or: raise DB::Rollback.new
+AppDB.transaction do
+  User.create!(name: "Outer", email: "outer@example.com")
+  AppDB.transaction do                # SAVEPOINT on the same connection
+    User.create!(name: "Inner", email: "inner@example.com")
+    raise DB::Rollback.new            # undoes only "Inner"
   end
 end
 # "Outer" is committed, "Inner" is not
-```
 
-If the inner block raises any other exception and it propagates out of the outer block too, everything is rolled back.
-
-A nested `transaction` call on the same fiber, through `schema.transaction { }` or `Model.transaction { }`, needs no `tx` argument: it runs as a SAVEPOINT on the outer connection, so the whole nest uses one connection. An inner `DB::Rollback` or error undoes only the inner block. If the outer block rescues an inner error, the outer transaction still commits; if the error propagates, everything is rolled back. Fibers spawned inside the block do not join the transaction; they check out their own connection. Schema changes (`schema.alter`, `schema.build`, and a table's `create!`, `drop!` and `truncate!`) nest as a SAVEPOINT the same way on SQLite and PostgreSQL; on MySQL and CockroachDB they raise `CQL::DialectError` inside a transaction, before running any DDL.
-
-```crystal
-schema.transaction do
-  User.create!(name: "Outer")
-  schema.transaction do
-    User.create!(name: "Inner")
-    raise DB::Rollback.new    # undoes only "Inner"
+User.transaction do |tx|
+  User.transaction(tx) do |inner|     # explicit form, same SAVEPOINT
+    User.create!(name: "Inner", email: "inner@example.com")
+    inner.rollback
   end
 end
 ```
 
-On the native PostgreSQL engine, `tx.savepoint { |inner| ... }` does the same:
+An inner exception undoes the inner block. If the outer block rescues it, the outer work still commits; if it
+propagates, everything rolls back.
 
+## Change the Schema Inside a Transaction
+
+{% tabs %}
+{% tab title="SQLite and PostgreSQL" %}
 ```crystal
-engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
-
-engine.transaction do |tx|
-  AppDB.insert.into(:accounts).values(name: "outer").using(tx).commit
-  tx.savepoint do |inner|
-    AppDB.insert.into(:accounts).values(name: "inner").using(inner).commit
-    raise DB::Rollback.new   # undoes only "inner"
-  end
+AppDB.transaction do
+  AppDB.alter(:users) { add_column :bio, String } # a SAVEPOINT inside the transaction
+  AppDB.update.table(:users).set(bio: "").commit  # an exception here also undoes the column
 end
 ```
 
-A failing savepoint block is rolled back to its savepoint and its exception propagates, unless it is `DB::Rollback`, in which case `savepoint` returns `nil`. A scope used after its transaction ended raises `CQL::Postgres::TransactionClosed`.
+`AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and migrator runs nest the same way. A rollback removes
+the column from the database but not from `AppDB`'s declaration, so model queries on the table then fail with
+`no such column: users.bio` until the process restarts.
+{% endtab %}
 
-## Isolation Levels and Transaction Options
-
-`Schema#transaction` and `Model.transaction` take no options. On the native PostgreSQL/CockroachDB engine, `AsyncEngine#transaction` accepts them per transaction:
-
+{% tab title="MySQL and CockroachDB" %}
 ```crystal
-engine.transaction(isolation: :serializable) { |tx| ... }
-engine.transaction(isolation: :repeatable_read, read_only: true, deferrable: true) { |tx| ... }
-engine.transaction(synchronous_commit: false) { |tx| ... }   # SET LOCAL; a crash may lose this commit
-```
-
-`isolation:` takes `:read_uncommitted`, `:read_committed`, `:repeatable_read` or `:serializable` (`CQL::Postgres::IsolationLevel`). `deferrable: true` raises `ArgumentError` on CockroachDB. Statements must be pinned to the transaction with `.using(tx)`. See the [native PostgreSQL driver guide](../postgres-native/README.md).
-
-## Transaction Events
-
-Subscribe to begin/commit/rollback of every `Schema#transaction`:
-
-```crystal
-CQL::Telemetry.subscribe_transactions("metrics") do |event|
-  # event.state    => Begin, Commit or Rollback (CQL::Telemetry::TransactionState)
-  # event.id       => shared by the Begin and its Commit/Rollback
-  # event.duration => time since Begin (zero for Begin; includes pool wait)
-  # event.nested   => a transaction was already open on this fiber
-  # event.error    => what caused a Rollback, if anything
-  Log.info { "tx #{event.id} #{event.state} #{event.duration}" }
-end
-
-CQL::Telemetry.unsubscribe_transactions("metrics")
-```
-
-`DB::Rollback` is reported as a `Rollback` with that error. A nested `transaction { }` emits its own Begin and Commit/Rollback events with `nested: true`; the `Model.transaction(tx)` and `schema.transaction(tx)` overloads emit none. See [Telemetry](../performance/telemetry.md).
-
-## Cleanup Operations
-
-Ensure cleanup happens even on failure:
-
-```crystal
-begin
-  User.transaction do
-    # Operations that might fail
-    user = User.create!(name: "John", email: "john@example.com")
-    external_api.create_account(user)  # Might fail
-  end
-rescue ex
-  # Handle or log the error
-  Log.error { "Transaction failed: #{ex.message}" }
-  raise ex
+AppDB.transaction do
+  AppDB.alter(:users) { add_column :bio, String }
+  # CQL::DialectError: MySQL does not support schema changes inside a transaction
 end
 ```
 
-## Verify Transaction Behavior
+DDL commits implicitly here, so `AppDB.alter`, `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and
+building or running a migrator raise before running any DDL. Run them outside the transaction.
+{% endtab %}
+{% endtabs %}
 
-```crystal
-initial_count = User.count
+## Set Isolation Levels
 
-begin
-  User.transaction do
-    User.create!(name: "Test", email: "test@example.com")
-    raise "Rollback!"
-  end
-rescue
-end
+`AppDB.transaction` and `Model.transaction` take no options; the native PostgreSQL engine's `transaction` takes `isolation:`, `read_only:`, `deferrable:` and `synchronous_commit:`, as [Transactions: Isolation and Savepoints](../postgres-native/tls-and-poolers.md#transactions-isolation-and-savepoints) shows.
 
-User.count == initial_count  # => true (rolled back)
-```
+## Observe Transactions
 
-## Related
+`CQL::Telemetry.subscribe_transactions` reports each `Begin`, `Commit` and `Rollback` with its duration; see [Telemetry](../observability/telemetry.md#transactions).
+
+## See Also
 
 - [Create Records](create.md)
 - [Update Records](update.md)
 - [Add Optimistic Locking](../models/optimistic-locking.md)
+- [Telemetry](../observability/telemetry.md#transactions)
+- [Configure TLS, Poolers, Timeouts and Transactions](../postgres-native/tls-and-poolers.md#transactions-isolation-and-savepoints)

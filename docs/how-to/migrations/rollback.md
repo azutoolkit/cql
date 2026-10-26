@@ -1,153 +1,115 @@
+---
+description: "Undo applied migrations by naming the version to go back to."
+---
+
 # Rollback Migrations
 
-This guide shows you how to rollback database migrations.
+The built-in step counts include pending migrations, so name the version.
 
-## Rollback Last Migration
+## Roll Back to a Version
 
 ```crystal
-migrator = MyDB.migrator(config)
+# Reverts every applied migration newer than *version*, whatever is pending
+def rollback_to(migrator : CQL::Migrator, version : Int64) : Nil
+  steps = CQL::Migrator.migrations.count { |migration| migration.version > version }
+  migrator.down(steps) if steps > 0
+end
+
+applied = migrator.applied_migrations.map(&.version).sort  # => [1, 2, 3, 4, 5]
+
+rollback_to(migrator, applied[-2]? || 0_i64)  # the newest applied one  -> [1, 2, 3, 4]
+rollback_to(migrator, 2_i64)                  # back to version 2       -> [1, 2]
+rollback_to(migrator, 0_i64)                  # every migration         -> []
+```
+
+`down(n)` walks the `n` newest *registered* migrations and reverts the applied ones among them, so counting the
+registered migrations newer than the target reverts exactly the applied ones above it. Each call runs in one
+transaction on SQLite and PostgreSQL, statement by statement on MySQL and CockroachDB, and prints the reverted ones.
+
+## Know What the Built-in Calls Revert
+
+| Call | Reverts |
+| :--- | :--- |
+| `migrator.rollback` | the newest registered migration if it is applied, else nothing (`down(1)`) |
+| `migrator.rollback(n)`, `migrator.down(n)` | the applied ones among the `n` newest registered |
+| `migrator.down` | every applied migration |
+| `migrator.down_to(v)` | the applied ones among the newest *position of v + 1* registered, not "down to v" |
+| `migrator.redo` | `rollback`, then `up` |
+
+```crystal
+# ❌ 1-5 applied: the second rollback looks at 5 again and reverts nothing
 migrator.rollback
-puts "Rolled back one migration"
+migrator.rollback
+migrator.applied_migrations.map(&.version)  # => [1, 2, 3, 4]
+
+# ❌ 1-5 registered, 1-3 applied: down_to reverts the wrong ones
+migrator.down_to(3_i64)                     # reverts 3      -> [1, 2]
+migrator.down_to(1_i64)                     # reverts nothing (5 is pending)
+
+# ✅ Name the version
+rollback_to(migrator, 1_i64)                # -> [1]
 ```
 
-`rollback(steps = 1)` rolls back the newest applied migration. Note that `down(steps)` defaults to **all** migrations, so call `migrator.down` without an argument only when you mean to undo everything. On SQLite and PostgreSQL the whole rollback runs in one transaction; on MySQL and CockroachDB each statement commits on its own. It prints a table of the migrations it reverted.
-
-## Rollback Multiple Migrations
+## Add a Rollback Command
 
 ```crystal
-# Rollback last 3 migrations
-migrator.rollback(3)
-```
-
-## Rollback to Specific Version
-
-Count the applied migrations newer than the target and roll back that many:
-
-```crystal
-target = 5_i64
-steps = migrator.applied_migrations.count { |record| record.version > target }
-migrator.rollback(steps) if steps > 0
-```
-
-`migrator.down_to(version)` exists, but it rolls back `position + 1` migrations, where `position` is the index of `version` in the ordered list of all registered migrations. That only equals "roll back to `version`" for some layouts, so prefer the explicit count above.
-
-## Rollback All Migrations
-
-```crystal
-# Rollback everything (use with caution!)
-migrator.down
-```
-
-## Check Before Rollback
-
-```crystal
-puts "Current version: #{migrator.last.try(&.version) || 0}"
-puts "Applied migrations: #{migrator.applied_migrations.size}"
-
-# Only rollback if there are migrations to rollback
-if migrator.applied_migrations.any?
-  migrator.rollback
-  puts "Rolled back to version: #{migrator.last.try(&.version) || 0}"
-else
-  puts "No migrations to rollback"
+# src/migrate.cr (see Run Migrations), with rollback_to defined above
+case ARGV[0]?
+when "up" then migrator.up
+when "rollback"
+  versions = migrator.applied_migrations.map(&.version).sort
+  rollback_to(migrator, versions[-2]? || 0_i64)
+when "version" then puts migrator.applied_migrations.max_of?(&.version) || 0
+else                abort "Usage: crystal src/migrate.cr up|rollback|version"
 end
 ```
 
-## Safe Rollback Script
-
-```crystal
-# src/rollback.cr
-require "./database"
-require "../migrations/*"
-
-config = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  auto_sync: true
-)
-
-migrator = MyDB.migrator(config)
-
-current = migrator.last.try(&.version) || 0_i64
-puts "Current version: #{current}"
-
-if current == 0
-  puts "No migrations to rollback"
-  exit 0
-end
-
-print "Rollback migration #{current}? (y/n): "
-if gets.try(&.strip) == "y"
-  migrator.rollback
-  puts "Rolled back to version: #{migrator.last.try(&.version) || 0}"
-else
-  puts "Cancelled"
-end
+```bash
+crystal src/migrate.cr rollback
+crystal src/migrate.cr version   # 4
 ```
+
+A `down` that runs in a new process needs the tables and columns it touches declared on the schema; see
+[Create a Migration](create-migration.md#write-a-migration).
 
 ## Handle Irreversible Migrations
 
-Some migrations can't be rolled back:
-
+{% code title="db/migrations/006_drop_legacy_users.cr" %}
 ```crystal
-class DropLegacyTable < CQL::Migration(10)
+class DropLegacyUsers < CQL::Migration(6)
   def up
-    schema.legacy_users.drop!
+    schema.exec("DROP TABLE legacy_users")
   end
 
   def down
-    # Can't restore dropped table with data
     raise "Cannot rollback: table was dropped with data"
   end
 end
 ```
-
-When you try to rollback, the exception aborts the rollback and, on SQLite and PostgreSQL, nothing is reverted:
+{% endcode %}
 
 ```crystal
 begin
-  migrator.rollback
+  rollback_to(migrator, 4_i64)
 rescue ex
-  puts "Rollback failed: #{ex.message}"
+  puts "Rollback failed: #{ex.message}"  # 5 and 6 both stay applied on SQLite and PostgreSQL
 end
 ```
 
-## Refresh Database
-
-Rollback all and re-migrate (development only):
+## Refresh a Development Database
 
 ```crystal
-def refresh_database
-  migrator = MyDB.migrator(config)
-
-  puts "Rolling back all migrations..."
-  migrator.down
-
-  puts "Re-running all migrations..."
-  migrator.up
-
-  puts "Database refreshed"
-end
+migrator.down   # every applied migration
+migrator.up
 ```
 
-## Verify Rollback
+{% hint style="danger" %}
+`migrator.down` without an argument reverts every applied migration and drops their data.
+{% endhint %}
 
-```crystal
-migrator = MyDB.migrator(config)
+## See Also
 
-# Record current state
-before = migrator.applied_migrations.size
-
-# Rollback
-migrator.rollback
-
-# Verify
-after = migrator.applied_migrations.size
-puts "Rolled back: #{before} -> #{after} migrations"
-```
-
-## Related
-
-- [Create a Migration](create-migration.md)
 - [Run Migrations](run-migrations.md)
+- [Create a Migration](create-migration.md)
+- [Fix Migration Errors](../troubleshooting/migration-errors.md)
 - [Migration DSL Reference](../../reference/api/migration-dsl.md)

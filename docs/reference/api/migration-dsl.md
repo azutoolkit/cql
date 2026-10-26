@@ -1,45 +1,23 @@
+---
+description: "Every method of the migration class, the table builder, the alter-table builder, the migrator and its config, with defaults and the SQL they produce."
+---
+
 # Migration DSL Reference
 
-Complete reference for the CQL Migration DSL (Domain Specific Language).
-
-## Migration Class
-
-Migrations inherit from `CQL::Migration(VERSION)` where VERSION is an integer (typically a timestamp, stored as `Int64`). The class registers itself with `CQL::Migrator` when it is defined, and the migrator exposes the database as `schema`:
+## Migration class
 
 ```crystal
 class CreateUsers < CQL::Migration(20250125001401)
   def up
-    # Apply changes
-  end
-
-  def down
-    # Rollback changes
-  end
-end
-```
-
-## Creating Tables
-
-### schema.table
-
-Defines a new table structure:
-
-```crystal
-class CreateUsers < CQL::Migration(1)
-  def up
     schema.table :users do
       primary :id, Int64, auto_increment: true
-      column :name, String, null: false
-      column :email, String, null: false
+      column :name, String
+      column :email, String
       column :active, Bool, default: true
       timestamps
+      index [:email], unique: true
     end
-
     schema.users.create!
-
-    schema.alter :users do
-      create_index :idx_users_email, [:email], unique: true
-    end
   end
 
   def down
@@ -48,316 +26,264 @@ class CreateUsers < CQL::Migration(1)
 end
 ```
 
-**Key methods:**
-- `schema.table :name do ... end` - Define table structure
-- `schema.table_name.create!` - Execute CREATE TABLE
-- `schema.table_name.drop!` - Execute DROP TABLE
+| Member | Meaning |
+| :--- | :--- |
+| `class Name < CQL::Migration(V)` | `V` is an integer literal (usually a timestamp). Defining the class registers it in `CQL::Migrator.migrations`. |
+| `def up`, `def down` | Required. Apply and revert the change. There is no irreversible marker: raise from `down`. |
+| `schema` | The `CQL::Schema` the migrator runs on. |
+| `Name.version` | `V` as `Int64`. |
 
-## Column Methods
+## Schema methods used in migrations
 
-### primary
+| Method | Behavior |
+| :--- | :--- |
+| **`schema.table(name, as: nil) { ... }`** | Declares (or replaces) the table in the schema with the [table builder](#table-builder); runs no SQL. Returns the `CQL::Table`. |
+| **`schema.<name>`**, `schema.tables[:name]` | The declared table (`KeyError` for `tables[:missing]`). |
+| **`schema.alter(name) { ... }`** | Runs the [alter-table builder](#schemaalter) statements; `CQL::Schema::Error` if the table is not declared. |
+| `schema.build` | `create_statements` of every declared table. |
+| `schema.exec(sql)` | Runs one raw statement. |
+| `schema.ddl_transaction { ... }` | Transaction (a SAVEPOINT when nested) on SQLite and PostgreSQL; bare on MySQL and CockroachDB, where it raises `CQL::DialectError` inside an open transaction. |
 
-Defines the primary key column:
+## Table builder
 
-```crystal
-primary :id, Int64                        # Default auto_increment: true
-primary :id, Int32, auto_increment: true
-primary :uuid, String, auto_increment: false
-```
+Methods available inside `schema.table :name do ... end` (and on a `CQL::Table`).
 
-**Parameters:**
-- `name` - Column name (Symbol)
-- `type` - Crystal type (Int32, Int64, String)
-- `auto_increment` - Enable auto-increment (default: true)
+### Columns
 
-### column
-
-Adds a column to the table:
-
-```crystal
-column :name, String                      # Required string
-column :bio, String, null: true           # Nullable
-column :active, Bool, default: true       # With default
-column :email, String, null: false, unique: true
-column :score, Int32, default: 0
-```
-
-**Options:**
-| Option | Type | Description |
-|--------|------|-------------|
-| `null` | Bool | Allow NULL values (default: false) |
-| `default` | T | Default value |
-| `unique` | Bool | Add unique constraint |
-| `index` | Bool | Index the column; `create!` creates it after the table (see [index](#index)) |
-| `size` | Int32 | Column size (for VARCHAR) |
-| `as` | String | Alias used when selecting the column |
-
-### Type-Specific Column Methods
-
-CQL provides helper methods for common column types:
-
-```crystal
-# String types
-varchar :name, size: 255
-text :description
-
-# Numeric types
-integer :age, null: false, default: 18
-bigint :balance, default: 0
-float :price, default: 0.0
-double :rating
-real :measurement
-
-# Other types
-boolean :active, default: true
-timestamp :created_at
-date :birthday
-json :metadata
-blob :avatar
-interval :duration
-lock_version                              # Int32 `version` column for optimistic locking
-```
-
-### Supported Types
-
-| Crystal Type | PostgreSQL | CockroachDB | MySQL | SQLite |
-|--------------|-----------|-------------|-------|--------|
-| `Int32` | INTEGER | INT4 | INT | INTEGER |
-| `Int64` | BIGINT | BIGINT | BIGINT | BIGINT |
-| `Float32` | REAL | REAL | FLOAT | FLOAT |
-| `Float64` | DOUBLE PRECISION | DOUBLE PRECISION | DOUBLE | DOUBLE |
-| `String` | VARCHAR | VARCHAR | VARCHAR(255) | TEXT |
-| `Bool` | BOOLEAN | BOOLEAN | TINYINT(1) | BOOLEAN |
-| `Time` (`timestamp`, `timestamps`) | TIMESTAMP | TIMESTAMP | DATETIME(3) | TIMESTAMP |
-| `Time` (`date`) | DATE | DATE | DATE | DATE |
-| `Time::Span` | INTERVAL | INTERVAL | TIME | INTERVAL |
-| `Slice(UInt8)` | BYTEA | BYTEA | BLOB | BLOB |
-| `JSON::Any` | JSONB | JSONB | JSON | TEXT |
-
-`UInt32` and `UInt64` are also mapped. See `CQL::DB_TYPE_MAPPING`.
-
-### timestamps
-
-Adds `created_at` and `updated_at` columns:
+| Method | Crystal type | Defaults |
+| :--- | :--- | :--- |
+| **`primary(name, type = Int32, auto_increment = true)`** | `type` | `auto_increment: false` makes a plain primary key. A bare `primary` declares `id`, `Int32`. |
+| **`column(name, type, as: nil, null: false, default: nil, unique: false, size: nil, index: false)`** | `type` | see [Column options](#column-options) |
+| `integer(name, ...)` | `Int32` | same options without `size` |
+| `bigint(name, ...)` | `Int64` | |
+| `float(name, ...)` | `Float32` | |
+| `double(name, ...)` | `Float64` | |
+| `real(name, ...)` | `Float64` | |
+| `text(name, ..., size: nil)` | `String` | |
+| `varchar(name, ..., size: 1000)` | `String` | |
+| `boolean(name, ...)` | `Bool` | |
+| `timestamp(name, ...)` | `Time` | |
+| `date(name, ...)` | `Time`, declared `DATE` | |
+| `json(name, ...)` | `JSON::Any` | |
+| `blob(name, ..., size: nil)` | `Slice(UInt8)` | |
+| `interval(name, ...)` | `Time::Span` | |
+| **`lock_version(name = :version, as: nil, null: false, default: 1, index: false)`** | `Int32` | Marked as a version column (`version_columns`) for optimistic locking. |
+| **`timestamps`** | `Time` | `created_at` and `updated_at`, `NOT NULL`, defaulting to the database's current time. |
 
 ```crystal
 schema.table :posts do
-  primary :id, Int64
-  column :title, String
+  primary :id, Int64, auto_increment: true # id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY (PostgreSQL)
+  column :user_id, Int64
+  column :title, String, default: ""
+  column :slug, String, unique: true, index: true # UNIQUE, plus CREATE UNIQUE INDEX idx_posts_slug
+  column :body, String, null: true
+  integer :views, default: 0
+  bigint :bytes, default: 0
+  float :ratio, null: true
+  double :score, default: 0.0
+  real :weight, null: true
+  text :summary, null: true
+  varchar :code, null: true
+  boolean :published, default: false
+  timestamp :published_at, null: true
+  date :publish_on, null: true
+  json :meta, null: true
+  blob :cover, null: true
+  interval :read_time, null: true
+  lock_version
   timestamps
 end
 ```
 
-Both columns are timestamps with current timestamp as default.
+### Column options
 
-## Index Methods
+| Option | Type | Default | SQL |
+| :--- | :--- | :--- | :--- |
+| `null` | `Bool` | `false` | `false` adds `NOT NULL` |
+| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings quoted, `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere |
+| `unique` | `Bool` | `false` | `UNIQUE`; with `index: true` the index is unique too |
+| `index` | `Bool` | `false` | Declares `idx_<t>_<column>` (e.g. `idx_posts_slug`), created by `create!` after the table |
+| `as` | `String?` | `nil` | Alias used when the column is selected |
+| `size` | `Int32?` | `nil` | Stored, **not emitted**: `String` is always `TEXT` / `VARCHAR` / `VARCHAR(255)` |
 
-### index
+### Column types
 
-`index [:cols], unique: bool, name: "idx_name"` inside a table block declares an index. `create!` and `schema.build` create it after the table with `CREATE INDEX IF NOT EXISTS` (plain `CREATE INDEX` on MySQL, which has no `IF NOT EXISTS` for indexes). `unique` defaults to `false`; without `name`, the index is named `idx_<table>_<columns>`.
+| Crystal type | SQLite | PostgreSQL | MySQL | CockroachDB |
+| :--- | :--- | :--- | :--- | :--- |
+| `Int32` | `INTEGER` | `INTEGER` | `INT` | `INT4` |
+| `Int64` | `BIGINT` | `BIGINT` | `BIGINT` | `BIGINT` |
+| `UInt32` | `INTEGER UNSIGNED` | `INTEGER` | `INT UNSIGNED` | `BIGINT` |
+| `UInt64` | `BIGINT UNSIGNED` | `BIGINT` | `BIGINT UNSIGNED` | `BIGINT` |
+| `Float32` | `FLOAT` | `REAL` | `FLOAT` | `REAL` |
+| `Float64` | `DOUBLE` | `DOUBLE PRECISION` | `DOUBLE` | `DOUBLE PRECISION` |
+| `String` | `TEXT` | `VARCHAR` | `VARCHAR(255)` | `VARCHAR` |
+| `Bool` | `BOOLEAN` | `BOOLEAN` | `TINYINT(1)` | `BOOLEAN` |
+| `Time` | `TIMESTAMP` | `TIMESTAMP` | `DATETIME(3)` | `TIMESTAMP` |
+| `Time` via `date` | `DATE` | `DATE` | `DATE` | `DATE` |
+| `Time::Span` | `INTERVAL` | `INTERVAL` | `TIME` | `INTERVAL` |
+| `Slice(UInt8)` | `BLOB` | `BYTEA` | `BLOB` | `BYTEA` |
+| `JSON::Any` | `TEXT` | `JSONB` | `JSON` | `JSONB` |
+| auto-increment primary key | `INTEGER PRIMARY KEY AUTOINCREMENT` | `<type> GENERATED ALWAYS AS IDENTITY PRIMARY KEY` | `<type> PRIMARY KEY AUTO_INCREMENT` | as PostgreSQL |
+| `timestamps` default | `DEFAULT (datetime('now'))` | `DEFAULT CURRENT_TIMESTAMP` | `DEFAULT NOW(3)` | `DEFAULT CURRENT_TIMESTAMP` |
+
+`CQL::Adapter::Postgres.sql_type(Int64)` returns the mapping.
+
+### Indexes and constraints
+
+| Method | Defaults | SQL |
+| :--- | :--- | :--- |
+| **`index(columns : Array(Symbol), unique: false, name: nil)`**, `add_index(...)` | name `idx_<t>_<columns>` | `CREATE [UNIQUE] INDEX IF NOT EXISTS ...` after the table (no `IF NOT EXISTS` on MySQL). The same name again replaces the earlier index; a name over 63 characters raises `ArgumentError`. |
+| **`unique_constraint(columns : Array(Symbol), name: nil)`** | unnamed | `CONSTRAINT <name> UNIQUE (...)` |
+| **`check_constraint(condition : String, name: nil)`** | unnamed | `CONSTRAINT <name> CHECK (...)`; raises `CQL::MySqlUnsupportedFeatureError` on MySQL |
+| **`foreign_key(columns : Array(Symbol), references:, references_columns: nil, name: nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` defaults to the referenced table's primary key (`:id` if that table is not declared) | `FOREIGN KEY (...) REFERENCES t (...) ON DELETE ... ON UPDATE ...`; unnamed unless `name:` (MySQL names it `fk_<t>_<columns>`); PostgreSQL omits `NO ACTION` clauses |
+| `foreign_key(column : Symbol, references:, ...)` | | single-column form |
+
+`on_delete` / `on_update`: `:cascade`, `:restrict`, `:set_null`, `:no_action`. `references_columns` takes a `Symbol` or an `Array(Symbol)`.
 
 ```crystal
-schema.table :users do
-  column :name, String
-  column :email, String
-  index [:name, :email], unique: true # idx_users_name_email
+schema.table :comments do
+  primary :id, Int64, auto_increment: true
+  column :post_id, Int64
+  column :user_id, Int64, null: true
+  column :rating, Int32, default: 0
+  foreign_key [:post_id], references: :posts, on_delete: :cascade
+  foreign_key :user_id, references: :users, references_columns: :id, name: "fk_comments_user", on_delete: :set_null
+  unique_constraint [:post_id, :user_id], name: "uq_comment_author"
+  check_constraint "rating >= 0", name: "chk_rating"
+  index [:post_id, :rating], name: "idx_comments_post_rating"
 end
 ```
 
-### create_index / drop_index
+### Table methods
 
-Create and drop indexes in alter operations (the name comes first):
+| Method | Returns | Behavior |
+| :--- | :--- | :--- |
+| `create!` | | Runs `create_statements`. |
+| `drop!` | | `DROP TABLE IF EXISTS <t>` |
+| `truncate!` | | `TRUNCATE TABLE <t>`; `DELETE FROM <t>` on SQLite |
+| `create_sql` | `String` | `CREATE TABLE IF NOT EXISTS <t> (...)` |
+| `create_index_sqls` | `Array(String)` | One `CREATE INDEX` per declared index |
+| `create_statements` | `Array(String)` | `create_sql` followed by `create_index_sqls` |
+| `drop_sql`, `truncate_sql` | `String` | The SQL of `drop!` / `truncate!` |
+| `columns`, `indexes`, `foreign_keys`, `unique_constraints`, `check_constraints` | collections | What the block declared |
+| `primary_key` | `BaseColumn?` | The declared primary key |
+| `version_columns` | `Array(BaseColumn)` | Columns declared with `lock_version` |
+| `<column>` | `BaseColumn` | A declared column by name (`schema.users.email`) |
 
 ```crystal
+AppDB.users.create_sql
+# => "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, ...)" (SQLite)
+```
+
+## `schema.alter`
+
+Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. Statements run in order, in `ddl_transaction`.
+
+| Method | Defaults | Notes |
+| :--- | :--- | :--- |
+| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | **`default`, `index` and `size` are ignored**: no `DEFAULT` clause and no index are emitted, so `null: false` fails on a table with rows (SQLite: `Cannot add a NOT NULL column with default value NULL`). Use raw DDL for a default, below. |
+| **`drop_column(name)`** | | An undeclared column only logs an error |
+| **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column |
+| **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
+| **`rename_table(new_name)`** | | Renames the table object at once, but every statement renders after the block, so other operations in the same block use the new name before the rename runs. Give it its own `schema.alter` block. |
+| **`create_index(name : Symbol, columns : Array(Symbol), unique: false)`** | | No `IF NOT EXISTS` |
+| **`drop_index(name : Symbol)`** | | |
+| **`foreign_key(columns or column, references:, references_columns: nil, name : Symbol? = nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` `[:id]`, name `fk_<t>_<columns>` | Raises `DB::Error` on SQLite |
+| **`drop_foreign_key(name : Symbol)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
+
+```crystal
+# PostgreSQL. On SQLite, change_column, foreign_key and drop_foreign_key raise.
 schema.alter :users do
-  create_index :email_idx, [:email], unique: true
-  drop_index :email_idx
+  add_column :phone, String
+  add_column :age, Int32, null: true
+  rename_column :name, :full_name
+  change_column :age, Int64
+  create_index :idx_users_phone, [:phone], unique: true
+  foreign_key [:team_id], references: :teams, on_delete: :cascade
+  drop_foreign_key :fk_users_team_id
+  drop_index :idx_users_phone
+  drop_column :phone
 end
-```
 
-## Foreign Key Methods
-
-### foreign_key
-
-Creates a foreign key constraint:
-
-```crystal
-schema.table :posts do
-  primary :id, Int64
-  column :user_id, Int64, null: false
-  column :category_id, Int64, null: true
-
-  foreign_key [:user_id], references: :users, references_columns: [:id]
-  foreign_key [:category_id], references: :categories, references_columns: [:id]
-end
-```
-
-A single-column overload takes `column :user_id` instead of an array. `references_columns` may be a Symbol or an Array and defaults to the referenced table's primary key (`:id`).
-
-**Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `columns` | Array(Symbol) | Local column(s) |
-| `references` | Symbol | Target table |
-| `references_columns` | Array(Symbol) | Target column(s) |
-| `on_delete` | Symbol | `:cascade`, `:restrict`, `:set_null`, `:no_action` |
-| `on_update` | Symbol | `:cascade`, `:restrict`, `:set_null`, `:no_action` |
-| `name` | String (`Symbol` in `schema.alter`) | Optional constraint name; defaults to `fk_<table>_<columns>` |
-
-### Composite Foreign Keys
-
-```crystal
-foreign_key [:order_id, :product_id],
-  references: :order_items,
-  references_columns: [:o_id, :p_id]
-```
-
-## Altering Tables
-
-### schema.alter
-
-Modifies an existing table:
-
-```crystal
-class AddPhoneToUsers < CQL::Migration(2)
-  def up
-    schema.alter :users do
-      add_column :phone, String, null: true
-      add_column :age, Int32, null: true, default: 18
-    end
-  end
-
-  def down
-    schema.alter :users do
-      drop_column :phone
-      drop_column :age
-    end
-  end
-end
-```
-
-### Alter Operations
-
-| Method | Description |
-|--------|-------------|
-| `add_column :name, Type, options` | Add a new column |
-| `drop_column :name` | Remove a column |
-| `rename_column :old, :new` | Rename a column |
-| `change_column :name, NewType` | Change column type |
-| `create_index :name, [:cols]` | Create an index |
-| `drop_index :name` | Drop an index |
-| `foreign_key [:cols], references: :table` | Add foreign key |
-| `drop_foreign_key :name` | Drop foreign key |
-| `rename_table :new_name` | Rename the table |
-
-`unique_constraint [:cols]` and `check_constraint "expression"` exist on tables (inside `schema.table`) but not in `schema.alter`.
-
-`schema.alter` raises `CQL::Schema::Error` if the table is not registered in the schema. SQLite does not support `change_column`, adding a foreign key or dropping a foreign key to an existing table; these raise `CQL::SQLiteUnsupportedFeatureError` with a workaround message. `drop_column` on a column the table does not know only logs an error.
-
-### Alter Examples
-
-```crystal
 schema.alter :users do
-  # Columns
-  add_column :phone, String, null: true
-  drop_column :legacy_field
-  rename_column :email, :user_email
-  change_column :age, String
-
-  # Indexes
-  create_index :phone_idx, [:phone]
-  drop_index :old_idx
-
-  # Foreign keys
-  foreign_key [:department_id], references: :departments, on_delete: :cascade
-  drop_foreign_key :fk_old_reference
+  rename_table :members # alone: see the note on rename_table
 end
 ```
 
-## Complete Example
+A column with a default, added with raw DDL and then declared so the schema knows it:
 
 ```crystal
-class CreateBlogSchema < CQL::Migration(1)
-  def up
-    # Create users table
-    schema.table :users do
-      primary :id, Int64, auto_increment: true
-      column :email, String, null: false
-      column :username, String, null: false
-      column :role, String, default: "member"
-      timestamps
-    end
-    schema.users.create!
-
-    schema.alter :users do
-      create_index :idx_users_email, [:email], unique: true
-      create_index :idx_users_username, [:username], unique: true
-    end
-
-    # Create posts table
-    schema.table :posts do
-      primary :id, Int64, auto_increment: true
-      column :user_id, Int64, null: false
-      column :title, String, null: false
-      column :body, String, null: false
-      column :published, Bool, default: false
-      column :views_count, Int64, default: 0
-      timestamps
-
-      foreign_key [:user_id], references: :users, references_columns: [:id]
-    end
-    schema.posts.create!
-
-    schema.alter :posts do
-      create_index :idx_posts_user_id, [:user_id]
-      create_index :idx_posts_published, [:published]
-    end
-  end
-
-  def down
-    schema.posts.drop!
-    schema.users.drop!
-  end
+def up
+  schema.exec "ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 1 NOT NULL"
+  schema.users.integer :level, default: 1 # declares only; runs no SQL
 end
 ```
 
-## Migration Execution
+<details>
+<summary>The SQL each statement emits, per dialect</summary>
+
+| Method | SQLite | PostgreSQL / CockroachDB | MySQL |
+| :--- | :--- | :--- | :--- |
+| `add_column :phone, String` | `ALTER TABLE users ADD COLUMN phone TEXT` | `... ADD COLUMN phone VARCHAR` | `... ADD COLUMN phone VARCHAR(255)` |
+| `add_column :age, Int32, null: false, unique: true` | `... ADD COLUMN age INTEGER NOT NULL UNIQUE` | `... age INTEGER NOT NULL UNIQUE` (`INT4` on CockroachDB) | `... age INT NOT NULL UNIQUE` |
+| `drop_column :bio` | `... DROP COLUMN bio` (SQLite 3.35+) | `... DROP COLUMN bio` | `... DROP COLUMN bio` |
+| `rename_column :nick, :handle` | `... RENAME COLUMN nick TO handle` | same | `... CHANGE nick handle VARCHAR(255)` |
+| `change_column :score, Int64` | raises | `... ALTER COLUMN score TYPE BIGINT` | `... MODIFY COLUMN score BIGINT` |
+| `create_index :idx_users_phone, [:phone], unique: true` | `CREATE UNIQUE INDEX idx_users_phone ON users (phone)` | same | same |
+| `drop_index :idx_users_phone` | `DROP INDEX IF EXISTS idx_users_phone` | same | `DROP INDEX idx_users_phone ON users` |
+| `foreign_key [:team_id], references: :teams` | raises | `... ADD CONSTRAINT fk_users_team_id FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE NO ACTION ON UPDATE NO ACTION` | same |
+| `drop_foreign_key :fk_users_team_id` | raises | `... DROP CONSTRAINT fk_users_team_id` | `... DROP FOREIGN KEY fk_users_team_id` |
+| `rename_table :members` | `ALTER TABLE users RENAME TO members` | same | `RENAME TABLE users TO members` |
+
+</details>
+
+## `Migrator`
 
 ```crystal
-migrator = schema.migrator                                      # auto_sync: true by default
-migrator = schema.migrator(CQL::MigratorConfig.new(auto_sync: false))
+config = CQL::MigratorConfig.new(schema_file_path: "src/schemas/app_schema.cr", auto_sync: true)
+migrator = AppDB.migrator(config)
 
-# Apply migrations (version order; one transaction on SQLite and PostgreSQL)
-migrator.up                    # Apply all pending
-migrator.up(1)                 # Run at most the first 1 migration in order
-
-# Rollback migrations (newest first; one transaction on SQLite and PostgreSQL)
-migrator.down                  # Rollback ALL applied migrations
-migrator.down(1)               # Rollback 1 migration
-migrator.rollback              # Alias for down(1)
-
-# Other operations
-migrator.redo                  # rollback (1) then up
-migrator.up_to(version)        # Apply up to and including version (Int64)
-migrator.down_to(version)      # See the caveat in the rollback guide
-
-# Status
-migrator.applied_migrations    # Array(CQL::MigrationRecord): id, name, version
-migrator.pending_migrations    # Array of migration classes
-migrator.last                  # Last applied migration class, or nil
-migrator.print_applied_migrations
-migrator.print_pending_migrations
-
-# Schema file
-migrator.update_schema_file
-migrator.verify_schema_consistency   # Bool
-migrator.bootstrap_schema
+migrator.up                         # apply every pending migration
+migrator.pending_migrations         # => [] of CQL::BaseMigration.class
+migrator.applied_migrations.size    # => 1
+migrator.rollback                   # revert the newest migration
+migrator.up_to(20250125001401_i64)  # apply up to and including this version
 ```
 
-`CQL::MigratorConfig` takes `schema_file_path`, `schema_name`, `schema_symbol`, `migration_table_name` (default `:cql_schema_migrations`) and `auto_sync`. With `auto_sync` on, the schema file is rewritten from the database when the migrator is created and after `up`/`down`.
+| Method | Behavior |
+| :--- | :--- |
+| `schema.migrator`, `schema.migrator(config)`, `CQL::Migrator.new(schema, config = MigratorConfig.new)` | Builds the migrator: with `auto_sync` dumps the schema file, then creates the migrations table (`ddl_transaction`). |
+| **`up(steps = all)`** | Takes the first `steps` migrations in version order and applies the pending ones, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints the applied list. |
+| **`down(steps = all)`** | Takes the newest `steps` *defined* migrations and reverts the applied ones, in one `ddl_transaction`; then rewrites the schema file and prints what was rolled back. |
+| **`rollback(steps = 1)`** | `down(steps)`. When the newest defined migration is pending, it does nothing. |
+| `redo` | `rollback`, then `up`. |
+| `up_to(version : Int64)` | `up(position + 1)` where `position` is the index of `version` in all migrations: applies up to and including it. Unknown versions do nothing. |
+| `down_to(version : Int64)` | `down(position + 1)`: reverts `position + 1` migrations from the newest, so `down_to(first)` reverts only the newest and `down_to(newest)` reverts all. Prefer `down(n)`. |
+| `pending_migrations` | `Array(BaseMigration.class)` in version order. |
+| `applied_migrations` | `Array(CQL::MigrationRecord)` (`id`, `name`, `version`). |
+| `last` | The newest applied migration class, or `nil`. |
+| `print_applied_migrations`, `print_pending_migrations`, `print_rolled_back_migrations(list)` | Print a status table. |
+| `update_schema_file` | Dumps the database to `schema_file_path`; `CQL::Migrator::Error` on failure. |
+| `verify_schema_consistency` | `Bool`: the dump equals the file. `false` when the file is missing or the dump fails. |
+| `bootstrap_schema` | `update_schema_file` with log lines. |
+| `config`, `schema`, `repo` | The `MigratorConfig`, the schema, the `Repository(MigrationRecord, Int32)`. |
+
+### `MigratorConfig`
+
+| Property | Type | Default |
+| :--- | :--- | :--- |
+| `schema_file_path` | `String` | `"src/schemas/app_schema.cr"` |
+| `schema_name` | `Symbol` | `:AppSchema` (constant in the generated file) |
+| `schema_symbol` | `Symbol` | `:app_schema` |
+| `migration_table_name` | `Symbol` | `:cql_schema_migrations` |
+| `auto_sync?` | `Bool` | `true`: rewrite the schema file when the migrator is built and after `up` / `down` |
+
+`CQL.build_migrator(schema)` builds the config from `CQL.configure` instead (table `:schema_migrations`); see the [Configuration Reference](../configuration.md#helpers).
 
 ## See Also
 
 - [Create a Migration](../../how-to/migrations/create-migration.md)
 - [Run Migrations](../../how-to/migrations/run-migrations.md)
+- [Rollback Migrations](../../how-to/migrations/rollback.md)
 - [Add Columns](../../how-to/migrations/add-columns.md)
+- [Database Support](../database-support.md)

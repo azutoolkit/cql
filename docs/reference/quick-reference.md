@@ -1,172 +1,282 @@
+---
+description: "The most used CQL calls, one line each, and the CQL-specific terms they use."
+---
+
 # Quick Reference
 
-Essential CQL patterns for quick reference.
+## Terms
 
-## Schema Definition
+| Term | Meaning | API |
+| :--- | :--- | :--- |
+| `QueryBuilder` | The typed, model-aware query `Model.query` and `Model.where` return | `User.where(active: true).order(id: :desc)` |
+| `CQL::Query` | The table-level SQL builder `AppDB.query` returns; CTEs and window functions live here | `AppDB.query.from(:users).where(name: "Ada")` |
+| Database context | The schema and table a model maps to; inferred from the class name when omitted | `db_context AppDB, :users` |
+| Schema file | The generated Crystal file that mirrors the database; the migrator writes it | `migrator.update_schema_file` |
+| Dialect | The per-database SQL rules: placeholders, upserts, DDL | `CQL::Adapter::Postgres.dialect` |
+
+## Schema
+
+The blocks from here on compile and run on SQLite in this order.
 
 ```crystal
-MyDB = CQL::Schema.define(
-  :my_db,
-  adapter: CQL::Adapter::Postgres,  # or SQLite, MySql, CockroachDB
-  uri: "postgres://localhost/myapp"
-) do
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
   table :users do
     primary :id, Int64, auto_increment: true
     column :name, String
     column :email, String
+    column :age, Int32, default: 0
+    column :active, Bool, default: true
     timestamps
+    index [:email], unique: true
+  end
+
+  table :posts do
+    primary :id, Int64, auto_increment: true
+    column :user_id, Int64, null: true
+    column :title, String
+    column :published, Bool, default: false
+  end
+
+  table :profiles do
+    primary :id, Int64, auto_increment: true
+    column :user_id, Int64, null: true
+    column :bio, String, default: ""
+    column :lock_version, Int32, default: 1
+  end
+
+  table :comments do
+    primary :id, Int64, auto_increment: true
+    column :post_id, Int64
+    column :body, String
+    column :deleted_at, Time, null: true
+  end
+
+  table :tags do
+    primary :id, Int64, auto_increment: true
+    column :name, String
+  end
+
+  table :post_tags do
+    primary :id, Int64, auto_increment: true
+    column :post_id, Int64
+    column :tag_id, Int64
   end
 end
+
+AppDB.build # CREATE TABLE IF NOT EXISTS ... for every table, then its indexes
 ```
 
-## Model Definition
-
-```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  # db_context is optional: User maps to :users, in the schema whose define block declares it.
-  # One argument overrides just that part: db_context table: :people, db_context schema: MyDB
-  # Both: db_context MyDB, :users
-
-  property id : Int64?
-  property name : String
-  property email : String
-  property created_at : Time?
-  property updated_at : Time?
-
-  def initialize(@name : String, @email : String)
-  end
-end
-```
-
-## CRUD Operations
-
-```crystal
-# Create
-user = User.create!(name: "John", email: "john@example.com")
-
-# Read
-user = User.find(1)             # => User? (nil when missing)
-user = User.find!(1)            # raises DB::NoResultsError
-user = User.find_by(email: "john@example.com")
-users = User.where(active: true).all
-
-# Update
-user.name = "Jane"
-user.save!
-
-# Delete
-user.delete!
-```
-
-## Querying
-
-```crystal
-# Basic queries
-User.all
-User.first
-User.last
-User.count
-
-# Where clauses
-User.where(active: true).all
-User.where { age > 18 }.all                        # typed columns, checked at compile time
-User.where { (age >= 18) & (status == "active") }.all
-User.where { name.like("%john%") }.all
-User.where("lower(email) = ?", "john@example.com").all
-
-# Chaining
-User.where(active: true)
-    .order(created_at: :desc)
-    .limit(10)
-    .all
-
-# Typed ordering, joins through associations and partial selects
-User.query
-    .joins(:posts) { posts.published == true }
-    .order_by(created_at: :desc)
-    .select(:id, :name)
-    .to_a
-
-# Pagination and loading
-User.page(2, per_page: 20)
-User.preload(:posts).all          # has_many, belongs_to, has_one
-User.where(active: true).pluck(:email, as: String)
-
-# Scopes
-scope :active, -> { where(active: true) }
-User.active.recent.all
-```
-
-## Relationships
-
-```crystal
-# Define
-belongs_to :user, User, :user_id
-has_one :profile, Profile, :user_id
-has_many :posts, Post, :user_id
-
-# Use
-user.posts.all                    # Array(Post)
-user.posts.create(title: "Hi")    # sets user_id for you
-post.user                         # => User? (optional: true by default)
-```
-
-`has_many` also takes `foreign_key:` and `dependent:` (`:nullify`, `:destroy`, `:delete_all`, `:restrict_with_error`); `many_to_many :tags, Tag, join_through: PostTag` uses a join model.
-
-Relationship declarations are compile-time checked. `belongs_to` and `has_many` raise CQL-specific compile errors when foreign-key and primary-key types do not match:
+## Models
 
 ```crystal
 class User
-  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::Model(Int64) # Pk: Int32, Int64, UUID or String (ULID)
+  # db_context AppDB, :users              # optional: inferred from the class name and the schema
+
+  property name : String = ""
+  property email : String = ""
+  property age : Int32 = 0
+  property active : Bool = true
+  property created_at : Time?
+  property updated_at : Time?
+
+  has_many :posts, Post, :user_id
+  has_one :profile, Profile, :user_id
+
+  validate :name, presence: true, size: 2..50
+  validate :email, required: true, match: /@/
+
+  before_save :normalize_email
+
+  scope :active, -> { where(active: true) }
+  scope :adults, -> { where { age >= 18 } }
+
+  def initialize # every model needs a no-argument initialize
+  end
+
+  def initialize(@name : String, @email : String)
+  end
+
+  private def normalize_email
+    @email = @email.downcase
+    true # false would halt the save
+  end
 end
 
 class Post
-  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::Model(Int64)
 
-  property user_id : Int32?
+  property user_id : Int64?
+  property title : String = ""
+  property published : Bool = false
 
-  # Compile-time error: user_id must match User's Int64 primary key.
   belongs_to :user, User, :user_id
+  many_to_many :tags, Tag, join_through: PostTag
+
+  def initialize(@title : String = "", @user_id : Int64? = nil) # used by user.posts.create(title:)
+  end
+end
+
+class Profile
+  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::OptimisticLocking
+
+  optimistic_locking version_column: :lock_version # Int32 column; default :lock_version
+
+  property user_id : Int64?
+  property bio : String = ""
+  property lock_version : Int32 = 1
+end
+
+class Tag
+  include CQL::ActiveRecord::Model(Int64)
+  property name : String = ""
+end
+
+class PostTag
+  include CQL::ActiveRecord::Model(Int64)
+  property post_id : Int64 = 0
+  property tag_id : Int64 = 0
 end
 ```
 
-## Schema Mapping Validation
+| Macro | Signature | Defaults |
+| :--- | :--- | :--- |
+| `belongs_to` | `belongs_to :user, User, :user_id, optional: true` | optional (reader returns `User?`) |
+| `has_one` | `has_one :profile, Profile, :user_id, dependent: :destroy` | `dependent: :destroy`; also `:delete`, `:nullify` |
+| `has_many` | `has_many :posts, Post, :user_id, dependent: :nullify` | `dependent: :nullify`; also `:destroy`, `:delete_all`, `:restrict_with_error`; `foreign_key:` may be named |
+| `many_to_many` | `many_to_many :tags, Tag, join_through: PostTag` | `dependent: :nullify`; also `:destroy`, `:delete_all` |
+| `validate` | `validate :email, match: /@/, message: "is invalid"` | see [Validation Options](api/validation-options.md) |
+| `before_save` etc. | `before_save :method` | see [Callback Hooks](api/callback-hooks.md) |
+| `scope` | `scope :recent, -> { order(id: :desc) }` | |
 
-```bash
-CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
-```
-
-When enabled, CQL checks model getter types against the model's schema table (from `db_context`, or inferred) and raises `CQL schema mapping error` for mismatches.
-
-## Validations
-
-```crystal
-validate :name, presence: true
-validate :email, required: true, match: /@/
-validate :age, gt: 0, lt: 150
-validate :status, in: ["active", "pending"]
-validate :username, presence: true, size: 3..20, message: "is invalid"   # one call per property
-use PasswordValidator                                                    # custom validator class
-```
-
-## Callbacks
+## Create, read, update, delete
 
 ```crystal
-before_save :normalize_data
-after_create :send_notification
-before_destroy :cleanup
+ada = User.create!(name: "Ada", email: "ADA@example.com", age: 36) # INSERT; no validation, no callbacks
+grace = User.new("Grace", "grace@example.com")
+grace.save                        # => true; validates, runs callbacks, sets id and timestamps
+grace.name = "Grace H."
+grace.save!                       # raises ValidationError if invalid, RecordNotSaved if a callback halts
+grace.valid?                      # => true
+grace.errors                      # => [] of CQL::ActiveRecord::Validations::Error
+
+User.find(ada.id!)                # => User?
+User.find!(ada.id!)               # raises DB::NoResultsError when missing
+User.find_by(email: "ADA@example.com")
+User.find_by!(name: "Ada")
+
+User.update!(ada.id!, age: 37)    # UPDATE users SET age = ? WHERE users.id = ?
+ada.reload!
+ada.delete!                       # => true; runs destroy callbacks
+```
+
+## Query
+
+```crystal
+User.all                                   # Array(User)
+User.first                                 # User?
+User.last                                  # User?
+User.count                                 # SELECT COUNT(*) FROM users
+User.where(active: true).exists?           # Bool
+User.where(active: true).order(created_at: :desc).limit(10).offset(10).all
+User.where { age > 18 }.all                # typed columns, checked at compile time
+User.where { (age >= 18) & (active == true) }.all
+User.where { name.like("G%") }.all
+User.where("lower(email) = ?", "grace@example.com").all
+User.query.joins(:posts) { posts.published == true }.order_by(created_at: :desc).select(:id, :name).to_a
+User.page(2, per_page: 20)                 # Array(User)
+User.preload(:posts).all                   # has_many, belongs_to, has_one
+User.where(active: true).pluck(:email, as: String)
+User.active.adults.all                     # scopes chain
+User.where(active: true).find_each(batch_size: 1000) { |user| user.name }
+```
+
+## Associations
+
+```crystal
+user = User.create!(name: "Linus", email: "linus@example.com")
+post = user.posts.create(title: "Hello") # sets user_id; validates the Post
+user.posts.all                           # Array(Post)
+user.posts.count                         # Int64
+post.user                                # => User?
+user.profile                             # => Profile?
+tag = Tag.create!(name: "crystal")
+post.tags << tag                         # inserts the post_tags row
+post.tags.all                            # Array(Tag)
+```
+
+## Transactions
+
+```crystal
+User.transaction do
+  owner = User.create!(name: "Ken", email: "ken@example.com")
+  Profile.create!(user_id: owner.id!, bio: "unix")
+end # commits; an exception in the block rolls back
+
+AppDB.transaction do |tx|
+  tx.connection.exec("UPDATE users SET active = ? WHERE age < ?", false, 18)
+end
+```
+
+## Soft deletes
+
+```crystal
+class Comment
+  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::SoftDeletable # adds deleted_at : Time?
+
+  property post_id : Int64 = 0
+  property body : String = ""
+end
+
+comment = Comment.create!(post_id: post.id!, body: "Nice")
+comment.delete!                   # UPDATE comments SET deleted_at = ...
+Comment.all                       # excludes soft-deleted rows
+Comment.with_deleted.all.size     # includes them
+Comment.only_deleted.all.size     # only them
+comment.restore!                  # deleted_at = NULL
+comment.force_delete!             # DELETE FROM comments ...
+```
+
+## Optimistic locking
+
+`Profile` (above) includes `CQL::ActiveRecord::OptimisticLocking`.
+
+```crystal
+profile = Profile.create!(user_id: user.id!, bio: "kernel")
+profile.bio = "Linux"
+begin
+  profile.update!                 # UPDATE profiles SET ..., lock_version = ? WHERE (profiles.id = ?) AND (profiles.lock_version = ?)
+rescue CQL::OptimisticLockError
+  profile.reload!                 # another process won; reload and retry
+end
+```
+
+## Query builder (`CQL::Query`)
+
+```crystal
+AppDB.query.from(:users).select(:name).where(active: true).order(:name).all(as: String)
+AppDB.query.from(:users).select(:name, :age).all(as: {String, Int32})
+AppDB.insert.into(:users).values(name: "Barbara", email: "barbara@example.com").commit
+AppDB.update.table(:users).set(active: false).where(name: "Barbara").commit
+AppDB.delete.from(:users).where(name: "Barbara").commit
+AppDB.query.from(:users).where(name: "Ada").to_sql(for: CQL::Adapter::Postgres) # {sql, params}
 ```
 
 ## Migrations
 
 ```crystal
-class CreateUsers < CQL::Migration(1)
+class CreateUsers < CQL::Migration(20250125001401)
   def up
     schema.table :users do
       primary :id, Int64, auto_increment: true
-      column :name, String, null: false
+      column :name, String
+      column :email, String
+      column :age, Int32, default: 0
+      column :active, Bool, default: true
       timestamps
+      index [:email], unique: true
     end
     schema.users.create!
   end
@@ -175,70 +285,31 @@ class CreateUsers < CQL::Migration(1)
     schema.users.drop!
   end
 end
+
+migrator = AppDB.migrator(CQL::MigratorConfig.new(schema_file_path: "src/schemas/app_schema.cr", auto_sync: true))
+migrator.up                       # apply pending migrations
+migrator.pending_migrations       # => [] of CQL::BaseMigration.class
+migrator.applied_migrations.size  # => 1
+migrator.rollback                 # revert the newest
 ```
 
-## Run Migrations
+## Configuration
 
 ```crystal
-config = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  auto_sync: true
-)
-
-migrator = MyDB.migrator(config)
-migrator.up
-```
-
-## Transactions
-
-```crystal
-User.transaction do
-  user = User.create!(name: "John", email: "john@example.com")
-  Profile.create!(user_id: user.id!)
+CQL.configure do |c|
+  c.db = "sqlite3://./app.db"
+  c.pool_size = 5
+  c.sql_logging = false
 end
 ```
 
-## Soft Deletes
+For each database's URL, see [Configure Database Connection](../how-to/configuration/database-connection.md); to check models against the schema, see [Fix Schema Mapping Errors](../how-to/troubleshooting/schema-mapping-errors.md).
 
-```crystal
-include CQL::ActiveRecord::SoftDeletable
+## See Also
 
-user.delete!        # Soft delete
-user.restore!       # Restore
-user.force_delete!  # Permanent delete
-
-User.with_deleted.all
-User.only_deleted.all
-```
-
-## Optimistic Locking
-
-```crystal
-include CQL::ActiveRecord::OptimisticLocking
-optimistic_locking version_column: :version   # version property is an Int32 (the lock_version column), whatever the primary key type
-
-begin
-  user.update!
-rescue CQL::OptimisticLockError
-  user.reload!
-  # Retry
-end
-```
-
-## Connection Strings
-
-```crystal
-# PostgreSQL
-"postgres://user:pass@host:5432/database"
-
-# MySQL
-"mysql://user:pass@host:3306/database"
-
-# CockroachDB
-"cockroachdb://user:pass@host:26257/database"
-
-# SQLite
-"sqlite3://./db/app.db"
-"sqlite3::memory:"
-```
+- [Migration DSL](api/migration-dsl.md)
+- [Validation Options](api/validation-options.md)
+- [Callback Hooks](api/callback-hooks.md)
+- [Configuration Reference](configuration.md)
+- [Error Codes](error-codes.md)
+- [Database Support](database-support.md)
