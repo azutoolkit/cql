@@ -33,8 +33,8 @@ engine.stream(AppDB.query.from(:users).select(:id), fetch_size: 100) do |rows|
     break if rows.read(Int64) >= 1000 # stopping early closes the portal; the connection goes back in sync
   end
 end
-# engine.stream takes its own pooled connection and holds it until the block ends;
-# tx.stream uses the transaction's, so run nothing else on tx inside the block.
+# engine.stream holds its own pooled connection until the block ends. tx.stream uses the transaction's:
+# a statement on tx inside the block raises Sync::Error::Deadlock (Crystal 1.20+).
 # Read rows inside the block, on the fiber that opened the stream. Kept past its block, a stream
 # yields only rows already buffered, then raises CQL::Postgres::StreamClosed; another fiber gets WrongFiber.
 # COPY cannot be streamed and fetch_size must be positive (ArgumentError for both).
