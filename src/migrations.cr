@@ -182,8 +182,8 @@ module CQL
     getter repo : Repository(MigrationRecord, Int32)
 
     def initialize(@schema : Schema, @config = MigratorConfig.new)
+      ensure_schema_migrations_table
       bootstrap_schema if @config.auto_sync?
-      schema.ddl_transaction { ensure_schema_migrations_table }
       @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
 
@@ -451,7 +451,6 @@ module CQL
     end
 
     private def ensure_schema_migrations_table
-      # Table doesn't exist, create it
       schema.table @config.migration_table_name do
         primary :id, Int32
         column :name, String
@@ -464,14 +463,7 @@ module CQL
     end
 
     private def migration_applied?(version)
-      # Ensure the schema_migrations table exists before checking
-      ensure_schema_migrations_table
-
-      begin
-        repo.exists?(version: version)
-      rescue DB::NoResultsError | CQL::Schema::ConnectionError
-        false
-      end
+      repo.exists?(version: version)
     end
 
     private def record_migration(migration : BaseMigration.class)

@@ -710,7 +710,8 @@ module CQL
       Expression::TruncateTable.new(self).accept(schema.new_generator).to_s
     end
 
-    # Creates the table in the database.
+    # Creates the table in the database, registering it with the schema if it is not yet.
+    # Runs in `Schema#ddl_transaction`, so it raises `CQL::DialectError` inside an open transaction where DDL commits implicitly.
     # - **@return** [Nil]
     #
     # **Example**
@@ -723,12 +724,13 @@ module CQL
     # => nil
     # ```
     def create!
-      schema.tables[table_name] = self if schema.tables[table_name].nil?
+      schema.tables[table_name] ||= self
       Log.debug { "Creating table #{table_name}" }
-      create_statements.each { |sql| schema.exec sql }
+      schema.ddl_transaction { create_statements.each { |sql| schema.exec sql } }
     end
 
     # Drops the table from the database.
+    # Runs in `Schema#ddl_transaction`, so it raises `CQL::DialectError` inside an open transaction where DDL commits implicitly.
     # - **@return** [Nil]
     #
     # **Example**
@@ -740,10 +742,11 @@ module CQL
     # ```
     def drop!
       Log.debug { "Dropping table #{table_name}" }
-      schema.exec "#{drop_sql};"
+      schema.ddl_transaction { schema.exec "#{drop_sql};" }
     end
 
     # Truncates the table in the database.
+    # Runs in `Schema#ddl_transaction`, so it raises `CQL::DialectError` inside an open transaction where DDL commits implicitly.
     # - **@return** [Nil]
     #
     # **Example**
@@ -754,7 +757,7 @@ module CQL
     # ```
     def truncate!
       Log.debug { "Truncating table #{table_name}" }
-      schema.exec "#{truncate_sql};"
+      schema.ddl_transaction { schema.exec "#{truncate_sql};" }
       schema.tables.delete(table_name)
     end
 

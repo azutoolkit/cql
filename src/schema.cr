@@ -233,7 +233,8 @@ module CQL
       raise InvalidURIError.new("Invalid URI format")
     end
 
-    # Builds the schema. This method creates the tables in the schema.
+    # Builds the schema. This method creates the tables in the schema, in one `ddl_transaction`: atomically where DDL
+    # is transactional; elsewhere each statement commits on its own and it raises `CQL::DialectError` inside an open transaction.
     #
     # **Example**
     #
@@ -241,8 +242,10 @@ module CQL
     # schema.build
     # ```
     def build
-      @tables.each_value do |table|
-        table.create_statements.each { |sql| exec(sql) }
+      ddl_transaction do
+        @tables.each_value do |table|
+          table.create_statements.each { |sql| exec(sql) }
+        end
       end
     end
 

@@ -347,12 +347,85 @@ describe "CQL::Schema#transaction nesting" do
     committed_columns.call.should contain "mysql_outside_transaction"
   end
 
+  it "drops a table outside a transaction on a dialect whose DDL commits implicitly" do
+    mysql_schema.nested_alters.drop!
+
+    committed_columns.call.should be_empty
+  end
+
+  it "refuses create! inside a transaction on a dialect whose DDL commits implicitly" do
+    count_queries(:ddl) do
+      expect_raises(CQL::DialectError, /MySQL/) { mysql_schema.transaction { mysql_schema.nested_alters.create! } }
+    end.should be_empty
+  end
+
+  it "refuses drop! inside a transaction on a dialect whose DDL commits implicitly" do
+    count_queries(:ddl) do
+      expect_raises(CQL::DialectError, /MySQL/) { mysql_schema.transaction { mysql_schema.nested_alters.drop! } }
+    end.should be_empty
+
+    committed_columns.call.should_not be_empty
+  end
+
+  it "refuses truncate! inside a transaction on a dialect whose DDL commits implicitly" do
+    count_queries(:ddl) do
+      expect_raises(CQL::DialectError, /MySQL/) { mysql_schema.transaction { mysql_schema.nested_alters.truncate! } }
+    end.should be_empty
+
+    mysql_schema.tables[:nested_alters]?.should_not be_nil
+  end
+
+  it "refuses build inside a transaction on a dialect whose DDL commits implicitly" do
+    count_queries(:ddl) do
+      expect_raises(CQL::DialectError, /MySQL/) { mysql_schema.transaction { mysql_schema.build } }
+    end.should be_empty
+  end
+
   it "rolls back DDL run in a ddl_transaction when the block raises" do
     expect_raises(Exception, "boom") do
       schema.ddl_transaction do
         schema.exec("CREATE TABLE ddl_tx_probe (id INTEGER)")
         raise "boom"
       end
+    end
+
+    committed_probe_tables.call.should be_empty
+  end
+
+  it "discards a create! when the outer transaction block raises" do
+    probe = CQL::Table.new(:ddl_tx_probe, schema)
+    probe.primary :id, Int32
+
+    begin
+      expect_raises(Exception, "boom") do
+        schema.transaction do
+          probe.create!
+          raise "boom"
+        end
+      end
+    ensure
+      schema.tables.delete(:ddl_tx_probe)
+    end
+
+    committed_probe_tables.call.should be_empty
+  end
+
+  it "builds every table in one transaction, so a failing table rolls back the tables before it" do
+    broken = CQL::Schema.define(:nested_tx_broken, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{db_file}") do
+      table :ddl_tx_probe do
+        primary :id, Int32
+      end
+
+      table :ddl_tx_broken do
+        primary :id, Int32
+        check_constraint "not valid sql ("
+      end
+    end
+
+    begin
+      expect_raises(SQLite3::Exception) { broken.build }
+    ensure
+      broken.close
     end
 
     committed_probe_tables.call.should be_empty
