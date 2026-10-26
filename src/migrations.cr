@@ -99,6 +99,12 @@ module CQL
   abstract class BaseMigration
     @@version : Int64 = 0 # Initialize with a default value
 
+    getter schema : CQL::Schema
+
+    # `Migrator` calls `new(schema)` on every registered class, which must resolve even when no
+    # migration class exists.
+    def initialize(@schema : CQL::Schema); end
+
     abstract def up
     abstract def down
 
@@ -113,13 +119,12 @@ module CQL
 
   abstract class Migration(V) < BaseMigration
     macro inherited
-      getter schema : CQL::Schema
-
       CQL::Migrator.migrations << {{@type}}
       def self.version : Int64
         V.to_i64
       end
 
+      # Kept per class so `new(schema)` survives a migration that adds its own `initialize` overload.
       def initialize(@schema : CQL::Schema); end
     end
   end

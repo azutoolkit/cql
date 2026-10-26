@@ -5,10 +5,6 @@ abstract class StepMigration < CQL::BaseMigration
   # Versions in the order `down` ran.
   class_getter reverted = [] of Int64
 
-  getter schema : CQL::Schema
-
-  def initialize(@schema : CQL::Schema); end
-
   def up
     schema.exec("CREATE TABLE step_migration_#{self.class.version} (id INTEGER)")
   end
