@@ -194,23 +194,7 @@ module CQL
           @@stats.hits += 1
           @@stats.total_cache_time += (Time.instant - start_time).total_seconds
           begin
-            parsed = JSON.parse(cached_value).as_a
-            return parsed.map do |item|
-              case item
-              when .as_s?
-                item.as_s.as(DB::Any)
-              when .as_i?
-                item.as_i.as(DB::Any)
-              when .as_i64?
-                item.as_i64.as(DB::Any)
-              when .as_f?
-                item.as_f.as(DB::Any)
-              when .as_bool?
-                item.as_bool.as(DB::Any)
-              else
-                nil.as(DB::Any)
-              end
-            end
+            return JSON.parse(cached_value).as_a.map { |item| cached_db_value(item).as(DB::Any) }
           rescue JSON::ParseException
             @@stats.hits -= 1
             @@stats.misses += 1
@@ -229,8 +213,30 @@ module CQL
       # - **@param** ttl [Time::Span] Time to live (default: 1 hour)
       def self.set(key : String, value : Array(DB::Any), ttl : Time::Span = @@default_ttl)
         return unless @@enabled
-        cache_value = serialize_for_cache(value)
-        cache_store.set(key, cache_value, ttl)
+        cache_store.set(key, serialize_rows(value), ttl)
+      end
+
+      # A value `set` stored, read back: integers that fit come back as `Int32`, as before, and a
+      # `Time` as its RFC 3339 `String`.
+      private def self.cached_db_value(item : JSON::Any) : DB::Any
+        case raw = item.raw
+        when Int64
+          Int32::MIN <= raw <= Int32::MAX ? raw.to_i32 : raw
+        when String, Bool, Float64, Nil
+          raw
+        end
+      end
+
+      # JSON has no binary form, so a `Bytes` value raises instead of being stored.
+      private def self.serialize_rows(values : Array(DB::Any)) : String
+        JSON.build do |json|
+          json.array do
+            values.each do |value|
+              raise ArgumentError.new("Cache.set cannot store Bytes: JSON has no binary form") if value.is_a?(Bytes)
+              value.to_json(json)
+            end
+          end
+        end
       end
 
       # Check if a key exists in the cache

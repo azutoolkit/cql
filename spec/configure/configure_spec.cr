@@ -117,6 +117,15 @@ describe "CQL.configure" do
     end
   end
 
+  describe "fragment_cache" do
+    it "builds a FragmentCache with each invalidation strategy" do
+      {"timestamp" => "TimestampInvalidation", "version" => "VersionInvalidation", "transaction_aware" => "TransactionAwareInvalidation"}.each do |strategy, name|
+        CQL.configure(&.cache.invalidation=(strategy))
+        CQL.fragment_cache.stats["invalidation_strategy"].should eq(name)
+      end
+    end
+  end
+
   describe "full_db_url" do
     it "opens through the native PostgreSQL driver without unknown startup parameters" do
       {"postgres://u@localhost/app", "cockroachdb://root@localhost:26257/defaultdb"}.each do |url|
