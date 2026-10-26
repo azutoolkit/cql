@@ -28,14 +28,18 @@ titles = CQL::Cache::GlobalCache.cache("homepage_titles:typed", 1.minute) do
 end
 
 key = CQL::Cache::Cache.generate_cache_key(sql, params)  # "cql:<md5 of sql and params>"; a third argument replaces "cql"
-CQL::Cache::Cache.set(key, ["Ada", 36] of DB::Any, 5.minutes)
-CQL::Cache::Cache.get(key)      # => ["Ada", 36] as Array(DB::Any)?
+CQL::Cache::Cache.with_cache(key, 5.minutes) { AppDB.query.from(:users).select(:name).all(as: String) }
+CQL::Cache::Cache.get(key)      # => ["Ada"] as Array(DB::Any)?, for a cached JSON array
 CQL::Cache::Cache.cached?(key)  # => true
 
 CQL::Cache::Cache.enabled = false  # with_cache runs the block, get returns nil, cached? false
 ```
 
 `with_cache` without a TTL uses `Cache.default_ttl` (1 hour). `GlobalCache` ignores `Cache.enabled` and is not counted in `Cache.stats`.
+
+{% hint style="warning" %}
+`Cache.set(key, rows, ttl)` does not compile: its `Array(DB::Any)` can hold `Bytes`, which has no JSON form. Store values with `with_cache`, `GlobalCache.set` or `cache_store.set`, and keep `Bytes` out of cached values.
+{% endhint %}
 
 ## Choose a Store
 
@@ -106,7 +110,7 @@ CQL::Cache::CacheKeyBuilder.new("myapp").add_component("posts").add_param("page"
 # => "myapp:posts:<md5 of page=2>"
 ```
 
-Tags work with both stores; deleting or evicting a `MemoryCache` entry also removes it from its tags. `FragmentCache` keeps its strategy only for `fragments.stats["invalidation_strategy"]`: TTLs and tags are what remove entries.
+Tags work with both stores; deleting or evicting a `MemoryCache` entry also removes it from its tags. `FragmentCache` never consults its strategy: only TTLs and tags remove entries.
 
 ## Use an Invalidation Strategy
 

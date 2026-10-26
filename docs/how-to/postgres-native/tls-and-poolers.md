@@ -60,10 +60,10 @@ Not tested: RDS Proxy, Supavisor, other pgpool-II settings.
 ```
 
 ```bash
-# Nine probes: connect, cached statements, interleaved clients, statement_cache_size=0,
-# pipelining, SET LOCAL, timeout cancel, streaming, savepoints (pooler on 127.0.0.1, database postgres)
-POOLER_NAME=pgbouncer POOLER_PORT=6432 POOLER_USER=app POOLER_PASSWORD=secret \
-  crystal run script/pooler_probes.cr  # POOLER_QUERY adds URL options (default sslmode=disable)
+# From a CQL checkout, with the pooler on 127.0.0.1 in front of the database postgres
+POOLER_NAME=pgbouncer POOLER_PORT=6432 POOLER_USER=app POOLER_PASSWORD=secret crystal run script/pooler_probes.cr
+# Nine probes: connect, cached statements, interleaved clients, statement_cache_size=0, pipelining,
+# SET LOCAL, timeout cancel, streaming, savepoints. POOLER_QUERY adds URL options (default sslmode=disable).
 ```
 
 ## Timeouts and Cancel

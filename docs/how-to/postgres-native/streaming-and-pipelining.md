@@ -73,7 +73,8 @@ engine.with_connection do |connection|
     rows.peak_buffered            # => 3 (most rows held at once, never above fetch_size)
   end
 end
-# connection.stream(sql, *args) is the DB::ResultSet flavour that engine.stream uses.
+# connection.stream(sql, args, fetch_size: 100) is the DB::ResultSet flavour engine.stream uses;
+# without arguments pass [] of DB::Any, since connection.stream(sql) does not compile.
 ```
 
 ## Pipeline Statements
@@ -114,7 +115,7 @@ end
 
 **Streaming hangs behind pgcat or pgpool-II**: streaming through a portal hung on both in the project's [measured compatibility](https://github.com/azutoolkit/cql#measured-compatibility) runs.
 
-**A stream is slower than `to_a`**: it costs one round trip per `fetch_size` rows. In the README's measurement (200,000 two-column rows, PostgreSQL 16, one run), streaming 1000 rows per fetch held 1000 rows instead of 200,000 and took 125 ms against 82 ms. Raise `fetch_size` to trade memory for speed.
+**A stream is slower than `to_a`**: it costs one round trip per `fetch_size` rows. In the README's [measurement](https://github.com/azutoolkit/cql#measured-compatibility) (200,000 two-column rows, PostgreSQL 16, one run), streaming 1000 rows per fetch held 1000 rows instead of 200,000 and took 125 ms against 82 ms. Raise `fetch_size` to trade memory for speed.
 
 ## See Also
 
