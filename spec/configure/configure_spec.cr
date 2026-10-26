@@ -148,6 +148,33 @@ describe "CQL.configure" do
     end
   end
 
+  describe ".verify_schema" do
+    it "reports a stale schema file without rewriting it, and rewrites it with auto_fix" do
+      schema_dir = File.join(Dir.tempdir, "cql_verify_schema_#{Process.pid}_#{Random::Secure.hex(4)}")
+      db_file = File.join(Dir.tempdir, "cql_verify_schema_#{Process.pid}_#{Random::Secure.hex(4)}.db")
+      CQL.configure do |config|
+        config.db = "sqlite3://#{db_file}"
+        config.schema_dir = schema_dir
+        config.auto_sync = true
+      end
+      schema = CQL::Schema.new(:verify_schema_spec, "sqlite3://#{db_file}", CQL::Adapter::SQLite)
+      Dir.mkdir_p(schema_dir)
+      File.write(CQL.config.schema_path, "# stale\n")
+
+      begin
+        CQL.verify_schema(schema).should be_false
+        File.read(CQL.config.schema_path).should eq("# stale\n")
+
+        CQL.verify_schema(schema, auto_fix: true).should be_true
+        CQL.verify_schema(schema).should be_true
+      ensure
+        schema.close
+        FileUtils.rm_rf(schema_dir)
+        File.delete(db_file) if File.exists?(db_file)
+      end
+    end
+  end
+
   describe ".build_schema" do
     it "defines tables with the schema DSL and applies the configured connection settings" do
       with_crystal_env("test") do

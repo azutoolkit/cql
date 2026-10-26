@@ -58,6 +58,17 @@ module CQL
       new(schema.adapter, schema.uri)
     end
 
+    # Yields a dumper for *schema*'s database and closes its connections afterwards.
+    # - **@return** the block's value
+    def self.open(schema : CQL::Schema, &)
+      dumper = from_schema(schema)
+      begin
+        yield dumper
+      ensure
+        dumper.close
+      end
+    end
+
     # Generate the schema content as a string
     # - **@param** schema_name [Symbol] Name for the schema constant
     # - **@param** schema_symbol [Symbol] Symbol name for the schema
@@ -96,12 +107,10 @@ module CQL
       end
     end
 
-    # SQLite table inspection
+    # SQLite table inspection. Each query finishes before the next starts, so one connection is enough.
     private def inspect_sqlite_tables
-      tables = [] of TableInfo
-
-      @db.query_each("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") do |record_set|
-        table_name = record_set.read(String)
+      table_names = @db.query_all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", as: String)
+      table_names.map do |table_name|
         table_info = TableInfo.new(table_name)
 
         # Get columns
@@ -145,26 +154,31 @@ module CQL
           table_info.foreign_keys << fk_info
         end
 
-        tables << table_info
+        table_info
       end
-
-      tables
     end
 
-    # PostgreSQL table inspection
+    # PostgreSQL table inspection. Each query finishes before the next starts, so one connection is enough.
     private def inspect_postgres_tables
-      tables = [] of TableInfo
-
-      # Get all tables
-      @db.query_each(<<-SQL) do |record_set|
+      table_names = @db.query_all(<<-SQL, as: String)
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = 'public'
         AND table_type = 'BASE TABLE'
         ORDER BY table_name
         SQL
-        table_name = record_set.read(String)
+      table_names.map do |table_name|
         table_info = TableInfo.new(table_name)
+        primary_keys = @db.query_all(<<-SQL, table_name, as: String)
+          SELECT kcu.column_name FROM information_schema.table_constraints tc
+          JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+          AND tc.table_name = kcu.table_name
+          WHERE tc.table_schema = 'public'
+          AND tc.table_name = $1
+          AND tc.constraint_type = 'PRIMARY KEY'
+          SQL
 
         # Get columns
         @db.query_each(<<-SQL, table_name) do |col_rs|
@@ -178,27 +192,13 @@ module CQL
           nullable = col_rs.read(String) == "YES"
           default_value = col_rs.read(String?)
 
-          # Check if it's a primary key
-          is_primary = false
-          @db.query_each(<<-SQL, table_name, column_name) do |_|
-            SELECT 1 FROM information_schema.table_constraints tc
-            JOIN information_schema.key_column_usage kcu
-            ON tc.constraint_name = kcu.constraint_name
-            WHERE tc.table_schema = 'public'
-            AND tc.table_name = $1
-            AND kcu.column_name = $2
-            AND tc.constraint_type = 'PRIMARY KEY'
-            SQL
-            is_primary = true
-          end
-
           crystal_type = map_sql_type_to_crystal(column_type)
           column_info = ColumnInfo.new(
             name: column_name,
             type: crystal_type,
             nullable: nullable,
             default: default_value,
-            primary_key: is_primary
+            primary_key: primary_keys.includes?(column_name)
           )
           table_info.columns << column_info
         end
@@ -241,18 +241,14 @@ module CQL
           table_info.foreign_keys << fk_info
         end
 
-        tables << table_info
+        table_info
       end
-
-      tables
     end
 
-    # MySQL table inspection
+    # MySQL table inspection. Each query finishes before the next starts, so one connection is enough.
     private def inspect_mysql_tables
-      tables = [] of TableInfo
-
-      @db.query_each("SHOW TABLES") do |record_set|
-        table_name = record_set.read(String)
+      table_names = @db.query_all("SHOW TABLES", as: String)
+      table_names.map do |table_name|
         table_info = TableInfo.new(table_name)
 
         # Get columns
@@ -306,10 +302,8 @@ module CQL
           table_info.foreign_keys << fk_info
         end
 
-        tables << table_info
+        table_info
       end
-
-      tables
     end
 
     # Map SQL type to Crystal type name

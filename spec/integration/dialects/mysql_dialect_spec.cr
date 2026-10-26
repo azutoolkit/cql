@@ -18,13 +18,21 @@ module Expression
     end
 
     describe "#structure_dump" do
-      it "uses mysqldump for structure dumps" do
-        dialect = MySqlDialect.new
-        uri = URI.parse("mysql://user:pass@localhost:3306/mydb")
+      it "returns what mysqldump prints, run against the URI's server, user, password and database" do
+        FakeExecutable.with("mysqldump", %(echo "CREATE TABLE users ();"; printf '%s\n' "$@")) do
+          MySqlDialect.new.structure_dump(URI.parse("mysql://user:pass@db.example:3307/mydb")).should eq([
+            "CREATE TABLE users ();",
+            "--no-data", "--skip-comments", "--compact", "--user=user", "--password=pass", "--host=db.example", "--port=3307", "mydb",
+          ].join("\n") + "\n")
+        end
+      end
 
-        # This is a bit tricky to test directly since it calls an external process
-        # We'll test that the method exists and returns a string
-        dialect.structure_dump(uri).should be_a(String)
+      it "raises with mysqldump's error output when it fails" do
+        FakeExecutable.with("mysqldump", %(echo "Access denied" >&2; exit 2)) do
+          expect_raises(CQL::Error, "mysqldump failed: Access denied") do
+            MySqlDialect.new.structure_dump(URI.parse("mysql://user@localhost/mydb"))
+          end
+        end
       end
     end
 

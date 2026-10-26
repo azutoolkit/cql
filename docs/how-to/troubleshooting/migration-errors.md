@@ -62,11 +62,13 @@ CQL::Postgres::NotNullViolation: ERROR: column "name" of relation "users" contai
 ```
 
 ```crystal
-# ✅ add_column ignores default:, so write the column in SQL with its default
-schema.exec("ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT 'Unknown'")
+# ✅ Give the column a default: it fills the rows already in the table
+schema.alter :users do
+  add_column :name, String, null: false, default: "Unknown"
+end
 ```
 
-[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) explains the cause and the nullable-then-backfill alternative.
+[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) shows the migration and what to do when each row needs its own value.
 
 ## Column cannot be dropped
 
@@ -87,7 +89,7 @@ end
 # ALTER TABLE posts DROP CONSTRAINT fk_posts_user_id; DROP INDEX IF EXISTS idx_posts_user_id; ALTER TABLE posts DROP COLUMN user_id;
 ```
 
-`drop_column` on a column the schema does not declare only logs `Column nope does not exist in table ...` and emits no SQL. SQLite cannot drop foreign keys or change column types (`SQLite does not support ALTER COLUMN syntax`), so rebuild the table:
+`drop_column` emits `DROP COLUMN` whether or not the schema declares the column; the database raises if the table has no such column. SQLite cannot drop foreign keys or change column types (`SQLite does not support ALTER COLUMN syntax`), so rebuild the table:
 
 ```crystal
 # SQLite, in a migration: rebuild posts without user_id (or with a new column type)
@@ -109,14 +111,26 @@ CQL::Postgres::ForeignKeyViolation: ERROR: insert or update on table "posts" vio
 ## Schema update failed
 
 ```text
-CQL::Migrator::Error: Schema update failed: Could not check out a connection in 10.0 seconds
 CQL::Migrator::Error: Schema update failed: Unable to create directory: 'db/schema': File exists
 ```
 
-**Cause:** with `auto_sync` on, the migrator dumps the schema file after `up` and `down`. The dump needs two connections, so a pool of one (the test default) times out; a path under an existing file cannot be created.
+**Cause:** with `auto_sync` on, the migrator dumps the schema file after `up` and `down`, and a path under an existing file cannot be created.
 
 ```crystal
-CQL.configure { |c| c.pool_size = 2 } # or migrate with CQL::MigratorConfig.new(auto_sync: false)
+AppDB.migrator(CQL::MigratorConfig.new(schema_file_path: "src/schemas/app_schema.cr")) # a writable path
+AppDB.migrator(CQL::MigratorConfig.new(auto_sync: false))                            # or no schema file
+```
+
+## No migration with that version
+
+```text
+CQL::Migrator::Error: No migration with version 42
+```
+
+**Cause:** `up_to` or `down_to` got a version no registered migration has, so nothing ran. List the versions:
+
+```crystal
+CQL::Migrator.migrations.map(&.version).sort
 ```
 
 ## A migration raised mid-run

@@ -83,15 +83,6 @@ module Expression
       timestamp_column : Bool,
     ) : String
 
-    # Generates SQL to add a column to a table.
-    abstract def add_column(
-      column_name : String,
-      column_type : String,
-      primary_key : Bool,
-      nullable : Bool,
-      unique : Bool,
-    ) : String
-
     # Generates SQL to drop a column from a table.
     abstract def drop_column(column_name : String) : String
 
@@ -261,6 +252,26 @@ module Expression
 
   # Shared implementation helpers for common dialect patterns
   module DialectHelpers
+    # Runs a database's dump tool and returns what it printed. Raises `CQL::Error` with the
+    # tool's error output when it exits unsuccessfully.
+    protected def run_dump(command : String, args : Array(String), env : Process::Env = nil) : String
+      output = IO::Memory.new
+      error = IO::Memory.new
+      status = Process.run(command, args, env: env, output: output, error: error)
+      raise CQL::Error.new("#{command} failed: #{error.to_s.strip}") unless status.success?
+      output.to_s
+    rescue ex : IO::Error
+      raise CQL::Error.new("#{command} could not be run: #{ex.message}")
+    end
+
+    # `--host` and `--port` options for the server in *uri*, when it names one.
+    protected def server_options(uri : URI) : Array(String)
+      options = [] of String
+      uri.hostname.presence.try { |host| options << "--host=#{host}" }
+      uri.port.try { |port| options << "--port=#{port}" }
+      options
+    end
+
     # Efficient string building with pre-allocated capacity
     protected def build_sql(initial_capacity : Int32 = 256, &)
       String.build(initial_capacity) do |str|
@@ -417,6 +428,17 @@ module Expression
         str << "CONSTRAINT #{constraint.name} " if constraint.name
         str << "CHECK (" << constraint.condition << ")"
       end
+    end
+
+    # Generates the ALTER TABLE action that adds a column, from its `define_column` definition.
+    def add_column(column_definition : String, primary_key : Bool) : String
+      "ADD COLUMN #{column_definition}#{" PRIMARY KEY" if primary_key}"
+    end
+
+    # The SQL type of a column declared with *size*: VARCHAR takes it as its length, other types ignore it.
+    def sized_type(column_type : String, size : Int32?) : String
+      return column_type unless size && column_type.starts_with?("VARCHAR")
+      "VARCHAR(#{size})"
     end
 
     # Generates SQL to create an index that is skipped when it already exists.

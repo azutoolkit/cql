@@ -1,5 +1,5 @@
 ---
-description: "Add columns to an existing table with schema.alter, and give them defaults with a backfill or raw DDL."
+description: "Add columns to an existing table with schema.alter, with defaults, indexes and data backfills."
 ---
 
 # Add Columns
@@ -32,29 +32,22 @@ block.
 | Option | Effect on the `ADD COLUMN` statement |
 | :--- | :--- |
 | `null: false` | adds `NOT NULL` |
-| `default:` | none: the default is never written |
+| `default:` | adds `DEFAULT <value>`, which also fills the existing rows |
 | `unique: true` | adds `UNIQUE`; SQLite rejects it ("Cannot add a UNIQUE column"), so use `create_index ..., unique: true` |
-| `size:`, `index:`, `as:` | none |
+| `index: true` | runs `CREATE INDEX idx_<table>_<column>` after the column (`UNIQUE` with `unique: true`) |
+| `size:` | `VARCHAR(size)` for a `String` column on PostgreSQL, CockroachDB and MySQL; SQLite's `TEXT` has no length |
+| `as:` | none: it names the column in selects |
 
 ## Add a Column With a Default
 
-```crystal
-# ❌ default: is dropped: ALTER TABLE users ADD COLUMN active BOOLEAN NOT NULL
-add_column :active, Bool, default: true, null: false
-# Table with rows -> SQLite3::Exception: Cannot add a NOT NULL column with default value NULL
-# Empty table     -> succeeds, then an INSERT without active fails: NOT NULL constraint failed: users.active
-```
-
 {% code title="db/migrations/006_add_active_to_users.cr" %}
 ```crystal
-# ✅ Nullable column, then a backfill with a bound value
 class AddActiveToUsers < CQL::Migration(6)
   def up
     schema.alter :users do
-      add_column :active, Bool
+      add_column :active, Bool, default: true, null: false
+      # ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT 1 NOT NULL (SQLite; DEFAULT TRUE on PostgreSQL)
     end
-    schema.update.table(:users).set(active: true).commit  # UPDATE users SET active = ?
-    # PostgreSQL and CockroachDB can then enforce it: schema.exec("ALTER TABLE users ALTER COLUMN active SET NOT NULL")
   end
 
   def down
@@ -66,29 +59,15 @@ end
 ```
 {% endcode %}
 
-{% code title="db/migrations/007_add_version_to_users.cr" %}
-```crystal
-# ✅ Raw DDL when the database must enforce NOT NULL and the default
-class AddVersionToUsers < CQL::Migration(7)
-  def up
-    schema.exec("ALTER TABLE users ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-  end
-
-  def down
-    schema.exec("ALTER TABLE users DROP COLUMN version")
-  end
-end
-```
-{% endcode %}
-
-`schema.exec` does not change the schema's table declaration, so `drop_column :version` would emit nothing; drop it
-with raw DDL too. Raw DDL is not translated per dialect, so write it for your database.
+The default fills the rows already in the table, so a `NOT NULL` column can be added to a table with data. When the
+value depends on each row, add the column nullable and fill it as in
+[Migrate Data in Batches](#migrate-data-in-batches).
 
 ## Migrate Data in Batches
 
-{% code title="db/migrations/008_normalize_user_emails.cr" %}
+{% code title="db/migrations/007_normalize_user_emails.cr" %}
 ```crystal
-class NormalizeUserEmails < CQL::Migration(8)
+class NormalizeUserEmails < CQL::Migration(7)
   BATCH_SIZE = 1000 # a constant you control, never user input
 
   def up
@@ -121,16 +100,16 @@ transaction. If `email` is unique, addresses that differ only in case collide; f
 ## Add an Indexed Column
 
 ```crystal
+schema.alter :users do
+  # ADD COLUMN deleted_at TIMESTAMP, for SoftDeletable, then CREATE INDEX idx_users_deleted_at ON users (deleted_at)
+  add_column :deleted_at, Time, index: true
+end
+
 schema.alter :posts do
   add_column :slug, String
   create_index :idx_posts_slug, [:slug], unique: true  # CREATE UNIQUE INDEX idx_posts_slug ON posts (slug)
 end
 # down: drop_index :idx_posts_slug, then drop_column :slug
-
-schema.alter :users do
-  add_column :deleted_at, Time                         # ADD COLUMN deleted_at TIMESTAMP, for SoftDeletable
-  create_index :idx_users_deleted_at, [:deleted_at]
-end
 ```
 
 ## Add Timestamps to an Existing Table
@@ -163,7 +142,7 @@ end
 
 {% tab title="SQLite" %}
 {% hint style="warning" %}
-`foreign_key` in `schema.alter` raises `DB::Error` while the block's SQL is built, so nothing in that block runs. Add the column alone, or recreate the table with the key declared.
+`foreign_key` in `schema.alter` raises `CQL::SQLiteUnsupportedFeatureError` while the block's SQL is built, so nothing in that block runs. Add the column alone, or recreate the table with the key declared.
 {% endhint %}
 {% endtab %}
 {% endtabs %}

@@ -20,16 +20,17 @@ migrator = AppDB.migrator(config)
 config.migration_table_name    # => :cql_schema_migrations, created by AppDB.migrator
 ```
 
-With `auto_sync: true`, the migrator writes the schema file from the live database when it is built and after every
-`up` and `down`, creating missing directories. Pass `auto_sync: false` in production and in tests so the file is left
-alone.
+With `auto_sync: true`, every `up` and `down` rewrites the schema file from the live database, creating missing
+directories; building the migrator writes nothing. Pass `auto_sync: false` in production and in tests so the file is
+left alone.
 
 ## Apply Pending Migrations
 
 ```crystal
 migrator.up             # every pending migration, in version order, then prints the applied table
-migrator.up(2)          # only the first 2 registered migrations; applied ones count towards the 2
-migrator.up_to(5_i64)   # every migration up to and including version 5; nothing if no migration has that version
+migrator.up(2)          # the 2 oldest pending migrations
+migrator.up_to(5_i64)   # every pending migration up to and including version 5; raises CQL::Migrator::Error
+                        # if no migration has that version
 ```
 
 {% tabs %}
@@ -39,9 +40,8 @@ everything the run did.
 {% endtab %}
 
 {% tab title="MySQL and CockroachDB" %}
-Each statement commits on its own, so a failure leaves the run's earlier migrations applied. Building a migrator (before
-its `auto_sync` bootstrap writes the schema file), calling `up` or listing `pending_migrations` inside an open
-transaction raises `CQL::DialectError`.
+Each statement commits on its own, so a failure leaves the run's earlier migrations applied. Building a migrator, calling
+`up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`.
 {% endtab %}
 {% endtabs %}
 
@@ -93,7 +93,7 @@ crystal src/migrate.cr status    # Applied: 5, pending: 0
 
 ## Deploy One Migration at a Time
 
-On SQLite and PostgreSQL, commit each migration with `up_to` so that one failure does not undo the others:
+On SQLite and PostgreSQL, commit each migration with `up(1)` so that one failure does not undo the others:
 
 {% code title="src/deploy_migrations.cr" %}
 ```crystal
@@ -111,7 +111,7 @@ end
 pending.each do |migration|
   puts "Running migration #{migration.version} (#{migration.name})..."
   begin
-    migrator.up_to(migration.version)
+    migrator.up(1)  # the oldest pending one: this migration
   rescue ex
     puts "FAILED: #{ex.message}"
     exit 1
