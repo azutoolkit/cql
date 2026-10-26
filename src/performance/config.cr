@@ -14,6 +14,8 @@ module CQL::Performance
       property? query_profiling : Bool = true
       property? auto_analyze_slow : Bool = true
       property context_tracking : Bool = false
+      property? async : Bool = false
+      property async_queue_capacity : Int32 = 4096
 
       def initialize
         # Auto-enable in development
@@ -31,6 +33,8 @@ module CQL::Performance
       property slow_query_threshold : Time::Span = 100.milliseconds
       property very_slow_threshold : Time::Span = 1.second
       property max_recorded_queries : Int32 = 10_000
+      # Distinct SQL shapes, such as IN lists of varying length, would grow the stats map without bound.
+      property max_tracked_statements : Int32 = 1000
       property? log_slow_queries : Bool = true
       property? log_all_queries : Bool = false
 

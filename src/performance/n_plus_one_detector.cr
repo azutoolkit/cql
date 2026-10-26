@@ -22,8 +22,12 @@ module CQL::Performance
   # N+1 detector without event system
   class NPlusOneDetector < BasePerformanceComponent
     include CQL::Performance::NPlusOneDetectorInterface
-    @recent_queries : Array(String) = [] of String
-    @patterns : Array(NPlusOnePattern) = [] of NPlusOnePattern
+    @recent_queries : RecentQueries
+    # Entries recorded, capped as the buffer the ring replaced was: a query that takes it past
+    # twice the window cuts it back to the window. The detection warm-up still reads it. Markers
+    # never cut it, so it saturates just past twice the window, where every value acts the same.
+    @recorded : Int32 = 0
+    @patterns : Hash(String, NPlusOnePattern) = {} of String => NPlusOnePattern
     @config : Config::Detection
     @detection_window : Int32
     @mutex : CQL::Compat::Mutex = CQL::Compat::Mutex.new
@@ -33,6 +37,7 @@ module CQL::Performance
     def initialize(@config : Config::Detection = Config::Detection.new)
       super()
       @detection_window = @config.detection_window
+      @recent_queries = RecentQueries.new(@detection_window)
     end
 
     # Direct method call for query recording
@@ -41,19 +46,10 @@ module CQL::Performance
       return if should_ignore?(sql)
 
       normalized = normalized_sql || SQLUtils.normalize_sql(sql)
-      should_log = false
-      log_query = ""
-      log_count = 0
-
-      @mutex.synchronize do
-        @recent_queries << normalized
-
-        # Keep window size manageable
-        if @recent_queries.size > @detection_window * 2
-          @recent_queries = @recent_queries.last(@detection_window)
-        end
-
-        should_log, log_query, log_count = detect_patterns
+      should_log, log_query, log_count = @mutex.synchronize do
+        remember(normalized)
+        @recorded = @detection_window if @recorded > @detection_window * 2
+        detect_patterns
       end
 
       if should_log
@@ -65,26 +61,26 @@ module CQL::Performance
     def start_relation_loading(relation_name : String, parent_model : String) : Void
       return unless @enabled
       @mutex.synchronize do
-        @recent_queries << "-- RELATION START: #{parent_model}.#{relation_name}"
+        remember("-- RELATION START: #{parent_model}.#{relation_name}")
       end
     end
 
     def end_relation_loading : Void
       return unless @enabled
       @mutex.synchronize do
-        @recent_queries << "-- RELATION END"
+        remember("-- RELATION END")
       end
     end
 
     # Get detected patterns
     def patterns : Array(NPlusOnePattern)
-      @mutex.synchronize { @patterns.dup }
+      @mutex.synchronize { @patterns.values }
     end
 
     # Get performance issues
     def issues : Array(Issue)
       @mutex.synchronize do
-        @patterns.map do |pattern|
+        @patterns.map do |_, pattern|
           severity = case pattern.repetition_count
                      when 2..5   then :low
                      when 6..20  then :medium
@@ -111,79 +107,134 @@ module CQL::Performance
     def clear : Void
       @mutex.synchronize do
         @recent_queries.clear
+        @recorded = 0
         @patterns.clear
         reset
       end
     end
 
-    private def detect_patterns : Tuple(Bool, String, Int32)
-      should_log = false
-      log_query = ""
-      log_count = 0
-
-      return {false, "", 0} if @recent_queries.size < @config.threshold + 1
-
-      # Look for repeated queries in recent window
-      last_queries = @recent_queries.last(@detection_window)
-
-      # Count query frequencies
-      query_counts = {} of String => Int32
-      last_queries.each do |query|
-        next if query.starts_with?("-- RELATION")
-        query_counts[query] = (query_counts[query]? || 0) + 1
-      end
-
-      # Find queries that appear multiple times
-      query_counts.each do |query, count|
-        next if count < @config.threshold
-
-        # Try to find parent query
-        parent = find_parent_query(query, last_queries)
-
-        # Check if this is a new pattern or update existing
-        existing = @patterns.find { |pattern| pattern.repeated_query == query }
-        if existing.nil?
-          @patterns << NPlusOnePattern.new(parent, query, count)
-          cleanup_patterns if @patterns.size > MAX_PATTERNS
-          if @config.strict_mode?
-            should_log = true
-            log_query = query
-            log_count = count
-          end
-        elsif existing.repetition_count < count
-          # Update count if increased
-          @patterns.delete(existing)
-          @patterns << NPlusOnePattern.new(parent, query, count)
-        end
-      end
-
-      {should_log, log_query, log_count}
+    private def remember(entry : String) : Nil
+      @recent_queries.push(entry)
+      @recorded = Math.min(@recorded + 1, @detection_window * 2 + 1)
     end
 
-    private def find_parent_query(repeated_query : String, queries : Array(String)) : String
-      first_index = queries.index(repeated_query)
-      return "Unknown" unless first_index && first_index > 0
+    private def detect_patterns : Tuple(Bool, String, Int32)
+      detection = {false, "", 0}
+      return detection if @recorded < @config.threshold + 1
 
-      (first_index - 1).downto(0) do |i|
-        query = queries[i]
-        next if query == repeated_query || query.starts_with?("-- RELATION")
-        return query
+      @recent_queries.each_repeated(@config.threshold) do |query, count, offset|
+        existing = @patterns[query]?
+        next if existing && existing.repetition_count >= count
+
+        store_pattern(query, count, offset)
+        detection = {true, query, count} if existing.nil? && @config.strict_mode?
       end
+      detection
+    end
 
-      "Unknown"
+    # A new or grown pattern goes last, as the latest detected.
+    private def store_pattern(query : String, count : Int32, offset : Int32) : Nil
+      parent = @recent_queries.query_before(offset) || "Unknown"
+      @patterns.delete(query)
+      @patterns[query] = NPlusOnePattern.new(parent, query, count)
+      @patterns.shift if @patterns.size > MAX_PATTERNS
     end
 
     private def should_ignore?(sql : String) : Bool
-      normalized = sql.strip.upcase
-      @config.ignore_patterns.any? { |pattern| normalized.starts_with?(pattern) }
+      statement = sql.to_slice
+      statement += statement.index { |byte| !byte.unsafe_chr.ascii_whitespace? } || statement.size
+      @config.ignore_patterns.any? { |pattern| starts_with_upcased?(statement, pattern.to_slice) }
     end
 
-    private def cleanup_patterns
-      @patterns = @patterns.last(MAX_PATTERNS)
+    private def starts_with_upcased?(statement : Bytes, prefix : Bytes) : Bool
+      prefix.size <= statement.size &&
+        (0...prefix.size).all? { |i| statement[i].unsafe_chr.upcase(:ascii) == prefix[i].unsafe_chr }
     end
 
     private def log_detection(query : String, count : Int32)
       Log.warn { "N+1 Query Pattern Detected: #{SQLUtils.truncate_sql(query)} (#{count} times)" }
+    end
+
+    # The last `capacity` entries in a fixed ring. Each query in it maps to its count and to the
+    # push sequence of its oldest entry. Relation markers take slots but are never counted. A
+    # count is deleted at zero, so the counts stay bounded by the window rather than by every
+    # statement ever recorded.
+    private class RecentQueries
+      MARKER = "-- RELATION"
+
+      @head = 0
+      @size = 0
+      @pushed = 0_i64
+      @counts = {} of String => {Int32, Int64}
+
+      def initialize(@capacity : Int32)
+        @entries = Array(String).new(@capacity, "")
+      end
+
+      def push(entry : String) : Nil
+        return if @capacity.zero?
+        evict_oldest if @size == @capacity
+        unless marker?(entry)
+          count, first = @counts[entry]? || {0, @pushed}
+          @counts[entry] = {count + 1, first}
+        end
+        @entries[(@head + @size) % @capacity] = entry
+        @size += 1
+        @pushed += 1
+      end
+
+      # Yields each query counted at least `min_count` times once, at its oldest offset, oldest first.
+      def each_repeated(min_count : Int32, & : String, Int32, Int32 ->) : Nil
+        @size.times do |offset|
+          query = self[offset]
+          count, first = @counts[query]? || next
+          yield query, count, offset if count >= min_count && first == sequence(offset)
+        end
+      end
+
+      def query_before(offset : Int32) : String?
+        (offset - 1).downto(0) do |earlier|
+          entry = self[earlier]
+          return entry unless marker?(entry)
+        end
+      end
+
+      def clear : Nil
+        @head = @size = 0
+        @counts.clear
+        @entries.fill("")
+      end
+
+      private def [](offset : Int32) : String
+        @entries[(@head + offset) % @capacity]
+      end
+
+      private def sequence(offset : Int32) : Int64
+        @pushed - @size + offset
+      end
+
+      # The evicted entry was its query's oldest, so the query's next entry becomes the oldest.
+      private def evict_oldest : Nil
+        evicted = @entries[@head]
+        @head = (@head + 1) % @capacity
+        @size -= 1
+        return if marker?(evicted)
+        count = @counts[evicted][0] - 1
+        if count.zero?
+          @counts.delete(evicted)
+        else
+          @counts[evicted] = {count, first_sequence(evicted)}
+        end
+      end
+
+      private def first_sequence(query : String) : Int64
+        @size.times { |offset| return sequence(offset) if self[offset] == query }
+        @pushed
+      end
+
+      private def marker?(entry : String) : Bool
+        entry.starts_with?(MARKER)
+      end
     end
   end
 end

@@ -210,6 +210,30 @@ CQL::Telemetry.subscribe("prometheus") do |event|
 end
 ```
 
+## Export From a Background Subscriber
+
+An exporter that does I/O should not add to query latency. Subscribe it with `async: true` and read pool pressure from the event:
+
+```crystal
+CQL::Telemetry.subscribe("statsd", async: true) do |event|
+  StatsD.timing("sql.#{event.operation}", event.duration)
+  StatsD.timing("sql.pool_wait", event.pool_wait) # the part of duration spent waiting for a pooled connection
+end
+
+CQL::Telemetry.flush(5.seconds)    # at shutdown or in a spec: waits for delivery; the timeout keeps a stuck exporter from hanging it
+CQL::Telemetry.dropped_events      # events a full queue discarded; alert when it grows
+```
+
+A rising `pool_wait` with a steady statement time means the pool, not the SQL, is the bottleneck. For headline numbers without a subscriber, read the profiler's p95 and the p95 wait for a pooled connection (the monitor must be on):
+
+```crystal
+summary = CQL::Performance.metrics_summary
+StatsD.gauge("sql.p95_ms", summary["p95_query_time_ms"].as(Float64))
+StatsD.gauge("sql.pool_wait_p95_ms", summary["p95_pool_wait_ms"].as(Float64))
+```
+
+Queue capacity, ordering and drops are in [Telemetry](telemetry.md); what the monitor measures and costs is in [Profile Queries](query-profiler.md#health-and-metrics) and [What monitoring costs](query-profiler.md#what-monitoring-costs).
+
 ## Verify Setup
 
 Test your monitoring:

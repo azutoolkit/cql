@@ -261,6 +261,15 @@ end
 
 describe CQL::Performance::PerformanceReport do
   describe "#to_h" do
+    it "carries latency percentiles in milliseconds, also in the text and JSON formats" do
+      latency = CQL::Performance::LatencyPercentiles.new(1.millisecond, 2500.microseconds, 1.second)
+      report = CQL::Performance::PerformanceReport.new(duration: 1.minute, total_queries: 1, slow_queries: 0, errors: 0, latency: latency)
+
+      report.to_h["latency"]["p95_ms"].as_f.should eq(2.5)
+      CQL::Performance::TextReportFormatter.new.format(report).should contain("Latency: p50 1.0ms / p95 2.5ms / p99 1.0s")
+      JSON.parse(CQL::Performance::JSONReportFormatter.new.format(report))["metrics"]["p99_ms"].as_f.should eq(1000.0)
+    end
+
     it "returns a hash with expected keys" do
       report = build_test_report(total_queries: 100, slow_queries: 5, errors: 2)
       hash = report.to_h

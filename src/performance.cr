@@ -122,8 +122,12 @@ module CQL::Performance
     monitor.metrics_summary
   end
 
-  def self.is_healthy? : Bool
+  def self.healthy? : Bool
     monitor.healthy?
+  end
+
+  def self.is_healthy? : Bool
+    healthy?
   end
 
   def self.critical_issues : Array(Issue)
@@ -136,5 +140,10 @@ module CQL::Performance
 
   def self.export_metrics_as_json : String
     monitor.metrics.to_json
+  end
+
+  # Waits until the monitor has recorded every statement handed to it; false on timeout. Pass a timeout at shutdown.
+  def self.flush(timeout : Time::Span? = nil) : Bool
+    monitor.flush(timeout)
   end
 end

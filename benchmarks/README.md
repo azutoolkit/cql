@@ -1,6 +1,6 @@
 # Benchmarks
 
-Two scripts measure the native PostgreSQL driver (`CQL::Postgres`) against a real server, and one measures query building and ActiveRecord operations on SQLite without a server. None ships with results: numbers depend on your hardware, network, server settings and Crystal build, so run them in the environment you care about.
+Two scripts measure the native PostgreSQL driver (`CQL::Postgres`) against a real server, and two run on SQLite without a server: one measures query building and ActiveRecord operations, the other what telemetry and monitoring add to a statement. None ships with results: numbers depend on your hardware, network, server settings and Crystal build, so run them in the environment you care about.
 
 The PostgreSQL scripts read the server from `DATABASE_URL` and create their own scratch table. All of them should be run with `--release` for meaningful timings, from the repository root.
 
@@ -80,6 +80,17 @@ Query-building workloads: a `where` by id (also on a schema with `quote_identifi
 | `BENCH_ONLY` | none | run only workloads whose name contains this text |
 
 Building the query is part of what is timed (and, for `ar:` workloads, execution and row hydration); the insert's row hashes are built once beforehand. Seeding runs on every invocation, even with `BENCH_ONLY`. It runs with the library's default configuration, so the numbers reflect what an application gets out of the box. `BENCH_ONLY` ignores case, and a filter that matches nothing exits with an error.
+
+## `telemetry_overhead_bench.cr`
+
+Measures what CQL's telemetry and performance monitoring add to one statement. It runs `find` by id and `create!` against a seeded in-memory SQLite table (1,000 rows, a single-connection pool) under seven configurations, in this order: all off, one synchronous `CQL::Telemetry.subscribe` subscriber, one `async: true` subscriber (the benchmark loop never yields, so the consumer fiber rarely runs and this row mostly measures the push and drop path), a no-op `CQL::Telemetry::Tracer`, `CQL::Performance.enable_production_mode!`, the same monitor with `monitoring.async` on (again mostly the push and drop path), and SQL logging with the info lines filtered out by the log level, then a "baseline again" repeat of "all off" so drift over the run is visible. Every configuration starts from the 1,000 seeded rows, logging is set to errors only before timing starts (failed or very slow statements would still be logged, with their bound values), and "all off" is restored between configurations.
+
+```bash
+crystal run --release benchmarks/telemetry_overhead_bench.cr
+BENCH_ONLY=tracer crystal run --release benchmarks/telemetry_overhead_bench.cr   # one configuration
+```
+
+Read each configuration's bytes per iteration and iterations per second against the "all off" run of the same operation: the difference is the cost of that instrumentation. Bytes per iteration is the reliable column; time differences under about 10% are within run-to-run noise. The production monitor row repeats one statement, so the N+1 detector takes its full pattern path every time: treat it as a worst case. `BENCH_ONLY` matches configuration names by substring, ignoring case. `spec/performance/overhead_spec.cr` asserts that the instrumentation around a statement allocates nothing with everything off and with one subscriber.
 
 ## Related
 

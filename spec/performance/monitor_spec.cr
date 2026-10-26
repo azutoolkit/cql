@@ -318,6 +318,22 @@ describe CQL::Performance::Monitor do
       report.should contain("CQL Performance Report")
     end
 
+    it "reports latency percentiles in the text, JSON, HTML and console formats" do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.profiling.enabled = true
+      config.logging.enabled = false
+
+      monitor = CQL::Performance::Monitor.new(config: config)
+      3.times { monitor.profiler.not_nil!.record_query("SELECT 1", [] of DB::Any, 50.milliseconds) }
+
+      monitor.generate_report("text").should match(/^Latency: p50 50\.0ms /m)
+      metrics = JSON.parse(monitor.generate_report("json"))["metrics"]
+      ["p50_ms", "p95_ms", "p99_ms"].each { |key| metrics[key].as_f.should eq(50.0) }
+      monitor.generate_report("html").should contain("p95 Latency")
+      monitor.generate_report("console").should contain("Latency")
+    end
+
     it "falls back to text format for unknown formats" do
       config = CQL::Performance::Config.new
       config.monitoring.enabled = true
@@ -566,6 +582,74 @@ class NormalizationSpyProfiler
   end
 end
 
+class RaisingProfiler
+  include CQL::Performance::QueryProfilerInterface
+
+  def record_query(sql : String, params : Array(DB::Any),
+                   execution_time : Time::Span,
+                   rows_affected : Int64? = nil,
+                   error : String? = nil,
+                   normalized_sql : String? = nil) : Void
+    raise "profiler broke"
+  end
+
+  def statistics
+    {} of String => NamedTuple(count: Int32, total_ms: Float64, avg_ms: Float64, min_ms: Float64, max_ms: Float64)
+  end
+
+  def slowest_queries(limit : Int32) : Array(CQL::Performance::QueryData)
+    [] of CQL::Performance::QueryData
+  end
+
+  def stats_trackers : Hash(String, CQL::Performance::StatsTracker)
+    {} of String => CQL::Performance::StatsTracker
+  end
+
+  def issues : Array(CQL::Performance::Issue)
+    [] of CQL::Performance::Issue
+  end
+
+  def clear : Void
+  end
+end
+
+# Real profiler that also notes where and under which context it was called; a gate holds `record_query` until it is closed.
+class AsyncSpyProfiler < CQL::Performance::QueryProfiler
+  getter fibers = [] of Fiber
+  getter contexts = [] of String?
+  getter seen_params = [] of Array(DB::Any)
+
+  def initialize(@gate : Channel(Nil)? = nil)
+    super()
+  end
+
+  def record_query(sql : String, params : Array(DB::Any), execution_time : Time::Span, rows_affected : Int64? = nil,
+                   error : String? = nil, normalized_sql : String? = nil) : Void
+    @gate.try(&.receive?)
+    @fibers << Fiber.current
+    @contexts << CQL::Telemetry.current_context
+    @seen_params << params
+    super
+  end
+end
+
+private def statement_event(params : Array(DB::Any) = [] of DB::Any)
+  CQL::Telemetry.query_event(CQL::Adapter::SQLite, :select, "SELECT 1", params, 1.millisecond, nil, nil)
+end
+
+private def with_async_monitor(profiler : CQL::Performance::QueryProfilerInterface? = nil, capacity : Int32 = 4096, &)
+  config = CQL::Performance::Config.new
+  config.monitoring.enabled = true
+  config.monitoring.async = true
+  config.monitoring.async_queue_capacity = capacity
+  config.detection.enabled = false
+  config.logging.enabled = false
+  monitor = CQL::Performance::Monitor.new(config: config, profiler: profiler)
+  yield monitor
+ensure
+  monitor.try(&.close)
+end
+
 class NormalizationSpyDetector
   include CQL::Performance::NPlusOneDetectorInterface
 
@@ -678,6 +762,313 @@ describe "CQL::Performance.enable_sql_logging" do
   end
 end
 
+describe "CQL::Performance.with_context across fibers" do
+  it "shows each fiber's own context in its SQL log entries and never another's" do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = true
+    monitor = CQL::Performance::Monitor.new(config: config, sql_formatter: CQL::Performance::SQLFormatter.new(colorize_enabled: false))
+    done = Channel(Nil).new
+    entries = [] of String
+
+    with_global_monitor(monitor) do
+      Log.capture("*") do |logs|
+        %w[a b].each do |name|
+          spawn do
+            CQL::Performance.with_context(name) do
+              CQL::Performance.track("SELECT '#{name}1'") { 1 }
+              sleep 5.milliseconds
+              CQL::Performance.track("SELECT '#{name}2'") { 1 }
+            end
+            done.send(nil)
+          end
+        end
+        2.times { done.receive }
+        4.times { logs.next("a logged statement") { |entry| entries << entry.message; true } }
+      end
+    end
+
+    {"a" => "b", "b" => "a"}.each do |own, other|
+      own_entries = entries.select(&.includes?("'#{own}"))
+      own_entries.size.should eq(2)
+      own_entries.each(&.should(contain("{#{own}}")))
+      own_entries.each(&.should_not(contain("{#{other}}")))
+    end
+  end
+end
+
+describe "CQL::Performance::Monitor with CQL::Execution.run" do
+  events = [] of CQL::Telemetry::QueryEvent
+
+  profiling_monitor = -> do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.profiling.enabled = true
+    config.detection.enabled = false
+    config.logging.enabled = false
+    CQL::Performance::Monitor.new(config: config)
+  end
+
+  raising_monitor = -> do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.detection.enabled = false
+    config.logging.enabled = false
+    CQL::Performance::Monitor.new(config: config, profiler: RaisingProfiler.new)
+  end
+
+  statement_count = ->(monitor : CQL::Performance::Monitor) { monitor.profiler.not_nil!.statistics.values.sum(&.[:count]) }
+  total_ms = ->(monitor : CQL::Performance::Monitor) { monitor.profiler.not_nil!.statistics.values.sum(&.[:total_ms]) }
+  select_names = -> { UserDB.query.from(:users).select(:name).where(name: "ada").all(as: String) }
+
+  before_each do
+    CQL::Telemetry.reset!
+    UserDB.users.create!
+    events.clear
+    CQL::Telemetry.subscribe("spec") { |event| events << event }
+  end
+
+  after_each do
+    CQL::Telemetry.reset!
+    UserDB.users.drop!
+  end
+
+  it "records the exact duration the telemetry event reports for one statement" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) { select_names.call }
+
+    events.size.should eq(1)
+    statement_count.call(monitor).should eq(1)
+    total_ms.call(monitor).should eq(events.first.duration.total_milliseconds)
+  end
+
+  it "keeps recording after Telemetry.reset! drops the subscribers" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) do
+      select_names.call
+      statement_count.call(monitor).should eq(1)
+      CQL::Telemetry.reset!
+      select_names.call
+    end
+
+    statement_count.call(monitor).should eq(2)
+  end
+
+  it "records a failed statement with a measured duration and counts the error" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) do
+      expect_raises(SQLite3::Exception, /no such column/) { UserDB.query.from(:users).where("nope = ?", 1).all(as: Int32) }
+    end
+
+    trackers = monitor.profiler.not_nil!.stats_trackers.values
+    trackers.size.should eq(1)
+    trackers.first.total_time.should be > Time::Span.zero
+    trackers.first.errors.should eq(1)
+    monitor.error_count.should eq(1)
+  end
+
+  it "keeps the driver's exception when the monitor fails recording a failed statement" do
+    with_global_monitor(raising_monitor.call) do
+      expect_raises(SQLite3::Exception, /no such column/) { UserDB.query.from(:users).where("nope = ?", 1).all(as: Int32) }
+    end
+  end
+
+  it "leaves the Params section out of a failed statement's log line when include_params is off" do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = true
+    config.logging.include_params = false
+    secret = "secret@example.com"
+
+    Log.capture("*") do |logs|
+      with_global_monitor(CQL::Performance::Monitor.new(config: config)) do
+        expect_raises(SQLite3::Exception, /no such column/) { UserDB.query.from(:users).where("nope = ?", secret).all(as: Int32) }
+      end
+
+      entry = logs.next(:error, /\AQuery failed:/).entry
+      entry.exception.should be_nil
+      message = entry.message
+      message.should_not contain(secret)
+      message.should_not contain("Params:")
+      logs.empty
+    end
+  end
+
+  it "returns the result when the monitor fails recording a successful statement" do
+    with_global_monitor(raising_monitor.call) { select_names.call.should eq([] of String) }
+  end
+
+  it "logs a monitor failure as an error" do
+    Log.capture("*") do |logs|
+      with_global_monitor(raising_monitor.call) { select_names.call }
+      logs.check(:error, /performance monitor/i)
+    end
+  end
+
+  it "does not record an explain" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) { UserDB.query.from(:users).where(name: "ada").explain }
+
+    events.map(&.operation).should eq([:explain])
+    monitor.profiler.not_nil!.statistics.should be_empty
+  end
+
+  it "does not record DDL run through Schema#exec" do
+    monitor = profiling_monitor.call
+
+    with_global_monitor(monitor) { UserDB.exec("SELECT 1") }
+
+    events.map(&.operation).should eq([:ddl])
+    monitor.profiler.not_nil!.statistics.should be_empty
+  end
+
+  it "records five statements through the async queue once flushed" do
+    with_async_monitor do |monitor|
+      with_global_monitor(monitor) do
+        5.times { select_names.call }
+        CQL::Performance.flush(1.second).should be_true
+      end
+
+      monitor.counters.observed_statements.should eq(5)
+      monitor.metrics.query_metrics.total_queries.should eq(5)
+    end
+  end
+
+  describe "counters" do
+    counting_monitor = -> do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.profiling.enabled = false
+      config.detection.enabled = false
+      config.logging.enabled = false
+      CQL::Performance::Monitor.new(config: config)
+    end
+
+    it "counts the statements run through Execution.run and times the monitor's own recording" do
+      monitor = counting_monitor.call
+
+      with_global_monitor(monitor) { 5.times { select_names.call } }
+
+      counters = monitor.counters
+      counters.observed_statements.should eq(5)
+      counters.overhead.should be > Time::Span.zero
+      counters.overhead.should be < events.sum(Time::Span.zero, &.duration)
+      summary = monitor.metrics_summary
+      summary["observed_statements"].should eq(5_i64)
+      summary["monitor_overhead_ms"].should be_a(Float64)
+      summary["monitor_overhead_ms"].as(Float64).should be > 0.0
+    end
+
+    it "reports the wait for a pooled connection held by another fiber" do
+      monitor = counting_monitor.call
+      busy = spec_sqlite_schema("monitor_pool_wait.db", "?initial_pool_size=0&max_pool_size=1&checkout_timeout=5")
+      done = Channel(Nil).new
+
+      with_global_monitor(monitor) do
+        busy.with_connection do |_connection|
+          spawn { CQL::Execution.run(busy, "SELECT 1", [] of DB::Any, :select, &.scalar("SELECT 1")); done.send(nil) }
+          Fiber.yield
+          sleep 20.milliseconds
+        end
+        done.receive
+      end
+
+      monitor.counters.pool_wait.p95.should be > Time::Span.zero
+      monitor.metrics_summary["p95_pool_wait_ms"].as(Float64).should be > 0.0
+    end
+  end
+end
+
+describe "CQL::Performance::MonitorCounters" do
+  tracking_monitor = -> do
+    config = CQL::Performance::Config.new
+    config.monitoring.enabled = true
+    config.logging.enabled = false
+    CQL::Performance::Monitor.new(config: config)
+  end
+
+  it "counts statements recorded through track as observed" do
+    monitor = tracking_monitor.call
+    2.times { monitor.track("SELECT 1") { nil } }
+
+    monitor.counters.observed_statements.should eq(2)
+  end
+
+  it "is reset to zero by Monitor#clear" do
+    monitor = tracking_monitor.call
+    monitor.track("SELECT 1") { nil }
+
+    monitor.clear
+
+    monitor.counters.should eq(CQL::Performance::MonitorCounters.zero)
+  end
+
+  describe "pool wait percentiles" do
+    record_waits = ->(monitor : CQL::Performance::Monitor, count : Int32, pool_wait : Time::Span) do
+      count.times do
+        event = CQL::Telemetry.query_event(CQL::Adapter::SQLite, :select, "SELECT 1", [] of DB::Any, 1.millisecond, nil, nil, pool_wait)
+        monitor.record(event, [] of DB::Any)
+      end
+    end
+
+    it "counts waits under 1 microsecond as zero" do
+      monitor = tracking_monitor.call
+      record_waits.call(monitor, 100, 300.nanoseconds)
+
+      monitor.counters.pool_wait.should eq(CQL::Performance::LatencyPercentiles.zero)
+    end
+
+    it "gives the zero waits the lowest ranks and keeps the real waits in the upper percentiles" do
+      monitor = tracking_monitor.call
+      record_waits.call(monitor, 90, 300.nanoseconds)
+      record_waits.call(monitor, 10, 20.milliseconds)
+
+      pool_wait = monitor.counters.pool_wait
+      pool_wait.p50.should eq(Time::Span.zero)
+      (15.milliseconds..25.milliseconds).should contain(pool_wait.p95)
+      (15.milliseconds..25.milliseconds).should contain(pool_wait.p99)
+    end
+
+    it "treats 999 nanoseconds as free and 1 microsecond as a real wait" do
+      monitor = tracking_monitor.call
+      record_waits.call(monitor, 1, 999.nanoseconds)
+      record_waits.call(monitor, 1, 1.microsecond)
+
+      pool_wait = monitor.counters.pool_wait
+      pool_wait.p50.should eq(Time::Span.zero)
+      pool_wait.p95.should eq(1.microsecond)
+    end
+
+    it "resets the zero share with Monitor#clear" do
+      monitor = tracking_monitor.call
+      record_waits.call(monitor, 100, 300.nanoseconds)
+
+      monitor.clear
+      record_waits.call(monitor, 1, 20.milliseconds)
+
+      (15.milliseconds..25.milliseconds).should contain(monitor.counters.pool_wait.p50)
+    end
+  end
+
+  it "is zero in PerformanceMetrics built without it" do
+    CQL::Performance::PerformanceMetrics.from_components.monitor.should eq(CQL::Performance::MonitorCounters.zero)
+  end
+
+  it "is exported under the monitor key of PerformanceMetrics#to_h" do
+    monitor = tracking_monitor.call
+    monitor.track("SELECT 1") { nil }
+
+    exported = monitor.metrics.to_h["monitor"].as_h
+
+    exported.keys.sort!.should eq(["dropped_events", "observed_statements", "overhead_ms", "p95_pool_wait_ms"])
+    exported["observed_statements"].as_i64.should eq(1)
+  end
+end
+
 describe "CQL::Performance::Monitor SQL logging of bound values" do
   secret = "secret@example.com"
   sql = "SELECT * FROM users WHERE email = ?"
@@ -729,6 +1120,30 @@ describe "CQL::Performance::Monitor SQL logging of bound values" do
     end
   end
 
+  describe "a driver error message that quotes a bound value" do
+    failure = ->(monitor : CQL::Performance::Monitor) do
+      error = Exception.new("Duplicate entry '#{secret}' for key 'users.email'")
+      event = CQL::Telemetry::QueryEvent.new(sql, 1, nil, 1.millisecond, error, CQL::Adapter::SQLite, :insert, nil, nil)
+      message = ""
+      Log.capture("*") do |logs|
+        monitor.record(event, [secret] of DB::Any)
+        message = logs.check(:error, /\AQuery failed:/).entry.message
+      end
+      message
+    end
+
+    it "is redacted in the failed statement's log line when include_params is off" do
+      message = failure.call(build_monitor.call(false))
+
+      message.should contain("Duplicate entry '?'")
+      message.should_not contain(secret)
+    end
+
+    it "is logged verbatim when include_params is on" do
+      failure.call(build_monitor.call(true)).should contain("Duplicate entry '#{secret}'")
+    end
+  end
+
   it "logs bound values once include_params is turned on" do
     monitor = build_monitor.call(false)
     monitor.configure(&.logging.include_params=(true))
@@ -777,9 +1192,166 @@ describe "CQL::Performance::Monitor metrics export of bound values" do
     json.should_not contain(secret)
   end
 
+  describe "a failed slow query whose driver message quotes a bound value" do
+    export_failure = ->(include_params : Bool) do
+      config = CQL::Performance::Config.new
+      config.monitoring.enabled = true
+      config.logging.include_params = include_params
+      config.profiling.slow_query_threshold = 0.seconds
+      monitor = CQL::Performance::Monitor.new(config: config, profiler: CQL::Performance::QueryProfiler.new(config.profiling))
+      error = Exception.new("Duplicate entry '#{secret}' for key 'users.email'")
+      event = CQL::Telemetry::QueryEvent.new("INSERT INTO users (email) VALUES (?)", 1, nil, 1.millisecond, error, CQL::Adapter::SQLite, :insert, nil, nil)
+      monitor.record(event, [secret] of DB::Any)
+      monitor.metrics.to_json
+    end
+
+    it "is redacted in the metrics JSON when include_params is off" do
+      json = export_failure.call(false)
+
+      JSON.parse(json)["top_queries"]["slowest_queries"][0]["error"].should eq("Duplicate entry '?'")
+      json.should_not contain(secret)
+    end
+
+    it "is exported verbatim when include_params is on" do
+      JSON.parse(export_failure.call(true))["top_queries"]["slowest_queries"][0]["error"].should eq("Duplicate entry '#{secret}' for key 'users.email'")
+    end
+  end
+
   it "exports a slow query's params in the metrics JSON when include_params is on" do
     json = build_monitor.call(true).metrics.to_json
 
     JSON.parse(json)["top_queries"]["slowest_queries"][0]["params"].should eq(JSON.parse(%(["#{secret}"])))
+  end
+end
+
+describe "CQL::Performance::Monitor async recording" do
+  it "records off the caller's fiber" do
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |monitor|
+      3.times { monitor.record(statement_event, [] of DB::Any) }
+      monitor.flush(1.second).should be_true
+    end
+
+    spy.fibers.size.should eq(3)
+    spy.fibers.each(&.should_not(eq(Fiber.current)))
+  end
+
+  it "drops statements instead of blocking when the queue is full" do
+    gate = Channel(Nil).new
+    spy = AsyncSpyProfiler.new(gate)
+    with_async_monitor(spy, capacity: 1) do |monitor|
+      returned = Channel(Nil).new
+      spawn { 3.times { monitor.record(statement_event, [] of DB::Any) }; returned.send(nil) }
+      select
+      when returned.receive
+      when timeout(2.seconds) then fail "Monitor#record blocked on a full queue"
+      end
+
+      gate.close
+      monitor.flush(1.second).should be_true
+      dropped = monitor.counters.dropped_events
+      dropped.should be >= 1_i64
+      (spy.fibers.size + dropped).should eq(3)
+      monitor.metrics_summary["monitor_dropped_events"].should eq(dropped)
+    end
+  end
+
+  it "copies the params so a caller that mutates them afterwards changes nothing" do
+    gate = Channel(Nil).new
+    spy = AsyncSpyProfiler.new(gate)
+    with_async_monitor(spy) do |monitor|
+      bytes = Bytes.new(3) { |i| (i + 1).to_u8 }
+      params = [bytes] of DB::Any
+      monitor.record(statement_event(params), params)
+      bytes[0] = 99_u8
+      gate.close
+      monitor.flush(1.second).should be_true
+
+      spy.seen_params.first.first.should eq(Bytes.new(3) { |i| (i + 1).to_u8 })
+    end
+  end
+
+  it "copies an empty params array too, so a caller that appends to it afterwards changes nothing" do
+    gate = Channel(Nil).new
+    spy = AsyncSpyProfiler.new(gate)
+    with_async_monitor(spy) do |monitor|
+      params = [] of DB::Any
+      monitor.record(statement_event(params), params)
+      params << 1
+      gate.close
+      monitor.flush(1.second).should be_true
+
+      spy.seen_params.should eq([[] of DB::Any])
+    end
+  end
+
+  it "restores the statement's telemetry context around the background recording" do
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |monitor|
+      CQL::Telemetry.with_context("req-1") { monitor.record(statement_event, [] of DB::Any) }
+      monitor.flush(1.second).should be_true
+    end
+
+    spy.contexts.should eq(["req-1"] of String?)
+  end
+
+  it "records synchronously again after close, and flush without a queue returns true" do
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |monitor|
+      monitor.close
+      monitor.record(statement_event, [] of DB::Any)
+
+      spy.fibers.should eq([Fiber.current])
+      monitor.flush.should be_true
+    end
+  end
+
+  it "records synchronously once the global monitor is replaced, because the replaced one is closed" do
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |old|
+      with_global_monitor(old) do
+        CQL::Performance.monitor = CQL::Performance::Monitor.new(config: CQL::Performance::Config.new)
+      end
+      old.record(statement_event, [] of DB::Any)
+
+      spy.fibers.should eq([Fiber.current])
+    end
+  end
+
+  it "clears the drops of a live queue" do
+    gate = Channel(Nil).new
+    spy = AsyncSpyProfiler.new(gate)
+    with_async_monitor(spy, capacity: 1) do |monitor|
+      3.times { monitor.record(statement_event, [] of DB::Any) }
+      monitor.counters.dropped_events.should be >= 1_i64
+
+      monitor.clear
+      gate.close
+      monitor.flush(1.second).should be_true
+      monitor.counters.dropped_events.should eq(0)
+    end
+  end
+
+  it "reuses the event's own copy of the params when telemetry captured them" do
+    CQL::Telemetry.capture_params = true
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |monitor|
+      params = [1] of DB::Any
+      event = statement_event(params)
+      monitor.record(event, params)
+      monitor.flush(1.second).should be_true
+
+      spy.seen_params.first.should be(event.params)
+    end
+  ensure
+    CQL::Telemetry.capture_params = false
+  end
+
+  it "reports no dropped events for a synchronous monitor" do
+    monitor = CQL::Performance::Monitor.new(config: CQL::Performance::Config.new)
+
+    monitor.flush.should be_true
+    monitor.counters.dropped_events.should eq(0)
+    monitor.metrics_summary["monitor_dropped_events"].should eq(0_i64)
   end
 end
