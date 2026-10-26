@@ -189,6 +189,8 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Fixed
 
+- Reading a `has_many` or `many_to_many` association declared with `dependent: :destroy` or `:delete_all` no longer logs "DEPRECATION WARNING: The 'cascade' parameter is deprecated" (twice for many_to_many) on every access and for every preloaded parent. The association macros passed the deprecated `cascade:` themselves; `dependent:` already carried the strategy.
+- Doc comments describe the real API: the callbacks module no longer advertises `:if`/`:unless` options; `optimistic_locking` documents `version_column:` (default `:lock_version`, while the `lock_version` table helper names its column `version`) instead of `column_name:` and `CQL::ActiveRecord::Base`; MySQL's `format_returning` no longer claims RETURNING exists from MySQL 8.0.21.
 - The test environment's default `db` is `sqlite3::memory:`, which opens. It was `sqlite3://:memory:`, which `URI.parse` rejects (`bad port`), so `CQL.build_schema` raised `URI::Error`; its encoded form `sqlite3://%3Amemory%3A` created a file named `[:memory:]` with crystal-sqlite3 before 0.23. `CQL.configure` also accepts the opaque `sqlite3:` form.
 - A PostgreSQL or CockroachDB URI with an empty host (`postgres:///app`) raises `CQL::Schema::InvalidURIError` ("Missing host in PostgreSQL URI") unless `?host=` or `PGHOST` supplies one. Before, the PostgreSQL check passed for any empty host, and the CockroachDB check rejected the `?host=/socket/dir` form.
 - With `CRYSTAL_ENV=development`, `CQL_NO_SQL_LOG` also keeps the performance monitor's SQL log off. Before, only the `CQL.configure` default honored it, and the monitor's development defaults logged SQL anyway.

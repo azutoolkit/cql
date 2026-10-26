@@ -6,24 +6,31 @@ module CQL
     #
     # ## Usage
     #
-    # Include this module in your model:
+    # Include this module in your model and name its version column:
     #
     # ```
-    # class User < CQL::ActiveRecord::Base
+    # class User
+    #   include CQL::ActiveRecord::Model(Int64)
     #   include CQL::ActiveRecord::OptimisticLocking
+    #   db_context AppDB, :users
     #
-    #   optimistic_locking column_name: :version_number
+    #   property name : String = ""
+    #   property version : Int32 = 1
+    #
+    #   optimistic_locking version_column: :version
     # end
     # ```
     #
-    # The table should have a version column:
+    # The table needs that column. The `lock_version` table helper names it `version` unless told
+    # otherwise, while a bare `optimistic_locking` reads `lock_version`, so pass `version_column:`:
     #
     # ```
-    # schema.create_table :users do |t|
-    #   t.primary :id, Int64
-    #   t.column :name, String
-    #   t.column :email, String
-    #   t.lock_version :version_number
+    # AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+    #   table :users do
+    #     primary :id, Int64, auto_increment: true
+    #     text :name
+    #     lock_version :version
+    #   end
     # end
     # ```
     #
@@ -42,17 +49,12 @@ module CQL
     # ```
     module OptimisticLocking
       # Define optimistic locking for a model
-      # Specifies optimistic locking settings for the model.
-      # - **@param** column_name [Symbol] the name of the version column (default: :version)
+      # - **@param** version_column [Symbol] the name of the version column (default: :lock_version)
       #
       # **Example**
       #
       # ```
-      # class User < CQL::ActiveRecord::Base
-      #   include CQL::ActiveRecord::OptimisticLocking
-      #
-      #   optimistic_locking column_name: :version
-      # end
+      # optimistic_locking version_column: :version
       # ```
       macro optimistic_locking(version_column = :lock_version)
         # Store the name of the version column
