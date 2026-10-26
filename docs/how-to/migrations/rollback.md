@@ -1,152 +1,98 @@
+---
+description: "Undo applied migrations: the newest one, several, or everything newer than a version."
+---
+
 # Rollback Migrations
 
-This guide shows you how to rollback database migrations.
-
-## Rollback Last Migration
+## Roll Back the Newest Migrations
 
 ```crystal
-migrator = MyDB.migrator(config)
-migrator.rollback
-puts "Rolled back one migration"
+migrator.applied_migrations.map(&.version).sort  # => [1, 2, 3, 4, 5]
+
+migrator.rollback     # reverts 5         -> [1, 2, 3, 4]
+migrator.rollback(2)  # reverts 4, then 3 -> [1, 2]
 ```
 
-`rollback(steps = 1)` rolls back the newest applied migration, the one with the highest version. Pending migrations do not count towards `steps`. Note that `down(steps)` defaults to **all** migrations, so call `migrator.down` without an argument only when you mean to undo everything. On SQLite and PostgreSQL the whole rollback runs in one transaction; on MySQL and CockroachDB each statement commits on its own. It prints a table of the migrations it reverted.
+`rollback(n)` and `down(n)` revert the `n` newest *applied* migrations, highest version first; pending migrations do
+not count. Each call runs in one transaction on SQLite and PostgreSQL, statement by statement on MySQL and CockroachDB,
+and prints the reverted ones.
 
-## Rollback Multiple Migrations
+## Roll Back to a Version
 
 ```crystal
-# Rollback last 3 migrations
-migrator.rollback(3)
+migrator.down_to(2_i64)   # reverts every applied migration newer than 2; 2 stays applied
+migrator.down_to(42_i64)  # raises CQL::Migrator::Error: No migration with version 42
 ```
 
-## Rollback to Specific Version
+## Know What the Built-in Calls Revert
 
-`down_to(version)` rolls back every applied migration newer than `version`, newest first. The migration with that version stays applied:
+| Call | Reverts |
+| :--- | :--- |
+| `migrator.rollback` | the newest applied migration (`down(1)`) |
+| `migrator.rollback(n)`, `migrator.down(n)` | the `n` newest applied migrations |
+| `migrator.down_to(v)` | every applied migration newer than `v`; raises `CQL::Migrator::Error` if no migration has version `v` |
+| `migrator.down` | every applied migration |
+| `migrator.redo` | `rollback`, then `up` (every pending migration) |
 
-```crystal
-# With 1-4 applied, this reverts 4, 3 and 2
-migrator.down_to(1_i64)
-```
-
-`down_to` raises `CQL::Migrator::Error` ("No migration with version ...") when no registered migration has that version, so a mistyped version reverts nothing. To undo everything, call `migrator.down`.
-
-## Rollback All Migrations
-
-```crystal
-# Rollback everything (use with caution!)
-migrator.down
-```
-
-## Check Before Rollback
+## Add a Rollback Command
 
 ```crystal
-puts "Current version: #{migrator.last.try(&.version) || 0}"
-puts "Applied migrations: #{migrator.applied_migrations.size}"
-
-# Only rollback if there are migrations to rollback
-if migrator.applied_migrations.any?
-  migrator.rollback
-  puts "Rolled back to version: #{migrator.last.try(&.version) || 0}"
-else
-  puts "No migrations to rollback"
+# src/migrate.cr (see Run Migrations)
+case ARGV[0]?
+when "up"       then migrator.up
+when "rollback" then migrator.rollback
+when "version"  then puts migrator.applied_migrations.max_of?(&.version) || 0
+else                 abort "Usage: crystal src/migrate.cr up|rollback|version"
 end
 ```
 
-## Safe Rollback Script
-
-```crystal
-# src/rollback.cr
-require "./database"
-require "../migrations/*"
-
-config = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/app_schema.cr",
-  schema_name: :AppSchema,
-  auto_sync: true
-)
-
-migrator = MyDB.migrator(config)
-
-current = migrator.last.try(&.version) || 0_i64
-puts "Current version: #{current}"
-
-if current == 0
-  puts "No migrations to rollback"
-  exit 0
-end
-
-print "Rollback migration #{current}? (y/n): "
-if gets.try(&.strip) == "y"
-  migrator.rollback
-  puts "Rolled back to version: #{migrator.last.try(&.version) || 0}"
-else
-  puts "Cancelled"
-end
+```bash
+crystal src/migrate.cr rollback
+crystal src/migrate.cr version   # 4
 ```
+
+A `down` that runs in a new process needs the tables it touches, and the columns `rename_column` renames, declared on
+the schema; `drop_column` emits its `DROP COLUMN` either way. See
+[Create a Migration](create-migration.md#write-a-migration).
 
 ## Handle Irreversible Migrations
 
-Some migrations can't be rolled back:
-
+{% code title="db/migrations/006_drop_legacy_users.cr" %}
 ```crystal
-class DropLegacyTable < CQL::Migration(10)
+class DropLegacyUsers < CQL::Migration(6)
   def up
-    schema.legacy_users.drop!
+    schema.exec("DROP TABLE legacy_users")
   end
 
   def down
-    # Can't restore dropped table with data
     raise "Cannot rollback: table was dropped with data"
   end
 end
 ```
-
-When you try to rollback, the exception aborts the rollback and, on SQLite and PostgreSQL, nothing is reverted:
+{% endcode %}
 
 ```crystal
 begin
-  migrator.rollback
+  migrator.down_to(4_i64)
 rescue ex
-  puts "Rollback failed: #{ex.message}"
+  puts "Rollback failed: #{ex.message}"  # 5 and 6 both stay applied on SQLite and PostgreSQL
 end
 ```
 
-## Refresh Database
-
-Rollback all and re-migrate (development only):
+## Refresh a Development Database
 
 ```crystal
-def refresh_database
-  migrator = MyDB.migrator(config)
-
-  puts "Rolling back all migrations..."
-  migrator.down
-
-  puts "Re-running all migrations..."
-  migrator.up
-
-  puts "Database refreshed"
-end
+migrator.down   # every applied migration
+migrator.up
 ```
 
-## Verify Rollback
+{% hint style="danger" %}
+`migrator.down` without an argument reverts every applied migration and drops their data.
+{% endhint %}
 
-```crystal
-migrator = MyDB.migrator(config)
+## See Also
 
-# Record current state
-before = migrator.applied_migrations.size
-
-# Rollback
-migrator.rollback
-
-# Verify
-after = migrator.applied_migrations.size
-puts "Rolled back: #{before} -> #{after} migrations"
-```
-
-## Related
-
-- [Create a Migration](create-migration.md)
 - [Run Migrations](run-migrations.md)
+- [Create a Migration](create-migration.md)
+- [Fix Migration Errors](../troubleshooting/migration-errors.md)
 - [Migration DSL Reference](../../reference/api/migration-dsl.md)

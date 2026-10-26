@@ -9,7 +9,7 @@ shards install --ignore-crystal-version   # install dependencies
 crystal spec                              # full suite (Postgres/Redis specs go pending without servers)
 crystal spec spec/core/query_spec.cr      # one file
 crystal tool format --check src spec      # CI format check
-bin/ameba                                 # CI lint (build with `shards build ameba` if missing)
+crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec   # CI lint, as CI runs it
 ```
 
 The `structure_dump` specs put a fake `pg_dump`/`mysqldump` on `PATH` (`spec/support/helpers/fake_executable.cr`), so
@@ -49,3 +49,5 @@ it is created:
   `docs/SUMMARY.md` and linked from its section `README.md`.
 - A behavior change updates the matching docs page in the same change. Every class, method and option
   a page cites must exist in `src/`; prefer call shapes copied from `spec/`.
+- Page shape, length limits per Diátaxis type, callout syntax (GitBook `{% hint %}`) and how to verify
+  examples: `.claude/docs-style-guide.md`.

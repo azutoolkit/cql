@@ -1,272 +1,188 @@
+---
+description: "Every error class CQL defines, what raises it, and its message."
+---
+
 # Error Codes
 
-Common CQL errors and their meanings. Everything CQL defines inherits from `CQL::Error`, except `CQL::ActiveRecord::Validations::ValidationError`, which inherits from `Exception`. Classes marked "defined, not raised by CQL" exist in `src/exceptions.cr` for applications to raise or rescue but are not raised by the library itself.
-
-## Validation Errors
-
-### ValidationError
-
-Raised when model validations fail: by `validate!`, and by `save`, `save!` and `create!`, which validate first.
-
-```crystal
-begin
-  user.validate!
-rescue CQL::ActiveRecord::Validations::ValidationError => ex
-  puts ex.message  # Contains validation error messages
-end
-```
-
-**Common causes:**
-- Required field is empty
-- Value doesn't match format
-- Value outside allowed range
-
-**Solution:** Check `model.errors` for specific field errors (each has `field` and `message`). Use `valid?` to check without raising.
-
-## Locking Errors
-
-### OptimisticLockError
-
-Raised when a concurrent update is detected.
-
-```crystal
-begin
-  user.update!
-rescue CQL::OptimisticLockError
-  user.reload!  # Get latest version
-  # Re-apply changes and retry
-end
-```
-
-**Common causes:**
-- Another process updated the record
-- Version column mismatch
-
-**Solution:** Reload the record and retry the operation.
-
-## Record Errors
-
-### DB::NoResultsError
-
-Raised by `find!` and `find_by!` when no row matches. `find` and `find_by` return `nil` instead.
-
-```crystal
-begin
-  user = User.find!(999)
-rescue DB::NoResultsError
-  puts "User not found"
-end
-```
-
-**Solution:** Use `find` (returns nil) instead, or handle the exception.
-
-`CQL::RecordNotFound` and `CQL::RecordNotFoundError` (with `model_class` and `id`) are defined but not raised by CQL.
-
-### RecordInvalid and RecordNotSaved
-
-`save!` raises these when `save` returns `false`. `CQL::RecordInvalid` (with `error_messages` and `error_fields`) is raised if the record has validation errors; `CQL::RecordNotSaved` ("Failed to save the record") otherwise, typically because a `before_*` callback halted the save.
+CQL's own classes inherit from `CQL::Error < Exception`, except `CQL::ActiveRecord::Validations::ValidationError`, which inherits from `Exception`.
 
 ```crystal
 begin
   user.save!
-rescue ex : CQL::RecordNotSaved
-  puts "Failed: #{ex.message}"
+rescue ex : CQL::ActiveRecord::Validations::ValidationError
+  ex.message                    # => "name must be present,email must match the pattern /@/"
+rescue ex : CQL::RecordNotSaved # a before_* callback returned false
+rescue ex : CQL::Error          # anything else CQL raises
 end
 ```
 
-Validation failures themselves raise `Validations::ValidationError` before `save` can return `false`, so `RecordInvalid` is rarely seen in practice.
+## Core errors (`src/exceptions.cr`)
 
-**Solution:** Check `valid?` before saving, or use the non-bang `save`, which returns `false` when a `before_*` callback halts.
+| Class | Raised by | Message and fields |
+| :--- | :--- | :--- |
+| **`CQL::Error`** | Raised directly for model and table misuse; see the next table | free text |
+| **`CQL::RecordInvalid`** | `save!` when `save` returned `false` and the record has validation errors (a `before_validation` / `after_validation` callback halted an invalid record) | `"Record invalid: name: name must be present, email: ..."`; `validation_errors`, `error_messages`, `error_fields` |
+| **`CQL::RecordNotSaved`** | `save!` when a callback halted and there are no validation errors | `"Failed to save the record"` |
+| **`CQL::OptimisticLockError`** | `update!` on a model with `optimistic_locking`, and `Update#with_optimistic_lock(...).commit`, when no row matched the version | `"Record has been modified by another process"`; `model_class`, `id`, `expected_version`, `actual_version` (CQL leaves them `nil`) |
+| **`CQL::DialectError`** | SQL generation for a feature the adapter lacks; see [Dialect errors](#dialect-errors) | `"SQLite does not support DISTINCT ON\n\nWorkaround:\n..."`; `dialect`, `feature`, `workaround` |
+| **`CQL::SQLiteUnsupportedFeatureError`** < `DialectError` | SQLite: `back(...)` on insert, update or delete; `change_column`; `foreign_key` and `drop_foreign_key` in `schema.alter` | `"SQLite does not support ALTER COLUMN syntax"` |
+| **`CQL::MySqlUnsupportedFeatureError`** < `DialectError` | MySQL: a table with `check_constraint` | `"MySQL does not support CHECK constraints (...)"` |
 
-## Database Errors
+`CQL::Error` messages raised directly:
 
-### DB::ConnectionRefused
-
-Raised by crystal-db when a connection cannot be opened (the native PostgreSQL driver maps transport and TLS failures to it).
-
-**Common causes:**
-- Database server not running
-- Wrong connection string
-- Network issues
-
-**Solution:** Verify connection settings and database availability. See [Fix Connection Errors](../how-to/troubleshooting/connection-errors.md).
-
-### CQL::Schema::InvalidURIError
-
-Raised by `Schema.define` / `Schema.new` for a URI that is malformed, has no host (PostgreSQL, MySQL, CockroachDB) or an unsupported scheme.
-
-### CQL::Postgres errors
-
-The native PostgreSQL/CockroachDB driver raises subclasses of `CQL::Postgres::Error`:
-
-| Error | Raised when |
-|-------|-------------|
-| `AuthenticationError` | Authentication could not complete |
-| `TLSRefused` | The server refused or failed TLS that `sslmode` requires |
-| `ConnectionLost` | The socket failed or was closed |
-| `PoolTimeout` / `PoolClosed` | The async engine's pool had no free connection in time / was closed |
-| `QueryTimeout` | A statement exceeded its time limit |
-| `TransactionClosed` | A transaction scope was used after its transaction ended |
-| `ServerError` | The server sent an ErrorResponse; has `sqlstate`, `detail`, `constraint`, ... |
-
-`ServerError` has subclasses chosen by SQLSTATE: `UniqueViolation` (23505), `ForeignKeyViolation` (23503), `NotNullViolation` (23502), `CheckViolation` (23514), `SerializationFailure` (40001), `DeadlockDetected` (40P01), `UndefinedTable` (42P01), `UndefinedColumn` (42703) and `QueryCanceled` (57014), with the parents `IntegrityViolation`, `TransactionRollback`, `SyntaxOrAccessError` and `InvalidAuthorization` for the rest of their classes. See the [native PostgreSQL driver guide](../how-to/postgres-native/README.md).
+| Message | Raised by | Example |
+| :--- | :--- | :--- |
+| `Unknown column: <name>` | `Model.update!(id, attrs)` / `update!(**attrs)` with a column the table lacks; `touch` on a model without `updated_at` | `User.update!(1_i64, {:nope => "x".as(DB::Any)})` |
+| `No attributes to update` | `Model.update!(id, {} of Symbol => DB::Any)` | |
+| `Column <name> cannot be null` | `Model.update!(id, attrs)` setting `nil` on a `NOT NULL` column | |
+| `Invalid type for column <name>: expected <T>, got <U>` | `Model.update!(id, attrs)` with a wrongly typed value | |
+| `Cannot touch on a new record object` | `touch` on an unsaved record | `User.new.touch` |
+| `Primary key overflow: <id> exceeds Int32 range` | `create!` on a `Model(Int32)` | |
+| `Record must be persisted for optimistic locking`, `Version value missing for optimistic locking` | `update!` on an `optimistic_locking` model | |
+| `Specified version column '<c>' not found in table '<t>'`, `No version column found in table '<t>' ...`, `Current version value is required for optimistic locking` | `Update#with_optimistic_lock` | |
+| `Table name cannot be empty` / `cannot contain spaces` / `cannot start with a number` | `schema.table`, `CQL::Table.new` | `CQL::Table.new(:"1users", AppDB)` |
+| `<tool> failed: <error output>`, `<tool> could not be run: <cause>` | `dialect.structure_dump` on PostgreSQL and MySQL when `pg_dump` / `mysqldump` fails or is not installed | `"pg_dump failed: pg_dump: error: connection to server ... failed"` |
 
 ### Dialect errors
 
-`CQL::DialectError` (with `dialect`, `feature` and an optional `workaround`) is raised when the adapter cannot express a feature. `CQL::SQLiteUnsupportedFeatureError` and `CQL::MySqlUnsupportedFeatureError` are its subclasses, for example `change_column` or adding a foreign key to an existing SQLite table. On MySQL and CockroachDB (`Dialect#supports_transactional_ddl?` is false) `schema.alter`, `schema.build`, a table's `create!`, `drop!` and `truncate!`, `Migrator.new`, `migrator.up`, `migrator.down` and `migrator.pending_migrations` raise it when a transaction is open ("MySQL does not support schema changes inside a transaction").
+| Feature | Raises on | Error |
+| :--- | :--- | :--- |
+| `lock(...)` (row locking) | SQLite | `DialectError` |
+| `explain(analyze: true)` | SQLite | `DialectError` |
+| `distinct_on` | SQLite, MySQL | `DialectError` |
+| `json_contains` | SQLite | `DialectError` |
+| `within_distance` | SQLite | `DialectError` |
+| `full(...)` join | MySQL | `DialectError` |
+| `Insert#get` / `get!` | SQLite, MySQL | `DialectError` (`INSERT ... RETURNING`) |
+| `dialect.structure_dump` | CockroachDB | `DialectError` |
+| `schema.alter`, `schema.build`, a table's `create!` / `drop!` / `truncate!`, `Migrator.new`, `up`, `down`, `pending_migrations` inside an open transaction | MySQL, CockroachDB | `DialectError` (`"MySQL does not support schema changes inside a transaction"`), raised before any DDL runs |
+| `back(...)` on insert, update, delete | SQLite | `SQLiteUnsupportedFeatureError` |
+| `change_column`, `foreign_key`, `drop_foreign_key` in `schema.alter` | SQLite | `SQLiteUnsupportedFeatureError` |
+| `check_constraint` | MySQL | `MySqlUnsupportedFeatureError` |
 
-### QueryError, TransactionError, PersistenceError, AttributeError, CallbackError, ConnectionError
+## Active Record errors
 
-Defined, not raised by CQL. `CQL::QueryError` carries `sql` and `params`, `CQL::TransactionError` a `transaction_state`, `CQL::ConnectionError` prefixes its message with "Database connection error:". Query failures from the database surface as the driver's own exceptions (`DB::Error` subclasses, or `CQL::Postgres::ServerError`).
+| Class | Raised by | Message |
+| :--- | :--- | :--- |
+| **`CQL::ActiveRecord::Validations::ValidationError`** < `Exception` | `validate!`, `save`, `save!` and the instance `create!` on an invalid record. Class-level `Model.create!(**attrs)` does not validate. | the error messages joined by `,` |
+| **`CQL::ActiveRecord::SchemaMappingError`** | `Model.schema` when no `CQL::Schema.define` block, or more than one, declares the inferred table; with `CQL_VALIDATE_SCHEMA_MAPPINGS=1`, after the program's other top-level code has run, when the table is missing, a getter type differs from the column type, or the primary key column differs | ``CQL schema mapping error in User: schema column `users.age` type Int32 does not match model getter `age` type Int64. ...`` |
+| **`CQL::ActiveRecord::Relations::BaseRelation::RelationError`** | Instance `delete!` / `force_delete!` with a `has_many ..., dependent: :restrict_with_error` that has records, or a `dependent: :destroy` child whose `delete!` returns `false`; a `DB::Error` inside an association operation | `"Cannot delete record because dependent posts exist"`, `"... could not be deleted"`, `"Database operation failed: ..."` |
+| **`...::AssociationNotFound`** < `RelationError` | `first` / `last` on an empty `has_many` collection; updating a missing `has_one` / `belongs_to` target | `"No records found in collection"`, `"No profile to update"` |
+| **`...::InvalidAssociation`** < `RelationError` | Reading a `belongs_to ..., optional: false` whose key is `nil` or `0`; clearing a non-optional `belongs_to` | `"Required association user foreign key is nil or 0"` |
+| **`...::UnsavedRecord`** < `RelationError` | Association operations on an unsaved owner | `"Cannot operate on unsaved record"` |
 
-## Migration Errors
+## Schema and migration errors
 
-### CQL::Migrator::Error
+| Class | Raised by | Message |
+| :--- | :--- | :--- |
+| **`CQL::Schema::Error`** | `schema.alter :name` for a table not in the schema | `"Table 'users' not found"` |
+| **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL URI with no host part, a MySQL or CockroachDB URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
+| **`CQL::Migrator::Error`** | `update_schema_file` (run by `up` and `down` with `auto_sync`, and by `bootstrap_schema`) when the dump fails; `up_to` / `down_to` with a version no migration has | `"Schema update failed: <cause>"`, `"No migration with version 42"` |
+| **`CQL::SchemaDump::Error`** | `SchemaDump` for an unknown adapter or a failed connection; reaches you wrapped in `Migrator::Error` | `"Failed to connect to database: ..."` |
+| `KeyError` | `schema.tables[:name]` for an unknown table | `"Missing hash key: :name"` |
 
-Raised when the schema file cannot be written ("Schema update failed: ...") with `auto_sync` on.
+A failing statement inside `up` or `down` raises the driver's own exception. On SQLite and PostgreSQL the whole `up` / `down` run rolls back; on MySQL and CockroachDB each statement commits on its own. There is no `IrreversibleMigration` class: raise any exception from `down`.
 
-### CQL::Schema::Error
+## Native PostgreSQL driver errors
 
-Raised by `schema.alter :table` when the table is not registered in the schema ("Table 'users' not found").
+All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain credentials or bound values.
 
-### Database errors during a migration
+| Class | Raised when |
+| :--- | :--- |
+| `ProtocolError` | The bytes on the wire do not follow protocol 3.0 |
+| `UnrecognizedStartupReply` < `ProtocolError` | The first reply is not a protocol message (e.g. CockroachDB answering HTTP/2) |
+| `UnsupportedProtocol` | The server speaks no protocol version the connection may use |
+| `AuthenticationError` | The authentication exchange cannot complete |
+| `TLSRefused` | `sslmode` requires TLS and the server refused it or the handshake / certificate check failed |
+| `ConnectionLost` | The socket failed or the connection was already closed |
+| `QueryTimeout` | No answer within the read timeout; the statement is canceled on the server |
+| `PoolTimeout` / `PoolClosed` | The `AsyncEngine` pool had no free connection in time / is closed |
+| `TransactionClosed` | A `TransactionScope` was used after its transaction ended |
+| `WrongFiber` / `StreamClosed` | A `RowStream` was read by another fiber / after its block ended or its statement failed |
+| `UnsupportedValue` | A valid PostgreSQL value Crystal cannot represent (infinite or far-out dates) |
+| `ServerError` | The server sent an ErrorResponse; fields `severity`, `sqlstate`, `server_message`, `detail`, `hint`, `position`, `schema`, `table`, `column`, `constraint`, `routine`; `stale_plan?` |
 
-A failing statement in `up` or `down` raises the driver's exception and rolls back the whole `migrator.up`/`migrator.down` run on SQLite and PostgreSQL; on MySQL and CockroachDB each statement commits on its own.
+`ServerError.from` picks a subclass by SQLSTATE, then by SQLSTATE class.
 
-**Common causes:**
-- Table already exists (only for tables created outside CQL; `create!` uses `IF NOT EXISTS`)
-- Column already exists
-- Foreign key constraint violation
-- Invalid SQL syntax
+<details>
+<summary>ServerError subclasses by SQLSTATE</summary>
 
-`CQL::MigrationError` (with `migration_version` and `direction`) is defined, not raised by CQL.
+| Subclass | SQLSTATE | Parent |
+| :--- | :--- | :--- |
+| `IntegrityViolation` | class `23` | `ServerError` |
+| `UniqueViolation` / `ForeignKeyViolation` / `NotNullViolation` / `CheckViolation` | `23505` / `23503` / `23502` / `23514` | `IntegrityViolation` |
+| `TransactionRollback` | class `40` | `ServerError` |
+| `SerializationFailure` / `DeadlockDetected` | `40001` / `40P01` | `TransactionRollback` |
+| `SyntaxOrAccessError` | class `42` | `ServerError` |
+| `UndefinedTable` / `UndefinedColumn` | `42P01` / `42703` | `SyntaxOrAccessError` |
+| `InvalidAuthorization` | class `28` | `ServerError` |
+| `QueryCanceled` | `57014` | `ServerError` |
+| `LocalCancel` | a cancel the driver issued itself | `QueryCanceled` |
 
-### Irreversible migrations
+</details>
 
-There is no `IrreversibleMigration` class. Raise any exception from `down`:
+`message` keeps the server's wording only for value-free SQLSTATE classes (`08 0A 23 25 28 3D 53 54 55 57 58`); otherwise it is a fixed title such as `"ERROR: syntax error (SQLSTATE 42601)"`. See the [native PostgreSQL driver guide](../how-to/postgres-native/README.md).
 
-```crystal
-def down
-  raise "Cannot rollback: data would be lost"
-end
-```
+## crystal-db and standard errors
 
-**Solution:** Handle the rollback manually or skip it.
+| Class | Raised by | Message |
+| :--- | :--- | :--- |
+| `DB::NoResultsError` | `find!`, `find_by!` (class and `QueryBuilder`); `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, ``"No records found with conditions: {email: "x"}"``, `"The insert returned no row"` |
+| `NilAssertionError` | `first!` with no matching row | |
+| `Exception` | `QueryBuilder#last!` / `Model.last!` with no matching row | `"No records found"` |
+| `DB::ConnectionRefused` | Opening a connection fails (crystal-db's first connect; the native driver maps transport and TLS failures to it) | |
+| `DB::PoolTimeout`, `DB::PoolRetryAttemptsExceeded` | A saturated pool; a failed lazy reconnect | |
+| `URI::Error` | `CQL.build_schema` with a `db` URL `URI.parse` rejects, such as `sqlite3://:memory:` | `"Invalid URI: bad port at character 11"` |
+| Driver errors (`SQLite3::Exception`, MySQL and `pg` errors, `CQL::Postgres::ServerError`) | A statement the database rejects | |
 
-## Schema Errors
+## `ArgumentError`
 
-### SchemaMappingError
+There is no `ConfigurationError`, `TableNotFound` or `ColumnNotFound` class. These raise `ArgumentError`:
 
-Raised when strict schema mapping validation is enabled and a model getter type does not match the schema column type, or the model's primary key column differs from the table's declared primary key (``table `labels` declares primary key `label_no`, but the model maps `id` to `id` ``).
+| Raised by | Message |
+| :--- | :--- |
+| `CQL.configure` validation | see [Configuration Reference](configuration.md#validation-messages) |
+| `insert.into`, `update.table`, `delete.from` / `using` with an unknown table | `"Table users not found"` |
+| `query.from` with an unknown table | `"Table 'users' not found in schema"` |
+| An unknown column in `values` or `set` / in `where` or `select` | `"Column nope not found in users"` / `"Column 'nope' not found in any tables/aliases: users"` |
+| A table, column, index, constraint or foreign key name with characters other than letters, digits and `_` | ``"Invalid foreign key name "bad name": only letters, digits and underscores are allowed, ..."`` |
+| `lock(skip_locked: true, nowait: true)`; `lock(:other)` | `"Use skip_locked or nowait, not both"`, `"Unknown lock mode :other (use :update or :share)"` |
+| `do_update` / `do_nothing` without `on_conflict`, or `on_conflict` without columns | `"Call on_conflict(...) before do_update"` |
+| `Insert#get` without `back` | ``"Insert#get needs the columns to return; call `back` first"`` |
+| `foreign_key` with mismatched column counts | `"Number of columns (...) must match number of referenced columns (...)"` |
+| An index name longer than 63 characters | ``"Index name "..." is longer than 63 characters; give the index a shorter name"`` |
+| `find_each` / `find_in_batches` / `insert_all` with `batch_size <= 0` | `"batch_size must be positive, got 0"` |
+| `preload` after a partial `select` | `"preload is not supported after a partial select"` |
+| A scope called with the wrong arguments or returning a non-query | `"Scope 'active' expects no arguments ..."` |
+| `CQL::Schema.new(..., source:)` with a source bound to another adapter | `"the connection source speaks ..."` |
+| Native PostgreSQL driver: unsupported `sslmode`, libpq-only options, `sslrootcert` without `verify-full`, non-numeric pool options | `"the sslcert option is not supported by this driver"` |
 
-Enable strict validation with:
+## Compile-time errors
 
-```bash
-CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
-```
+The compiler stops with these messages; there is no runtime class.
 
-**Common causes:**
-- Model property type differs from the column type in `CQL::Schema.define`
-- `db_context` points at the wrong table
-- A schema was changed but the model was not updated
-- The table's `primary` column is not `id` and the model lacks `db_context ..., primary_key: :column`
+| Message starts with | Cause |
+| :--- | :--- |
+| `CQL belongs_to error in Post:` | Name or foreign key not a symbol literal; foreign key getter missing; key type differs from the target primary key type |
+| `CQL has_many error in User:` | Name or `foreign_key` not a symbol literal; unsupported `dependent` (allowed: `destroy delete_all nullify restrict_with_error`); target lacks the key; key type mismatch |
+| `CQL has_one error in User:` | Unsupported `dependent` (allowed: `destroy delete nullify`) |
+| `CQL many_to_many error in Post:` | Unsupported `dependent` (allowed: `destroy delete_all nullify`) |
+| `CQL association error in User:` | The target model type does not exist |
+| `CQL has_many error ...: foreign key ... is the primary key of ...` | Shared primary keys are not supported |
+| `CQL validation error in User:` | Unsupported predicate; `validate` on an unknown attribute; missing `confirmation` target |
+| `CQL order_by: User has no column` | `order_by` with an unknown column |
+| `CQL: cannot compare a String column with an integer` | A typed `where { }` comparison with the wrong value type |
+| `CQL: Symbol cannot be bound as a SQL parameter` | A raw fragment value that is not a `DB::Any` type, as in `where("name = ?", :admin)` |
 
-**Solution:** Update the model property type or the schema column type so they agree.
+## Defined, not raised by CQL
 
-### Unknown tables and columns
+These `CQL::` classes are defined, and some are rescued, but nothing in CQL raises them: `RecordNotFound`, `RecordNotFoundError`, `ValidationError` (not the Active Record one above), `ConnectionError`, `QueryError`, `TransactionError`, `MigrationError`, `AttributeError`, `PersistenceError`, `CallbackError`, `Schema::VersionConflictError` and `Schema::ConnectionError`.
 
-There are no `TableNotFound` or `ColumnNotFound` classes. A table or column missing from the database surfaces as the driver's error (`CQL::Postgres::UndefinedTable` / `UndefinedColumn` on the native driver). A table missing from the *schema definition* raises `KeyError` from `schema.tables[...]`, `ArgumentError` ("Table users not found") from `insert.into`, `update.table`, `delete.from` and `delete.using`, or `CQL::Schema::Error` from `schema.alter`.
+## See Also
 
-**Solution:** Ensure migrations have run, check spelling, and keep the schema definition in sync.
-
-## Compile-Time Association Errors
-
-### CQL belongs_to error
-
-Raised at compile time when a `belongs_to` declaration is malformed or type-unsafe.
-
-**Common causes:**
-- Association name is not a symbol literal
-- Foreign key is not a symbol literal
-- The model does not define the foreign key getter/property
-- Foreign key type does not match the target model primary key type
-
-**Solution:** Add a typed foreign key property and make it match the target model primary key type.
-
-### CQL has_many error
-
-Raised at compile time when a `has_many` declaration is malformed or type-unsafe.
-
-**Common causes:**
-- Association name is not a symbol literal
-- `foreign_key` is not a symbol literal
-- `dependent` option is unsupported
-- Target model does not define the foreign key getter/property
-- Target foreign key type does not match the parent model primary key type
-
-**Solution:** Add the target foreign key property and make it match the parent model primary key type.
-
-### CQL has_one error / CQL many_to_many error
-
-Raised at compile time when the `dependent` option is unsupported: `has_one` accepts `:destroy`, `:delete` and
-`:nullify`; `many_to_many` accepts `:destroy`, `:delete_all` and `:nullify`.
-
-**Solution:** Use one of the listed values, or leave `dependent` out.
-
-### RelationError when deleting
-
-`delete!` (and `force_delete!`) raise `CQL::ActiveRecord::Relations::BaseRelation::RelationError` and delete nothing:
-
-- "Cannot delete record because dependent posts exist" when a `has_many ..., dependent: :restrict_with_error`
-  association still has records.
-- "Cannot delete record because dependent posts could not be deleted" when a `has_many` or `has_one` with
-  `dependent: :destroy` calls a child's `delete!` and it returns false: a `before_destroy` callback halted it, or the
-  child's row was already gone.
-
-**Solution:** Delete or reassign the associated records first, fix the halting callback, or choose another `dependent`
-strategy.
-
-## Configuration Errors
-
-There is no `ConfigurationError` class. Invalid settings raise `ArgumentError`:
-
-- `CQL.configure` validates when the block ends: empty `db`, `schema_dir` or `schema_file`, a `schema_file` not ending in `.cr`, a `timezone` other than `:utc`/`:local`, a non-positive pool size, an invalid `ssl.mode`, or an unsupported SQLite `journal_mode`/`synchronous` value
-- `config.adapter` raises `ArgumentError` for a URL that is not `postgres://`, `postgresql://`, `cockroachdb://`, `mysql://` or `sqlite3://`
-- The native PostgreSQL driver raises `ArgumentError` for an unsupported `sslmode`, unsupported libpq options, or non-numeric pool options
-
-**Solution:** Review the message; it names the offending setting.
-
-## Debugging Tips
-
-### Enable Logging
-
-```crystal
-Log.setup do |c|
-  c.bind("cql.*", :debug, Log::IOBackend.new)
-end
-
-# Or let CQL print formatted SQL (`config.sql_logging = true` takes effect when CQL.build_schema runs)
-CQL::Performance.enable_sql_logging
-```
-
-### Print Error Details
-
-```crystal
-begin
-  # operation
-rescue ex
-  puts "Error type: #{ex.class}"
-  puts "Message: #{ex.message}"
-  puts "Backtrace: #{ex.backtrace.first(5).join("\n")}"
-end
-```
-
-### Check Validation Errors
-
-```crystal
-unless model.valid?
-  model.errors.each do |error|
-    puts "#{error.field}: #{error.message}"
-  end
-end
-```
+- [Fix Connection Errors](../how-to/troubleshooting/connection-errors.md)
+- [Fix Migration Errors](../how-to/troubleshooting/migration-errors.md)
+- [Fix Schema Mapping Errors](../how-to/troubleshooting/schema-mapping-errors.md)
+- [Fix Validation Errors](../how-to/troubleshooting/validation-errors.md)
+- [Database Support](database-support.md)
+- [Configuration Reference](configuration.md)

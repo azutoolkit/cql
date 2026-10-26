@@ -1,56 +1,52 @@
+---
+description: "Add columns to an existing table with schema.alter, with defaults, indexes and data backfills."
+---
+
 # Add Columns
 
-This guide shows you how to add columns to existing tables using migrations.
+## Add Nullable Columns
 
-`schema.alter` columns are nullable by default (`null: true`), unlike `column` in a `schema.table` block. Supported `add_column` options are `null:`, `default:`, `unique:`, `size:`, `index:` and `as:`. `size:` is the length of a `String` column (`VARCHAR(size)` on PostgreSQL, CockroachDB and MySQL; SQLite's `TEXT` has no length and other types ignore it).
-
-## Add a Single Column
-
+{% code title="db/migrations/005_add_profile_fields_to_users.cr" %}
 ```crystal
-class AddAvatarToUsers < CQL::Migration(5)
+class AddProfileFieldsToUsers < CQL::Migration(5)
   def up
     schema.alter :users do
-      add_column :avatar_url, String, null: true
+      add_column :avatar_url, String   # ALTER TABLE users ADD COLUMN avatar_url TEXT
+      add_column :bio, String
     end
   end
 
   def down
     schema.alter :users do
       drop_column :avatar_url
-    end
-  end
-end
-```
-
-## Add Multiple Columns
-
-```crystal
-class AddProfileFieldsToUsers < CQL::Migration(6)
-  def up
-    schema.alter :users do
-      add_column :bio, String, null: true
-      add_column :website, String, null: true
-      add_column :location, String, null: true
-    end
-  end
-
-  def down
-    schema.alter :users do
       drop_column :bio
-      drop_column :website
-      drop_column :location
     end
   end
 end
 ```
+{% endcode %}
 
-## Add Column with Default
+`add_column` makes nullable columns (`null: true`) unless you pass `null: false`, unlike `column` in a `schema.table`
+block.
 
+| Option | Effect on the `ADD COLUMN` statement |
+| :--- | :--- |
+| `null: false` | adds `NOT NULL` |
+| `default:` | adds `DEFAULT <value>`, which also fills the existing rows |
+| `unique: true` | adds `UNIQUE`; SQLite rejects it ("Cannot add a UNIQUE column"), so use `create_index ..., unique: true` |
+| `index: true` | runs `CREATE INDEX idx_<table>_<column>` after the column (`UNIQUE` with `unique: true`) |
+| `size:` | `VARCHAR(size)` for a `String` column on PostgreSQL, CockroachDB and MySQL; SQLite's `TEXT` has no length |
+| `as:` | none: it names the column in selects |
+
+## Add a Column With a Default
+
+{% code title="db/migrations/006_add_active_to_users.cr" %}
 ```crystal
-class AddActiveToUsers < CQL::Migration(7)
+class AddActiveToUsers < CQL::Migration(6)
   def up
     schema.alter :users do
       add_column :active, Bool, default: true, null: false
+      # ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT 1 NOT NULL (SQLite; DEFAULT TRUE on PostgreSQL)
     end
   end
 
@@ -61,153 +57,117 @@ class AddActiveToUsers < CQL::Migration(7)
   end
 end
 ```
+{% endcode %}
 
-The default fills the existing rows, so a `NOT NULL` column can be added to a table that already has data. On PostgreSQL this runs:
+The default fills the rows already in the table, so a `NOT NULL` column can be added to a table with data. When the
+value depends on each row, add the column nullable and fill it as in
+[Migrate Data in Batches](#migrate-data-in-batches).
 
-```sql
-ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT TRUE NOT NULL
-```
+## Migrate Data in Batches
 
-## Add Column with Index
-
+{% code title="db/migrations/007_normalize_user_emails.cr" %}
 ```crystal
-class AddSlugToPosts < CQL::Migration(8)
+class NormalizeUserEmails < CQL::Migration(7)
+  BATCH_SIZE = 1000 # a constant you control, never user input
+
   def up
-    schema.alter :posts do
-      add_column :slug, String, null: true, index: true
+    loop do
+      # MySQL rejects LIMIT inside IN (...): select the ids first there
+      result = schema.exec(<<-SQL)
+        UPDATE users SET email = LOWER(TRIM(email))
+        WHERE id IN (SELECT id FROM users WHERE email <> LOWER(TRIM(email)) LIMIT #{BATCH_SIZE})
+        SQL
+      break if result.rows_affected == 0
     end
+
+    left = schema.exec_query do |conn|
+      conn.scalar("SELECT COUNT(*) FROM users WHERE email <> LOWER(TRIM(email))").as(Int64)
+    end
+    raise "Data migration incomplete: #{left} emails left" if left > 0
   end
 
   def down
-    schema.alter :posts do
-      drop_index :idx_posts_slug
-      drop_column :slug
-    end
+    raise "Cannot roll back #{self.class.name}: the original emails are gone"
   end
 end
 ```
+{% endcode %}
 
-`index: true` creates `idx_posts_slug` right after adding the column. For a unique index, put `create_index :idx_posts_slug, [:slug], unique: true` in the same block instead: `unique: true` on `add_column` also declares the column `UNIQUE`, which SQLite cannot add to an existing table.
+Each `UPDATE` touches at most 1,000 rows, but on SQLite and PostgreSQL every batch still runs in the migration run's one
+transaction. If `email` is unique, addresses that differ only in case collide; find them first with
+`GROUP BY LOWER(TRIM(email)) HAVING COUNT(*) > 1`.
 
-## Add Foreign Key Column
-
-Adding a foreign key to an existing table is not supported on SQLite: `foreign_key` in `schema.alter` raises `CQL::SQLiteUnsupportedFeatureError` with a workaround.
+## Add an Indexed Column
 
 ```crystal
-class AddCategoryToPosts < CQL::Migration(9)
-  def up
-    schema.alter :posts do
-      add_column :category_id, Int64, null: true
-      create_index :idx_posts_category_id, [:category_id]
-      foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: :set_null
-    end
-  end
+schema.alter :users do
+  add_column :deleted_at, Time, index: true            # ADD COLUMN deleted_at TIMESTAMP, for SoftDeletable,
+end                                                    # then CREATE INDEX idx_users_deleted_at ON users (deleted_at)
 
-  def down
-    schema.alter :posts do
-      drop_foreign_key :fk_posts_category_id
-      drop_index :idx_posts_category_id
-      drop_column :category_id
-    end
-  end
+schema.alter :posts do
+  add_column :slug, String
+  create_index :idx_posts_slug, [:slug], unique: true  # CREATE UNIQUE INDEX idx_posts_slug ON posts (slug)
 end
+# down: drop_index :idx_posts_slug, then drop_column :slug
 ```
 
-## Add Timestamp Columns
+## Add Timestamps to an Existing Table
 
 ```crystal
-class AddTimestampsToPosts < CQL::Migration(10)
-  def up
-    schema.alter :posts do
-      add_column :created_at, Time, null: true
-      add_column :updated_at, Time, null: true
-    end
-
-    # Optionally set current time for existing records
-    # NOW() is PostgreSQL/MySQL; use CURRENT_TIMESTAMP for SQLite
-    schema.exec("UPDATE posts SET created_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
-  end
-
-  def down
-    schema.alter :posts do
-      drop_column :created_at
-      drop_column :updated_at
-    end
-  end
+schema.alter :posts do
+  add_column :created_at, Time
+  add_column :updated_at, Time
 end
+now = Time.utc
+schema.update.table(:posts).set(created_at: now, updated_at: now).commit
 ```
 
-## Add Column for Soft Deletes
+## Add a Foreign Key Column
 
+{% tabs %}
+{% tab title="PostgreSQL and MySQL" %}
 ```crystal
-class AddDeletedAtToUsers < CQL::Migration(11)
-  def up
-    schema.alter :users do
-      add_column :deleted_at, Time, null: true, index: true
-    end
-  end
-
-  def down
-    schema.alter :users do
-      drop_index :idx_users_deleted_at
-      drop_column :deleted_at
-    end
-  end
+schema.alter :posts do
+  add_column :category_id, Int64
+  create_index :idx_posts_category_id, [:category_id]
+  foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: :set_null
 end
+# ALTER TABLE posts ADD COLUMN category_id BIGINT
+# CREATE INDEX idx_posts_category_id ON posts (category_id)
+# ALTER TABLE posts ADD CONSTRAINT fk_posts_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL ON UPDATE NO ACTION
+# down: drop_foreign_key :fk_posts_category_id, drop_index, drop_column
 ```
+{% endtab %}
 
-## Add Version Column for Locking
+{% tab title="SQLite" %}
+{% hint style="warning" %}
+`foreign_key` in `schema.alter` raises `CQL::SQLiteUnsupportedFeatureError` while the block's SQL is built, so nothing in that block runs. Add the column alone, or recreate the table with the key declared.
+{% endhint %}
+{% endtab %}
+{% endtabs %}
 
-```crystal
-class AddVersionToUsers < CQL::Migration(12)
-  def up
-    schema.alter :users do
-      add_column :version, Int32, default: 1, null: false
-    end
-  end
-
-  def down
-    schema.alter :users do
-      drop_column :version
-    end
-  end
-end
-```
-
-## Update Model After Migration
-
-After running the migration, update your model:
+## Use the Column in the Model
 
 ```crystal
 class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context schema: MyDB, table: :users
 
-  # Existing properties...
-
-  # New property
+  property name : String = ""
+  property email : String = ""
   property avatar_url : String?
-
-  # Don't forget to update constructor if needed
-  def initialize(@name : String, @email : String, @avatar_url : String? = nil)
-  end
 end
-```
 
-If you use schema-file sync, the schema file (`app_schema.cr`) is regenerated by the migrator when `auto_sync` is on.
-
-## Verify Column Added
-
-```crystal
-migrator.up
-
-# Test the new column works
 user = User.create!(name: "John", email: "john@example.com", avatar_url: "/avatars/john.png")
-user.avatar_url  # => "/avatars/john.png"
+user.avatar_url # => "/avatars/john.png"
 ```
 
-## Related
+`create!` writes only columns the schema declares, so add the column to your `CQL::Schema.define` block too (with
+`auto_sync`, the migrator rewrites the generated schema file for you).
+
+## See Also
 
 - [Create a Migration](create-migration.md)
 - [Create Indexes](indexes.md)
+- [Implement Soft Deletes](../models/soft-delete.md)
+- [Add Optimistic Locking](../models/optimistic-locking.md)
 - [Migration DSL Reference](../../reference/api/migration-dsl.md)

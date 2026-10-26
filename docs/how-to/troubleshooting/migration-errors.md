@@ -1,221 +1,164 @@
+---
+description: "Find the error your migration raised, then apply its fix."
+---
+
 # Fix Migration Errors
 
-This guide helps you diagnose and fix common migration errors.
+Check which migrations have run first, as in [Check Status](../migrations/run-migrations.md#check-status). SQLite messages below come from SQLite. PostgreSQL errors go through CQL's native driver, which prints a fixed title for SQLSTATE classes whose server text can quote values; the server's own text is in `server_message`:
 
-## Common Error: Table Already Exists
-
-**Error:**
-```
-relation "users" already exists
-```
-
-**Cause:** Another statement created the table (for example a raw `CREATE TABLE`, or a hand-written `schema.exec`). `Table#create!` itself emits `CREATE TABLE IF NOT EXISTS`, so it will not raise this error.
-
-**Solutions:**
-
-1. Check migration status:
 ```crystal
-migrator.applied_migrations.each { |record| puts "#{record.version} #{record.name}" }
-migrator.print_pending_migrations
-```
-
-2. CQL has no "mark as applied" helper. If the table exists and is correct, insert the version into the migrations table (`cql_schema_migrations` by default, columns `name`, `version`):
-```crystal
-schema.exec("INSERT INTO cql_schema_migrations (name, version) VALUES ('CreateUsers', 1)")
-```
-
-3. Drop and recreate (development only; `drop!` is `DROP TABLE IF EXISTS`):
-```crystal
-schema.users.drop!
-```
-
-## Common Error: Table Does Not Exist
-
-**Error:**
-```
-relation "users" does not exist
-```
-
-**Cause:** Trying to alter or reference a table that wasn't created.
-
-**Solutions:**
-
-1. Run migrations in order:
-```crystal
-migrator.up  # Run all pending migrations
-```
-
-2. Check migration order - ensure create comes before alter
-
-## Common Error: Column Already Exists
-
-**Error:**
-```
-column "email" of relation "users" already exists
-```
-
-**Solutions:**
-
-1. Check whether the migration already ran (`migrator.applied_migrations`), or whether the column was added by hand. CQL has no `column_exists?` helper; the table's declared columns are in `schema.tables[:users].columns`, which mirrors the schema definition, not necessarily the live database.
-
-2. Remove the column first if replacing:
-```crystal
-def up
-  schema.alter :users do
-    drop_column :email
-    add_column :email, String, null: false
-  end
+begin
+  migrator.up
+rescue ex : CQL::Postgres::ServerError # the PostgreSQL errors below inherit from it
+  ex.message        # => "ERROR: syntax error or access rule violation (SQLSTATE 42P07)"
+  ex.sqlstate       # => "42P07"
+  ex.server_message # => "relation \"users\" already exists"; may quote bound values
 end
 ```
 
-`drop_column` emits `DROP COLUMN` even for a column the table definition does not declare; the database raises if the table has no such column.
+## Table already exists
 
-## Common Error: Cannot Drop Column
-
-**Error:**
-```
-cannot drop column "user_id" because other objects depend on it
+```text
+SQLite3::Exception: table users already exists
+CQL::Postgres::SyntaxOrAccessError: ERROR: syntax error or access rule violation (SQLSTATE 42P07)
 ```
 
-**Cause:** Foreign key or index depends on the column. (SQLite cannot drop foreign keys at all and raises `CQL::SQLiteUnsupportedFeatureError`; rebuild the table.)
+**Cause:** a raw `CREATE TABLE` ran on a table that exists. `Table#create!` emits `CREATE TABLE IF NOT EXISTS`, so it never raises this. If the table is correct and only the record is missing, record the version by hand (CQL has no helper):
 
-**Solutions:**
-
-1. Drop dependencies first:
 ```crystal
-def up
-  schema.alter :posts do
-    drop_foreign_key :fk_posts_user_id   # default name is fk_<table>_<columns>
-    drop_index :idx_posts_user_id
-    drop_column :user_id
-  end
-end
+# CQL.build_migrator records in schema_migrations (test_migrations in test), AppDB.migrator in cql_schema_migrations
+AppDB.exec("INSERT INTO schema_migrations (name, version) VALUES ('CreateUsers', 1)")
 ```
 
-## Common Error: Null Constraint Violation
+## Table not found
 
-**Error:**
+```text
+CQL::Schema::Error: Table 'comments' not found
+SQLite3::Exception: no such table: comments
+CQL::Postgres::UndefinedTable: ERROR: undefined table (SQLSTATE 42P01)
 ```
-column "name" contains null values
+
+**Cause:** the first comes from `schema.alter :comments` when the schema block does not declare `comments`; declare it. The others mean the table was never created: run the migration that creates it first (versions run in ascending order).
+
+## Column already exists
+
+```text
+SQLite3::Exception: duplicate column name: email
+CQL::Postgres::SyntaxOrAccessError: ERROR: syntax error or access rule violation (SQLSTATE 42701)
 ```
 
-**Cause:** Adding NOT NULL column to table with existing data.
+**Cause:** the migration already ran, or the column was added by hand:
 
-**Solutions:**
-
-1. Add with default value:
 ```crystal
+migrator.applied_migrations.map(&.version) # did the migration run?
+schema.tables[:users].columns.keys         # the schema's declaration, not the live database
+```
+
+## Adding a NOT NULL column fails
+
+```text
+SQLite3::Exception: Cannot add a NOT NULL column with default value NULL
+CQL::Postgres::NotNullViolation: ERROR: column "name" of relation "users" contains null values (SQLSTATE 23502)
+```
+
+```crystal
+# ✅ Give the column a default: it fills the rows already in the table
 schema.alter :users do
   add_column :name, String, null: false, default: "Unknown"
 end
 ```
 
-2. Add as nullable, update, then add constraint:
+[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) shows the migration and what to do when each row needs its own value.
+
+## Column cannot be dropped
+
+```text
+CQL::Postgres::ServerError: ERROR: server error (SQLSTATE 2BP01)
+CQL::SQLiteUnsupportedFeatureError: SQLite does not support dropping foreign keys
+```
+
+**Cause:** a foreign key or index depends on the column (2BP01). Drop them first:
+
 ```crystal
-def up
-  schema.alter :users do
-    add_column :name, String, null: true
-  end
-
-  schema.exec("UPDATE users SET name = 'Unknown' WHERE name IS NULL")
-
-  # change_column only takes a name and a type; to add NOT NULL use raw SQL
-  schema.exec("ALTER TABLE users ALTER COLUMN name SET NOT NULL")   # PostgreSQL / CockroachDB
+schema.alter :posts do
+  drop_foreign_key :fk_posts_user_id # name CQL gives a key added with alter; a key declared in a
+                                     # table block is named by the database (PostgreSQL: posts_user_id_fkey)
+  drop_index :idx_posts_user_id      # the default name for index [:user_id] on posts
+  drop_column :user_id
 end
+# ALTER TABLE posts DROP CONSTRAINT fk_posts_user_id; DROP INDEX IF EXISTS idx_posts_user_id; ALTER TABLE posts DROP COLUMN user_id;
 ```
 
-## Common Error: Foreign Key Violation
-
-**Error:**
-```
-insert or update on table "posts" violates foreign key constraint
-```
-
-**Cause:** Referenced record doesn't exist.
-
-**Solutions:**
-
-1. Ensure parent records exist first
-2. Set foreign key to nullable:
-```crystal
-bigint :user_id, null: true
-```
-
-3. Use ON DELETE CASCADE or SET NULL (the column must be nullable for `:set_null`):
-```crystal
-foreign_key [:user_id], references: :users, on_delete: :set_null
-```
-
-## Debugging Migrations
+`drop_column` emits `DROP COLUMN` whether or not the schema declares the column; the database raises if the table has no such column. SQLite cannot drop foreign keys or change column types (`SQLite does not support ALTER COLUMN syntax`), so rebuild the table:
 
 ```crystal
-migrator = MyDB.migrator(config)
-
-puts "Applied migrations: #{migrator.applied_migrations.map(&.version)}"
-puts "Pending migrations: #{migrator.pending_migrations.map(&.version)}"
-puts "Current version: #{migrator.last.try(&.version) || 0}"
+# SQLite, in a migration: rebuild posts without user_id (or with a new column type)
+schema.exec("CREATE TABLE posts_new (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL)")
+schema.exec("INSERT INTO posts_new (id, title) SELECT id, title FROM posts")
+schema.exec("DROP TABLE posts")
+schema.exec("ALTER TABLE posts_new RENAME TO posts")
 ```
 
-## Reset Database (Development Only)
+## Foreign key violation
+
+```text
+SQLite3::Exception: FOREIGN KEY constraint failed
+CQL::Postgres::ForeignKeyViolation: ERROR: insert or update on table "posts" violates foreign key constraint "posts_user_id_fkey" (SQLSTATE 23503)
+```
+
+**Cause:** a row points at a parent that does not exist. Insert parents first, or make the column nullable and use `on_delete: :set_null`. SQLite checks foreign keys only with `foreign_keys=1`, which `CQL.build_schema` adds.
+
+## Schema update failed
+
+```text
+CQL::Migrator::Error: Schema update failed: Unable to create directory: 'db/schema': File exists
+```
+
+**Cause:** with `auto_sync` on, the migrator dumps the schema file after `up` and `down`, and a path under an existing file cannot be created.
 
 ```crystal
-def reset_database
-  migrator = MyDB.migrator(config)
-
-  puts "Rolling back all migrations..."
-  migrator.down   # no argument: roll back every applied migration
-
-  puts "Running all migrations..."
-  migrator.up
-
-  puts "Database reset complete"
-end
+AppDB.migrator(CQL::MigratorConfig.new(schema_file_path: "src/schemas/app_schema.cr")) # a writable path
+AppDB.migrator(CQL::MigratorConfig.new(auto_sync: false))                            # or no schema file
 ```
 
-## Migration Raised Mid-Run
+## No migration with that version
 
-On SQLite and PostgreSQL, `migrator.up` and `migrator.down` run all migrations in one database transaction, so a failing migration rolls back everything that run did (including the recorded versions). MySQL and CockroachDB commit each statement on its own, so a failure there leaves the earlier migrations of the run applied and recorded; follow the steps below.
+```text
+CQL::Migrator::Error: No migration with version 42
+```
 
-## Stuck Migration
+**Cause:** `up_to` or `down_to` got a version no registered migration has, so nothing ran. List the versions:
 
-If a migration failed halfway:
-
-1. Check what was created:
 ```crystal
-# Tables CQL knows about (the schema definition, not the live database)
-schema.tables.keys
+CQL::Migrator.migrations.map(&.version).sort
 ```
 
-2. Manually fix state:
-```sql
--- Remove from migration tracking
-DELETE FROM cql_schema_migrations WHERE version = 5;
--- (the table name is MigratorConfig#migration_table_name)
-```
+## A migration raised mid-run
 
-3. Drop partially created objects:
+{% tabs %}
+{% tab title="SQLite and PostgreSQL" %}
+One `migrator.up` or `migrator.down` runs in a single transaction: a failure rolls back the whole run, recorded versions included, so fix the migration and run `up` again.
+{% endtab %}
+
+{% tab title="MySQL and CockroachDB" %}
+Each statement commits, so earlier migrations of the run stay applied. Recover by hand:
+
 ```crystal
-schema.partial_table.drop!   # DROP TABLE IF EXISTS
-```
-
-4. Re-run migration:
-```crystal
+schema.tables.keys                                        # tables the schema declares (not the live database)
+schema.exec("DELETE FROM schema_migrations WHERE version = 5") # table: migrator.config.migration_table_name
+schema.partial_table.drop!                                # DROP TABLE IF EXISTS partial_table
 migrator.up
 ```
+{% endtab %}
+{% endtabs %}
 
-## Common Error: Schema File Cannot Be Written
+To start a development database over, see [Refresh a Development Database](../migrations/rollback.md#refresh-a-development-database).
 
-**Error:**
-```
-Migrator::Error: Schema update failed: ...
-```
-
-**Cause:** With `auto_sync: true` (the default), `up` and `down` rewrite the schema file at `MigratorConfig#schema_file_path`. A missing directory or unwritable path fails the run.
-
-**Solutions:** Create the directory, point `schema_file_path` somewhere writable, or pass `auto_sync: false`.
-
-## Related
+## See Also
 
 - [Create a Migration](../migrations/create-migration.md)
 - [Run Migrations](../migrations/run-migrations.md)
+- [Add Columns](../migrations/add-columns.md)
 - [Rollback Migrations](../migrations/rollback.md)
+- [Configure CQL](../configuration/configure-cql.md#build_migrator-versus-schemamigrator)
+- [Fix Connection Errors](connection-errors.md)

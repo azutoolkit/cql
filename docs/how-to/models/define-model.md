@@ -1,147 +1,123 @@
+---
+description: "Map a class to a table by including CQL::ActiveRecord::Model(Pk), where Pk is the primary key type."
+---
+
 # Define a Model
 
-This guide shows you how to define a CQL Active Record model that maps to a database table.
+## Write the Model
 
-## Basic Model Definition
-
-To define a model, create a struct or class that includes the Active Record module:
-
+{% code title="src/database.cr" %}
 ```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
+  table :users do
+    primary :id, Int64, auto_increment: true
+    column :name, String
+    column :email, String
+    column :bio, String, null: true
+    column :active, Bool, default: true
+    timestamps
+  end
+end
+```
+{% endcode %}
 
-  property id : Int64?
-  property name : String
-  property email : String
+{% code title="src/models/user.cr" %}
+```crystal
+class User
+  include CQL::ActiveRecord::Model(Int64) # Pk: Int32, Int64, UUID, or String (ULID)
+
+  # One property per column, named after it. id, id!, id? and id= (Int64?) come from the module.
+  property name : String = ""
+  property email : String = ""
+  property bio : String?           # nullable column
+  property active : Bool = true
   property created_at : Time?
   property updated_at : Time?
 
-  def initialize(@name : String, @email : String)
+  @[DB::Field(ignore: true)]       # not a column: never read or written
+  property password_confirmation : String?
+
+  def initialize                   # User.new
+  end
+
+  def initialize(@name : String, @email : String) # User.new("Ada", "ada@example.com")
+  end
+
+  def email_domain : String        # business logic lives on the model
+    email.split("@").last
   end
 end
 ```
-
-`User` maps to the `users` table of the schema whose `CQL::Schema.define` block declares `table :users` (see [step 2](#2-map-the-model-to-a-schema-and-table)). Add `db_context` only when that inference is not enough.
-
-## Key Components
-
-### 1. Include the Active Record Module
+{% endcode %}
 
 ```crystal
-include CQL::ActiveRecord::Model(Int64)
+user = User.new("Ada", "ada@example.com")
+user.id          # => nil
+user.save        # => true
+user.id          # => 1
+
+User.create!(name: "Grace", email: "grace@example.com") # => User, the row as stored
+User.find(1)     # => User? (nil when no row matches)
+User.find!(99)   # raises DB::NoResultsError: No records found with id=99
 ```
 
-The type parameter specifies your primary key type: `Int32`, `Int64`, `UUID`, or `String` (for ULIDs).
+The model only gets the constructor that reads a row, so write the ones you call. `User.from_hash` needs the one without arguments.
 
-The module provides `id`, `id!`, `id?` and `id=` for you, typed as `Pk?` (for example `Int64?`). Declaring `property id : Int64?` yourself, as the examples below do, is optional.
+## Map the Model to a Schema and Table
 
-### 2. Map the Model to a Schema and Table
-
-`db_context` is optional. Without it, CQL maps the model to:
-
-- **The table** named after its type, underscored and pluralized: `User` to `:users`, `OrderItem` to `:order_items`, `Category` to `:categories`, `Box` to `:boxes`. Only the last namespace segment counts, so `Shop::OrderItem` also maps to `:order_items`.
-- **The schema** that declares that table: the `CQL::Schema.define(...) do ... end` constant, in the model's enclosing namespaces or at the top level, whose block contains `table :users do ... end`. It is found at compile time.
-
-Give `db_context` one argument to override just that part, and CQL infers the other:
+Without `db_context`, CQL infers both at compile time:
 
 ```crystal
-db_context table: :people   # schema: the one declaring :people
-db_context schema: AppDB    # table: :users, from the type name
-```
+# Table: the type name's last segment, underscored and pluralized
+#   User -> :users, OrderItem -> :order_items, Shop::OrderItem -> :order_items,
+#   Category -> :categories, Address -> :addresses, Person -> :persons
+# Schema: the one CQL::Schema.define constant, in the model's enclosing namespaces or at the
+#   top level, whose block contains `table :users do ... end`
 
-`db_context AppDB, :users` and `db_context schema: AppDB, table: :users` pin both.
-
-Write `db_context` yourself when:
-
-- **The plural is irregular.** `Person` maps to `:persons`, so write `db_context table: :people`.
-- **Several schemas declare the table.** Name one, for example in a multi-database app: `db_context AppDB, :users`.
-- **The schema is out of the lookup's sight.** Only literal `table :name` calls written directly in the `define` block are seen. Tables added later with `Schema.new` and `.table`, through helper macros, or wrapped in `{% if %}` or `begin` are not. A `private` schema constant inside a namespace cannot be referenced by the generated code either.
-
-When no `define` block declares the table, or several do, the model still compiles and `Model.schema` raises `CQL::ActiveRecord::SchemaMappingError` on its first call. See [Fix Schema Mapping Errors](../troubleshooting/schema-mapping-errors.md).
-
-CQL also records the mapping for optional strict schema validation. To verify model getter types against schema column types when your application boots, run with:
-
-```bash
-CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
-```
-
-This raises a `CQL schema mapping error` if a model getter type disagrees with the schema column type. Models whose schema was inferred are checked too; a model with no resolvable schema is skipped at startup. The check is opt-in because many applications intentionally omit database columns from a model or allow nil values while a record is transient.
-
-### 3. Define Properties
-
-```crystal
-property id : Int64?          # Primary key (optional; provided by the module)
-property name : String        # Required field
-property active : Bool = false  # With default value
-property bio : String?        # Nullable field
-property created_at : Time?   # Timestamp
-property updated_at : Time?   # Timestamp
-```
-
-### 4. Create a Constructor
-
-```crystal
-def initialize(@name : String, @email : String)
-end
-```
-
-## Primary Key Types
-
-### Integer
-
-```crystal
-struct Product
+class Person
   include CQL::ActiveRecord::Model(Int64)
-  db_context StoreDB, :products
-
-  property id : Int64?
-  # ...
+  db_context table: :people  # irregular plural; schema inferred: the one declaring :people
 end
+
+class Admin
+  include CQL::ActiveRecord::Model(Int64)
+  db_context AppDB, :users   # both pinned, same as db_context schema: AppDB, table: :users
+end
+
+User.table        # => :users
+User.schema.name  # => :app_db, AppDB's name
 ```
 
-### UUID
+Write `db_context` when:
 
-`UUID` keys are generated client-side on insert and stored as text, so the column is `primary :id, String, auto_increment: false` (see `spec/patterns/active_record/uuid_primary_key_spec.cr`).
+- **The plural is irregular**, as for `Person`.
+- **Several schemas declare the table.** Name one: `db_context AppDB, :users`.
+- **The lookup cannot see the table.** It reads only literal `table :name` calls written directly in the `define` block, not tables added with `Schema.new` and `.table`, through helper macros, or inside `{% if %}` or `begin`. It cannot reference a `private` schema constant either.
 
-```crystal
-struct Session
-  include CQL::ActiveRecord::Model(UUID)
-  db_context MyDB, :sessions
+{% hint style="warning" %}
+When no `define` block or several declare the table, the model still compiles, and `User.schema` raises `CQL::ActiveRecord::SchemaMappingError` on its first call. See [Fix Schema Mapping Errors](../troubleshooting/schema-mapping-errors.md).
+{% endhint %}
 
-  property id : UUID?
-  # ...
-end
-```
+## Check Property Types Against the Schema
 
-### ULID (for sortable IDs)
+Run `CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec` to compare every model's property types with its schema columns; see [Validate Models Against the Schema](../migrations/schema-dump-and-validation.md#validate-models-against-the-schema).
 
-`Model(String)` primary keys are filled with a 26-character ULID on insert. Declare the column as `primary :id, String, auto_increment: false`.
+## Primary Key on Another Column
 
-```crystal
-struct Event
-  include CQL::ActiveRecord::Model(String)
-  db_context EventDB, :events
-
-  property id : String?
-  # ...
-end
-```
-
-### Primary Key on Another Column
-
-When the table's key is not called `id`, name it with `primary_key:` (default `:id`). The model's `id` then reads and writes that column. The value must be a Symbol, otherwise compilation fails (see `spec/patterns/active_record/custom_primary_key_spec.cr`).
+Name the key column with `primary_key:` (default `:id`, always a Symbol literal); `id` then reads and writes it:
 
 ```crystal
-LabelKeyDB = CQL::Schema.define(:label_key_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3:///tmp/labels.db") do
-  table :labels do
-    primary :label_no, Int32
-    text :name
-  end
+table :labels do      # in AppDB
+  primary :label_no, Int32
+  text :name
 end
 
 class Label
   include CQL::ActiveRecord::Model(Int32)
-  db_context LabelKeyDB, :labels, primary_key: :label_no
+  db_context AppDB, :labels, primary_key: :label_no
+  # also: db_context table: :labels, primary_key: :label_no
+  #       db_context schema: AppDB, primary_key: :label_no
+  #       db_context primary_key: :label_no (schema and table inferred)
 
   property name : String = ""
 
@@ -149,100 +125,35 @@ class Label
   end
 end
 
-Label.primary_key_column     # => :label_no
-Label.find!(7).id            # => 7
-Label.query.where_primary_key([7, 8]).all
+Label.primary_key_column                # => :label_no
+label = Label.create!(name: "Fragile")
+label.id                                # => 1
+Label.find!(99)                         # DB::NoResultsError: No records found with label_no=99
+
+# Hashes name real columns; where_primary_key names the key for you
+Label.where(label_no: 1).all            # where(id: 1) would look for a column called id
+Label.query.where_primary_key([1, 2]).all
+# In the typed DSL, id is the key: WHERE labels.label_no = ?
+Label.query.where { id == 1 }.order_by(id: :desc).all
+
+# Mass assignment never sets the key, so request params cannot re-point a record
+label.attributes({:label_no => 7} of Symbol => DB::Any)
+label.id                                # => 1
+label.id = 7                            # explicit assignment does
+Label.from_hash({:label_no => 7, :name => "x"} of Symbol => DB::Any).id                          # => nil
+Label.from_hash({:label_no => 7, :name => "x"} of Symbol => DB::Any, with_primary_key: true).id  # => 7
 ```
 
-`primary_key:` combines with the one-argument forms, `db_context table: :labels, primary_key: :label_no` or `db_context schema: LabelKeyDB, primary_key: :label_no`, and also stands alone: `db_context primary_key: :label_no` infers both the schema and the table. A model without `db_context` uses `id`, so on a table keyed on another column it needs `db_context primary_key:`. `CQL_VALIDATE_SCHEMA_MAPPINGS=1` reports the mismatch (see [Fix Primary Key Mismatches](../troubleshooting/schema-mapping-errors.md#fix-primary-key-mismatches)).
+The declared column is used by `find`, `find?`, `find!`, `ids`, `attributes`, create, `save`, `update!`, `touch`, optimistic locking, delete and soft delete, cursor helpers, `insert_all`/`upsert_all`, and associations (`belongs_to` preloads, `has_many` `ids=`, typed `joins`, `many_to_many` targets). Pass `with_primary_key: true` to `from_hash` only for trusted data: the record then saves as an update of that row.
 
-Everything keyed on the id uses the declared column: `find`, `find?`, `find!`, `ids`, `attributes`, create, update, `save`, `touch`, optimistic locking, delete and soft delete, cursor helpers, `insert_all`/`upsert_all`, and the associations (`belongs_to` preloads, `has_many` `ids=`, typed `joins`, `many_to_many` targets). `find!` errors name the column.
+{% hint style="info" %}
+A model without `primary_key:` uses `id`. `CQL_VALIDATE_SCHEMA_MAPPINGS=1` reports a table keyed on another column (see [Fix Primary Key Mismatches](../troubleshooting/schema-mapping-errors.md#fix-primary-key-mismatches)).
+{% endhint %}
 
-Mass assignment never sets the key: `record.attributes(...)` and `record.update!(attrs)` ignore `id` and the declared key column, so request params cannot re-point a record at another row. Assign it explicitly with `id=`. `Label.from_hash(hash)` ignores the key as well; pass `with_primary_key: true` only for trusted data, since a record built with a key saves as an update of that row.
-
-Hashes and `where` conditions are not rewritten: `Label.where(label_no: 7)` names the column, and `where(id: 7)` would look for a column literally called `id`. Use `where_primary_key(key)` or `where_primary_key(keys)` to filter by the key without naming it. The typed block DSL is different: there `id` is the model's key, so `Label.query.where { id == 7 }`, `order_by(id: :desc)` and `select(:id, :name)` use `labels.label_no`.
-
-## Excluding Fields from Persistence
-
-Use the `DB::Field` annotation to exclude virtual fields:
-
-```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
-
-  property id : Int64?
-  property name : String
-  property password : String?
-
-  @[DB::Field(ignore: true)]
-  property password_confirmation : String?
-
-  def initialize(@name : String, @password : String? = nil, @password_confirmation : String? = nil)
-  end
-end
-```
-
-## Adding Custom Methods
-
-Add business logic directly in your model:
-
-```crystal
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
-
-  property id : Int64?
-  property first_name : String
-  property last_name : String
-  property email : String
-
-  def initialize(@first_name : String, @last_name : String, @email : String)
-  end
-
-  def full_name : String
-    "#{first_name} #{last_name}"
-  end
-
-  def email_domain : String
-    email.split("@").last
-  end
-end
-```
-
-## Verify Your Model
-
-Test that your model works:
-
-```crystal
-# Create an instance
-user = User.new("John", "john@example.com")
-
-# Check attributes
-user.name      # => "John"
-user.id        # => nil (not saved yet)
-
-# Save to database
-user.save
-user.id        # => 1 (now assigned)
-
-# Find it again
-found = User.find(user.id!)    # => User? (nil when no row matches)
-```
-
-## Common Issues
-
-**`CQL::ActiveRecord::SchemaMappingError` from `User.schema` ("no `CQL::Schema.define` block declares table" or "all declare table")**: CQL could not infer the model's schema. Add `db_context` with the schema constant and the table symbol.
-
-**Query or insert fails on an unknown column**: Property names must match database column names. Use `@[DB::Field(ignore: true)]` for properties that are not columns.
-
-**Type mismatch when reading rows**: Crystal property types must match database column types.
-
-**"CQL schema mapping error"**: You enabled `CQL_VALIDATE_SCHEMA_MAPPINGS=1` and a model getter type does not match the schema column type. Update either the schema or the model property type.
-
-## Related
+## See Also
 
 - [Add Validations](add-validations.md)
 - [Use Callbacks](use-callbacks.md)
-- [Set Up Relationships](../relationships/belongs-to.md)
+- [Use UUID and ULID Primary Keys](uuid-ulid-primary-keys.md)
+- [Set Up Belongs To](../relationships/belongs-to.md)
 - [Fix Schema Mapping Errors](../troubleshooting/schema-mapping-errors.md)

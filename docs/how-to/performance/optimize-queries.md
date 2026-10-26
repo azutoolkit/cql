@@ -1,226 +1,235 @@
-# Optimize Queries
+---
+description: "Cut round trips, allocations and in-memory work: preload associations, select only the columns you need, and let the database count."
+---
 
-Improve query performance with indexing, eager loading, and query optimization techniques.
+# Optimizing Queries in CQL
 
-## Prerequisites
+{% hint style="success" %}
+Optimize CQL database operations by minimizing network round trips (**`preload`**), reducing heap allocations (**`select`**), and offloading collection work to the database engine (**`exists?`**, **`count`**).
+{% endhint %}
 
-- Working CQL application
-- Understanding of your data access patterns
+---
 
-## Add Database Indexes
+## Performance Quick Reference
 
-Indexes dramatically speed up queries on frequently searched columns.
+| Strategy | Anti-Pattern (High Latency / OOM Risk) | CQL Optimized Pattern |
+| :--- | :--- | :--- |
+| **Association Loading** | Reading an association inside a loop | **`Post.preload(:user).all`** |
+| **Column Projection** | Loading full models to read two columns | **`User.select(:id, :email).all`** |
+| **Large Datasets** | `User.all.each` | **`User.find_in_batches(batch_size: 1000)`** |
+| **Existence Checks** | `User.where(...).to_a.any?` | **`User.where(...).exists?`** |
+| **Aggregates** | `User.where(...).to_a.size` | **`User.where(...).count`** |
+| **Bulk Ingestion** | `create!` or `save!` in a loop | **`User.insert_all(rows)`** |
 
-Declare indexes in the table block with `index [...]` or `index: true`, and `table.create!` creates them after the table. For an existing table, use `create_index` inside `schema.alter`, as below (see [Create Indexes](../migrations/indexes.md)).
+---
 
-### Single Column Index
+## 1. Preventing N+1 Queries
+
+Reading an association inside a loop sends one query per record. **`preload`** loads it for every record with one extra query.
 
 ```crystal
-class AddIndexes < CQL::Migration(1)
-  def up
-    schema.alter :users do
-      create_index :idx_users_email, [:email]
-    end
-    schema.alter :posts do
-      create_index :idx_posts_user_id, [:user_id]
-      create_index :idx_posts_published_at, [:published_at]
-    end
-  end
+# ❌ N+1: 1 query for posts + 1 query per post
+posts = Post.all
+posts.each { |post| puts post.user.try(&.name) }
 
-  def down
-    schema.alter :users do
-      drop_index :idx_users_email
-    end
-    schema.alter :posts do
-      drop_index :idx_posts_user_id
-      drop_index :idx_posts_published_at
-    end
-  end
-end
+# ✅ 2 queries: posts, then SELECT ... FROM users WHERE users.id IN (?, ?, ...)
+posts = Post.preload(:user).all
+posts.each { |post| puts post.user.try(&.name) }
+
+# ✅ One extra query per association (has_many, belongs_to, has_one)
+users = User.preload(:posts, :profile).all
+
+# ✅ Filter by an association in one query
+# SELECT DISTINCT users.id, ... FROM users INNER JOIN posts ON (posts.user_id = users.id) AND (posts.published = ?)
+authors = User.query.joins(:posts) { posts.published == true }.distinct.all
 ```
 
-### Composite Index
+{% hint style="info" %}
+**`preload`** runs only through `all` / `to_a`, ignores `many_to_many`, and raises `ArgumentError` after a partial `select`. A join filters rows but does not populate the association.
+{% endhint %}
 
-For queries filtering on multiple columns:
+---
+
+## 2. Column Projection
 
 ```crystal
-# For queries like: WHERE user_id = ? AND status = ?
-schema.alter :orders do
-  create_index :idx_orders_user_status, [:user_id, :status]
-end
+rows = User.select(:id, :email).all                          # Array(User::Row)
+rows.first.email                                             # => "ada@example.com"
+rows.first.name                                              # => nil (not selected)
+
+emails = User.where(active: true).pluck(:email, as: String)  # Array(String)
+pairs = User.pluck(:id, :name, as: {Int64, String})          # Array({Int64, String})
+newest = User.order(id: :desc).pick(:id, as: Int64)          # Int64?
 ```
 
-### Unique Index
+---
 
-Enforce uniqueness and speed up lookups:
-
-```crystal
-schema.alter :users do
-  create_index :idx_users_email, [:email], unique: true
-end
-```
-
-## Use Select to Limit Columns
-
-Only fetch columns you need:
+## 3. Large Datasets
 
 ```crystal
-# Instead of
-users = User.all
+# ❌ Loads every matching row at once
+User.where(active: true).all.each { |user| user.update!(processed: true) }
 
-# Use (returns lightweight rows with only these columns filled in)
-rows = User.select(:id, :name, :email).all
-rows.first.name  # => String?
-```
-
-## Use Pluck for Single Values
-
-When you only need specific columns without model objects:
-
-```crystal
-# Returns array of emails
-emails = User.where(active: true).pluck(:email, as: String)
-
-# Returns array of {id, name} tuples
-data = User.where(active: true).pluck(:id, :name, as: {Int64, String})
-
-# One value from the first row
-newest_id = User.order(id: :desc).pick(:id, as: Int64)
-```
-
-## Limit Result Sets
-
-Always paginate or limit large queries:
-
-```crystal
-# Pagination
-users = User.limit(20).offset(40).all
-
-# Or use cursor pagination for large datasets
-users = User.where { id > last_id }.limit(20).all
-```
-
-## Use Count Instead of Size
-
-For counting records without loading them:
-
-```crystal
-# Efficient - runs COUNT query
-count = User.where(active: true).count
-
-# Inefficient - loads all records
-count = User.where(active: true).all.size
-```
-
-## Batch Processing
-
-Process large datasets in batches:
-
-```crystal
-# One record at a time, loaded 1000 per query
-User.where(active: true).find_each(1000) do |user|
+# ✅ 1,000 rows per query, one record at a time
+User.where(active: true).find_each(batch_size: 1000) do |user|
   user.update!(processed: true)
 end
 
-# Or a whole batch at a time
-User.where(active: true).find_in_batches(1000) do |batch|
+# ✅ 1,000 rows per query, one Array(User) at a time
+User.where(active: true).find_in_batches(batch_size: 1000) do |batch|
   batch.each { |user| user.update!(processed: true) }
 end
+
+# Paging used by find_each / find_in_batches:
+#   no order/select/distinct/group/having -> WHERE ... AND users.id > ? ORDER BY users.id LIMIT ?
+#                                            constant cost per batch; safe to update filtered columns
+#   otherwise                             -> ORDER BY <yours>, users.id LIMIT ? OFFSET ?
+#                                            cost grows per batch; do not update filtered columns
+# The query's own limit/offset are ignored; batch_size <= 0 raises ArgumentError.
+
+# ✅ Pages for users on large tables: a cursor instead of a deep OFFSET
+User.where { id > last_id }.order(id: :asc).limit(20).all
 ```
 
-Without an `order`, batches page by primary key (`WHERE id > ? ORDER BY id LIMIT ?`): each batch is an index seek, and it is safe to update the columns used in your `where` (for example flagging rows out of the filter) or to delete rows you have already visited. Across a join, an unordered query still yields each record once; an ordered or shaped query pages by OFFSET and yields a record once per joined row.
+---
 
-With an `order` (or a `select`, `distinct`, `group` or `having`), batches page by `LIMIT ... OFFSET ...` in that order, with the primary key appended to break ties. There, do not change the columns used in your `where` or delete rows while iterating, or later batches will skip rows, and each batch rescans the rows before it, so a full pass costs O(N²/batch size) on large tables.
-
-Either way, a query's own `limit` and `offset` are ignored: batching walks every matching row.
-
-## Use Exists Instead of Count
-
-When checking for presence:
+## 4. Existence Checks and Aggregates
 
 ```crystal
-# Efficient - stops at first match
-if User.where(email: email).exists?
-  # ...
-end
+# ❌ Loads rows to answer a number
+User.where(active: true).to_a.size
+User.where(email: "ada@example.com").to_a.any?
 
-# Inefficient - counts all matches
-if User.where(email: email).count > 0
-  # ...
-end
+# ✅ SELECT COUNT(*) FROM users WHERE users.active = ?
+User.where(active: true).count
+
+# ✅ SELECT users.id FROM users WHERE users.email = ? LIMIT ?
+User.where(email: "ada@example.com").exists?
+
+# ✅ SELECT SUM(users.age) / AVG(users.age) / DISTINCT users.age FROM users
+User.sum(:age)
+User.average(:age)
+User.distinct(:age, as: Int32)
+
+# ✅ Comment counts for every post in one grouped query
+counts = AppDB.query
+  .from(:comments)
+  .select(:post_id, count: :id)
+  .group(:post_id)
+  .all(as: {Int64, Int64})
+  .to_h
 ```
 
-## Optimize Ordering
+---
 
-Ensure ordered columns are indexed:
-
-```crystal
-# Add index for common ordering
-schema.alter :posts do
-  create_index :idx_posts_created_at, [:created_at]
-end
-
-# Query uses index
-Post.order(created_at: :desc).limit(10).all
-```
-
-## Use the Bulk and Cached Paths
-
-Prefer the paths that send fewer statements or reuse work:
+## 5. Bulk Ingestion
 
 ```crystal
-# Many rows in one statement per chunk (no validations or callbacks)
+# ❌ One INSERT per row
+rows.each { |row| User.create!(**row) }
+
+# ✅ INSERT INTO users (name, email, created_at, updated_at) VALUES (?, ?, ?, ?), (?, ?, ?, ?)
 User.insert_all([{name: "Ada", email: "ada@example.com"}, {name: "Grace", email: "grace@example.com"}])
+
+# ✅ INSERT ... ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, updated_at = EXCLUDED.updated_at
 User.upsert_all([{email: "ada@example.com", name: "Ada L."}], on_conflict: :email)
-user.insert_posts_all([{title: "One", body: "..."}, {title: "Two", body: "..."}])
 
-# Associations for many parents: one query per chunk instead of one per parent
-Post.preload(:user).all
-User.preload(:posts, :profile).all
+# ✅ has_many: INSERT INTO posts (title, user_id) VALUES (?, ?), (?, ?)
+user.insert_posts_all([{title: "One"}, {title: "Two"}])
 
-# Send only changed columns (opt-in per model)
+# ✅ SELECT users.id ..., then DELETE FROM users WHERE users.id IN (...) per chunk
+User.where(active: false).delete_all
+
+# ✅ Dirty tracking: UPDATE sends only changed columns, and nothing when unchanged
 class User
   include CQL::ActiveRecord::Model(Int64)
   include CQL::ActiveRecord::DirtyTracking
-  # ...
 end
 ```
 
-`Model.find` reuses one rendered statement per model, unless the model defines its own `self.query`; keep per-call scopes there only when you need them. Leave SQL logging and the performance monitor off in production unless you are investigating something: each costs several microseconds per query. See [How CQL Keeps Queries Fast](../../explanation/performance-design.md) for why these paths are faster.
+{% hint style="info" %}
+Bulk writes skip validations and callbacks. Rows per statement default to `max_bind_params / columns`; pass `batch_size:` to change it. `delete_all` deletes record by record when the model has destroy callbacks, `dependent:` or `many_to_many`.
+{% endhint %}
 
-## Analyze Slow Queries
+---
 
-Log queries to find bottlenecks:
+## 6. Indexes
 
 ```crystal
+schema.table :users do
+  primary :id, Int64
+  column :email, String
+  column :status, String, index: true  # where(status: ...)
+  index [:email], unique: true         # exists?(email: ...), upsert_all(on_conflict: :email)
+end
+
+schema.alter :posts do
+  # where(user_id: ...).order(published_at: :desc), and preload/joins through user_id
+  create_index :idx_posts_user_published, [:user_id, :published_at]
+end
+```
+
+---
+
+## 7. CTEs
+
+CTEs live on **`CQL::Query`** (`AppDB.query`), not on model classes.
+
+```crystal
+spend = AppDB.query.from(:orders)
+  .select(:customer_id)
+  .sum(:total, as: :spent)
+  .group(:customer_id)
+
+# WITH totals AS (SELECT orders.customer_id, SUM(orders.total) AS spent FROM orders GROUP BY orders.customer_id)
+# SELECT totals.customer_id FROM totals WHERE totals.spent > ?
+big_spenders = AppDB.query
+  .with(:totals, spend)
+  .from(:totals).select(:customer_id)
+  .where { totals.spent > 100 }
+  .all(as: Int64)
+
+# Hierarchies: .with_recursive(:tree, anchor) { |step| ... }
+```
+
+---
+
+## 8. Inspecting Queries
+
+```crystal
+query = User.where(email: "ada@example.com")
+
+query.to_sql                                    # "SELECT users.id, ... FROM users WHERE users.email = ?"
+query.to_sql_with_params                        # {"SELECT ...", ["ada@example.com"]}
+query.query.to_sql(for: CQL::Adapter::Postgres) # {"... WHERE users.email = $1", ["ada@example.com"]}
+
+puts query.query.explain
+# Index used                                          Full scan
+# SQLite:     SEARCH users USING INDEX idx_users_email  SCAN users
+# PostgreSQL: Index Scan using idx_users_email          Seq Scan on users
+# MySQL:      key column: idx_users_email               type column: ALL
+
+puts query.query.explain(analyze: true)         # runs the statement; raises CQL::DialectError on SQLite
+
 CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
   Log.warn { "Slow query (#{event.duration.total_milliseconds.round(2)}ms): #{event.sql}" }
 end
+
+CQL::Performance.enable_development_mode!       # profiler + N+1 detector
+CQL::Performance.monitor.detector.not_nil!.issues # :n_plus_one issues, :medium at most with the default window
 ```
 
-See [Monitor Performance](monitoring.md) and [Telemetry](telemetry.md) for more.
+{% hint style="info" %}
+Keep SQL logging and the performance monitor off in production; the production monitor alone adds about 340 ns per query (see [What monitoring costs](../observability/query-profiler.md#what-monitoring-costs)).
+{% endhint %}
 
-## Verify Optimization
-
-Check query execution plans:
-
-```crystal
-query = User.where(email: "test@example.com").query
-
-puts query.explain                 # the database's plan, one line per row
-puts query.explain(analyze: true)  # runs the statement and reports real timings
-```
-
-Look for:
-- Index scans (good) vs sequential scans (bad)
-- Low row estimates
-- Efficient join methods
+---
 
 ## See Also
 
-- [How CQL Keeps Queries Fast](../../explanation/performance-design.md)
-- [Benchmark CQL](benchmark.md)
 - [Avoid N+1 Queries](n-plus-one.md)
+- [Profile Queries and Detect N+1](../observability/query-profiler.md)
+- [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
+- [Use CTEs and Recursive CTEs](../advanced-sql/ctes.md)
 - [Create Indexes](../migrations/indexes.md)
-- [Telemetry](telemetry.md)
-- [Monitor Performance](monitoring.md)
+- [How CQL Keeps Queries Fast](../../explanation/performance-design.md)

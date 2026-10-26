@@ -1,192 +1,142 @@
+---
+description: "Load associations and counts for a whole collection in a fixed number of queries, not one query per record."
+---
+
 # Avoid N+1 Queries
 
-Prevent the N+1 query problem that causes excessive database queries.
-
-## Understanding N+1
-
-The N+1 problem occurs when fetching a collection (1 query) and then accessing a relationship for each item (N queries).
-
-### The Problem
+## Spot the Pattern
 
 ```crystal
-# 1 query to fetch posts
+# ❌ 1 query for the posts, then 1 query per post on first access to post.user
 posts = Post.all
-
-# N queries - one for each post's author!
-posts.each do |post|
-  puts post.user.try(&.name)  # belongs_to triggers a query on first access per post
-end
+posts.each { |post| puts post.user.try(&.name) }
+# SELECT posts.id, posts.title, posts.user_id FROM posts
+# SELECT users.id, users.name, ... FROM users WHERE users.id = ? LIMIT ?   <- once per post
 ```
 
-With 100 posts, this runs 101 queries. The same happens in the other direction when you call `user.posts` for every user.
+With 100 posts this runs 101 queries. Calling `user.posts` for every user does the same in the other direction.
 
-## Use Eager Loading
-
-`preload` loads a `has_many`, `belongs_to` or `has_one` association for all records with one extra query (`WHERE foreign_key IN (...)` or `WHERE id IN (...)`, split into chunks of the database's bind limit). Records that share a `belongs_to` target share one preloaded instance.
-
-### Basic Preload
+## Preload Associations
 
 ```crystal
-# 2 queries total: users + posts
-users = User.preload(:posts).all
+# ✅ 2 queries: posts, then SELECT ... FROM users WHERE users.id IN (?, ?)
+posts = Post.preload(:user).all
+posts.each { |post| puts post.user.try(&.name) }
 
-users.each do |user|
-  puts user.posts.size  # No additional query
-end
+# ✅ One extra query per association
+# SELECT ... FROM posts WHERE posts.user_id IN (?, ?)
+# SELECT ... FROM profiles WHERE profiles.user_id IN (?, ?)
+users = User.preload(:posts, :profile).all
+users.each { |user| puts user.posts.size }  # no query
 ```
 
-### Multiple Relationships
+{% hint style="info" %}
+**`preload`** handles `has_many`, `belongs_to` and `has_one`, splits the `IN` list at the database's bind limit, and shares one instance per `belongs_to` target. It skips associations declared with `cache: false` and ignores `many_to_many`; [Optimize Queries](optimize-queries.md) lists its other limits.
+{% endhint %}
+
+## Filter Through a Join
 
 ```crystal
-# Load multiple has_many associations
-posts = Post
-  .preload(:comments, :taggings)
-  .all
+# SELECT posts.id, ... FROM posts INNER JOIN users ON (users.id = posts.user_id) AND (users.active = ?)
+posts = Post.query.joins(:user) { user.active == true }.all
 ```
 
-`preload` handles `has_many`, `belongs_to` and `has_one` associations (`Post.preload(:user)`, `User.preload(:profile)`; a `belongs_to` or `has_one` declared with `cache: false` is skipped). Preloading a `many_to_many` association is silently ignored, so use batch loading (below) or a join for those.
+The join filters rows but does not populate `post.user`. Use `left_joins` to keep posts without a match.
 
-## Use Joins for Filtering
+## Load by Hand
 
-When filtering by associated records, join through the association and put the condition on the joined table in the block:
-
-```crystal
-# Fetch posts written by active users
-posts = Post
-  .joins(:user) { user.active == true }
-  .all
-```
-
-The join only filters; it does not populate `post.user`. Use `left_joins` to keep rows without a match.
-
-## Select Only Needed Columns
-
-Reduce memory by selecting specific columns:
-
-```crystal
-rows = Post
-  .select(:id, :title, :user_id)
-  .all   # lightweight rows with only these columns filled in
-```
-
-## Batch Loading
-
-For custom relationships or complex scenarios:
-
-This is the way to avoid N+1 queries for `belongs_to`:
+For `many_to_many` or a relation CQL does not model, load the targets once and index them:
 
 ```crystal
 posts = Post.all
+users_by_id = User.where(id: posts.compact_map(&.user_id).uniq).all.index_by(&.id)
 
-# Load all users at once
-user_ids = posts.compact_map(&.user_id).uniq
-users_by_id = User.where(id: user_ids).all.index_by(&.id)
-
-posts.each do |post|
-  user = users_by_id[post.user_id]?
-  puts user.try(&.name)
-end
+posts.each { |post| puts users_by_id[post.user_id]?.try(&.name) }  # 2 queries in total
 ```
 
-## Detecting N+1 Queries
-
-Enable query logging during development:
+## Count Per Parent
 
 ```crystal
-CQL::Telemetry.log_queries   # one debug log line per statement, under the "cql.telemetry" log source
-```
+# ❌ One COUNT per post: SELECT COUNT(*) FROM comments WHERE comments.post_id = ?
+posts.each { |post| puts post.comments.count }
 
-Or let CQL look for repeated queries for you:
-
-```crystal
-CQL::Performance.enable_development_mode!
-
-# ... run your code ...
-
-CQL::Performance.critical_issues         # N+1 patterns appear as issues of type :n_plus_one
-CQL::Performance.high_priority_issues
-```
-
-Look for repeated similar queries:
-```
-SELECT * FROM users WHERE id = 1
-SELECT * FROM users WHERE id = 2
-SELECT * FROM users WHERE id = 3
-...
-```
-
-## Common N+1 Scenarios
-
-### In Views/Templates
-
-```crystal
-# Controller
-@posts = Post.preload(:comments).all
-@users_by_id = User.where(id: @posts.compact_map(&.user_id).uniq).all.index_by(&.id)
-
-# View - comments are preloaded, so no query per post
-<% @posts.each do |post| %>
-  <p>By: <%= @users_by_id[post.user_id]?.try(&.name) %></p>
-  <p>Comments: <%= post.comments.size %></p>
-<% end %>
-```
-
-### Manual Counter Columns
-
-For frequently accessed counts, add a counter column and maintain it manually:
-
-```crystal
-# Add column in migration
-schema.alter :posts do
-  add_column :comments_count, Int32, default: 0
-end
-
-# Update counter when adding comments
-def create_comment(post : Post, content : String)
-  Comment.create!(content: content, post_id: post.id!)
-  post.comments_count = post.comments.count.to_i32
-  post.save!
-end
-
-# Now use post.comments_count instead of post.comments.count
-```
-
-### Aggregations
-
-```crystal
-# Instead of
-posts.each { |p| p.comments.count }  # N+1
-
-# Use one grouped query on the comments table
-counts = MyDB.query
+# ✅ SELECT comments.post_id, COUNT(comments.id) FROM comments GROUP BY comments.post_id
+counts = AppDB.query
   .from(:comments)
   .select(:post_id, count: :id)
   .group(:post_id)
   .all(as: {Int64, Int64})
   .to_h
 
-posts.each { |p| puts counts[p.id!]? || 0 }
+posts.each { |post| puts counts[post.id!]? || 0 }
 ```
 
-## Verify Fix
+For a count read on every page, keep it in a column; its default fills the existing rows (see
+[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default)):
 
-Before:
-```
-Post Load (2ms) SELECT * FROM posts
-User Load (1ms) SELECT * FROM users WHERE id = 1
-User Load (1ms) SELECT * FROM users WHERE id = 2
-User Load (1ms) SELECT * FROM users WHERE id = 3
-... (100 more queries)
+```crystal
+# Migration
+schema.alter :posts do
+  add_column :comments_total, Int32, default: 0, null: false
+end
+
+# In the Post model: property comments_total : Int32 = 0
+def add_comment(post : Post, body : String)
+  Comment.create!(post_id: post.id!, body: body)
+  post.comments_total = post.comments.count.to_i32
+  post.save!
+end
+
+Post.order(comments_total: :desc).limit(10).all  # no COUNT queries
 ```
 
-After:
+{% hint style="warning" %}
+`has_many :comments` already defines `comments_count`, which runs a COUNT query each call. A counter column named `comments_count` is shadowed by it, so give the column another name.
+{% endhint %}
+
+## Find and Verify
+
+```crystal
+CQL::Telemetry.log_queries  # debug lines on the "cql.telemetry" log source
+# [select] 0.01ms SELECT users.id, ... FROM users WHERE users.id = ? LIMIT ? (2 params)   <- repeated per post
+
+CQL::Performance.enable_development_mode!  # the N+1 detector
+CQL::Performance.metrics.issues_by_type(:n_plus_one).each { |issue| puts issue.message }
+# N+1 pattern detected: Query repeated 10 times
 ```
-Post Load (2ms) SELECT * FROM posts
-User Load (3ms) SELECT * FROM users WHERE id IN (1, 2, 3, ...)
+
+The detector, its window and its severities are in [Profile Queries and Detect N+1](../observability/query-profiler.md).
+
+Once fixed, guard the query count in a spec (`Factory` is from [Set Up Test Databases and Factories](../testing/test-database.md#build-records-with-factories)):
+
+{% code title="spec/n_plus_one_spec.cr" %}
+```crystal
+require "./spec_helper"
+
+def count_queries(&) : Int32
+  count = 0
+  CQL::Telemetry.subscribe("query_count") { count += 1 }
+  yield
+  count
+ensure
+  CQL::Telemetry.unsubscribe("query_count")
+end
+
+describe "Post list" do
+  it "loads posts and their authors in two queries" do
+    3.times { Factory.post }
+    count_queries { Post.preload(:user).all.each(&.user) }.should eq(2)
+  end
+end
 ```
+{% endcode %}
+
+Without `preload(:user)` the block runs 4 queries (the posts, then one per post) and the example fails.
 
 ## See Also
 
 - [Optimize Queries](optimize-queries.md)
-- [Monitor Performance](monitoring.md)
+- [Profile Queries and Detect N+1](../observability/query-profiler.md)
+- [Telemetry](../observability/telemetry.md)
 - [Set Up Has Many](../relationships/has-many.md)
+- [Add Columns](../migrations/add-columns.md)

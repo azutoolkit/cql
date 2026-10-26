@@ -1,132 +1,46 @@
+---
+description: "A type-safe query builder and Active Record ORM for Crystal on SQLite, PostgreSQL, MySQL and CockroachDB."
+icon: "house"
+---
+
 # CQL (Crystal Query Language)
 
-A high-performance, type-safe ORM for Crystal applications.
-
-Build fast, reliable database applications with compile-time safety and exceptional performance.
-
-## Quick Navigation
-
-| **I want to...** | **Go to...** |
-|------------------|--------------|
-| Learn CQL from scratch | [Tutorials](tutorials/README.md) |
-| Accomplish a specific task | [How-to Guides](how-to/README.md) |
-| Look up API details | [Reference](reference/README.md) |
-| Understand concepts | [Explanation](explanation/README.md) |
-
-## Installation
-
-Add CQL to your `shard.yml`:
-
-```yaml
-dependencies:
-  cql:
-    github: azutoolkit/cql
-    version: ~> 0.0.589
-
-  # Choose your database driver (PostgreSQL needs none: CQL ships a native driver):
-  sqlite3:  # SQLite
-    github: crystal-lang/crystal-sqlite3
-  mysql:    # MySQL
-    github: crystal-lang/crystal-mysql
-```
-
-Then run:
-
-```shell
-shards install
-```
-
-[Full installation guide](installation.md)
-
-## Quick Start
+Schemas, models and queries are Crystal code, so a misspelled column or a value of the wrong type fails at compile time, and every value reaches the database as a bound parameter. CQL ships its own PostgreSQL driver.
 
 ```crystal
-require "cql" # includes the native PostgreSQL driver
+require "cql"
+require "sqlite3"
 
-# Define your database
-MyDB = CQL::Schema.define(
-  :my_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: "postgres://localhost/myapp"
-) do
+AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
   table :users do
-    primary :id, Int64
+    primary :id, Int64, auto_increment: true
     text :name
-    text :email
   end
 end
 
-# Define a model
 class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
-
+  db_context AppDB, :users
   property name : String
-  property email : String
 
-  def initialize(@name : String, @email : String)
+  def initialize(@name : String)
   end
 end
 
-# Use it
-MyDB.users.create! # CREATE TABLE (use migrations in a real app)
-user = User.create!(name: "Alice", email: "alice@example.com")
-puts "Created user #{user.id}: #{user.name}"
+AppDB.users.create!
+User.create!(name: "Ada")
+User.where(name: "Ada").count # => 1   SELECT COUNT(*) FROM users WHERE users.name = ?
 ```
 
-## Documentation Structure
+## Start Here
 
-### Tutorials
+<table data-view="cards"><thead><tr><th></th><th></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody>
+<tr><td><strong>Installation</strong></td><td>Add the shards for your database and check the connection.</td><td><a href="installation.md">installation.md</a></td></tr>
+<tr><td><strong>Tutorials</strong></td><td>Learn CQL step by step, from a first app to a full blog.</td><td><a href="tutorials/README.md">tutorials/README.md</a></td></tr>
+<tr><td><strong>How-to Guides</strong></td><td>One task per page: models, queries, migrations, caching, PostgreSQL.</td><td><a href="how-to/README.md">how-to/README.md</a></td></tr>
+<tr><td><strong>Reference</strong></td><td>Every setting, DSL method, callback, validator and error.</td><td><a href="reference/README.md">reference/README.md</a></td></tr>
+<tr><td><strong>Explanation</strong></td><td>How CQL works and why: Active Record, guardrails, performance.</td><td><a href="explanation/README.md">explanation/README.md</a></td></tr>
+<tr><td><strong>Resources</strong></td><td>FAQ and how to contribute.</td><td><a href="resources/README.md">resources/README.md</a></td></tr>
+</tbody></table>
 
-**Learning-oriented** - Step-by-step guides for beginners
-
-- [Your First CQL App](tutorials/getting-started/your-first-cql-app.md) - Build your first application
-- [Building a Blog](tutorials/building-a-blog/01-project-setup.md) - Complete multi-part tutorial
-
-### How-to Guides
-
-**Task-oriented** - Practical steps to accomplish specific goals
-
-- [Models](how-to/models/define-model.md) - Define, validate, and enhance models
-- [Relationships](how-to/relationships/belongs-to.md) - Set up associations
-- [Querying](how-to/querying/find-records.md) - Find and filter data
-- [Migrations](how-to/migrations/create-migration.md) - Manage schema changes
-
-### Reference
-
-**Information-oriented** - Technical descriptions and specifications
-
-- [Quick Reference](reference/quick-reference.md) - Common patterns at a glance
-- [Glossary](reference/glossary.md) - Terminology definitions
-- [Error Codes](reference/error-codes.md) - Error messages explained
-
-### Explanation
-
-**Understanding-oriented** - Conceptual discussions
-
-- [What is an ORM?](explanation/concepts/what-is-orm.md) - ORM fundamentals
-- [Active Record Pattern](explanation/design-patterns/active-record.md) - Design pattern overview
-
-## Key Features
-
-- **Type Safety** - Catch errors at compile time
-- **Relationship Integrity** - Validate `belongs_to` and `has_many` foreign-key/primary-key types during compilation
-- **Schema Mapping Checks** - Opt-in boot validation for model getter types against schema columns
-- **Multiple Databases** - PostgreSQL, MySQL, SQLite, CockroachDB
-- **Active Record** - Familiar patterns for rapid development
-- **Migrations** - Version-controlled schema changes
-- **Validations** - Built-in data integrity
-- **Relationships** - belongs_to, has_one, has_many, many-to-many
-- **Soft Deletes** - Mark records as deleted
-- **Optimistic Locking** - Prevent concurrent update conflicts
-
-## Getting Help
-
-- [FAQ](resources/faq.md) - Frequently asked questions
-- [Troubleshooting](how-to/troubleshooting/connection-errors.md) - Common issues
-- [Community](resources/community.md) - Get support
-- [GitHub Issues](https://github.com/azutoolkit/cql/issues) - Report bugs
-
-## License
-
-CQL is available under the MIT license.
+Source, issues and releases: [azutoolkit/cql](https://github.com/azutoolkit/cql) on GitHub. CQL is available under the MIT license.

@@ -1,159 +1,64 @@
+---
+description: "Read why a record is invalid, handle the exception save raises, and fix validations that do not compile or do not run."
+---
+
 # Fix Validation Errors
 
-This guide helps you diagnose and fix validation errors.
-
-## Check What's Invalid
-
-`valid?`, `errors` and `validate!` take an optional validation context (`valid?(:update)`) that selects rules declared with `on:`. `errors` returns an array of `CQL::ActiveRecord::Validations::Error` with `field` and `message`.
+## See what is invalid
 
 ```crystal
-user = User.new("", "invalid-email")
+class User
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: AppDB, table: :users
 
-unless user.valid?
-  user.errors.each do |error|
-    puts "#{error.field}: #{error.message}"
+  property name : String = ""
+  property email : String = ""
+  property username : String = ""
+  property age : Int32 = 0
+
+  validate :name, presence: true
+  validate :email, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+  validate :username, required: true, size: 3..20
+  validate :age, gt: 0, lt: 150
+
+  def initialize(@name = "", @email = "", @username = "", @age = 0)
   end
 end
+
+user = User.new("", "invalid-email", "jo", -5)
+user.valid? # => false
+user.errors.each { |error| puts "#{error.field}: #{error.message}" }
+# name: name must be present
+# email: email must match the pattern /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
+# username: username must have a size of 3..20
+# age: age must be greater than 0
 ```
 
-## Common Error: Presence Validation Failed
+`errors` returns `Array(CQL::ActiveRecord::Validations::Error)`, one per failing predicate; [Validation Options Reference](../../reference/api/validation-options.md) lists each predicate's default message and `message:`.
 
-**Error:**
-```
-name must be present
-```
+## Handle the exception `save` raises
 
-(`presence: true` fails for `nil` or an empty value, message `"<field> must be present"`; `required: true` only rejects `nil`, message `"<field> is required"`.)
-
-**Cause:** Field is empty or nil.
-
-**Solutions:**
-
-1. Provide a value:
-```crystal
-user = User.new("John", "john@example.com")  # Not empty
+```text
+CQL::ActiveRecord::Validations::ValidationError: name must be present,email must match the pattern ...
 ```
 
-2. If field should be optional, adjust validation:
-```crystal
-# Remove presence validation or make it conditional
-validate :bio, presence: true, on: :update
-```
-
-## Common Error: Format Validation Failed
-
-**Error:**
-```
-email must match the pattern /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
-```
-
-(The default `match:` message is `"<field> must match the pattern <regex>"`; set `message:` for something friendlier.)
-
-**Cause:** Value doesn't match the required format.
-
-**Solutions:**
-
-1. Fix the value:
-```crystal
-user.email = "john@example.com"  # Valid email format
-```
-
-2. Check the regex pattern:
-```crystal
-# Make sure pattern matches expected format
-validate :email, match: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
-```
-
-## Common Error: Size Validation Failed
-
-**Error:**
-```
-username must have a size of 3..20
-```
-
-**Solutions:**
-
-1. Provide longer value:
-```crystal
-user.username = "john"  # At least 3 characters
-```
-
-2. Adjust size requirement if too strict:
-```crystal
-validate :username, size: 2..50  # Allow shorter names
-```
-
-## Common Error: Uniqueness Validation Failed
-
-**Error:**
-```
-duplicate key value violates unique constraint "idx_users_email"
-```
-
-**Cause:** There is no built-in `uniqueness` validation option. Duplicates are caught by a unique index (the database raises, for example `CQL::Postgres::UniqueViolation` on the native PostgreSQL driver) or by a custom validator registered with `use` (see [Add Validations](../models/add-validations.md)).
-
-**Solutions:**
-
-1. Use a different value:
-```crystal
-user.email = "different@example.com"
-```
-
-2. Find and handle the existing record:
-```crystal
-existing = User.find_by(email: email)
-if existing
-  # Handle duplicate - update existing or reject
-end
-```
-
-## Common Error: Numeric Validation Failed
-
-**Error:**
-```
-age must be greater than 0
-```
-
-**Solutions:**
-
-1. Provide valid number:
-```crystal
-user.age = 25  # Positive number
-```
-
-2. Check validation constraints:
-```crystal
-validate :age, gt: 0, lt: 150
-```
-
-Supported predicates are `eq`, `exclude`, `gt`, `gte`, `in`, `lt`, `lte`, `match`, `size`, `presence`, `required`, `confirmation` and `accept`, plus the `message:` and `on:` options. Any other key (`format:`, `numericality:`, `uniqueness:`) fails at compile time with "unsupported predicate".
-
-## Debugging Validation
-
-Print all errors with details:
+`save`, `save!` and the instance `create!` raise this on an invalid record; `save` does not return `false` for it. The message joins the error messages with commas.
 
 ```crystal
-user = User.new("", "bad", -5)
-
-if user.valid?
-  puts "Valid!"
+# ❌ Never reaches else: save raises before it can return false
+if user.save
+  redirect_to user
 else
-  puts "Validation failed:"
-  puts "Errors count: #{user.errors.size}"
-
-  user.errors.each do |error|
-    puts "  Field: #{error.field}"
-    puts "  Message: #{error.message}"
-    puts ""
-  end
+  render_errors user.errors
 end
-```
 
-## Common Error: ValidationError Raised From save
+# ✅ Check first, or rescue
+if user.valid?
+  user.save!
+else
+  render_errors user.errors.map { |e| {field: e.field, message: e.message} }
+end
 
-`save`, `save!` and `create!` run validations and raise `CQL::ActiveRecord::Validations::ValidationError` when the record is invalid (its message joins the error messages with commas). Check `valid?` first, or rescue it:
-
-```crystal
 begin
   user.save!
 rescue ex : CQL::ActiveRecord::Validations::ValidationError
@@ -161,70 +66,54 @@ rescue ex : CQL::ActiveRecord::Validations::ValidationError
 end
 ```
 
-## Skip Validation (Use Carefully)
+`save` returns `false`, and `save!` raises `CQL::RecordNotSaved: Failed to save the record`, only when a callback halts the save.
 
-Sometimes you need to bypass validation:
-
-```crystal
-# Instance update! writes the changed attributes without running validations
-user.update!(email: "override@example.com")
-
-# Class-level bulk update also skips model validation
-User.update_all({:active => false})
-```
-
-## Test Validations
+## Know which writes skip validation
 
 ```crystal
-describe User do
-  it "requires a name" do
-    user = User.new("", "test@example.com")
-    user.valid?.should be_false
-    user.errors.map(&.field).should contain(:name)
-  end
-
-  it "requires valid email format" do
-    user = User.new("John", "invalid")
-    user.valid?.should be_false
-    user.errors.map(&.field).should contain(:email)
-  end
-
-  it "accepts valid data" do
-    user = User.new("John", "john@example.com")
-    user.valid?.should be_true
-  end
-end
+User.create!(name: "", email: "nope", username: "x", age: -1) # class-level create!: inserts without validating
+user.update!(email: "not-an-email")                           # writes the attributes without validating
+User.update_all({:age => 0})                                  # one UPDATE, no validation
 ```
 
-## Handle Validation in Controllers
+## Catch duplicates
+
+```text
+SQLite3::Exception: UNIQUE constraint failed: users.email
+CQL::Postgres::UniqueViolation: ERROR: duplicate key value violates unique constraint "idx_users_email" (SQLSTATE 23505)
+```
+
+There is no `uniqueness` predicate, so a unique index raises these; to report a duplicate as a validation error, write a custom validator as in [Add Validations](../models/add-validations.md#write-a-custom-validator).
+
+## Fix validations that do not compile
+
+```text
+Error: CQL validation error in Signup: unsupported predicate `format` for `:email`. Supported predicates: "eq, exclude, gt, gte, in, lt, lte, match, size, presence, required, confirmation, accept".
+Error: CQL validation error in Signup: unknown attribute `:emial`. Define a readable property or getter for `:emial` before calling `validate ::emial`.
+Error: undefined macro variable 'context'
+```
+
+Use `match:` for formats and `gt:`/`lt:` for numbers, and declare the property before `validate`. The last error comes from any `on:` option: contexts do not compile yet, so remove `on:`. `valid?`, `errors` and `validate!` accept a context argument, but without `on:` it changes nothing.
+
+## Fix a validation that never fails
 
 ```crystal
-def create(params)
-  user = User.new(params[:name], params[:email])
+# ❌ The second call replaces the first: "jo" passes, because size: is gone
+validate :username, size: 3..20
+validate :username, required: true
 
-  if user.valid?
-    user.save!
-    {status: "success", user: user.to_json}
-  else
-    {
-      status: "error",
-      errors: user.errors.map { |e| {field: e.field, message: e.message} }
-    }
-  end
-end
+# ✅ One call per attribute, with every predicate
+validate :username, required: true, size: 3..20
 ```
 
-## Custom Error Messages
+## Test validations
 
-Make errors user-friendly:
+Spec `valid?` and `errors` on records built with `new`, not with the class-level `create!`; see [Set Up Test Databases and Factories](../testing/test-database.md#build-records-with-factories).
 
-```crystal
-validate :email, required: true, message: "Please provide your email address"
-validate :password, size: 8..100, message: "Password must be 8 to 100 characters"
-```
-
-## Related
+## See Also
 
 - [Add Validations](../models/add-validations.md)
 - [Validation Options Reference](../../reference/api/validation-options.md)
+- [Use Callbacks](../models/use-callbacks.md)
 - [Create Records](../data-operations/create.md)
+- [Fix Schema Mapping Errors](schema-mapping-errors.md)

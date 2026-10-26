@@ -1,185 +1,128 @@
+---
+description: "Write a CQL::Migration(version) subclass with up and down; defining the class registers it with CQL::Migrator."
+---
+
 # Create a Migration
 
-This guide shows you how to create database migrations to manage schema changes.
+## Write a Migration
 
-## Migration File Structure
-
-Create migration files in a `migrations/` directory:
-
-```
-migrations/
-├── 001_create_users.cr
-├── 002_create_posts.cr
-└── 003_add_email_index.cr
-```
-
-## Basic Migration
-
+{% code title="db/migrations/001_create_users.cr" %}
 ```crystal
-# migrations/001_create_users.cr
 class CreateUsers < CQL::Migration(1)
   def up
+    users.create!   # CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, ...)
+  end
+
+  def down
+    users.drop!     # DROP TABLE IF EXISTS users
+  end
+
+  # Declares the table on the migrator's schema, for up and for a down run in a later process
+  private def users : CQL::Table
     schema.table :users do
       primary :id, Int64, auto_increment: true
-      column :name, String, null: false
-      column :email, String, null: false
+      column :name, String
+      column :email, String
       timestamps
     end
-
-    schema.users.create!
-  end
-
-  def down
-    schema.users.drop!
   end
 end
 ```
-
-A migration registers itself with `CQL::Migrator` when its class is defined, so `require` every migration file before running the migrator. `up` and `down` receive no arguments; the schema is available as `schema`. `schema.table :users do ... end` declares the table and `schema.users.create!` / `schema.users.drop!` create and drop it.
-
-## Migration Number
-
-The number in `CQL::Migration(N)` is the version (stored as `Int64`) and must be unique; migrations run in ascending version order. Use sequential numbers or timestamps:
+{% endcode %}
 
 ```crystal
-class CreateUsers < CQL::Migration(1)              # Sequential
+# CQL::Migration(2)               the version is an Int64, unique, applied in ascending order
+# CQL::Migration(20250125120000)  timestamps sort the same way
+
+# Only defined classes are registered: require every file before running the migrator
+require "./db/migrations/*"
+```
+
+`up` and `down` take no arguments; `schema` is the schema you built the migrator from. When that schema already
+declares the table (your `CQL::Schema.define` block or the generated schema file), `schema.users.create!` and
+`schema.users.drop!` are enough. Otherwise `schema.users` raises `KeyError` in a process that did not run `up`.
+
+## Create a Table With Foreign Keys and Indexes
+
+{% code title="db/migrations/002_create_posts.cr" %}
+```crystal
 class CreatePosts < CQL::Migration(2)
-class AddIndexes < CQL::Migration(20250125120000)  # Timestamp format
-```
-
-## Create Table
-
-```crystal
-def up
-  schema.table :posts do
-    primary :id, Int64, auto_increment: true
-    column :title, String, null: false
-    column :body, String, null: false
-    column :published, Bool, default: false
-    column :user_id, Int64, null: false
-    timestamps
-
-    foreign_key [:user_id], references: :users, references_columns: [:id]
-  end
-
-  schema.posts.create!
-
-  # `index [...]` in the table block is created by create!; for an existing table use schema.alter
-  schema.alter :posts do
-    create_index :idx_posts_user_id, [:user_id]
-    create_index :idx_posts_published, [:published]
-  end
-end
-
-def down
-  schema.posts.drop!
-end
-```
-
-## Add Columns
-
-`schema.alter :users` looks the table up in the schema and raises `CQL::Schema::Error` ("Table 'users' not found") if it was never declared, so declare it with `schema.table` or load your generated schema file first.
-
-```crystal
-class AddAvatarToUsers < CQL::Migration(4)
   def up
-    schema.alter :users do
-      add_column :avatar_url, String, null: true
-      add_column :bio, String, null: true
-    end
+    posts.create!
+    # CREATE TABLE IF NOT EXISTS posts (..., user_id BIGINT NOT NULL, ...,
+    #   FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE NO ACTION)
+    # CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts (user_id)
   end
 
   def down
-    schema.alter :users do
-      drop_column :avatar_url
-      drop_column :bio
+    posts.drop!
+  end
+
+  private def posts : CQL::Table
+    schema.table :posts do
+      primary :id, Int64, auto_increment: true
+      column :title, String
+      column :published, Bool, default: false
+      column :user_id, Int64
+      timestamps
+      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
+      index [:user_id]
     end
   end
 end
 ```
+{% endcode %}
 
-## Add Index
+## Change an Existing Table
 
+{% code title="db/migrations/003_change_users.cr" %}
 ```crystal
-class AddEmailIndex < CQL::Migration(5)
+class ChangeUsers < CQL::Migration(3)
   def up
     schema.alter :users do
+      add_column :bio, String                  # ALTER TABLE users ADD COLUMN bio TEXT
+      rename_column :name, :full_name          # ALTER TABLE users RENAME COLUMN name TO full_name
       create_index :idx_users_email, [:email], unique: true
     end
   end
 
   def down
     schema.alter :users do
-      drop_index :idx_users_email
-    end
-  end
-end
-```
-
-## Add Foreign Key
-
-Not supported on SQLite (`CQL::SQLiteUnsupportedFeatureError`): declare `foreign_key` inside the `schema.table` block when creating the table instead.
-
-```crystal
-class AddPostsForeignKey < CQL::Migration(6)
-  def up
-    schema.alter :posts do
-      foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
-    end
-  end
-
-  def down
-    schema.alter :posts do
-      drop_foreign_key :fk_posts_user_id
-    end
-  end
-end
-```
-
-## Rename Column
-
-```crystal
-class RenameUserName < CQL::Migration(7)
-  def up
-    schema.alter :users do
-      rename_column :name, :full_name
-    end
-  end
-
-  def down
-    schema.alter :users do
+      drop_index :idx_users_email              # DROP INDEX IF EXISTS idx_users_email
       rename_column :full_name, :name
+      drop_column :bio                         # ALTER TABLE users DROP COLUMN bio /* Warning: Only works on SQLite 3.35.0+ */
     end
   end
 end
 ```
+{% endcode %}
 
-## Change Column Type
+`schema.alter` raises `CQL::Schema::Error` ("Table 'users' not found") unless the schema declares the table, and it
+reads columns from that declaration:
 
-PostgreSQL, CockroachDB and MySQL only: SQLite raises `CQL::SQLiteUnsupportedFeatureError` for `change_column` (as it does for `foreign_key` and `drop_foreign_key` in `schema.alter`). Recreate the table instead.
+| Call | SQLite | If the schema does not declare the column |
+| :--- | :--- | :--- |
+| `add_column`, `rename_table`, `create_index`, `drop_index` | yes | n/a |
+| `rename_column` | yes | raises `KeyError` |
+| `drop_column` | yes (SQLite 3.35+) | emits `DROP COLUMN`; the database raises if the column is missing |
+| `change_column :views, Int64` | `CQL::SQLiteUnsupportedFeatureError` | n/a |
+| `foreign_key [...], references: ...` | `CQL::SQLiteUnsupportedFeatureError` | n/a |
+| `drop_foreign_key :fk_posts_user_id` | `CQL::SQLiteUnsupportedFeatureError` | n/a |
 
-```crystal
-class ChangeViewsCount < CQL::Migration(8)
-  def up
-    schema.alter :posts do
-      change_column :views_count, Int64
-    end
-  end
-
-  def down
-    schema.alter :posts do
-      change_column :views_count, Int32
-    end
-  end
-end
+```sql
+-- PostgreSQL, from foreign_key, drop_foreign_key and change_column in schema.alter :posts
+ALTER TABLE posts ADD CONSTRAINT fk_posts_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE NO ACTION
+ALTER TABLE posts DROP CONSTRAINT fk_posts_user_id
+ALTER TABLE posts ALTER COLUMN title TYPE BIGINT
 ```
 
-## Irreversible Migration
+On SQLite, declare foreign keys in the `schema.table` block and recreate the table to change a column type.
 
-Some migrations can't be reversed:
+## Make a Migration Irreversible
 
+{% code title="db/migrations/004_drop_legacy_field.cr" %}
 ```crystal
-class RemoveOldColumn < CQL::Migration(9)
+class DropLegacyField < CQL::Migration(4)
   def up
     schema.alter :users do
       drop_column :legacy_field
@@ -187,27 +130,30 @@ class RemoveOldColumn < CQL::Migration(9)
   end
 
   def down
-    raise "Cannot reverse: data would be lost"
+    raise CQL::Migrator::Error.new("DropLegacyField cannot be reversed")
   end
 end
 ```
+{% endcode %}
 
-## Verify Migration
+The exception aborts the rollback; on SQLite and PostgreSQL nothing is reverted.
 
-Create a simple test:
+## Test a Migration
 
 ```crystal
-# Test migration (auto_sync: false keeps it from rewriting your schema file)
-migrator = MyDB.migrator(CQL::MigratorConfig.new(auto_sync: false))
-migrator.up
-
-# Check table exists
-User.count  # Should not raise
+it "creates and drops users" do
+  migrator = AppDB.migrator(CQL::MigratorConfig.new(auto_sync: false)) # leaves the schema file alone
+  migrator.up
+  AppDB.exec_query { |conn| conn.scalar("SELECT COUNT(*) FROM users") }.should eq(0)
+  migrator.down
+end
 ```
 
-## Related
+## See Also
 
 - [Run Migrations](run-migrations.md)
 - [Rollback Migrations](rollback.md)
 - [Add Columns](add-columns.md)
+- [Create Indexes](indexes.md)
 - [Migration DSL Reference](../../reference/api/migration-dsl.md)
+- [Fix Migration Errors](../troubleshooting/migration-errors.md)

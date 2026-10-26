@@ -1,142 +1,151 @@
+---
+description: "Build a migrator for your schema, apply the pending migrations, and check what has run."
+---
+
 # Run Migrations
 
-This guide shows you how to run database migrations.
-
-## Setup Migrator
+## Build the Migrator
 
 ```crystal
-require "cql"
-require "../migrations/*"
+require "./database"           # defines AppDB
+require "../db/migrations/*"   # registers every migration class
 
 config = CQL::MigratorConfig.new(
   schema_file_path: "src/schemas/app_schema.cr",
   schema_name: :AppSchema,
-  auto_sync: true
+  auto_sync: true              # the default
 )
+migrator = AppDB.migrator(config)
 
-migrator = MyDB.migrator(config)
+config.migration_table_name    # => :cql_schema_migrations, created by AppDB.migrator
 ```
 
-Creating a migrator creates the migrations table (`config.migration_table_name`, default `cql_schema_migrations`). With `auto_sync: true` (the default) `up` and `down` also write the schema file at `schema_file_path` from the database state when they finish; creating the migrator does not write it. Pass `auto_sync: false` to leave the file alone, which is usually what you want in production. Otherwise make sure the directory of `schema_file_path` exists.
+With `auto_sync: true`, every `up` and `down` rewrites the schema file from the live database, creating missing
+directories; building the migrator writes nothing. Pass `auto_sync: false` in production and in tests so the file is
+left alone.
 
-Only migration classes that have been required are registered, so require your migrations before calling `migrator.up`.
-
-## Run All Pending Migrations
+## Apply Pending Migrations
 
 ```crystal
-migrator.up
-puts "Migrations complete"
+migrator.up             # every pending migration, in version order, then prints the applied table
+migrator.up(2)          # the 2 oldest pending migrations
+migrator.up_to(5_i64)   # every pending migration up to and including version 5; raises CQL::Migrator::Error
+                        # if no migration has that version
 ```
 
-Pending migrations run in version order and are recorded as they succeed. On SQLite and PostgreSQL the whole run, `schema_migrations` records included, is one transaction on one connection, so a failing migration rolls back everything the run did. On MySQL and CockroachDB each statement commits on its own, so a failure leaves the earlier migrations of the run applied, and building a migrator, calling `up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`. On PostgreSQL the run holds its DDL locks until the final commit and `CREATE INDEX CONCURRENTLY` fails inside a migration; `up(steps)` keeps runs short. `migrator.up(2)` applies the 2 oldest pending migrations. `up` prints a table of applied migrations when it finishes.
+{% tabs %}
+{% tab title="SQLite and PostgreSQL" %}
+The whole run, migration records included, is one transaction on one connection: a failing migration rolls back
+everything the run did.
+{% endtab %}
 
-## Check Migration Status
+{% tab title="MySQL and CockroachDB" %}
+Each statement commits on its own, so a failure leaves the run's earlier migrations applied. Building a migrator, calling
+`up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`.
+{% endtab %}
+{% endtabs %}
+
+{% hint style="warning" %}
+On PostgreSQL a run holds its DDL locks until the final commit, and `CREATE INDEX CONCURRENTLY` fails inside a migration. Use `up(steps)` or `up_to` to keep runs short.
+{% endhint %}
+
+## Check Status
 
 ```crystal
-puts "Applied: #{migrator.applied_migrations.size}"
-puts "Pending: #{migrator.pending_migrations.size}"
-migrator.print_pending_migrations   # table of pending migrations
-migrator.print_applied_migrations   # table of applied migrations
+migrator.applied_migrations.size                    # rows in cql_schema_migrations
+migrator.pending_migrations.map(&.version)          # => [4, 5]
+migrator.applied_migrations.max_of?(&.version) || 0 # current version
+migrator.last.try(&.name)                           # => "CreateComments", the last recorded one
+
+migrator.applied_migrations.each { |record| puts "#{record.version} #{record.name}" }
+migrator.print_pending_migrations                   # table of pending migrations
+migrator.print_applied_migrations
 ```
 
-## Run to Specific Version
+## Write a Migration Command
 
+{% code title="src/migrate.cr" %}
 ```crystal
-# Run every migration up to and including version 5 (an Int64)
-migrator.up_to(5_i64)
-```
-
-`up_to` applies the pending migrations up to that version and skips the ones already applied. It raises `CQL::Migrator::Error` ("No migration with version 5") if no registered migration has that version.
-
-## Create Migration Script
-
-```crystal
-# src/migrate.cr
 require "./database"
-require "../migrations/*"
+require "../db/migrations/*"
 
-config = CQL::MigratorConfig.new(
+migrator = AppDB.migrator(CQL::MigratorConfig.new(
   schema_file_path: "src/schemas/app_schema.cr",
   schema_name: :AppSchema,
-  auto_sync: true
-)
-
-migrator = MyDB.migrator(config)
+  auto_sync: ENV["APP_ENV"]? != "production"
+))
 
 case ARGV[0]?
-when "up"
-  migrator.up
-  puts "Migrated up"
-when "down"
-  migrator.rollback   # one migration; `migrator.down` with no argument rolls back all of them
-  puts "Rolled back one migration"
-when "status"
-  puts "Applied: #{migrator.applied_migrations.size}"
-  puts "Pending: #{migrator.pending_migrations.size}"
-when "version"
-  puts "Current version: #{migrator.last.try(&.version) || 0}"
-else
-  puts "Usage: crystal src/migrate.cr [up|down|status|version]"
+when "up"      then migrator.up
+when "status"  then puts "Applied: #{migrator.applied_migrations.size}, pending: #{migrator.pending_migrations.size}"
+when "version" then puts migrator.applied_migrations.max_of?(&.version) || 0
+else                abort "Usage: crystal src/migrate.cr up|status|version"
 end
 ```
+{% endcode %}
 
-## Run From Command Line
-
-```shell
-# Run all pending migrations
+```bash
 crystal src/migrate.cr up
-
-# Check status
-crystal src/migrate.cr status
-
-# Rollback one migration
-crystal src/migrate.cr down
+crystal src/migrate.cr status    # Applied: 5, pending: 0
 ```
 
-## Auto-Run on Startup
+[Rollback Migrations](rollback.md) adds a `rollback` command.
 
-Run migrations when your app starts:
+## Deploy One Migration at a Time
+
+On SQLite and PostgreSQL, commit each migration with `up(1)` so that one failure does not undo the others:
+
+{% code title="src/deploy_migrations.cr" %}
+```crystal
+require "./database"
+require "../db/migrations/*"
+
+migrator = AppDB.migrator(CQL::MigratorConfig.new(auto_sync: false))
+pending = migrator.pending_migrations
+
+if pending.empty?
+  puts "No pending migrations"
+  exit 0
+end
+
+pending.each do |migration|
+  puts "Running migration #{migration.version} (#{migration.name})..."
+  begin
+    migrator.up(1)  # the oldest pending one: this migration
+  rescue ex
+    puts "FAILED: #{ex.message}"
+    exit 1
+  end
+end
+puts "All migrations completed"
+```
+{% endcode %}
+
+```bash
+crystal src/deploy_migrations.cr   # exits 1 at the first failure; the migrations before it stay applied
+```
+
+Run it on a copy of production data first, and back the database up.
+
+## Migrate on Startup
 
 ```crystal
 # src/app.cr
-require "./database"
-require "../migrations/*"
-
-def setup_database
-  config = CQL::MigratorConfig.new(
-    schema_file_path: "src/schemas/app_schema.cr",
-    schema_name: :AppSchema,
-    auto_sync: true
-  )
-
-  migrator = MyDB.migrator(config)
-
-  pending = migrator.pending_migrations.size
-  if pending > 0
-    puts "Running #{pending} pending migration(s)..."
-    migrator.up
-  end
-end
-
-setup_database
-# ... rest of your app
-```
-
-## Verify Migrations Ran
-
-```crystal
-migrator = MyDB.migrator(config)
-migrator.up
-
-# Verify
-puts "Applied migrations:"
-migrator.applied_migrations.each do |record|
-  puts "  - #{record.version} #{record.name}"
+migrator = AppDB.migrator(CQL::MigratorConfig.new(auto_sync: false))
+unless migrator.pending_migrations.empty?
+  puts "Running #{migrator.pending_migrations.size} pending migration(s)..."
+  migrator.up
 end
 ```
 
-## Related
+{% hint style="info" %}
+`CQL.build_migrator(schema)` reads its settings from `CQL.configure` and by default records migrations in `schema_migrations`, not `cql_schema_migrations`. See [build_migrator versus schema.migrator](../configuration/configure-cql.md#build_migrator-versus-schemamigrator).
+{% endhint %}
+
+## See Also
 
 - [Create a Migration](create-migration.md)
 - [Rollback Migrations](rollback.md)
+- [Dump and Validate Your Schema](schema-dump-and-validation.md)
+- [Fix Migration Errors](../troubleshooting/migration-errors.md)
 - [Migration DSL Reference](../../reference/api/migration-dsl.md)

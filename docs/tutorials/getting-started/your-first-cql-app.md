@@ -1,140 +1,102 @@
+---
+description: "Build a small SQLite app: connect, migrate, define models, query, validate and use a transaction."
+---
+
 # Your First CQL App
 
-This tutorial walks you through building your first application with CQL from scratch. By the end, you'll have a working Crystal application that connects to a database, creates tables through migrations, and performs CRUD operations.
+**You need:** Crystal 1.12.2 or later and the SQLite 3 development library (`libsqlite3-dev` on Debian and Ubuntu).
 
-## What You'll Learn
+{% stepper %}
+{% step %}
+### Create the project
 
-- Installing CQL and database drivers
-- Configuring a database connection
-- Creating and running migrations
-- Defining Active Record models
-- Performing basic CRUD operations
-- Working with associations
-- Adding validations
-- Using transactions
-
-## Prerequisites
-
-Before starting, ensure you have:
-
-- **Crystal** (latest stable version recommended)
-- **A supported database**: PostgreSQL, MySQL, SQLite, or CockroachDB
-- Basic familiarity with Crystal syntax
-
-## Step 1: Create Your Project
-
-Create a new Crystal project:
-
-```shell
+```bash
 crystal init app myapp
 cd myapp
 ```
 
-## Step 2: Add Dependencies
+Check: `ls` shows `shard.yml` and `src/myapp.cr`.
+{% endstep %}
 
-Add CQL and your database driver to `shard.yml`:
+{% step %}
+### Add CQL and a driver
 
+Add to `shard.yml`:
+
+{% code title="shard.yml" %}
 ```yaml
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.589
-
-  # Choose your database driver:
-  pg: # Optional for PostgreSQL: CQL ships its own native driver
-    github: will/crystal-pg
-    version: "~> 0.29.0"
-
-  # OR
-  mysql: # For MySQL
-    github: crystal-lang/crystal-mysql
-
-  # OR
-  sqlite3: # For SQLite
+    version: ~> 0.0.808
+  sqlite3:
     github: crystal-lang/crystal-sqlite3
 ```
+{% endcode %}
 
-Install the dependencies:
-
-```shell
+```bash
 shards install
 ```
 
-> **PostgreSQL note:** `require "cql"` registers a native PostgreSQL driver for `postgres://` URLs, so the `pg` shard is not needed. If you do add it, require it before or after `cql` and it serves those URLs instead.
+Check: the output lists `Installing cql` and `Installing sqlite3`.
+{% endstep %}
 
-## Step 3: Set Up Database Connection
+{% step %}
+### Connect to the database
 
-Create a file to configure your database connection. The setup varies slightly by database.
-
-### PostgreSQL
-
-```crystal
-# src/database.cr
-require "cql" # includes the native PostgreSQL driver; add `require "pg"` only if you use the pg shard
-
-DATABASE_URL = ENV["DATABASE_URL"]? || "postgres://username:password@localhost:5432/myapp_development"
-
-AcmeDB = CQL::Schema.define(
-  :acme_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: DATABASE_URL
-) do
-  # Tables will be defined through migrations
-end
+```bash
+mkdir -p db
 ```
 
-### SQLite
-
-Create the database directory first (`mkdir -p db`), then:
-
+{% code title="src/database.cr" %}
 ```crystal
-# src/database.cr
 require "cql"
 require "sqlite3"
 
-AcmeDB = CQL::Schema.define(
-  :acme_db,
-  adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://./db/development.db?foreign_keys=1"
-) do
-  # Tables will be defined through migrations
+# foreign_keys=1 makes SQLite enforce foreign keys (PostgreSQL and MySQL always do)
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./db/development.db?foreign_keys=1") do
+  # Empty: the migrations declare the tables
 end
+
+# Other databases:
+#   PostgreSQL: no shard or require needed (CQL ships a native driver; the pg shard also works)
+#     adapter: CQL::Adapter::Postgres, uri: "postgres://user:pass@localhost:5432/myapp"
+#   MySQL: add the mysql shard (github: crystal-lang/crystal-mysql) and require "mysql"
+#     adapter: CQL::Adapter::MySql, uri: "mysql://user:pass@localhost:3306/myapp"
 ```
+{% endcode %}
 
-### MySQL
-
+{% code title="src/check_connection.cr" %}
 ```crystal
-# src/database.cr
-require "cql"
-require "mysql"
+require "./database"
 
-AcmeDB = CQL::Schema.define(
-  :acme_db,
-  adapter: CQL::Adapter::MySql,
-  uri: "mysql://username:password@localhost:3306/myapp_development"
-) do
-  # Tables will be defined through migrations
-end
+AppDB.exec("SELECT 1")
+puts "Connected to #{AppDB.uri}"
+```
+{% endcode %}
+
+```bash
+crystal src/check_connection.cr
 ```
 
-## Step 4: Create Your First Migration
-
-Create a migrations directory and your first migration file:
-
-```shell
-mkdir -p migrations
+```text
+Connected to sqlite3://./db/development.db?foreign_keys=1
 ```
+{% endstep %}
 
+{% step %}
+### Create the users table
+
+{% code title="migrations/001_create_users.cr" %}
 ```crystal
-# migrations/001_create_users.cr
 class CreateUsers < CQL::Migration(1)
   def up
     schema.table :users do
       primary :id, Int64, auto_increment: true
-      column :name, String, null: false
-      column :email, String, null: false
+      column :name, String # NOT NULL unless you pass null: true
+      column :email, String
       column :active, Bool, default: false
-      timestamps  # Creates created_at and updated_at columns
+      timestamps # created_at and updated_at
 
       unique_constraint [:email]
     end
@@ -147,143 +109,124 @@ class CreateUsers < CQL::Migration(1)
   end
 end
 ```
+{% endcode %}
 
-## Step 5: Run the Migrations
-
-Create a setup script that applies the migrations:
-
+{% code title="src/setup.cr" %}
 ```crystal
-# src/setup.cr
 require "./database"
 require "../migrations/*"
 
-# Configure automatic schema file synchronization
-config = CQL::MigratorConfig.new(
-  schema_file_path: "src/schemas/acme_schema.cr",
-  schema_name: :AcmeSchema,
-  schema_symbol: :acme_schema,
-  auto_sync: true
-)
-
-# Create migrator and apply migrations
-migrator = AcmeDB.migrator(config)
+# AppDB.migrator uses CQL::MigratorConfig.new: after each run it writes the database's
+# tables to src/schemas/app_schema.cr as AppSchema (schema_symbol :app_schema, auto_sync: true)
+migrator = AppDB.migrator
 migrator.up
-
-puts "Database ready with #{migrator.applied_migrations.size} migrations"
+puts "Applied #{migrator.applied_migrations.size} migration(s)"
 ```
+{% endcode %}
 
-Run the setup:
-
-```shell
+```bash
 crystal src/setup.cr
 ```
 
-Besides creating the tables, the migrator writes `src/schemas/acme_schema.cr`: an `AcmeSchema` constant that describes the tables that now exist in your database. `AcmeDB` has an empty schema block (the migrations declare the tables while they run), so your application uses `AcmeSchema` instead, which knows every table without running the migrations again. The file is regenerated after every `up` and `down`.
+```text
+┌────────┬──────────────────────┬─────────┐
+│ Status │ Migration            │ Version │
+├────────┼──────────────────────┼─────────┤
+│   ✔    │ CreateUsers │       1 │
+└────────┴──────────────────────┴─────────┘
 
-## Step 6: Define Your First Model
+Applied 1 migration(s)
+```
 
-Create a model that maps to your users table. It points at `AcmeSchema`, the schema file the migrator generates in Step 5:
+CQL's development logger adds `INFO` and `DEBUG` lines. Check that `src/schemas/app_schema.cr` exists: its `AppSchema` knows every table, so the app uses it instead of the empty `AppDB`.
+{% endstep %}
 
+{% step %}
+### Define a model and run CRUD queries
+
+{% code title="src/models/user.cr" %}
 ```crystal
-# src/models/user.cr
 class User
-  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::Model(Int64) # adds the id primary key
+  db_context AppSchema, :users
 
-  # Connect to the database and table
-  db_context AcmeSchema, :users
-
-  # Define your model attributes (`id` is provided by the Model(Int64) module)
   property name : String
   property email : String
   property active : Bool = false
   property created_at : Time?
   property updated_at : Time?
 
-  # Constructor for creating new instances
   def initialize(@name : String, @email : String, @active : Bool = false)
   end
 end
 ```
+{% endcode %}
 
-Models are classes, not structs: `save` assigns the new primary key to the instance, which a struct copy would not see.
+Models are classes so that `save` can set the new id on your instance. Replace `src/myapp.cr`:
 
-## Step 7: Perform CRUD Operations
-
-Now you can interact with your data. Create a main application file:
-
+{% code title="src/myapp.cr" %}
 ```crystal
-# src/myapp.cr
 require "cql"
-require "sqlite3" # your database driver (not needed for PostgreSQL)
-require "./schemas/acme_schema"
+require "sqlite3"
+require "./schemas/app_schema"
 require "./models/*"
 
-# CREATE: Add new users
-user = User.new(name: "Alice Johnson", email: "alice@example.com", active: true)
+User.delete_all # start each run from an empty table
 
-if user.save
-  puts "User created with ID: #{user.id}"
-else
-  puts "Failed to create user" # a callback halted the save
-end
+# Create
+alice = User.new(name: "Alice Johnson", email: "alice@example.com", active: true)
+alice.save
+puts "Created #{alice.name} with id #{alice.id}"
 
-# Or create and save in one step
-bob = User.create!(
-  name: "Bob Smith",
-  email: "bob@example.com",
-  active: true
-)
-puts "Created user: #{bob.name}"
+bob = User.create!(name: "Bob Smith", email: "bob@example.com")
+puts "Created #{bob.name}"
 
-# READ: Find users
-found_user = User.find(1)
-if found_user
-  puts "Found user: #{found_user.name}"
-end
+# Read
+puts "find: #{User.find(alice.id!).try(&.name)}"
+puts "find_by: #{User.find_by(email: "bob@example.com").try(&.name)}"
+puts "Active users: #{User.where(active: true).count}"
 
-# Find by attributes
-alice = User.find_by(email: "alice@example.com")
-puts "User: #{alice.try(&.name)}"
+# Update
+alice.active = false
+alice.save
+bob.update!(name: "Robert Smith")
+puts "Updated: #{User.all.map(&.name)}"
 
-# Query with conditions
-active_users = User.where(active: true).all
-puts "Active users: #{active_users.size}"
-
-# UPDATE: Modify users
-if found_user
-  found_user.active = false
-  found_user.save
-  puts "User updated"
-end
-
-# Or update in one step
-found_user.try(&.update!(name: "Alice J."))
-
-# DELETE: Remove users
-inactive = User.where(active: false).first
-inactive.try(&.delete!)
-puts "Inactive user deleted"
+# Delete
+User.where(active: false).first.try(&.delete!)
+puts "Remaining: #{User.all.map(&.name)}"
 ```
+{% endcode %}
 
-Run your application:
-
-```shell
+```bash
 crystal src/myapp.cr
 ```
 
-## Step 8: Add a Related Model
+```text
+Created Alice Johnson with id 1
+Created Bob Smith
+find: Alice Johnson
+find_by: Bob Smith
+Active users: 1
+Updated: ["Alice Johnson", "Robert Smith"]
+Remaining: ["Robert Smith"]
+```
 
-Let's add posts to demonstrate relationships. First, create the migration:
+The id grows on every run.
+{% endstep %}
 
+{% step %}
+### Add posts
+
+{% code title="migrations/002_create_posts.cr" %}
 ```crystal
-# migrations/002_create_posts.cr
 class CreatePosts < CQL::Migration(2)
   def up
     schema.table :posts do
       primary :id, Int64, auto_increment: true
-      column :title, String, null: false
-      column :body, String, null: false
-      column :user_id, Int64, null: false
+      column :title, String
+      column :body, String
+      column :user_id, Int64
       timestamps
 
       foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
@@ -301,15 +244,13 @@ class CreatePosts < CQL::Migration(2)
   end
 end
 ```
+{% endcode %}
 
-Create the Post model:
-
+{% code title="src/models/post.cr" %}
 ```crystal
-# src/models/post.cr
 class Post
   include CQL::ActiveRecord::Model(Int64)
-
-  db_context AcmeSchema, :posts
+  db_context AppSchema, :posts
 
   property title : String
   property body : String
@@ -317,177 +258,159 @@ class Post
   property created_at : Time?
   property updated_at : Time?
 
-  # Associations
   belongs_to :user, User, :user_id
 
   def initialize(@title : String, @body : String, @user_id : Int64)
   end
 end
 ```
+{% endcode %}
 
-Update the User model to include the association:
+In `src/models/user.cr`, add below the properties:
 
 ```crystal
-# src/models/user.cr (updated)
-class User
-  include CQL::ActiveRecord::Model(Int64)
-
-  db_context AcmeSchema, :users
-
-  property name : String
-  property email : String
-  property active : Bool = false
-  property created_at : Time?
-  property updated_at : Time?
-
-  # Associations
   has_many :posts, Post, :user_id
-
-  def initialize(@name : String, @email : String, @active : Bool = false)
-  end
-end
 ```
 
-Run the migrations again (`crystal src/setup.cr`), then try it out:
+Add to the end of `src/myapp.cr`:
 
 ```crystal
-# Create user and posts
-user = User.create!(name: "Alice", email: "alice@example.com")
+author = User.create!(name: "Carol", email: "carol@example.com")
+Post.create!(title: "My First Post", body: "Hello!", user_id: author.id!)
+Post.create!(title: "Another Post", body: "More content.", user_id: author.id!)
 
-post1 = Post.create!(
-  title: "My First Post",
-  body: "This is my first blog post!",
-  user_id: user.id.not_nil!
-)
-
-post2 = Post.create!(
-  title: "Another Post",
-  body: "More content here",
-  user_id: user.id.not_nil!
-)
-
-# Access associated records
-user_posts = user.posts.all
-puts "#{user.name} has #{user_posts.size} posts"
-
-# Access parent record
-post = Post.find(1)
-if post
-  author = post.user
-  puts "Post '#{post.title}' by #{author.try(&.name)}"
-end
+puts "#{author.name} has #{author.posts.count} posts: #{author.posts.all.map(&.title)}"
+first_post = Post.find_by!(title: "My First Post")
+puts "'#{first_post.title}' was written by #{first_post.user.try(&.name)}"
 ```
 
-## Step 9: Add Validations
+Migrate first, so that `AppSchema` gains `posts`:
 
-Enhance your User model with validations:
+```bash
+crystal src/setup.cr
+crystal src/myapp.cr
+```
+
+```text
+...
+Applied 2 migration(s)
+...
+Carol has 2 posts: ["My First Post", "Another Post"]
+'My First Post' was written by Carol
+```
+
+`User.delete_all` now removes posts too, through the `on_delete: :cascade` foreign key.
+{% endstep %}
+
+{% step %}
+### Validate input
+
+In `src/models/user.cr`, add below `has_many`:
 
 ```crystal
-class User
-  include CQL::ActiveRecord::Model(Int64)
-
-  db_context AcmeSchema, :users
-
-  property name : String
-  property email : String
-  property active : Bool = false
-  property created_at : Time?
-  property updated_at : Time?
-
-  has_many :posts, Post, :user_id
-
-  # Add validations
-  validate :name, presence: true, size: (1..100)
+  validate :name, presence: true, size: 1..100
   validate :email, presence: true, match: /@/
+```
 
-  def initialize(@name : String, @email : String, @active : Bool = false)
+Add to the end of `src/myapp.cr`:
+
+```crystal
+invalid = User.new(name: "", email: "nope")
+puts "valid? #{invalid.valid?}"
+puts invalid.errors.map(&.message)
+
+begin
+  invalid.save
+rescue ex : CQL::ActiveRecord::Validations::ValidationError
+  puts "save raised: #{ex.message}"
+end
+```
+
+```bash
+crystal src/myapp.cr
+```
+
+```text
+...
+valid? false
+["name must be present", "name must have a size of 1..100", "email must match the pattern /@/"]
+save raised: name must be present,name must have a size of 1..100,email must match the pattern /@/
+```
+
+`save` and `save!` raise on an invalid record; `create!` skips validations.
+{% endstep %}
+
+{% step %}
+### Use a transaction
+
+Add to the end of `src/myapp.cr`:
+
+```crystal
+User.transaction do
+  dave = User.create!(name: "Dave", email: "dave@example.com")
+  Post.create!(title: "Welcome", body: "Thanks for joining!", user_id: dave.id!)
+end
+puts "Dave saved: #{User.find_by(email: "dave@example.com").try(&.posts.count)} post"
+
+begin
+  User.transaction do
+    User.create!(name: "Erin", email: "erin@example.com")
+    raise "payment failed"
   end
+rescue ex
+  puts "Rolled back (#{ex.message}): Erin saved? #{User.find_by(email: "erin@example.com") ? "yes" : "no"}"
 end
 ```
 
-Check validity before saving. `save` and `save!` run validations and raise `CQL::ActiveRecord::Validations::ValidationError` when a record is invalid:
-
-```crystal
-user = User.new(name: "", email: "nope")
-user.valid?                       # => false
-user.errors.map(&.message)
-# => ["name must be present", "name must have a size of 1..100", "email must match the pattern /@/"]
+```bash
+crystal src/myapp.cr
 ```
 
-## Step 10: Use Transactions
-
-Ensure data consistency with transactions:
-
-```crystal
-User.transaction do |tx|
-  user = User.create!(name: "Charlie", email: "charlie@example.com")
-
-  post = Post.create!(
-    title: "Welcome Post",
-    body: "Thanks for joining!",
-    user_id: user.id.not_nil!
-  )
-
-  # If any operation fails, everything is rolled back
-  puts "User and welcome post created successfully"
-end
+```text
+...
+Dave saved: 1 post
+Rolled back (payment failed): Erin saved? no
 ```
 
-## Project Structure
+An exception rolls back the whole block, then propagates.
+{% endstep %}
+{% endstepper %}
 
-Your completed project should look like this:
+## Project structure
 
-```
+```text
 myapp/
 ├── shard.yml
-├── src/
-│   ├── myapp.cr           # Main application
-│   ├── database.cr        # Database configuration
-│   ├── setup.cr           # Migration runner
-│   ├── models/
-│   │   ├── user.cr        # User model
-│   │   └── post.cr        # Post model
-│   └── schemas/
-│       └── acme_schema.cr # Auto-generated schema (written by the migrator)
+├── db/development.db          # SQLite database
 ├── migrations/
 │   ├── 001_create_users.cr
 │   └── 002_create_posts.cr
-└── db/
-    └── development.db     # SQLite database file (if using SQLite)
+└── src/
+    ├── check_connection.cr
+    ├── database.cr            # AppDB: the connection migrations run on
+    ├── myapp.cr               # the application
+    ├── setup.cr               # runs the migrations
+    ├── models/
+    │   ├── post.cr
+    │   └── user.cr
+    └── schemas/
+        └── app_schema.cr      # AppSchema, written by the migrator
 ```
 
 ## Troubleshooting
 
-### Database Connection Issues
+The pool opens when code first uses `AppDB`, so a bad PostgreSQL or MySQL URL raises there (for example `DB::ConnectionRefused`); `src/check_connection.cr` shows it.
 
-`CQL::Schema.define` opens the connection immediately, so connection problems surface there:
+To reset the database in development, call `down` and then `up` on `AppSchema.migrator`, not `AppDB.migrator`: a `down` method such as `schema.posts.drop!` raises `KeyError` on `AppDB`, which knows no tables. [Rollback Migrations](../../how-to/migrations/rollback.md) covers rolling back to a version.
 
-```crystal
-begin
-  AcmeDB.exec("SELECT 1")
-  puts "Database connection successful"
-rescue ex
-  puts "Database connection failed: #{ex.message}"
-end
-```
+## Next steps
 
-### Migration Issues
+- [Define a Model](../../how-to/models/define-model.md)
+- [Build Complex Queries](../../how-to/querying/complex-queries.md)
+- [Add Validations](../../how-to/models/add-validations.md)
 
-```crystal
-migrator = AcmeDB.migrator(config)
-puts "Applied migrations: #{migrator.applied_migrations.size}"
-puts "Pending migrations: #{migrator.pending_migrations.size}"
+The five-part blog tutorial builds a larger app:
 
-# Reset database (development only)
-migrator.down        # Roll back all migrations
-migrator.up          # Reapply all
-```
-
-## Next Steps
-
-Congratulations! You've built your first CQL application. Continue learning with:
-
-- [Building a Blog](../building-a-blog/01-project-setup.md) - A comprehensive multi-part tutorial
-- [Define a Model](../../how-to/models/define-model.md) - Learn advanced model features
-- [Build Complex Queries](../../how-to/querying/complex-queries.md) - Master the query interface
-- [Add Validations](../../how-to/models/add-validations.md) - Ensure data integrity
+{% content-ref url="../building-a-blog/01-project-setup.md" %}
+[01-project-setup.md](../building-a-blog/01-project-setup.md)
+{% endcontent-ref %}
