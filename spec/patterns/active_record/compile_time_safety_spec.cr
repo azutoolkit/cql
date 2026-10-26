@@ -260,4 +260,44 @@ describe "CQL compile-time safety" do
   ensure
     File.delete(db_path) if db_path && File.exists?(db_path)
   end
+
+  it "validates schema mappings of models without db_context" do
+    db_path = File.join(Dir.tempdir, "cql_inferred_schema_#{Random.rand(1_000_000)}.db")
+    success, _output, error = Snippets.run <<-CRYSTAL
+      require "sqlite3"
+      require "./src/cql"
+
+      ENV["CQL_VALIDATE_SCHEMA_MAPPINGS"] = "1"
+
+      InferredBrokenSchema = CQL::Schema.define(
+        :inferred_broken_schema,
+        "sqlite3://#{db_path}",
+        CQL::Adapter::SQLite
+      ) do
+        table :inferred_broken_users do
+          primary :id, Int32
+          column :name, String
+        end
+      end
+
+      class InferredOrphanRecord
+        include CQL::ActiveRecord::Model(Int32)
+
+        property name : String
+      end
+
+      class InferredBrokenUser
+        include CQL::ActiveRecord::Model(Int32)
+
+        property name : Int32
+      end
+      CRYSTAL
+
+    success.should be_false
+    error.should contain("CQL schema mapping error")
+    error.should contain("schema column `inferred_broken_users.name` type String does not match model getter `name` type Int32")
+    error.should_not contain("no `CQL::Schema.define` block declares")
+  ensure
+    File.delete(db_path) if db_path && File.exists?(db_path)
+  end
 end
