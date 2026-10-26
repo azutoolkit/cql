@@ -46,7 +46,7 @@ class Post
   end
 
   private def log_attempt
-    Log.debug { "validating post #{@title}" }
+    puts "validating post #{@title}"
     true
   end
 
@@ -66,17 +66,17 @@ class Post
   end
 
   private def log_created
-    Log.info { "created post #{@id}" }
+    puts "created post #{@id}"
     true
   end
 
   private def log_updated
-    Log.info { "updated post #{@id}" }
+    puts "updated post #{@id}"
     true
   end
 
   private def log_saved
-    Log.info { "saved post #{@id}" }
+    puts "saved post #{@id}"
     true
   end
 
@@ -85,7 +85,7 @@ class Post
   end
 
   private def log_destroyed
-    Log.info { "deleted post #{@id}" }
+    puts "deleted post #{@id}"
     true
   end
 end

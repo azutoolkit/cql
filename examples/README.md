@@ -18,21 +18,22 @@ crystal run examples/run_examples.cr                      # interactive menu
 | --- | --- | --- |
 | [basic/](basic/README.md) | memory cache, fragment cache and invalidation strategies; a Redis cache | Redis for one example |
 | [caching/](caching/README.md) | fragment caching on models, per-request query cache, cache configuration, Redis store | SQLite; Redis for one example |
-| [configuration/](configuration/README.md) | `CQL.configure` settings and migrator configuration | nothing (SQLite) |
+| [configuration/](configuration/README.md) | `CQL.configure` settings and migrator configuration | nothing (one example reads `DATABASE_URL`) |
 | [migrations/](migrations/README.md) | migrations with a schema file kept in sync: up, rollback, redo | SQLite; PostgreSQL for one example |
 | [performance/](performance/README.md) | the performance monitor and reports | see its README: none compile today |
 | [framework-integration/](framework-integration/README.md) | the Azu per-request cache middleware, with mock requests | SQLite |
 | [blog/](blog/README.md) | a blog app: migrations, seeders, models, CRUD, joins, aggregates, monitoring | SQLite |
-| [utilities/](utilities/README.md) | `Beautify`, the console helpers the examples print with | nothing |
+| [utilities/](utilities/README.md) | `Beautify`, the console helpers several examples print with | nothing |
 
 ## Status
 
-Checked with Crystal 1.22.0: every file below was compiled with `crystal build --no-codegen`, and the SQLite and
-Redis examples were also run.
+Checked with Crystal 1.22.0: every `.cr` file in these directories was compiled with `crystal build --no-codegen`, and
+the SQLite and Redis examples were also run.
 
 | Example | Result |
 | --- | --- |
 | everything not listed below | compiles and runs |
+| `migrations/generated_schema.cr`, `utilities/beautify.cr` | not programs: a sample generated schema file and a helper module |
 | `configuration/configuration_showcase.cr` | runs only with `DATABASE_URL` set (any value; nothing connects), otherwise raises `KeyError` |
 | `blog/blog_demo.cr` | runs, and rewrites the tracked file `src/schemas/app_schema.cr`; see [blog/](blog/README.md) |
 | `migrations/schema_migration_workflow.cr` | compiles, but stops at the first migration (`attempt to write a readonly database`) and exits 0; see [migrations/](migrations/README.md) |
