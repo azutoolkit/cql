@@ -87,7 +87,9 @@ User.where { deleted_at.null }.all
 User.where { deleted_at.not_null }.all
 ```
 
-A nil value in `where`, `find_by`, `exists?`, `delete_by!` or `update_by` matches the rows whose column is NULL, so reject a nil that comes from untrusted input before using it as a filter. An index on the column serves `IS NULL`; a partial index declared `WHERE col IS NOT NULL` does not.
+A schema query's block, which names columns through their table, works the same way: `Northwind.query.from(:customers).where { customers.city == city }` emits `customers.city IS NULL` when `city` is nil and binds the value otherwise, and `!= nil` emits `IS NOT NULL`. So do `eq(nil)` and `neq(nil)`, and the blocks of `update.where { }` and `delete.where { }`.
+
+A nil value in `where`, `find_by`, `exists?`, `delete_by!` or `update_by`, or compared with `==` in a `where` block, matches the rows whose column is NULL, so reject a nil that comes from untrusted input before using it as a filter. An index on the column serves `IS NULL`; a partial index declared `WHERE col IS NOT NULL` does not.
 
 ## LIKE Queries
 

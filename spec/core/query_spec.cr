@@ -320,6 +320,57 @@ describe CQL::Query do
       select_query.should eq({output.strip, [1000]})
     end
 
+    it "matches NULL for == nil in a WHERE block" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name)
+        .where { customers.name == nil }
+        .to_sql
+
+      select_query.should eq({"SELECT customers.name FROM customers WHERE customers.name IS NULL", [] of DB::Any})
+    end
+
+    it "matches NOT NULL for != nil in a WHERE block" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name)
+        .where { customers.name != nil }
+        .to_sql
+
+      select_query.should eq({"SELECT customers.name FROM customers WHERE customers.name IS NOT NULL", [] of DB::Any})
+    end
+
+    it "matches NULL and NOT NULL for eq(nil) and neq(nil) in a WHERE block" do
+      select_query = Northwind.query
+        .from(:customers)
+        .select(:name)
+        .where { customers.name.eq(nil) & customers.city.neq(nil) }
+        .to_sql
+
+      output = <<-SQL
+        SELECT customers.name FROM customers WHERE (customers.name IS NULL) AND (customers.city IS NOT NULL)
+      SQL
+
+      select_query.should eq({output.strip, [] of DB::Any})
+    end
+
+    it "matches NULL for a nilable value compared in a WHERE block only when it holds nil" do
+      in_city = ->(city : String?) { Northwind.query.from(:customers).select(:name).where { customers.city == city }.to_sql }
+
+      in_city.call(nil).should eq({"SELECT customers.name FROM customers WHERE customers.city IS NULL", [] of DB::Any})
+      in_city.call("Berlin").should eq({"SELECT customers.name FROM customers WHERE customers.city = ?", ["Berlin"] of DB::Any})
+    end
+
+    it "numbers PostgreSQL placeholders without a slot for == nil in a WHERE block" do
+      query = Northwind.query.from(:customers).select(:name).where { (customers.name == nil) & (customers.balance == 1000) }
+      generator = Expression::Generator.new(CQL::Adapter::Postgres)
+
+      query.to_sql(generator).should eq({
+        "SELECT customers.name FROM customers WHERE (customers.name IS NULL) AND (customers.balance = $1)",
+        [1000] of DB::Any,
+      })
+    end
+
     it "numbers PostgreSQL placeholders without a slot for a nil value" do
       query = Northwind.query.from(:customers).select(:name).where(name: nil, balance: 1000)
       generator = Expression::Generator.new(CQL::Adapter::Postgres)

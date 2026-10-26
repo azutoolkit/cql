@@ -69,13 +69,6 @@ class TxMigrationDropDOnDown < TxMigration
   end
 end
 
-# SQLite underneath, but reports MySQL's dialect, so DDL is treated as non-transactional.
-class TxNonTransactionalDdlSchema < CQL::Schema
-  def dialect
-    CQL::Adapter::MySql.dialect
-  end
-end
-
 private def tx_schema(uri : String, schema_class : CQL::Schema.class = CQL::Schema)
   schema_class.new(:migration_tx, uri, CQL::Adapter::SQLite)
 end
@@ -130,7 +123,7 @@ describe "CQL::Migrator transaction" do
   end
 
   it "keeps earlier migrations applied when a later one fails without transactional DDL" do
-    with_migrator(uri, TxMigrationCreateA, TxMigrationCreateBThenFail, schema_class: TxNonTransactionalDdlSchema) do |migrator|
+    with_migrator(uri, TxMigrationCreateA, TxMigrationCreateBThenFail, schema_class: NonTransactionalDdlSchema) do |migrator|
       expect_raises(Exception, "boom") { migrator.up }
     end
 
@@ -139,7 +132,7 @@ describe "CQL::Migrator transaction" do
   end
 
   it "refuses to run inside a caller's transaction without transactional DDL" do
-    with_migrator(uri, TxMigrationCreateA, schema_class: TxNonTransactionalDdlSchema) do |migrator|
+    with_migrator(uri, TxMigrationCreateA, schema_class: NonTransactionalDdlSchema) do |migrator|
       expect_raises(CQL::DialectError, "MySQL") { migrator.schema.transaction { migrator.up } }
     end
 
@@ -148,7 +141,7 @@ describe "CQL::Migrator transaction" do
   end
 
   it "refuses to create the migrations table inside a caller's transaction without transactional DDL" do
-    schema = tx_schema(uri, TxNonTransactionalDdlSchema)
+    schema = tx_schema(uri, NonTransactionalDdlSchema)
     statements = [] of String
     CQL::Telemetry.subscribe("migration_tx_spec") { |event| statements << event.sql }
 
@@ -161,6 +154,38 @@ describe "CQL::Migrator transaction" do
       schema.close
     end
 
+    statements.select(&.includes?("CREATE")).should be_empty
+  end
+
+  it "refuses to bootstrap the schema file inside a caller's transaction without transactional DDL" do
+    schema = tx_schema(uri, NonTransactionalDdlSchema)
+    schema_file = File.join(Dir.tempdir, "cql_migration_tx_schema_#{Process.pid}_#{Random::Secure.hex(4)}.cr")
+
+    begin
+      expect_raises(CQL::DialectError, "MySQL") do
+        schema.transaction { CQL::Migrator.new(schema, CQL::MigratorConfig.new(schema_file_path: schema_file, auto_sync: true)) }
+      end
+      File.exists?(schema_file).should be_false
+    ensure
+      File.delete(schema_file) if File.exists?(schema_file)
+      schema.close
+    end
+  end
+
+  it "refuses to list pending migrations inside a caller's transaction without transactional DDL" do
+    statements = [] of String
+    with_migrator(uri, TxMigrationCreateA, schema_class: NonTransactionalDdlSchema) do |migrator|
+      CQL::Telemetry.subscribe("migration_tx_spec") { |event| statements << event.sql }
+      begin
+        expect_raises(CQL::DialectError, "MySQL") { migrator.schema.transaction { migrator.pending_migrations } }
+      ensure
+        CQL::Telemetry.unsubscribe("migration_tx_spec")
+      end
+
+      migrator.pending_migrations.should eq([TxMigrationCreateA] of CQL::BaseMigration.class)
+    end
+
+    # `pending_migrations` creates the migrations table if it is missing, which MySQL would commit with the caller's work.
     statements.select(&.includes?("CREATE")).should be_empty
   end
 
@@ -203,7 +228,7 @@ describe "CQL::Migrator transaction" do
   end
 
   it "keeps completed reverts when a later revert fails without transactional DDL" do
-    with_migrator(uri, TxMigrationFailOnDown, TxMigrationDropDOnDown, schema_class: TxNonTransactionalDdlSchema) do |migrator|
+    with_migrator(uri, TxMigrationFailOnDown, TxMigrationDropDOnDown, schema_class: NonTransactionalDdlSchema) do |migrator|
       migrator.up
       expect_raises(Exception, "boom") { migrator.down }
     end
@@ -214,7 +239,7 @@ describe "CQL::Migrator transaction" do
 
   it "refuses to revert inside a caller's transaction without transactional DDL" do
     statements = [] of String
-    with_migrator(uri, TxMigrationDropDOnDown, schema_class: TxNonTransactionalDdlSchema) do |migrator|
+    with_migrator(uri, TxMigrationDropDOnDown, schema_class: NonTransactionalDdlSchema) do |migrator|
       migrator.up
       CQL::Telemetry.subscribe("migration_tx_spec") { |event| statements << event.sql }
       begin

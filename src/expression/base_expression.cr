@@ -33,6 +33,16 @@ module Expression
       end
     {% end %}
 
+    # `== nil` / `!= nil` mean IS NULL / IS NOT NULL, as `where(col: nil)` does: a bound NULL matches no row.
+    # Columns are typed by their non-nil type (nullability is `null: true`), so a nil always lands here.
+    def ==(other : Nil) : ConditionBuilder
+      null
+    end
+
+    def !=(other : Nil) : ConditionBuilder
+      not_null
+    end
+
     # Method aliases for comparison operators
     {% for operator, method_name in {
                                       "==" => :eq,
