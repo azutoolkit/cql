@@ -1,31 +1,29 @@
-"""Compile the Crystal programs in the docs, so a page cannot drift from the API.
-
-Each program is built with `crystal build --no-codegen`: a renamed method or a wrong argument in a page fails CI
-instead of a reader's build.
-
-What is compiled:
-- Tutorials: each titled block ({% code title="src/x.cr" %}) is written to a scratch project in page order, and each
-  `crystal src/x.cr` or `crystal run src/x.cr` command a page shows compiles that program as it stands at that point.
-  Pages named NN-*.md in one directory form one project; any other tutorial page is a project of its own.
-- Other pages: a crystal block that requires "cql" and no relative file starts a program, and the untitled crystal
-  blocks after it are appended to it until the next such block. Blocks before the first one are fragments and are not
-  compiled, and so are titled blocks that are one file of a larger project. A program that uses `AppDB` or `User`
-  without defining them gets a prelude that defines both (see PRELUDE).
-
-Markers, an HTML comment above a block (a line of prose in between cancels it):
-- `<!-- docs-check: skip -->` leaves the block out.
-- `<!-- docs-check: new-program -->` starts a new program at the block, for a page that shows alternatives.
-- `<!-- docs-check: run -->` on a shell block in a tutorial runs its `crystal src/x.cr` commands instead of only
-  compiling them, and runs its other lines with bash, one line at a time, for a step whose output (a generated schema
-  file) a later step needs. Running needs SQLite; each command has 10 minutes.
-
-Also skipped: a block containing `# ❌` (an intentional error) or a bare `...` line, and a program that requires one
-of OPTIONAL_SHARDS when it is missing from lib/ (reported, not failed); any other unresolved require fails.
-Compiler errors are reported at the Markdown page and line.
-
-Usage: python3 script/docs/compile_snippets.py [-j JOBS] [PAGE.md ...]   (default: README.md and every page in docs/)
-       (from the repository root, after `shards install`; CRYSTAL selects the compiler; exits 1 on any failure)
-"""
+"""Compile the Crystal programs in the docs, so a page cannot drift from the API."""
+# Each program is built with `crystal build --no-codegen`: a renamed method or a wrong argument in a page fails CI
+# instead of a reader's build.
+#
+# What is compiled:
+# - Tutorials: each titled block ({% code title="src/x.cr" %}) is written to a scratch project in page order, and each
+#   `crystal src/x.cr` or `crystal run src/x.cr` command a page shows compiles that program as it stands at that point.
+#   Pages named NN-*.md in one directory form one project; any other tutorial page is a project of its own.
+# - Other pages: a crystal block that requires "cql" and no relative file starts a program, and the untitled crystal
+#   blocks after it are appended to it until the next such block. Blocks before the first one are fragments and are not
+#   compiled, and so are titled blocks that are one file of a larger project. A program that uses `AppDB` or `User`
+#   without defining them gets a prelude that defines both (see PRELUDE).
+#
+# Markers, an HTML comment above a block (a line of prose in between cancels it):
+# - `<!-- docs-check: skip -->` leaves the block out.
+# - `<!-- docs-check: new-program -->` starts a new program at the block, for a page that shows alternatives.
+# - `<!-- docs-check: run -->` on a shell block in a tutorial runs its `crystal src/x.cr` commands instead of only
+#   compiling them, and runs its other lines with bash, one line at a time, for a step whose output (a generated schema
+#   file) a later step needs. Running needs SQLite; each command has 10 minutes.
+#
+# Also skipped: a block containing `# ❌` (an intentional error) or a bare `...` line, and a program that requires one
+# of OPTIONAL_SHARDS when it is missing from lib/ (reported, not failed); any other unresolved require fails.
+# Compiler errors are reported at the Markdown page and line.
+#
+# Usage: python3 script/docs/compile_snippets.py [-j JOBS] [PAGE.md ...]   (default: README.md and every page in docs/)
+#        (from the repository root, after `shards install`; CRYSTAL selects the compiler; exits 1 on any failure)
 import argparse
 import concurrent.futures
 import os
@@ -104,6 +102,7 @@ end
 
 @dataclass
 class Block:
+
     """A fenced code block: its language, `{% code title %}`, first line in the page and marker."""
 
     page: str
@@ -121,6 +120,7 @@ class Block:
 
 @dataclass
 class Source:
+
     """A generated file and, per line range, the Markdown block it came from."""
 
     text: str = ""
@@ -142,6 +142,7 @@ class Source:
 
 @dataclass
 class Check:
+
     """One command run in the scratch project after writing *files*."""
 
     label: str

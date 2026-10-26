@@ -1,10 +1,8 @@
-"""Check every Markdown file in the repository for broken links and anchors.
-
-Also reports docs/ links that leave docs/ (GitBook cannot follow them) and GitHub alerts in docs/ (GitBook shows them
-raw; use {% hint %}).
-
-Usage: python3 script/docs/check_links.py   (from the repository root; exits 1 on any problem)
-"""
+"""Check every Markdown file in the repository for broken links and anchors."""
+# Also reports docs/ links that leave docs/ (GitBook cannot follow them) and GitHub alerts in docs/ (GitBook shows them
+# raw; use {% hint %}).
+#
+# Usage: python3 script/docs/check_links.py   (from the repository root; exits 1 on any problem)
 import os
 import re
 import sys

@@ -1,10 +1,8 @@
-"""Check the docs navigation, the section READMEs and the redirects.
-
-Every page must be listed in docs/SUMMARY.md and linked from its section README.md, every SUMMARY entry must exist,
-and every redirect in docs/.gitbook.yaml must point at a page that exists without shadowing one.
-
-Usage: python3 script/docs/check_nav.py   (from the repository root; exits 1 on any problem)
-"""
+"""Check the docs navigation, the section READMEs and the redirects."""
+# Every page must be listed in docs/SUMMARY.md and linked from its section README.md, every SUMMARY entry must exist,
+# and every redirect in docs/.gitbook.yaml must point at a page that exists without shadowing one.
+#
+# Usage: python3 script/docs/check_nav.py   (from the repository root; exits 1 on any problem)
 import os
 import re
 import sys

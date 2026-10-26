@@ -1,8 +1,6 @@
-"""Lint GitBook markup in docs pages: frontmatter, block tags, nesting, targets.
-
-Usage: python3 script/docs/gitbook_lint.py [FILE.md ...]   (default: every page under docs/; run from the repository
-root; exits 1 on any problem). The rules are in .claude/docs-style-guide.md.
-"""
+"""Lint GitBook markup in docs pages: frontmatter, block tags, nesting, targets."""
+# Usage: python3 script/docs/gitbook_lint.py [FILE.md ...]   (default: every page under docs/; run from the repository
+# root; exits 1 on any problem). The rules are in .claude/docs-style-guide.md.
 import os
 import re
 import sys
@@ -87,6 +85,7 @@ def opening_tag_errors(name, attrs, stack, page):
 
 
 class BlockChecker:
+
     """Walks a page body line by line, tracking open GitBook blocks, fenced code and <details>."""
 
     def __init__(self, page):
