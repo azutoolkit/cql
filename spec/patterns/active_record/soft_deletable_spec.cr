@@ -254,13 +254,26 @@ describe CQL::ActiveRecord::SoftDeletable do
       SoftDeletableUser.with_deleted.find!(gone.id!).deleted_at.should_not be_nil
     end
 
-    it "skips rows that are already soft deleted unless with_deleted is used" do
+    it "skips rows that are already soft deleted, with_deleted included" do
       user = SoftDeletableUser.new("Twice", "twice@example.com", 20)
       user.save!
       user.delete!
 
       SoftDeletableUser.where(age: 20).delete_all.should eq(0)
-      SoftDeletableUser.with_deleted.where(age: 20).delete_all.should eq(1)
+      SoftDeletableUser.with_deleted.where(age: 20).delete_all.should eq(0)
+    end
+
+    it "skips already soft deleted rows record by record when the model has destroy callbacks" do
+      user = AuditedSoftDeletableUser.new("Twice", "twice@example.com", 5)
+      user.save!
+      user.delete!
+      first_deleted_at = AuditedSoftDeletableUser.with_deleted.find!(user.id!).deleted_at
+      AuditedSoftDeletableUser.destroyed_names.clear
+
+      AuditedSoftDeletableUser.with_deleted.where(age: 5).delete_all.should eq(0)
+
+      AuditedSoftDeletableUser.with_deleted.find!(user.id!).deleted_at.should eq(first_deleted_at)
+      AuditedSoftDeletableUser.destroyed_names.should be_empty
     end
   end
 

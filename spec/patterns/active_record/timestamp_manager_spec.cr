@@ -9,7 +9,7 @@ TestTimestampDB = CQL::Schema.define(
   uri: spec_sqlite_uri("timestamp_manager_spec.db")
 ) do
   table :articles do
-    primary
+    primary :id, Int64
     text :title
     text :content
     timestamps

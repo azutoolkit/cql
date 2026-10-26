@@ -68,7 +68,7 @@ CQL.configure do |c|
 end
 ```
 
-`c.cache.on` is off by default in production and test, and on in development. `CQL.build_schema` applies these settings to the cache classes when `on` is true.
+`c.cache.on` is off by default in production and test, and on in development, including when `CRYSTAL_ENV` is unset (unlike SQL logging); any other environment name leaves it off. `CQL.build_schema` applies these settings to the cache classes when `on` is true.
 
 ## Cache Stores
 

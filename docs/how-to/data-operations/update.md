@@ -40,15 +40,17 @@ user.update!(
 
 ## Bulk Update
 
-Update multiple records matching a condition:
+Update multiple records matching a condition with one `UPDATE` statement (no validations or callbacks):
 
 ```crystal
 # Update all inactive users
-User.where(active: false).update!(active: true)
+AppDB.update.table(:users).set(active: true).where(active: false).commit
 
 # Update with specific value
-Post.where(user_id: 1).update!(published: true)
+AppDB.update.table(:posts).set(published: true).where(user_id: 1).commit
 ```
+
+`User.update_all(attrs)` updates every row of the table.
 
 ## Increment a Value
 
@@ -72,12 +74,12 @@ end
 
 ## Update Only Changed Fields
 
-CQL tracks changes automatically:
+By default `save` writes every column. Include `CQL::ActiveRecord::DirtyTracking` (see [Dirty Tracking](../models/dirty-tracking.md)) to send only the changed ones:
 
 ```crystal
 user = User.find!(1)
 user.name = "New Name"  # Only name changed
-user.save!              # Only updates name column
+user.save!              # With DirtyTracking: UPDATE users SET name = ?, updated_at = ? WHERE users.id = ?
 ```
 
 ## Update with Validation
@@ -88,9 +90,10 @@ Validations run on update:
 user = User.find!(1)
 user.email = "invalid"
 
-unless user.save
+unless user.valid?
   puts user.errors.map(&.message).join(", ")
 end
+user.save  # raises CQL::ActiveRecord::Validations::ValidationError for an invalid record
 ```
 
 ## Update Timestamps
@@ -110,8 +113,8 @@ user.updated_at  # => Current time
 To skip callbacks (use carefully):
 
 ```crystal
-# Direct update bypasses callbacks
-User.where(id: 1).update!(name: "Direct Update")
+# Direct update bypasses validations and callbacks
+User.update!(1, name: "Direct Update")
 ```
 
 ## Verify Update

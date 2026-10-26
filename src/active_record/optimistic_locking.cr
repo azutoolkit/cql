@@ -70,11 +70,13 @@ module CQL
           current_version = record.{{version_column.id}}
           raise CQL::Error.new("Version value missing for optimistic locking") if current_version.nil?
 
-          CQL::Update
-            .new({{@type.id}}.schema)
-            .table({{@type.id}}.table)
-            .set(record.attributes)
-            .where(id: record.id!)
+          # The key only scopes the row, and the lock writes the next version itself
+          attrs = record.attributes
+          attrs.delete(primary_key_column)
+          attrs.delete(lock_version_col)
+
+          update_of(record.id!)
+            .set(attrs)
             .with_optimistic_lock(current_version, lock_version_col)
             .commit
 

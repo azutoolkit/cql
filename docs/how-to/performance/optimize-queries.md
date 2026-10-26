@@ -164,6 +164,30 @@ end
 Post.order(created_at: :desc).limit(10).all
 ```
 
+## Use the Bulk and Cached Paths
+
+Prefer the paths that send fewer statements or reuse work:
+
+```crystal
+# Many rows in one statement per chunk (no validations or callbacks)
+User.insert_all([{name: "Ada", email: "ada@example.com"}, {name: "Grace", email: "grace@example.com"}])
+User.upsert_all([{email: "ada@example.com", name: "Ada L."}], on_conflict: :email)
+user.insert_posts_all([{title: "One", body: "..."}, {title: "Two", body: "..."}])
+
+# Associations for many parents: one query per chunk instead of one per parent
+Post.preload(:user).all
+User.preload(:posts, :profile).all
+
+# Send only changed columns (opt-in per model)
+class User
+  include CQL::ActiveRecord::Model(Int64)
+  include CQL::ActiveRecord::DirtyTracking
+  # ...
+end
+```
+
+`Model.find` reuses one rendered statement per model, unless the model defines its own `self.query`; keep per-call scopes there only when you need them. Leave SQL logging and the performance monitor off in production unless you are investigating something: each costs several microseconds per query. See [How CQL Keeps Queries Fast](../../explanation/performance-design.md) for why these paths are faster.
+
 ## Analyze Slow Queries
 
 Log queries to find bottlenecks:
@@ -194,6 +218,8 @@ Look for:
 
 ## See Also
 
+- [How CQL Keeps Queries Fast](../../explanation/performance-design.md)
+- [Benchmark CQL](benchmark.md)
 - [Avoid N+1 Queries](n-plus-one.md)
 - [Create Indexes](../migrations/indexes.md)
 - [Telemetry](telemetry.md)

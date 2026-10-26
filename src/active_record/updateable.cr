@@ -2,6 +2,19 @@ module CQL
   module ActiveRecord
     module Updateable
       macro included
+        # An update of the row whose primary key (`primary_key_column`) is *id*.
+        protected def self.update_of(id : Pk) : CQL::Update
+          CQL::Update.new(schema).table(table)
+            .where({primary_key_column => CQL::ActiveRecord::IdChunks.bound(id)})
+        end
+
+        # An update of the rows whose primary key is any of *ids*, already bound (`IdChunks.each`
+        # yields them as `DB::Any`, UUIDs as text); *ids* must not be empty (`IN ()` is invalid SQL).
+        protected def self.update_of(ids : Array(DB::Any)) : CQL::Update
+          key = primary_key_expression
+          CQL::Update.new(schema).table(table).where { key.in(ids) }
+        end
+
         # Update a record by ID with given attributes
         # - **@param** id [PrimaryKey] The ID of the record
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to update
@@ -29,11 +42,7 @@ module CQL
             end
           end
 
-          CQL::Update
-            .new({{@type.id}}.schema)
-            .table({{@type.id}}.table)
-            .set(attrs)
-            .where(id: id).commit
+          update_of(id).set(attrs).commit
         end
 
         # Update a record by ID with given fields
@@ -63,12 +72,7 @@ module CQL
             end
           end
 
-          CQL::Update
-            .new({{@type.id}}.schema)
-            .table({{@type.id}}.table)
-            .set(**attrs)
-            .where(id: id)
-            .commit
+          update_of(id).set(**attrs).commit
         end
 
         # Update a record by ID with given record object
@@ -89,15 +93,9 @@ module CQL
           attrs = record.attributes
 
           # Remove the ID from the attributes
-          attrs.delete(:id)
+          attrs.delete(primary_key_column)
 
-          # Update the record
-          CQL::Update
-            .new({{@type.id}}.schema)
-            .table({{@type.id}}.table)
-            .set(attrs)
-            .where(id: record.id!)
-            .commit
+          update_of(record.id!).set(attrs).commit
 
           record
         end
@@ -117,7 +115,7 @@ module CQL
         )
 
           # Remove the ID from the attributes
-          update_attrs.delete(:id)
+          update_attrs.delete(primary_key_column)
 
           CQL::Update
             .new({{@type.id}}.schema)
@@ -167,7 +165,7 @@ module CQL
         # ```
         def update!(**attrs)
           self.attributes(**attrs)
-          {{@type.id}}.update!(self)
+          update!
         end
 
         # Update a record by ID with given attributes
@@ -181,7 +179,7 @@ module CQL
         # ```
         def update!(attrs : Hash(Symbol, DB::Any))
           self.attributes(attrs)
-          {{@type.id}}.update!(self)
+          update!
         end
       end
     end

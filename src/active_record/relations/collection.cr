@@ -384,7 +384,7 @@ module CQL::ActiveRecord::Relations
         CQL::Delete
           .new(Target.schema)
           .from(Target.table)
-          .where({:id => bound_id(id), @key => bound_id(@id)})
+          .where({Target.primary_key_column => bound_id(id), @key => bound_id(@id)})
           .commit
           .rows_affected > 0
       end
@@ -452,8 +452,9 @@ module CQL::ActiveRecord::Relations
     # ```
     def ids=(ids : Array(Pk))
       safe_db_operation do
+        target_key = Expression::Column.new(Target.cql_column(Target.primary_key_column))
         CQL::ActiveRecord::IdChunks.each(ids, Target.adapter.dialect.max_bind_params - 1) do |chunk|
-          CQL::Update.new(Target.schema).table(Target.table).set({@key => bound_id(@id)}).where(id: chunk).commit
+          CQL::Update.new(Target.schema).table(Target.table).set({@key => bound_id(@id)}).where { target_key.in(chunk) }.commit
         end
         reload
       end

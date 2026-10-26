@@ -6,19 +6,18 @@ module CQL
       alias Row = Hash(Symbol, DB::Any)
 
       TIMESTAMP_COLUMNS = {:created_at, :updated_at}
-      KEPT_ON_CONFLICT  = {:id, :created_at}
 
       # ON CONFLICT for `Model.upsert_all`: *target* columns find the existing row, *update* columns take
-      # the incoming value (by default every inserted column but the target, `id` and `created_at`).
+      # the incoming value (by default every inserted column but the target, the key and `created_at`).
       record Conflict, target : Array(Symbol), update : Array(Symbol)? = nil
 
       @rows : Array(Row)
       @table_columns : Set(Symbol)
       @generated_ids = false
 
-      # *generate_id* fills a missing or nil `:id` (UUID and ULID keys); without it a nil `:id` is
-      # dropped so the database assigns one.
-      def initialize(@schema : CQL::Schema, @table : Symbol, rows : Array(Row), generate_id : (-> DB::Any)? = nil, @conflict : Conflict? = nil)
+      # *generate_id* fills a missing or nil *primary_key* (UUID and ULID keys); without it a nil key
+      # is dropped so the database assigns one.
+      def initialize(@schema : CQL::Schema, @table : Symbol, rows : Array(Row), generate_id : (-> DB::Any)? = nil, @conflict : Conflict? = nil, @primary_key : Symbol = :id)
         @table_columns = @schema.tables[@table].columns.keys.to_set
         @rows = complete(rows, generate_id)
       end
@@ -61,10 +60,10 @@ module CQL
       private def checked_update(conflict : Conflict, columns : Set(Symbol)) : Array(Symbol)
         raise ArgumentError.new("on_conflict needs at least one column") if conflict.target.empty?
         require_inserted(conflict.target, columns, "on_conflict")
-        if @generated_ids && conflict.target.includes?(:id)
-          raise ArgumentError.new("on_conflict: :id never matches a generated id; give every row its id")
+        if @generated_ids && conflict.target.includes?(@primary_key)
+          raise ArgumentError.new("on_conflict: :#{@primary_key} never matches a generated id; give every row its id")
         end
-        update = (conflict.update || columns.to_a - conflict.target - KEPT_ON_CONFLICT.to_a).uniq
+        update = (conflict.update || columns.to_a - conflict.target - [@primary_key, :created_at]).uniq
         require_inserted(update, columns, "update")
         update
       end
@@ -103,15 +102,15 @@ module CQL
       end
 
       private def incomplete?(row : Row, stamped, generate_id : (-> DB::Any)?) : Bool
-        (row[:id]?.nil? && (row.has_key?(:id) || !generate_id.nil?)) || stamped.any? { |column| row[column]?.nil? }
+        (row[@primary_key]?.nil? && (row.has_key?(@primary_key) || !generate_id.nil?)) || stamped.any? { |column| row[column]?.nil? }
       end
 
       private def completed(row : Row, stamped, generate_id : (-> DB::Any)?, now : DB::Any) : Row
         filled = row.dup
-        if row[:id]?.nil?
-          filled.delete(:id)
+        if row[@primary_key]?.nil?
+          filled.delete(@primary_key)
           generate_id.try do |generate|
-            filled[:id] = generate.call
+            filled[@primary_key] = generate.call
             @generated_ids = true
           end
         end

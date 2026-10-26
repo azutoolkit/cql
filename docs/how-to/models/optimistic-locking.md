@@ -43,7 +43,7 @@ end
 
 ## Enable Optimistic Locking
 
-Include the module and configure the version column:
+Include the module and configure the version column. The version is an `Int32` (the column `lock_version` creates), whatever the primary key type:
 
 ```crystal
 struct User

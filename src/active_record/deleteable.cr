@@ -15,19 +15,20 @@ module CQL
         # User.delete!(1)
         # ```
         def self.delete!(id : Pk)
-          {% if Pk == UUID %}
-            CQL::Delete
-              .new({{@type.id}}.schema)
-              .from({{@type.id}}.table)
-              .where(id: id.to_s)
-              .commit
-          {% else %}
-            CQL::Delete
-              .new({{@type.id}}.schema)
-              .from({{@type.id}}.table)
-              .where(id: id)
-              .commit
-          {% end %}
+          delete_of(id).commit
+        end
+
+        # A delete of the row whose primary key (`primary_key_column`) is *id*.
+        protected def self.delete_of(id : Pk) : CQL::Delete
+          CQL::Delete.new(schema).from(table)
+            .where({primary_key_column => CQL::ActiveRecord::IdChunks.bound(id)})
+        end
+
+        # A delete of the rows whose primary key is any of *ids*, already bound (`IdChunks.each`
+        # yields them as `DB::Any`, UUIDs as text); *ids* must not be empty (`IN ()` is invalid SQL).
+        protected def self.delete_of(ids : Array(DB::Any)) : CQL::Delete
+          key = primary_key_expression
+          CQL::Delete.new(schema).from(table).where { key.in(ids) }
         end
 
         # Delete records matching specific fields
@@ -97,7 +98,7 @@ module CQL
 
         # The statement `delete_ids` sends for one chunk of ids (soft deletes update instead).
         protected def self.delete_chunk(ids : Array(DB::Any)) : Int64
-          CQL::Delete.new(schema).from(table).where(id: ids).commit.rows_affected
+          delete_of(ids).commit.rows_affected
         end
 
         # Check if the record has been destroyed (deleted from the database)

@@ -75,14 +75,13 @@ describe CQL::ActiveRecord::Attributes do
 
     it "handles nil values correctly for nullable fields" do
       user = TestUser.new("Nil Test", "nil@example.com", 30, "password123", "password123")
-      user.id = 1 # Set ID to non-nil value
 
       attrs = {
-        :id => nil,
+        :name => nil,
       } of Symbol => DB::Any
 
       user.attributes(attrs)
-      user.id.should be_nil
+      user.name.should be_nil
     end
 
     it "handles partial updates (only some fields)" do
