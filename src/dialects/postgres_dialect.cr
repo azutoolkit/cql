@@ -18,13 +18,12 @@ module Expression
 
     def structure_dump(uri : URI) : String
       args = [
-        "--no-data",
         "--no-comments",
         "--schema-only",
         "--username=#{uri.user}",
         "--dbname=#{uri.path[1..-1]}",
-      ]
-      Process.new("pg_dump", args: args, output: Process::Redirect::Pipe).output.to_s
+      ] + server_options(uri)
+      run_dump("pg_dump", args, env: uri.password.try { |password| {"PGPASSWORD" => password} })
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String

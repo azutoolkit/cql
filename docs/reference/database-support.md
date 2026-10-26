@@ -37,11 +37,17 @@ Legend: yes, no (raises `CQL::DialectError` unless stated), or a note.
 | Bare `OFFSET` (no `LIMIT`) | `LIMIT -1 OFFSET n` | `OFFSET n` | `LIMIT 18446744073709551615 OFFSET n` | `OFFSET n` |
 | `explain` | `EXPLAIN QUERY PLAN` | `EXPLAIN` | `EXPLAIN` | `EXPLAIN` |
 | `explain(analyze: true)` | no | yes | MySQL 8.0.18+ | yes |
-| `structure_dump` | returns an empty string | via `pg_dump` | yes | no |
+| `structure_dump` | returns an empty string | via `pg_dump` | via `mysqldump` | no |
 | `Int32` column type | `INTEGER` | `INTEGER` | `INT` | `INT4` |
 | `JSON::Any` column type | `TEXT` | `JSONB` | `JSON` | `JSONB` |
 
 ## Notes by Feature
+
+### Structure Dumps
+
+`Dialect#structure_dump(uri)` runs the database's own dump tool with the connection settings from the URI, waits for it
+and returns the DDL it printed; when the tool fails it raises `CQL::Error` with the tool's error output. See
+[Dump and Validate Your Schema](../how-to/migrations/schema-dump-and-validation.md#raw-structure-dumps).
 
 ### Upsert
 

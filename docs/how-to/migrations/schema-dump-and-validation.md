@@ -120,12 +120,12 @@ File.write("db/structure.sql", ddl)
 
 | Adapter | Behavior |
 | --- | --- |
-| PostgreSQL | runs `pg_dump --schema-only --no-data --no-comments`, using the user and database name from the URI |
-| MySQL | runs `mysqldump --no-data --skip-comments --compact`, using user, password and database name from the URI |
+| PostgreSQL | runs `pg_dump --schema-only --no-comments` with the user, database, host and port from the URI, and its password as `PGPASSWORD` |
+| MySQL | runs `mysqldump --no-data --skip-comments --compact` with the user, password, host, port and database from the URI |
 | SQLite | returns an empty string |
 | CockroachDB | raises `CQL::DialectError`; run `SHOW CREATE ALL TABLES` instead |
 
-`pg_dump` and `mysqldump` must be installed and on `PATH`. The PostgreSQL call passes only the user, so supply the password through `PGPASSWORD` or `~/.pgpass`.
+`structure_dump` waits for the tool and returns what it printed. When the tool exits with an error it raises `CQL::Error` carrying the tool's error output (for example "pg_dump failed: connection refused"), and when the tool is not installed on `PATH` it raises `CQL::Error` ("pg_dump could not be run: ..."). A PostgreSQL URI without a password leaves `PGPASSWORD` and `~/.pgpass` to supply it. MySQL receives the password as a `--password=` argument, which other local users can see in the process list.
 
 ## Validate Models Against the Schema
 

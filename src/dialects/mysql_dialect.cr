@@ -64,9 +64,10 @@ module Expression
         "--compact",
         "--user=#{uri.user}",
         "--password=#{uri.password}",
+        *server_options(uri),
         uri.path[1..-1],
       ]
-      Process.new("mysqldump", args: args, output: Process::Redirect::Pipe).output.to_s
+      run_dump("mysqldump", args)
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String

@@ -34,16 +34,37 @@ module Expression
     end
 
     describe "#structure_dump" do
-      it "uses pg_dump for structure dumps" do
-        dialect = PostgresDialect.new
-        uri = URI.parse("postgres://user:pass@localhost:5432/mydb")
+      it "returns what pg_dump prints, run against the URI's server, user, password and database" do
+        FakeExecutable.with("pg_dump", %(echo "CREATE TABLE users ();"; printf '%s\n' "$@"; echo "PGPASSWORD=$PGPASSWORD")) do
+          PostgresDialect.new.structure_dump(URI.parse("postgres://user:pass@db.example:5433/mydb")).should eq([
+            "CREATE TABLE users ();",
+            "--no-comments", "--schema-only", "--username=user", "--dbname=mydb", "--host=db.example", "--port=5433",
+            "PGPASSWORD=pass",
+          ].join("\n") + "\n")
+        end
+      end
 
-        # This is a bit tricky to test directly since it calls an external process
-        # We'll test that the command includes the expected parameters
-        # In a real environment, you might want to mock Process.new
+      it "passes an IPv6 host without brackets and leaves out what the URI does not name" do
+        FakeExecutable.with("pg_dump", %(printf '%s\n' "$@")) do
+          PostgresDialect.new.structure_dump(URI.parse("postgres://user@[::1]/mydb")).should end_with("--host=::1\n")
+          PostgresDialect.new.structure_dump(URI.parse("postgres://user@/mydb")).should end_with("--dbname=mydb\n")
+        end
+      end
 
-        # For now, we'll just verify the method exists and returns a string
-        dialect.structure_dump(uri).should be_a(String)
+      it "raises CQL::Error when pg_dump is not installed" do
+        FakeExecutable.with_empty_path do
+          expect_raises(CQL::Error, "pg_dump could not be run") do
+            PostgresDialect.new.structure_dump(URI.parse("postgres://user@localhost/mydb"))
+          end
+        end
+      end
+
+      it "raises with pg_dump's error output when it fails" do
+        FakeExecutable.with("pg_dump", %(echo "connection refused" >&2; exit 1)) do
+          expect_raises(CQL::Error, "pg_dump failed: connection refused") do
+            PostgresDialect.new.structure_dump(URI.parse("postgres://user@localhost/mydb"))
+          end
+        end
       end
     end
 
