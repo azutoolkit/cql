@@ -31,6 +31,7 @@ end
 
 key = CQL::Cache::Cache.generate_cache_key(sql, params)  # "cql:<md5 of sql and params>"; a third argument replaces "cql"
 CQL::Cache::Cache.with_cache(key, 5.minutes) { AppDB.query.from(:users).select(:name).all(as: String) }
+CQL::Cache::Cache.set("ids", [1, 2] of DB::Any, 1.minute)  # as JSON: a Time reads back as a String, Bytes raise ArgumentError
 CQL::Cache::Cache.get(key)      # => ["Ada"] as Array(DB::Any)?, for a cached JSON array
 CQL::Cache::Cache.cached?(key)  # => true
 
@@ -38,10 +39,6 @@ CQL::Cache::Cache.enabled = false  # with_cache runs the block, get returns nil,
 ```
 
 `with_cache` without a TTL uses `Cache.default_ttl` (1 hour). `GlobalCache` ignores `Cache.enabled` and is not counted in `Cache.stats`.
-
-{% hint style="warning" %}
-`Cache.set(key, rows, ttl)` does not compile: its `Array(DB::Any)` can hold `Bytes`, which has no JSON form. Store values with `with_cache`, `GlobalCache.set` or `cache_store.set`, and keep `Bytes` out of cached values.
-{% endhint %}
 
 ## Choose a Store
 
@@ -157,9 +154,7 @@ deferred.execute_pending_invalidations(store)  # after commit; CQL does not call
 deferred.clear_pending_invalidations           # after a rollback instead
 ```
 
-{% hint style="warning" %}
-`TransactionAwareInvalidation` is not an `InvalidationStrategy`, so `FragmentCache.new` rejects it, and `CQL.fragment_cache` fails to compile for the same reason. Build the `FragmentCache` yourself.
-{% endhint %}
+`CQL.fragment_cache` builds a `FragmentCache` from `CQL.config.cache`, with the strategy `c.cache.invalidation` names (`"timestamp"`, `"version"` or `"transaction_aware"`).
 
 ## Read Cache Statistics
 
@@ -173,6 +168,7 @@ CQL::Cache::Cache.reset_stats
 
 CQL::Cache::Cache.statistics["cache_store_type"]  # "memory" or "redis", merged with the store's stats
 CQL::Cache::Cache.cache_store.stats               # the store's own: hits, misses, hit_rate_percent, sets, deletes, evictions
+fragments.stats                                   # the store's, plus fragment_cache_enabled and invalidation_strategy
 puts CQL::Cache::Cache.performance_summary
 ```
 

@@ -509,7 +509,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder = builder.where(name: "Nonexistent")
 
-      expect_raises(Exception) do
+      expect_raises(DB::NoResultsError, "No records found") do
         builder.first!
       end
     end
@@ -654,13 +654,14 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
     end
 
     it "returns the last row from last! on both builders and raises when empty" do
-      expect_raises(Exception, "No records found") { TestUser.query.last! }
-      expect_raises(Exception, "No records found") { TestUser.query.select(:id, :name).last! }
+      expect_raises(DB::NoResultsError, "No records found") { TestUser.query.last! }
+      expect_raises(DB::NoResultsError, "No records found") { TestUser.query.select(:id, :name).last! }
 
       create_last_users
 
       TestUser.query.last!.name.should eq("Charlie")
       TestUser.query.select(:id, :name).last!.name.should eq("Charlie")
+      TestUser.query.select(max: :age).last!(as: Int32).should eq(40)
     end
 
     it "loads every row when the query is grouped" do
@@ -698,7 +699,7 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       builder = builder.where(name: "Nonexistent")
 
-      expect_raises(Exception) do
+      expect_raises(DB::NoResultsError, "No records found") do
         builder.last!
       end
     end

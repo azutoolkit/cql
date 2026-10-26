@@ -6,7 +6,6 @@ module CQL
     #
     # **Features**:
     # - Support for all standard callbacks (before/after validation, save, create, update, destroy)
-    # - Conditional callback execution with :if and :unless options
     # - Halting the callback chain when a callback returns false
     # - Proper callback sequence matching Rails ActiveRecord
     #

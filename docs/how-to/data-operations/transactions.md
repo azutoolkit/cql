@@ -90,8 +90,8 @@ end
 ```
 
 `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and migrator runs nest the same way. A rollback removes
-the column from the database but not from `AppDB`'s declaration, so model queries on the table then fail with
-`no such column: users.bio` until the process restarts.
+the column from both the database and `AppDB`'s declaration, so model queries keep working, also when the `alter`'s
+savepoint committed before the outer block raised. A manual `tx.rollback`, or a rollback of a transaction you opened yourself and passed in with `schema.transaction(tx)`, leaves the declaration as altered.
 {% endtab %}
 
 {% tab title="MySQL and CockroachDB" %}
@@ -103,7 +103,8 @@ end
 ```
 
 DDL commits implicitly here, so `AppDB.alter`, `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and
-building or running a migrator raise before running any DDL. Run them outside the transaction.
+building or running a migrator raise before running any DDL. Run them outside the transaction. An `alter` that fails
+part-way is not undone, in the database or in `AppDB`'s declaration.
 {% endtab %}
 {% endtabs %}
 

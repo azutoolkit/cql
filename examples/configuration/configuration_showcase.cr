@@ -71,7 +71,7 @@ puts "=== 🧪 Test Configuration ==="
 
 CQL.configure do |config|
   config.env = "test"
-  config.db = "sqlite3://:memory:"
+  config.db = "sqlite3::memory:"
   config.pool_size = 1
   config.auto_sync = true
   config.log_level = :error

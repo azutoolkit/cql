@@ -8,7 +8,7 @@ Build on [telemetry](telemetry.md) and the [performance monitor](query-profiler.
 
 - Slow-query alerts and SQL logs: [Alert on Slow Queries and Log SQL](telemetry.md#alert-on-slow-queries-and-log-sql).
 - Exporters that do I/O: subscribe with `async: true` ([Deliver Off the Query Path](telemetry.md#deliver-off-the-query-path)) and call `CQL::Telemetry.flush` and `CQL::Performance.flush` in `at_exit`.
-- Reports: call `CQL::Performance.report` on your own timer ([Generate a Report](query-profiler.md#generate-a-report)); CQL never writes one, since `config.reporting.auto_generate` and `reporting.interval` are not read.
+- Reports: call `CQL::Performance.report` on your own timer ([Generate a Report](query-profiler.md#generate-a-report)); CQL never writes one; `config.reporting.auto_generate` and `reporting.interval` are deprecated and have no effect.
 - Cost per statement: [What monitoring costs](query-profiler.md#what-monitoring-costs).
 
 ## Export Query Metrics

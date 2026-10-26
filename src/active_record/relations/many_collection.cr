@@ -69,7 +69,8 @@ module CQL
         end
 
         # Initialize parent with auto_load: false to prevent loading in base initializer
-        super(@key, @id, @cascade, query, auto_load: false, dependent: @dependent)
+        # The cascade flag was handled above; passing it on would log the warning a second time
+        super(@key, @id, false, query, auto_load: false, dependent: @dependent)
         @through_table = Through.table
         @records = [] of Target
       end

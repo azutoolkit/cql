@@ -2,6 +2,21 @@ require "../spec_helper"
 
 Users = CQL::Repository(User, Int32).new(Billing, :users)
 
+# A repository whose key is a String, for count
+RepositoryLabelDB = CQL::Schema.define(:repository_labels, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("repository_labels.db")) do
+  table :labels do
+    primary :id, String, auto_increment: false
+    column :name, String
+  end
+end
+
+struct RepositoryLabel
+  include DB::Serializable
+
+  getter id : String
+  getter name : String
+end
+
 describe CQL::Repository(User, Int32) do
   Billing.users.create!
 
@@ -24,6 +39,21 @@ describe CQL::Repository(User, Int32) do
     Users.create(name: "Jane Doe", email: "jane@example.com")
     users = Users.all
     users.size.should eq(2)
+  end
+
+  it "raises DB::NoResultsError from find! for a missing ID" do
+    expect_raises(DB::NoResultsError, "No records found with id=999") { Users.find!(999) }
+  end
+
+  it "counts rows of a repository keyed by a String" do
+    RepositoryLabelDB.labels.create!
+    labels = CQL::Repository(RepositoryLabel, String).new(RepositoryLabelDB, :labels)
+    RepositoryLabelDB.insert.into(:labels).values(id: "red", name: "Red").commit
+    RepositoryLabelDB.insert.into(:labels).values(id: "blue", name: "Blue").commit
+
+    labels.count.should eq(2_i64)
+  ensure
+    RepositoryLabelDB.labels.drop!
   end
 
   it "finds a user by ID" do

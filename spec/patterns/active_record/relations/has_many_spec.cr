@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 
 describe CQL::ActiveRecord::Relations::HasMany do
   before_each do
@@ -12,6 +13,27 @@ describe CQL::ActiveRecord::Relations::HasMany do
   end
 
   describe "has_many association" do
+    it "reads an association with dependent: :destroy without logging a deprecation warning" do
+      user = TestUser.new(name: "John Doe", email: "john@example.com", age: 30, password: "password123", password_confirmation: "password123")
+      user.create!
+
+      Log.capture("*", level: :warn) do |logs|
+        user.posts.size.should eq(0)
+        logs.empty
+      end
+    end
+
+    it "preloads an association with dependent: :destroy without logging a deprecation warning" do
+      user = TestUser.new(name: "John Doe", email: "john@example.com", age: 30, password: "password123", password_confirmation: "password123")
+      user.create!
+      Post.create!(title: "First Post", body: "Body", user_id: user.id)
+
+      Log.capture("*", level: :warn) do |logs|
+        TestUser.preload(:posts).all.first.posts.size.should eq(1)
+        logs.empty
+      end
+    end
+
     it "returns the associated posts" do
       user = TestUser.new(
         name: "John Doe",

@@ -32,6 +32,7 @@ User.query.where { score == nil }              # ... WHERE users.score IS NULL
 User.query.where { score.not_null }            # ... WHERE users.score IS NOT NULL
 # in, not_in (an Array), between: every column
 User.query.where { age.in([1, 2, 3]) & age.between(1, 9) }
+User.query.where { id.in([] of Int64) }  # ... WHERE 1 = 0: an empty list matches no row (not_in: every row)
 # like, not_like, ilike, not_ilike: String columns
 User.query.where { name.like("A%") }           # ... WHERE users.name LIKE ?
 # json_eq, json_contains: JSON::Any columns; see Query JSON and Geospatial Columns
@@ -53,7 +54,7 @@ User.query.joins(:posts) { posts.nope == 1 }   # undefined method 'nope' for Pos
 # ❌ Runtime ArgumentError
 User.query.joins(:nope)             # User has no association :nope. Associations: posts, profile
 User.query.select(:name, :nope)     # User has no column :nope in table users. Columns: id, name, ...
-User.query.where { age == 3_000_000_000 } # 3000000000 does not fit a Int32 column
+User.query.where { age == 3_000_000_000 } # ArgumentError: 3000000000 does not fit a Int32 column (users.age)
 ```
 
 <details>

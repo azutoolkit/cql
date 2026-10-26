@@ -23,7 +23,16 @@ module Expression
         "--username=#{uri.user}",
         "--dbname=#{uri.path[1..-1]}",
       ] + server_options(uri)
-      run_dump("pg_dump", args, env: uri.password.try { |password| {"PGPASSWORD" => password} })
+      run_dump("pg_dump", args, env: dump_env(uri))
+    end
+
+    # The password and the `sslmode` query parameter of *uri*, as pg_dump reads them from its
+    # environment. Other query parameters are ignored.
+    private def dump_env(uri : URI) : Hash(String, String)
+      env = {} of String => String
+      uri.password.try { |password| env["PGPASSWORD"] = password }
+      uri.query_params["sslmode"]?.try { |mode| env["PGSSLMODE"] = mode }
+      env
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String

@@ -315,6 +315,53 @@ describe "CQL::Postgres against a live server" do
     engine.close
   end
 
+  it "streams and pipelines a model's QueryBuilder through the engine" do
+    require_live!
+    engine = PG::AsyncEngine.connect(LIVE_URL)
+    LiveSchema.insert.into(:cql_wire_live_accounts).values(name: "ada", balance: 100_i64).using(engine).commit
+    LiveSchema.insert.into(:cql_wire_live_accounts).values(name: "bob").using(engine).commit
+
+    names = engine.stream(LiveAccount.query.where(name: "ada"), fetch_size: 1) do |rows|
+      found = [] of String
+      rows.each do
+        rows.read(Int64)
+        found << rows.read(String)
+        rows.read(Int64?)
+      end
+      found
+    end
+    names.should eq ["ada"]
+
+    results = engine.pipeline([LiveAccount.query.where(name: "bob"), LiveAccount.query.order_by(id: :asc)])
+    results[0].as(PG::PipelineResult).all(as: LiveAccount).map(&.name).should eq ["bob"]
+    results[1].as(PG::PipelineResult).all(as: LiveAccount).map(&.name).should eq ["ada", "bob"]
+    engine.close
+  end
+
+  it "streams and copies out binary rows on a Connection, with and without arguments" do
+    require_live!
+    engine = PG::AsyncEngine.connect(LIVE_URL)
+    engine.with_connection do |connection|
+      connection.stream("SELECT 7::int4") { |rows| rows.each { rows.read(Int32).should eq 7 } }
+      connection.stream("SELECT $1::int4", 8) { |rows| rows.each { rows.read(Int32).should eq 8 } }
+
+      copied = [] of Int32
+      count = connection.copy_out_binary("COPY (SELECT g::int4 FROM generate_series(1, 3) g) TO STDOUT (FORMAT binary)", [PG::Types::OID::INT4]) do |row|
+        copied << row.first.as(Int32)
+      end
+      count.should eq 3
+      copied.should eq [1, 2, 3]
+    end
+    engine.close
+  end
+
+  it "ignores auth_methods, which CQL.configure adds to URLs, instead of sending it to the server" do
+    require_live!
+    engine = PG::AsyncEngine.connect("#{LIVE_URL}#{LIVE_URL.includes?('?') ? '&' : '?'}auth_methods=cleartext,md5,scram-sha-256")
+    engine.with_connection(&.query_one("SELECT 1::int4", as: Int32)).should eq 1
+    engine.close
+  end
+
   it "pipelines CQL queries through the engine, one round trip, with typed results" do
     require_live!
     engine = PG::AsyncEngine.connect(LIVE_URL)

@@ -94,7 +94,6 @@ module CQL::ActiveRecord::Relations
           key: :{{fk}},
           id: parent_id,
           target_key: :{{target_fk}},
-          cascade: ({{dependent}} == :destroy || {{dependent}} == :delete_all),
           query: base_query,
           dependent: {{dependent}},
           validate: {{validate}},

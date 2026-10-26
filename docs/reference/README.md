@@ -15,4 +15,5 @@ For step-by-step tasks see the [How-to Guides](../how-to/README.md); for the rea
 <tr><td><strong>Callback Hooks</strong></td><td>The lifecycle callbacks, their order, and which calls run them.</td><td><a href="api/callback-hooks.md">api/callback-hooks.md</a></td></tr>
 <tr><td><strong>Database Support</strong></td><td>Feature and SQL differences across SQLite, PostgreSQL, MySQL and CockroachDB.</td><td><a href="database-support.md">database-support.md</a></td></tr>
 <tr><td><strong>Error Codes</strong></td><td>Every error class CQL raises, and when.</td><td><a href="error-codes.md">error-codes.md</a></td></tr>
+<tr><td><strong>API Reference</strong></td><td>Every public type and method, generated from the doc comments in the source for each release.</td><td><a href="https://azutoolkit.github.io/cql/">https://azutoolkit.github.io/cql/</a></td></tr>
 </tbody></table>

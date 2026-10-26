@@ -33,6 +33,17 @@ describe CQL::Cache::RedisCache do
         redis_cache.get("test_key").should eq("test_value")
       end
 
+      it "stores a value with a TTL under one second, and expires it" do
+        redis_cache.set("short_ttl_key", "short", 200.milliseconds).should be_true
+        redis_cache.get("short_ttl_key").should eq("short")
+
+        redis_cache.set_multi({"short_a" => "a", "short_b" => "b"}, 200.milliseconds).should be_true
+
+        sleep 300.milliseconds
+        redis_cache.get("short_ttl_key").should be_nil
+        redis_cache.get("short_a").should be_nil
+      end
+
       it "stores and retrieves values with TTL" do
         redis_cache.set("ttl_key", "ttl_value", 1.second).should be_true
         redis_cache.get("ttl_key").should eq("ttl_value")
@@ -171,6 +182,9 @@ describe CQL::Cache::RedisCache do
         stats["sets"].should be_a(Int64)
         stats["deletes"].should be_a(Int64)
         stats["key_prefix"].should eq("test")
+        stats["redis_memory_usage_bytes"].as(Int64).should be > 0
+        stats["redis_connected_clients"].as(Int32).should be > 0
+        stats.has_key?("redis_keyspace_hits").should be_true
       end
     end
 

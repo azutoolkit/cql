@@ -220,8 +220,15 @@ describe "Typed query DSL" do
       DslAuthor.query.where { id.not_in([1, 2]) }.to_a.size.should eq(0)
     end
 
+    it "matches no rows for an empty list, and every row for an empty not_in" do
+      DslAuthor.new("Ada", 36).save!
+      DslAuthor.query.where { id.in([] of Int64) }.to_a.size.should eq(0)
+      DslAuthor.query.where { id.not_in([] of Int64) }.to_a.size.should eq(1)
+      DslAuthor.where(id: [] of Int64).count.should eq(0)
+    end
+
     it "names the column when an integer literal does not fit" do
-      expect_raises(ArgumentError, /3000000000 does not fit a Int32/) do
+      expect_raises(ArgumentError, /3000000000 does not fit a Int32 column \(authors\.age\)/) do
         DslAuthor.query.where { age == 3_000_000_000 }
       end
     end

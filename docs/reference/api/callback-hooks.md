@@ -11,10 +11,10 @@ Every callback names an instance method; there are no block, `if:`, `unless:` or
 | Macro | Runs | `false` halts |
 | :--- | :--- | :--- |
 | **`before_validation :method`** | First in every `save` | `save` returns `false` before validating |
-| **`after_validation :method`** | Right after `before_validation`, before the rules are evaluated, so it cannot see the result | `save` returns `false` before validating |
+| **`after_validation :method`** | After the rules pass; it does not run for an invalid record | `save` returns `false` |
 | **`before_save :method`** | After validation passes, for inserts and updates | `save` returns `false` |
 | **`before_create :method`** | After `before_save`, new records only | `save` returns `false` |
-| **`before_update :method`** | After `before_save`, persisted records only | `save` returns `false` |
+| **`before_update :method`** | After `before_save`, records with an id only | `save` returns `false` |
 | **`after_create :method`** | After the INSERT | later `after_create` callbacks only |
 | **`after_update :method`** | After the UPDATE | later `after_update` callbacks only |
 | **`after_save :method`** | Last in `save`, after `after_create` / `after_update` | later `after_save` callbacks only |
@@ -36,7 +36,7 @@ class Post
   property published_at : Time?
 
   before_validation :strip_title      # @title = @title.strip
-  after_validation :log_attempt       # runs before the rules
+  after_validation :log_attempt       # runs once the rules pass
   before_save :set_slug               # inserts and updates
   before_create :default_title        # inserts only
   before_update :stamp_publish        # updates only
@@ -104,12 +104,12 @@ end
 
 ## Order
 
-| Step | `save` on a new record | `save` on a persisted record | `delete!` |
+| Step | `save` on a new record | `save` on a record with an id | `delete!` |
 | :--- | :--- | :--- | :--- |
 | 0 | timestamps set | timestamps set | `dependent: :restrict_with_error` check (raises `RelationError`) |
 | 1 | `before_validation` | `before_validation` | `before_destroy` |
-| 2 | `after_validation` | `after_validation` | `DELETE` (with `dependent:` handling) |
-| 3 | validation rules (raise `ValidationError` when invalid) | validation rules | `after_destroy` |
+| 2 | validation rules (`save` returns `false`, `save!` raises `ValidationError`, when invalid) | validation rules | `DELETE` (with `dependent:` handling) |
+| 3 | `after_validation` | `after_validation` | `after_destroy` |
 | 4 | `before_save` | `before_save` | `id` cleared |
 | 5 | `before_create` | `before_update` | |
 | 6 | `INSERT` | `UPDATE` | |
@@ -127,7 +127,7 @@ post.delete! # before_destroy, after_destroy
 
 | Call | Callbacks | Validates |
 | :--- | :--- | :--- |
-| `record.save`, `record.save!` | save callbacks | yes (raises `ValidationError`) |
+| `record.save`, `record.save!` | save callbacks | yes (`save` returns `false`, `save!` raises `ValidationError`) |
 | `record.delete!`; soft-delete `delete!`, `force_delete!` | destroy callbacks | no |
 | `Post.where(...).delete_all` when the model declares destroy callbacks, `dependent:` or `many_to_many` | each record's destroy callbacks, in one transaction | no |
 | `has_many` / `has_one ..., dependent: :destroy` | the child's destroy callbacks | no |
@@ -141,7 +141,7 @@ post.delete! # before_destroy, after_destroy
 
 | Callback returns | Effect |
 | :--- | :--- |
-| `false` from a `before_*` | `save` returns `false` and `save!` raises `CQL::RecordNotSaved` (`CQL::RecordInvalid` if the record is also invalid); `delete!` returns `false`. Nothing is added to `errors`. |
+| `false` from a `before_*` or `after_validation` | `save` returns `false` and `save!` raises `CQL::RecordNotSaved`; `delete!` returns `false`. Nothing is added to `errors`. |
 | `false` from an `after_*` | The remaining callbacks of that event are skipped; the next event still runs (`after_save` follows a halted `after_create`). The database change stays. |
 | anything else, including `nil` | The chain continues. Return `true` explicitly so a trailing `false` cannot halt by accident. |
 

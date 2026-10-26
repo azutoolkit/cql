@@ -110,7 +110,7 @@ module Expression
     ) : String
       # For timestamp columns, use the database function directly (without quoting)
       # SQLite requires parentheses around function expressions in DEFAULT: DEFAULT (datetime('now'))
-      if timestamp_column && default_value.is_a?(String) && default_value.starts_with?("datetime(")
+      if timestamp_column && default_value.is_a?(String) && default_value.matches?(/\Adatetime\('[^']*'(?:, *'[^']*')*\)\z/)
         build_sql(128) do |str|
           str << column_name << " " << column_type
           str << " DEFAULT (" << default_value << ")"

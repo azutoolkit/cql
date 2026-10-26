@@ -9,7 +9,7 @@ module CQL
         end
 
         # An update of the rows whose primary key is any of *ids*, already bound (`IdChunks.each`
-        # yields them as `DB::Any`, UUIDs as text); *ids* must not be empty (`IN ()` is invalid SQL).
+        # yields them as `DB::Any`, UUIDs as text).
         protected def self.update_of(ids : Array(DB::Any)) : CQL::Update
           key = primary_key_expression
           CQL::Update.new(schema).table(table).where { key.in(ids) }

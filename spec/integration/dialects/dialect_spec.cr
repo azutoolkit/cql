@@ -157,6 +157,20 @@ module Expression
         sqlite_col.should contain("DEFAULT 1") # SQLite uses 1/0 for booleans
       end
 
+      it "renders a timestamp column's default as SQL only when it is the whole current-time call" do
+        mysql = create_dialect(:mysql)
+        sqlite = create_dialect(:sqlite)
+
+        mysql.define_column("created_at", "DATETIME(3)", "NOW(3)", false, false, true)
+          .should eq("created_at DATETIME(3) DEFAULT NOW(3) NOT NULL")
+        mysql.define_column("created_at", "DATETIME(3)", "NOW(); DROP TABLE users", false, false, true)
+          .should eq("created_at DATETIME(3) DEFAULT 'NOW(); DROP TABLE users' NOT NULL")
+        sqlite.define_column("created_at", "TIMESTAMP", "datetime('now', 'localtime')", false, false, true)
+          .should eq("created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')) NOT NULL")
+        sqlite.define_column("created_at", "TIMESTAMP", "datetime('now')); DROP TABLE users; --", false, false, true)
+          .should eq("created_at TIMESTAMP DEFAULT 'datetime(''now'')); DROP TABLE users; --' NOT NULL")
+      end
+
       it "generates correct add column syntax" do
         postgres = create_dialect(:postgres)
         mysql = create_dialect(:mysql)

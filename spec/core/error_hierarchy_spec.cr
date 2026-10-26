@@ -73,6 +73,21 @@ describe "Error Hierarchy" do
     end
   end
 
+  describe "Validation errors" do
+    it "Validations::ValidationError inherits from RecordInvalid and CQL::Error" do
+      error = CQL::ActiveRecord::Validations::ValidationError.new([
+        CQL::ActiveRecord::Validations::Error.new(:name, "name must be present"),
+        CQL::ActiveRecord::Validations::Error.new(:email, "email is required"),
+      ])
+
+      error.is_a?(CQL::RecordInvalid).should be_true
+      error.is_a?(CQL::Error).should be_true
+      error.message.should eq("name must be present,email is required")
+      error.error_fields.should eq([:name, :email])
+      error.error_messages.should eq(["name must be present", "email is required"])
+    end
+  end
+
   describe "unified error handling" do
     it "rescue CQL::Error catches Schema::InvalidURIError" do
       rescued = false

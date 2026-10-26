@@ -61,6 +61,43 @@ class PersistenceArticle
   end
 end
 
+# Rules that apply only when the record is created, or only once it is saved
+class ContextValidatedUser
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: PersistenceTestDB, table: :persistence_users
+
+  property name : String = ""
+  property email : String = ""
+  property age : Int32? = nil
+  property active : Bool = true
+  property created_at : Time?
+  property updated_at : Time?
+
+  validate :email, presence: true, on: :create, message: "Email is required to sign up"
+  validate :name, presence: true, on: :update, message: "Name is required once saved"
+
+  def initialize(@name : String = "", @email : String = "")
+  end
+end
+
+# Leaves its timestamps nil until it is saved, unlike PersistenceUser
+class UnstampedUser
+  include CQL::ActiveRecord::Model(Int64)
+
+  db_context schema: PersistenceTestDB, table: :persistence_users
+
+  property name : String = ""
+  property email : String = ""
+  property age : Int32? = nil
+  property active : Bool = true
+  property created_at : Time?
+  property updated_at : Time?
+
+  def initialize(@name : String = "", @email : String = "")
+  end
+end
+
 describe CQL::ActiveRecord::Persistence do
   before_each do
     begin
@@ -389,14 +426,58 @@ describe CQL::ActiveRecord::Persistence do
       user.updated_at.not_nil!.should be > original_updated_at.not_nil!
     end
 
-    it "returns false when validation fails" do
-      # Create a user with invalid data that would fail validation
-      # Note: This test assumes there are validations in place
-      # For now, we'll test the basic save functionality
-      user = PersistenceUser.new("John Doe", "john@example.com", 30)
+    it "returns false when validation fails, and writes nothing" do
+      user = ContextValidatedUser.new("Ada")
 
-      result = user.save
-      result.should be_true # Should pass since no validations are defined
+      user.save.should be_false
+      user.new_record?.should be_true
+      user.errors.map(&.message).should eq(["Email is required to sign up"])
+      ContextValidatedUser.count.should eq(0)
+    end
+  end
+
+  describe "create!" do
+    it "stamps created_at and updated_at, which the table declares NOT NULL" do
+      user = UnstampedUser.new("Ada", "ada@example.com")
+      user.create!
+
+      user.id.should_not be_nil
+      user.created_at.should_not be_nil
+      user.updated_at.should_not be_nil
+      UnstampedUser.find!(user.id!).created_at.should_not be_nil
+    end
+  end
+
+  describe "validation contexts" do
+    it "applies on: :create rules to a new record" do
+      user = ContextValidatedUser.new("Ada")
+
+      user.valid?.should be_false
+      user.errors.map(&.message).should eq(["Email is required to sign up"])
+      user.save.should be_false
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Email is required to sign up") { user.create! }
+    end
+
+    it "applies on: :update rules once the record is saved" do
+      user = ContextValidatedUser.new("", "ada@example.com")
+      user.valid?.should be_true
+      user.save.should be_true
+
+      user.valid?.should be_false
+      user.errors.map(&.message).should eq(["Name is required once saved"])
+      user.save.should be_false
+
+      user.name = "Ada"
+      user.email = ""
+      user.save.should be_true
+    end
+
+    it "applies on: :create rules in create! even when the record already has an id" do
+      user = ContextValidatedUser.new("Ada")
+      user.id = 99_i64
+
+      user.valid?.should be_true
+      expect_raises(CQL::ActiveRecord::Validations::ValidationError, "Email is required to sign up") { user.create! }
     end
   end
 
@@ -425,12 +506,10 @@ describe CQL::ActiveRecord::Persistence do
     end
 
     it "raises RecordInvalid when validation fails" do
-      # This test would need actual validations to be meaningful
-      # For now, we'll test that save! returns true when save succeeds
-      user = PersistenceUser.new("John Doe", "john@example.com", 30)
+      error = expect_raises(CQL::RecordInvalid, "Email is required to sign up") { ContextValidatedUser.new("Ada").save! }
 
-      result = user.save!
-      result.should be_true
+      error.error_fields.should eq([:email])
+      ContextValidatedUser.count.should eq(0)
     end
 
     it "raises RecordNotSaved when save fails for other reasons" do

@@ -4,13 +4,14 @@ description: "Every error class CQL defines, what raises it, and its message."
 
 # Error Codes
 
-CQL's own classes inherit from `CQL::Error < Exception`, except `CQL::ActiveRecord::Validations::ValidationError`, which inherits from `Exception`.
+CQL's own classes inherit from `CQL::Error < Exception`.
 
 ```crystal
 begin
   user.save!
-rescue ex : CQL::ActiveRecord::Validations::ValidationError
+rescue ex : CQL::RecordInvalid  # an invalid record (a Validations::ValidationError)
   ex.message                    # => "name must be present,email must match the pattern /@/"
+  ex.error_fields               # => [:name, :email]
 rescue ex : CQL::RecordNotSaved # a before_* callback returned false
 rescue ex : CQL::Error          # anything else CQL raises
 end
@@ -21,8 +22,8 @@ end
 | Class | Raised by | Message and fields |
 | :--- | :--- | :--- |
 | **`CQL::Error`** | Raised directly for model and table misuse; see the next table | free text |
-| **`CQL::RecordInvalid`** | `save!` when `save` returned `false` and the record has validation errors (a `before_validation` / `after_validation` callback halted an invalid record) | `"Record invalid: name: name must be present, email: ..."`; `validation_errors`, `error_messages`, `error_fields` |
-| **`CQL::RecordNotSaved`** | `save!` when a callback halted and there are no validation errors | `"Failed to save the record"` |
+| **`CQL::RecordInvalid`** | An invalid record, always as its subclass `CQL::ActiveRecord::Validations::ValidationError` (see [Active Record errors](#active-record-errors)) | the error messages joined by `,`; `validation_errors`, `error_messages`, `error_fields` |
+| **`CQL::RecordNotSaved`** | `save!` when a callback halted the save | `"Failed to save the record"` |
 | **`CQL::OptimisticLockError`** | `update!` on a model with `optimistic_locking`, and `Update#with_optimistic_lock(...).commit`, when no row matched the version | `"Record has been modified by another process"`; `model_class`, `id`, `expected_version`, `actual_version` (CQL leaves them `nil`) |
 | **`CQL::DialectError`** | SQL generation for a feature the adapter lacks; see [Dialect errors](#dialect-errors) | `"SQLite does not support DISTINCT ON\n\nWorkaround:\n..."`; `dialect`, `feature`, `workaround` |
 | **`CQL::SQLiteUnsupportedFeatureError`** < `DialectError` | SQLite: `back(...)` on insert, update or delete; `change_column`; `foreign_key` and `drop_foreign_key` in `schema.alter` | `"SQLite does not support ALTER COLUMN syntax"` |
@@ -42,6 +43,7 @@ end
 | `Specified version column '<c>' not found in table '<t>'`, `No version column found in table '<t>' ...`, `Current version value is required for optimistic locking` | `Update#with_optimistic_lock` | |
 | `Table name cannot be empty` / `cannot contain spaces` / `cannot start with a number` | `schema.table`, `CQL::Table.new` | `CQL::Table.new(:"1users", AppDB)` |
 | `<tool> failed: <error output>`, `<tool> could not be run: <cause>` | `dialect.structure_dump` on PostgreSQL and MySQL when `pg_dump` / `mysqldump` fails or is not installed | `"pg_dump failed: pg_dump: error: connection to server ... failed"` |
+| `mysqldump would read the database name "<name>" as an option` | `dialect.structure_dump` on MySQL when the URI's database name starts with `-` | `mysqldump would read the database name "--all-databases" as an option` |
 
 ### Dialect errors
 
@@ -64,7 +66,7 @@ end
 
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
-| **`CQL::ActiveRecord::Validations::ValidationError`** < `Exception` | `validate!`, `save`, `save!` and the instance `create!` on an invalid record. Class-level `Model.create!(**attrs)` does not validate. | the error messages joined by `,` |
+| **`CQL::ActiveRecord::Validations::ValidationError`** < `CQL::RecordInvalid` | `validate!`, `save!` and the instance `create!` on an invalid record; `save` returns `false` instead. Class-level `Model.create!(**attrs)` does not validate. | the error messages joined by `,`; `error_fields`, `error_messages` |
 | **`CQL::ActiveRecord::SchemaMappingError`** | `Model.schema` when no `CQL::Schema.define` block, or more than one, declares the inferred table; with `CQL_VALIDATE_SCHEMA_MAPPINGS=1`, after the program's other top-level code has run, when the table is missing, a getter type differs from the column type, or the primary key column differs | ``CQL schema mapping error in User: schema column `users.age` type Int32 does not match model getter `age` type Int64. ...`` |
 | **`CQL::ActiveRecord::Relations::BaseRelation::RelationError`** | Instance `delete!` / `force_delete!` with a `has_many ..., dependent: :restrict_with_error` that has records, or a `dependent: :destroy` child whose `delete!` returns `false`; a `DB::Error` inside an association operation | `"Cannot delete record because dependent posts exist"`, `"... could not be deleted"`, `"Database operation failed: ..."` |
 | **`...::AssociationNotFound`** < `RelationError` | `first` / `last` on an empty `has_many` collection; updating a missing `has_one` / `belongs_to` target | `"No records found in collection"`, `"No profile to update"` |
@@ -76,7 +78,7 @@ end
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
 | **`CQL::Schema::Error`** | `schema.alter :name` for a table not in the schema | `"Table 'users' not found"` |
-| **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL URI with no host part, a MySQL or CockroachDB URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
+| **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL or CockroachDB URI with an empty host and no `?host=` or `PGHOST`, a MySQL URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
 | **`CQL::Migrator::Error`** | `update_schema_file` (run by `up` and `down` with `auto_sync`, and by `bootstrap_schema`) when the dump fails; `up_to` / `down_to` with a version no migration has | `"Schema update failed: <cause>"`, `"No migration with version 42"` |
 | **`CQL::SchemaDump::Error`** | `SchemaDump` for an unknown adapter or a failed connection; reaches you wrapped in `Migrator::Error` | `"Failed to connect to database: ..."` |
 | `KeyError` | `schema.tables[:name]` for an unknown table | `"Missing hash key: :name"` |
@@ -127,9 +129,7 @@ All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain cre
 
 | Class | Raised by | Message |
 | :--- | :--- | :--- |
-| `DB::NoResultsError` | `find!`, `find_by!` (class and `QueryBuilder`); `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, ``"No records found with conditions: {email: "x"}"``, `"The insert returned no row"` |
-| `NilAssertionError` | `first!` with no matching row | |
-| `Exception` | `QueryBuilder#last!` / `Model.last!` with no matching row | `"No records found"` |
+| `DB::NoResultsError` | `find!`, `find_by!`, `first!` and `last!` (class and `QueryBuilder`); `Repository#find!`; `Insert#get!`; reading a `belongs_to ..., optional: false` whose target is gone | `"No records found with id=999"`, ``"No records found with conditions: {email: "x"}"``, `"No records found"`, `"The insert returned no row"` |
 | `DB::ConnectionRefused` | Opening a connection fails (crystal-db's first connect; the native driver maps transport and TLS failures to it) | |
 | `DB::PoolTimeout`, `DB::PoolRetryAttemptsExceeded` | A saturated pool; a failed lazy reconnect | |
 | `URI::Error` | `CQL.build_schema` with a `db` URL `URI.parse` rejects, such as `sqlite3://:memory:` | `"Invalid URI: bad port at character 11"` |
@@ -153,6 +153,7 @@ There is no `ConfigurationError`, `TableNotFound` or `ColumnNotFound` class. The
 | An index name longer than 63 characters | ``"Index name "..." is longer than 63 characters; give the index a shorter name"`` |
 | `find_each` / `find_in_batches` / `insert_all` with `batch_size <= 0` | `"batch_size must be positive, got 0"` |
 | `preload` after a partial `select` | `"preload is not supported after a partial select"` |
+| `preload` with a name the model declares no association by | `"User has no association :postz. Associations: profile, posts"` |
 | A scope called with the wrong arguments or returning a non-query | `"Scope 'active' expects no arguments ..."` |
 | `CQL::Schema.new(..., source:)` with a source bound to another adapter | `"the connection source speaks ..."` |
 | Native PostgreSQL driver: unsupported `sslmode`, libpq-only options, `sslrootcert` without `verify-full`, non-numeric pool options | `"the sslcert option is not supported by this driver"` |

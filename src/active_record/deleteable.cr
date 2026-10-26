@@ -25,7 +25,7 @@ module CQL
         end
 
         # A delete of the rows whose primary key is any of *ids*, already bound (`IdChunks.each`
-        # yields them as `DB::Any`, UUIDs as text); *ids* must not be empty (`IN ()` is invalid SQL).
+        # yields them as `DB::Any`, UUIDs as text).
         protected def self.delete_of(ids : Array(DB::Any)) : CQL::Delete
           key = primary_key_expression
           CQL::Delete.new(schema).from(table).where { key.in(ids) }

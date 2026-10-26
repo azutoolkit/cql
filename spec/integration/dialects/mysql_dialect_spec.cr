@@ -18,12 +18,66 @@ module Expression
     end
 
     describe "#structure_dump" do
-      it "returns what mysqldump prints, run against the URI's server, user, password and database" do
-        FakeExecutable.with("mysqldump", %(echo "CREATE TABLE users ();"; printf '%s\n' "$@")) do
+      it "returns what mysqldump prints, run against the URI's server, user and database" do
+        FakeExecutable.with("mysqldump", %(echo "CREATE TABLE users ();"; shift; printf '%s\n' "$@")) do
           MySqlDialect.new.structure_dump(URI.parse("mysql://user:pass@db.example:3307/mydb")).should eq([
             "CREATE TABLE users ();",
-            "--no-data", "--skip-comments", "--compact", "--user=user", "--password=pass", "--host=db.example", "--port=3307", "mydb",
+            "--no-data", "--skip-comments", "--compact", "--user=user", "--host=db.example", "--port=3307", "--protocol=tcp", "mydb",
           ].join("\n") + "\n")
+        end
+      end
+
+      it "passes the password in an option file readable only by its owner, never as an argument" do
+        uri = URI.new("mysql", "localhost", path: "/mydb", user: "user", password: %(s3"cr\\et\nline\rx\ty #1))
+        script = %(f="${1#--defaults-extra-file=}"; echo "$f"; ls -l "$f" | cut -c1-10; cat "$f"; echo "args: $*")
+
+        output = FakeExecutable.with("mysqldump", script) { MySqlDialect.new.structure_dump(uri) }
+
+        output.should start_with("/")
+        option_file, mode, section, password, args = output.lines
+        mode.should eq("-rw-------")
+        section.should eq("[client]")
+        password.should eq(%(password="s3\\"cr\\\\et\\nline\\rx\\ty #1"))
+        args.should eq("args: --defaults-extra-file=#{option_file} --no-data --skip-comments --compact --user=user --host=localhost mydb")
+        File.exists?(option_file).should be_false
+      end
+
+      it "deletes the option file when mysqldump fails, and keeps the password out of the error" do
+        error = expect_raises(CQL::Error, /mysqldump failed: .*cql-mysqldump/) do
+          FakeExecutable.with("mysqldump", %(echo "${1#--defaults-extra-file=}" >&2; exit 2)) do
+            MySqlDialect.new.structure_dump(URI.parse("mysql://user:s3cret@localhost/mydb"))
+          end
+        end
+
+        message = error.message.not_nil!
+        message.should_not contain("s3cret")
+        File.exists?(message.lchop("mysqldump failed: ")).should be_false
+      end
+
+      it "writes no option file and connects over the socket when the URI names no password or port" do
+        FakeExecutable.with("mysqldump", %(printf '%s\n' "$@")) do
+          MySqlDialect.new.structure_dump(URI.parse("mysql://user@localhost/mydb")).lines
+            .should eq(["--no-data", "--skip-comments", "--compact", "--user=user", "--host=localhost", "mydb"])
+        end
+      end
+
+      it "refuses a database name mysqldump would read as an option" do
+        FakeExecutable.with("mysqldump", %(echo "ran")) do
+          expect_raises(CQL::Error, /--result-file/) do
+            MySqlDialect.new.structure_dump(URI.parse("mysql://user:s3cret@localhost/--result-file=dump.sql"))
+          end
+        end
+      end
+
+      it "raises CQL::Error when the option file cannot be written" do
+        saved = ENV["TMPDIR"]?
+        ENV["TMPDIR"] = File.join(Dir.tempdir, "cql-missing-#{Random::Secure.hex(4)}")
+        begin
+          expect_raises(CQL::Error, /mysqldump could not be run/) do
+            MySqlDialect.new.structure_dump(URI.parse("mysql://user:s3cret@localhost/mydb"))
+          end
+        ensure
+          ENV["TMPDIR"] = saved
         end
       end
 

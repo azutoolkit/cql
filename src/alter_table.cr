@@ -98,9 +98,11 @@ module CQL
       column = @table.columns[old_name]
       column.table = @table
       alter Expression::RenameColumn.new(column.dup, new_name.to_s)
-      column.name = new_name
+      # A renamed copy, so the declaration captured before the alter keeps the column as it was.
+      renamed = column.dup
+      renamed.name = new_name
       @table.columns.delete(old_name)
-      @table.columns[new_name] = column
+      @table.columns[new_name] = renamed
       @table.columns_changed!
     end
 
@@ -239,19 +241,20 @@ module CQL
       @statements << Expression::DropIndex.new(index)
     end
 
-    # Converts the alter table actions to SQL.
-    #
-    # - **@param** visitor [Expression::Visitor] the visitor to generate SQL
-    # - **@return** [String] the generated SQL
+    # The SQL of each statement, in declaration order. `Schema#alter` runs them one by one, so a
+    # statement is never split on text inside it, such as a default value.
     #
     # **Example**  Generating SQL for alter table actions
     # ```
-    # sql = to_sql(visitor)
+    # statements(visitor) # => ["ALTER TABLE users ADD COLUMN email TEXT"]
     # ```
-    def to_sql(visitor : Expression::Visitor)
-      String.build do |string|
-        @statements.each { |statement| string << statement.accept(visitor) << ";\n" }
-      end
+    def statements(visitor : Expression::Visitor) : Array(String)
+      @statements.map(&.accept(visitor))
+    end
+
+    # The statements as one script, each ended by `;` and a newline.
+    def to_sql(visitor : Expression::Visitor) : String
+      statements(visitor).join { |statement| "#{statement};\n" }
     end
 
     # Queues *action* as an `ALTER TABLE` statement on the table under its current name.

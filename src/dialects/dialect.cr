@@ -285,8 +285,7 @@ module Expression
 
       case value
       when String
-        # Quote and escape string values
-        "'#{value.to_s.gsub("'", "''")}'"
+        quote_string_literal(value)
       when Bool
         # Let subclasses override boolean representation
         format_boolean(value)
@@ -299,6 +298,11 @@ module Expression
         # Numbers and other types can be used as-is
         value.to_s
       end
+    end
+
+    # *value* as a string literal in DDL, where it cannot be bound: single-quoted, quotes doubled.
+    protected def quote_string_literal(value : String) : String
+      "'#{value.gsub('\'', "''")}'"
     end
 
     # Default boolean formatting - subclasses can override

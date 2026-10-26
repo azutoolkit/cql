@@ -29,7 +29,7 @@ module CQL::Configure
   class TestStrategy < EnvironmentStrategy
     def apply(config : Config) : Nil
       # === 🔌 DATABASE ===
-      config.db = "sqlite3://:memory:"
+      config.db = "sqlite3::memory:"
       config.migrations_table = :test_migrations
 
       # === ⚡ BEHAVIOR ===

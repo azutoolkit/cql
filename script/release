@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Releases VERSION from the checked-out commit: sets it in shard.yml, moves the [Unreleased] changelog entries under
+# a "## [VERSION] - DATE" heading, commits both files, tags that commit vVERSION, pushes the commit and the tag, and
+# publishes a GitHub release whose notes are those changelog entries.
+#
+#   script/release 0.0.862             # CI: the release job in .github/workflows/crystal.yml
+#   script/release 0.0.862 --dry-run   # commit and tag locally, then print what would be pushed and published
+#
+# Needs git with push access to origin and, unless --dry-run, the gh CLI with GH_TOKEN set.
+# When origin/master has moved past HEAD (before or during the run), nothing is released: the run for the newer commit
+# releases it. If the newest tag on origin/master has no GitHub release yet, from a run that pushed but failed to
+# publish, that release is published instead. Under GitHub Actions it sets the step outputs released=true and
+# version=<the published version>.
+set -euo pipefail
+
+usage="usage: script/release VERSION [--dry-run]"
+version="${1:?$usage}"
+case "${2:-}" in
+  "" | --dry-run) dry_run="${2:-}" ;;
+  *) echo "$usage" >&2 && exit 2 ;;
+esac
+tag="v$version"
+branch="${RELEASE_BRANCH:-master}"
+bot=(-c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com")
+notes_file="$(mktemp)"
+trap 'rm -f "$notes_file"' EXIT
+
+changelog_section() { # prints the entries under the "## [$1" heading of the changelog on stdin
+  awk -v heading="## [$1]" 'index($0, heading) == 1 { inside = 1; next } /^## / { inside = 0 } inside'
+}
+
+has_text() {
+  [ -n "$(tr -d '[:space:]' <"$1")" ]
+}
+
+roll_changelog() {
+  awk -v heading="## [$version] - $(date -u +%Y-%m-%d)" '
+    !rolled && /^## \[Unreleased\]/ { print; print ""; print heading; rolled = 1; next }
+    { print }
+  ' CHANGELOG.md >CHANGELOG.md.next
+  mv CHANGELOG.md.next CHANGELOG.md
+}
+
+publish() { # $1: tag
+  local notes=(--generate-notes)
+  if has_text "$notes_file"; then
+    notes=(--notes-file "$notes_file")
+  fi
+  if [ "$dry_run" = --dry-run ]; then
+    echo "dry run: would run gh release create $1 --verify-tag --title 'Release $1' ${notes[0]}"
+    return
+  fi
+  gh release create "$1" --verify-tag --title "Release $1" "${notes[@]}"
+  printf 'released=true\nversion=%s\n' "${1#v}" >>"${GITHUB_OUTPUT:-/dev/null}"
+}
+
+finish_unpublished_release() {
+  local latest
+  latest="$(git tag --points-at "origin/$branch" --list 'v*' | head -n 1)"
+  if [ -n "$latest" ] && [ -z "$dry_run" ] && ! gh release view "$latest" >/dev/null 2>&1; then
+    echo "$latest is tagged on origin/$branch but has no release; publishing it."
+    git show "origin/$branch:CHANGELOG.md" | changelog_section "${latest#v}" >"$notes_file"
+    publish "$latest"
+  fi
+}
+
+git fetch --quiet --tags origin "$branch"
+base="$(git rev-parse HEAD)"
+if [ "$base" != "$(git rev-parse "origin/$branch")" ]; then
+  echo "origin/$branch has moved past $(git rev-parse --short HEAD); the newer run releases it."
+  finish_unpublished_release
+  exit 0
+fi
+
+changelog_section Unreleased <CHANGELOG.md >"$notes_file"
+sed -i.bak -E "s/^version: .*/version: $version/" shard.yml && rm shard.yml.bak
+if has_text "$notes_file"; then
+  roll_changelog
+fi
+git add shard.yml CHANGELOG.md
+git "${bot[@]}" commit --quiet -m "Set shard version $version"
+git tag "$tag" # lightweight, like every earlier release tag
+
+if [ "$dry_run" = --dry-run ]; then
+  echo "dry run: would push $(git rev-parse --short HEAD) to $branch and tag $tag"
+  publish "$tag"
+  exit 0
+fi
+
+if ! git push --atomic origin "HEAD:refs/heads/$branch" "refs/tags/$tag"; then
+  git fetch --quiet origin "$branch"
+  if [ "$(git rev-parse "origin/$branch")" != "$base" ]; then
+    echo "origin/$branch moved while releasing; the newer run releases it."
+    exit 0
+  fi
+  exit 1
+fi
+publish "$tag"

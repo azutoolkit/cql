@@ -60,7 +60,7 @@ describe CQL::Delete do
       .to_sql
 
     output = <<-SQL.gsub(/\n/, " ").strip
-      DELETE FROM users WHERE users.id IN ()
+      DELETE FROM users WHERE 1 = 0
       SQL
 
     delete_query.should eq({output, [] of DB::Any})

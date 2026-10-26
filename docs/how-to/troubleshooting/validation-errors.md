@@ -1,5 +1,5 @@
 ---
-description: "Read why a record is invalid, handle the exception save raises, and fix validations that do not compile or do not run."
+description: "Read why a record is invalid, handle a save that returns false or raises, and fix validations that do not run."
 ---
 
 # Fix Validation Errors
@@ -36,37 +36,30 @@ user.errors.each { |error| puts "#{error.field}: #{error.message}" }
 
 `errors` returns `Array(CQL::ActiveRecord::Validations::Error)`, one per failing predicate; [Validation Options Reference](../../reference/api/validation-options.md) lists each predicate's default message and `message:`.
 
-## Handle the exception `save` raises
+## Handle a save that fails
 
 ```text
 CQL::ActiveRecord::Validations::ValidationError: name must be present,email must match the pattern ...
 ```
 
-`save`, `save!` and the instance `create!` raise this on an invalid record; `save` does not return `false` for it. The message joins the error messages with commas.
+`save` returns `false` on an invalid record. `save!` and the instance `create!` raise this instead; it is a `CQL::RecordInvalid`, so `rescue CQL::RecordInvalid` catches it. The message joins the error messages with commas, and `error_fields` lists the failing attributes.
 
 ```crystal
-# ❌ Never reaches else: save raises before it can return false
 if user.save
   redirect_to user
-else
-  render_errors user.errors
-end
-
-# ✅ Check first, or rescue
-if user.valid?
-  user.save!
 else
   render_errors user.errors.map { |e| {field: e.field, message: e.message} }
 end
 
 begin
   user.save!
-rescue ex : CQL::ActiveRecord::Validations::ValidationError
-  puts ex.message
+rescue ex : CQL::RecordInvalid
+  puts ex.message      # "name must be present,email must match the pattern ..."
+  puts ex.error_fields # [:name, :email]
 end
 ```
 
-`save` returns `false`, and `save!` raises `CQL::RecordNotSaved: Failed to save the record`, only when a callback halts the save.
+When a callback halts the save, `save` returns `false` with no errors, and `save!` raises `CQL::RecordNotSaved: Failed to save the record`.
 
 ## Know which writes skip validation
 
@@ -90,21 +83,13 @@ There is no `uniqueness` predicate, so a unique index raises these; to report a 
 ```text
 Error: CQL validation error in Signup: unsupported predicate `format` for `:email`. Supported predicates: "eq, exclude, gt, gte, in, lt, lte, match, size, presence, required, confirmation, accept".
 Error: CQL validation error in Signup: unknown attribute `:emial`. Define a readable property or getter for `:emial` before calling `validate ::emial`.
-Error: undefined macro variable 'context'
 ```
 
-Use `match:` for formats and `gt:`/`lt:` for numbers, and declare the property before `validate`. The last error comes from any `on:` option: contexts do not compile yet, so remove `on:`. `valid?`, `errors` and `validate!` accept a context argument, but without `on:` it changes nothing.
+Use `match:` for formats and `gt:`/`lt:` for numbers, and declare the property before `validate`.
 
-## Fix a validation that never fails
+## Fix a rule that runs only sometimes
 
-```crystal
-# ❌ The second call replaces the first: "jo" passes, because size: is gone
-validate :username, size: 3..20
-validate :username, required: true
-
-# ✅ One call per attribute, with every predicate
-validate :username, required: true, size: 3..20
-```
+A rule declared with `on: :create` runs only while the record is new, and `on: :update` only once it is saved. `valid?` and `errors` follow the record's state, so check a new record with `user.valid?(:update)` to see the update rules.
 
 ## Test validations
 

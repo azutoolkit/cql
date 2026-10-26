@@ -179,8 +179,8 @@ describe CQL::Performance::Config do
       config = CQL::Performance::Config.new
       reporting = hash_value(config.to_h, "reporting")
       reporting["format"].should eq(config.reporting.format)
-      reporting["auto_generate"].should eq(config.reporting.auto_generate?)
-      reporting["interval_seconds"].should eq(config.reporting.interval.total_seconds)
+      reporting.has_key?("auto_generate").should be_false
+      reporting.has_key?("interval_seconds").should be_false
     end
   end
 
@@ -409,14 +409,19 @@ describe CQL::Performance::Config::Logging do
     logging.enabled?.should be_true
     ENV.delete("CRYSTAL_ENV")
   end
+
+  it "stays off in development with CQL_NO_SQL_LOG, here and in the environment defaults" do
+    with_performance_env({"CRYSTAL_ENV" => "development", "CQL_NO_SQL_LOG" => "1"}) do
+      CQL::Performance::Config::Logging.new.enabled?.should be_false
+      CQL::Performance::Config.from_env.logging.enabled?.should be_false
+    end
+  end
 end
 
 describe CQL::Performance::Config::Reporting do
   it "has correct defaults" do
     reporting = CQL::Performance::Config::Reporting.new
     reporting.format.should eq("text")
-    reporting.auto_generate?.should be_false
-    reporting.interval.should eq(5.minutes)
     reporting.include_stack_traces?.should be_false
   end
 
@@ -485,8 +490,6 @@ describe CQL::Performance::ConfigPresets do
       config.detection.strict_mode?.should be_true
       config.logging.enabled?.should be_false
       config.cache.enabled?.should be_true
-      config.reporting.auto_generate?.should be_true
-      config.reporting.interval.should eq(10.minutes)
     end
   end
 
@@ -515,7 +518,7 @@ end
 # Runs the block with exactly the given performance-related ENV values (nil or
 # absent means unset) and restores the previous values afterwards.
 private def with_performance_env(values : Hash(String, String?), &)
-  names = %w[CRYSTAL_ENV CQL_ENV CQL_MONITORING_ENABLED]
+  names = %w[CRYSTAL_ENV CQL_ENV CQL_MONITORING_ENABLED CQL_NO_SQL_LOG]
   previous = names.to_h { |name| {name, ENV[name]?} }
   names.each { |name| ENV.delete(name) }
   values.each { |name, value| value ? (ENV[name] = value) : ENV.delete(name) }

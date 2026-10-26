@@ -44,6 +44,7 @@ Check: the output lists `Installing cql` and `Installing sqlite3`.
 {% step %}
 ### Connect to the database
 
+<!-- docs-check: run -->
 ```bash
 mkdir -p db
 ```
@@ -124,6 +125,7 @@ puts "Applied #{migrator.applied_migrations.size} migration(s)"
 ```
 {% endcode %}
 
+<!-- docs-check: run -->
 ```bash
 crystal src/setup.cr
 ```
@@ -286,6 +288,7 @@ puts "'#{first_post.title}' was written by #{first_post.user.try(&.name)}"
 
 Migrate first, so that `AppSchema` gains `posts`:
 
+<!-- docs-check: run -->
 ```bash
 crystal src/setup.cr
 crystal src/myapp.cr
@@ -319,10 +322,12 @@ invalid = User.new(name: "", email: "nope")
 puts "valid? #{invalid.valid?}"
 puts invalid.errors.map(&.message)
 
+puts "save: #{invalid.save}"
+
 begin
-  invalid.save
-rescue ex : CQL::ActiveRecord::Validations::ValidationError
-  puts "save raised: #{ex.message}"
+  invalid.save!
+rescue ex : CQL::RecordInvalid
+  puts "save! raised: #{ex.message}"
 end
 ```
 
@@ -334,10 +339,11 @@ crystal src/myapp.cr
 ...
 valid? false
 ["name must be present", "name must have a size of 1..100", "email must match the pattern /@/"]
-save raised: name must be present,name must have a size of 1..100,email must match the pattern /@/
+save: false
+save! raised: name must be present,name must have a size of 1..100,email must match the pattern /@/
 ```
 
-`save` and `save!` raise on an invalid record; `create!` skips validations.
+`save` returns `false` on an invalid record and `save!` raises `CQL::RecordInvalid`; `create!` skips validations.
 {% endstep %}
 
 {% step %}

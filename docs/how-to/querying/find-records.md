@@ -36,9 +36,9 @@ User.exists?(email: "ada@example.com")   # => true; SELECT users.id FROM users W
 
 ```crystal
 User.first                            # => User?; ... FROM users LIMIT ? (no ORDER BY)
-User.first!                           # raises NilAssertionError when no row matches
+User.first!                           # raises DB::NoResultsError when no row matches
 User.last                             # => User?; ... ORDER BY users.id DESC LIMIT ?
-User.last!                            # raises "No records found" when no row matches
+User.last!                            # raises DB::NoResultsError when no row matches
 
 User.order(created_at: :desc).first   # newest
 User.order(created_at: :asc).last     # newest too: the order reversed, ties to the higher id

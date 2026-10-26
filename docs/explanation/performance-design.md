@@ -36,7 +36,7 @@ Features that would tax every statement do nothing until you turn them on.
 An unset `CRYSTAL_ENV` turns none of these on. See the [Configuration Reference](../reference/configuration.md) for every switch.
 
 {% hint style="warning" %}
-`CQL_NO_SQL_LOG` changes only the `CQL.configure` default. With `CRYSTAL_ENV=development`, the monitor still turns itself on with its SQL log the first time it is used.
+`CQL_NO_SQL_LOG` keeps SQL logging off in development, both as the `CQL.configure` default and in the monitor's own development defaults. With `CRYSTAL_ENV=development`, the monitor still turns itself on the first time it is used.
 {% endhint %}
 
 ## Work That Is Done Once

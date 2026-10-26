@@ -34,14 +34,13 @@ engine.with_connection do |connection|
     rows.write_row(["Barbara", nil, 85]) # nil is NULL
   end
 
-  # On the session: Connection#copy_out_binary does not compile in this version
-  connection.session.copy_out_binary("COPY users (name, email, age) TO STDOUT (FORMAT binary)", types) do |row|
+  connection.copy_out_binary("COPY users (name, email, age) TO STDOUT (FORMAT binary)", types) do |row|
     row # => ["Ada", "ada@example.com", 0] first: one Array per row, decoded per column type
   end
 end
 ```
 
-The signature, header and trailer are written and read for you, and rows may be split across chunks. `Session#copy_in_binary` and `#copy_out_binary` also take `timeout:`.
+The signature, header and trailer are written and read for you, and rows may be split across chunks. On the session, `Session#copy_in_binary` and `#copy_out_binary` also take `timeout:`.
 
 ```crystal
 engine.with_connection do |connection|

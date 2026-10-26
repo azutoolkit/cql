@@ -157,8 +157,8 @@ module CQL
         CQL::Cache::CacheConfig.new(
           default_ttl: ttl,
           max_size: memory_size,
-          enable_versioning: fragment_versions?,
-          enable_tagging: fragment_tags?,
+          enable_versioning: fragment_versions,
+          enable_tagging: fragment_tags,
           enable_statistics: stats?,
           key_prefix: key_prefix
         )
