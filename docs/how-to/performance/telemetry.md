@@ -94,8 +94,9 @@ Every executed statement emits an event, and the duration includes pool wait tim
 `event.pool_wait` is the part of it spent waiting for a pooled connection (about zero on a transaction or pinned
 connection), and a checkout that fails counts its wait until the failure.
 `Schema#alter` statements (including those inside migrations) bypass telemetry; where DDL is transactional (SQLite,
-PostgreSQL), `alter`, `Migrator.new`, `Migrator#up` and `Migrator#down` run inside `Schema#transaction`, so they publish
-transaction events (`nested` when a transaction is already open). `event.error.message` may contain data, so
+PostgreSQL), `alter`, `build`, `Table#create!`/`drop!`/`truncate!`, `Migrator.new`, `Migrator#up`, `Migrator#down` and
+`Migrator#pending_migrations` (once per migration it checks) run inside `Schema#transaction`, so they publish transaction
+events (`nested` when a transaction is already open). `event.error.message` may contain data, so
 redact it before shipping it anywhere.
 
 Call `CQL::Telemetry.reset!` in specs to remove all subscribers.
