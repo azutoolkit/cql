@@ -39,7 +39,7 @@ Without a MySQL client, one spec errors because `mysqldump` is not installed (`s
 - `crystal spec` again on Crystal 1.19.1, the oldest version CI tests;
 - the docs checks and `compile_snippets.py` from `script/docs/`.
 
-After a green build on `master`, `script/release` sets the next version in `shard.yml`, moves the `[Unreleased]` changelog entries under it, commits both, tags that commit and publishes a GitHub release with those entries as notes. `script/api-docs` then builds the API reference, which is deployed to GitHub Pages. `.github/workflows/db-compat.yml` compiles CQL against every supported `crystal-db` version with `script/check_db_compat 0.13.1 0.14.0 0.15.0 latest`, also weekly.
+After a green build on `master`, `script/release` sets the next version in `shard.yml`, moves the `[Unreleased]` changelog entries under it, commits both, tags that commit and publishes a GitHub release with those entries as notes. `script/api-docs` then builds the API reference, which is deployed to GitHub Pages (the repository's Pages source must be set to GitHub Actions). `.github/workflows/db-compat.yml` compiles CQL against every supported `crystal-db` version with `script/check_db_compat 0.13.1 0.14.0 0.15.0 latest`, also weekly.
 
 To run the PostgreSQL specs locally, start the server from `docker-compose.yaml` and point `DATABASE_URL` at it; without it, the specs try `postgres://localhost/cql_test`:
 

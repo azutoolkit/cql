@@ -10,14 +10,16 @@ What is compiled:
   compiled, and so are titled blocks that are one file of a larger project. A program that uses `AppDB` or `User`
   without defining them gets a prelude that defines both (see PRELUDE).
 
-Markers, an HTML comment on the line before a block:
+Markers, an HTML comment above a block (a line of prose in between cancels it):
 - `<!-- docs-check: skip -->` leaves the block out.
 - `<!-- docs-check: new-program -->` starts a new program at the block, for a page that shows alternatives.
 - `<!-- docs-check: run -->` on a shell block in a tutorial runs its `crystal src/x.cr` commands instead of only
-  compiling them, for a step whose output (a generated schema file) a later step needs. Running needs SQLite.
+  compiling them, and runs its other lines with bash, one line at a time, for a step whose output (a generated schema
+  file) a later step needs. Running needs SQLite; each command has 10 minutes.
 
-Also skipped: a block containing `# ❌` (an intentional error) or a bare `...` line, and a program that requires a
-shard missing from lib/ (reported, not failed). Compiler errors are reported at the Markdown page and line.
+Also skipped: a block containing `# ❌` (an intentional error) or a bare `...` line, and a program that requires one
+of OPTIONAL_SHARDS when it is missing from lib/ (reported, not failed); any other unresolved require fails.
+Compiler errors are reported at the Markdown page and line.
 
 Usage: python3 script/docs/compile_snippets.py [-j JOBS] [PAGE.md ...]   (default: README.md and every page in docs/)
        (from the repository root, after `shards install`; CRYSTAL selects the compiler; exits 1 on any failure)
@@ -42,6 +44,8 @@ RUN_COMMAND = re.compile(r"^\s*crystal\s+(?:run\s+)?(?:-\S+\s+)*(src/\S+\.cr)\b"
 SHARD_REQUIRE = re.compile(r'^\s*require\s+"([^"./][^"]*)"', re.M)
 SERIES_PAGE = re.compile(r"^\d+-.*\.md$")
 SHELL = {"bash", "sh", "shell", "console", ""}
+OPTIONAL_SHARDS = {"mysql", "pg", "kemal", "lucky", "amber", "azu", "athena"}  # shards CQL does not install
+COMMAND_TIMEOUT = 600
 DEFINES_APP = re.compile(r"^\s*(AppDB\s*=|class User\b)", re.M)
 USES_APP = re.compile(r"\b(AppDB|User)\b")
 
@@ -160,6 +164,8 @@ def blocks(page):
         marked = MARKER.search(lines[i])
         if marked:
             marker = marked.group(1)
+        elif lines[i].strip() and not lines[i].lstrip().startswith("{%"):
+            marker = None
         titled = CODE_TITLE.search(lines[i])
         if titled:
             title = titled.group(1)
@@ -228,7 +234,7 @@ def shell_checks(block, files, seen):
         else:
             continue
         state = (tuple(check.argv), tuple(sorted((path, src.text) for path, src in files.items())))
-        if state not in seen:
+        if "--no-codegen" not in check.argv or state not in seen:  # runs change the project: never skip one
             seen.add(state)
             checks.append(check)
     return checks
@@ -250,7 +256,7 @@ def stdlib_dirs():
     return [d for d in out.strip().split(":") if d and d != "lib"]
 
 
-def missing_shards(check, lib, stdlib):
+def unresolved_shards(check, lib, stdlib):
     names = {name.split("/")[0] for src in check.files.values() for name in SHARD_REQUIRE.findall(src.text)}
     return sorted(n for n in names if not os.path.exists(os.path.join(lib, n))
                   and not any(os.path.exists(os.path.join(d, n + ".cr")) or os.path.isdir(os.path.join(d, n))
@@ -259,7 +265,8 @@ def missing_shards(check, lib, stdlib):
 
 def to_page_locations(output, project, check):
     for path, source in check.files.items():
-        pattern = re.compile(r"(?:" + re.escape(os.path.join(project, path)) + "|" + re.escape(path) + r"):(\d+)")
+        pattern = re.compile(r"(?:" + re.escape(os.path.join(project, path)) + r"|(?<![\w/.-])" + re.escape(path)
+                             + r"):(\d+)")
 
         def replace(match, source=source):
             where = source.locate(int(match.group(1)))
@@ -270,18 +277,24 @@ def to_page_locations(output, project, check):
 
 
 def perform(check, project, lib, stdlib):
-    missing = missing_shards(check, lib, stdlib)
-    if missing:
-        return "SKIP", f"{check.label} (needs shard {', '.join(missing)})"
+    unresolved = unresolved_shards(check, lib, stdlib)
+    if unresolved and set(unresolved) <= OPTIONAL_SHARDS:
+        return "SKIP", f"{check.label} (needs shard {', '.join(unresolved)})"
+    if unresolved:
+        return "FAIL", f"{check.label}\n    requires {', '.join(unresolved)}: not in lib/, stdlib or OPTIONAL_SHARDS"
     for path, source in check.files.items():
         os.makedirs(os.path.dirname(os.path.join(project, path)) or project, exist_ok=True)
         with open(os.path.join(project, path), "w", encoding="utf-8") as out:
             out.write(source.text)
-    result = subprocess.run(check.argv, cwd=project, capture_output=True, text=True)
+    try:
+        result = subprocess.run(check.argv, cwd=project, capture_output=True, text=True,
+                                stdin=subprocess.DEVNULL, timeout=COMMAND_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return "FAIL", f"{check.label}\n    timed out after {COMMAND_TIMEOUT} s"
     if result.returncode == 0:
         return "OK", check.label
     errors = to_page_locations(result.stdout + result.stderr, project, check).strip()
-    return "FAIL", f"{check.label}\n" + "\n".join("    " + line for line in errors.splitlines()[-25:])
+    return "FAIL", f"{check.label}\n" + "\n".join("    " + line for line in errors.splitlines()[-40:])
 
 
 def run_job(checks, lib, stdlib, scratch):

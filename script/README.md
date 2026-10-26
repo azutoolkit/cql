@@ -148,6 +148,9 @@ settings before relying on them.
 | `release VERSION [--dry-run]` | sets `shard.yml`, moves `[Unreleased]` under the version, commits, tags that commit, publishes the GitHub release | the `release` CI job on `master` |
 | `api-docs VERSION [DIR]` | builds the API reference from the doc comments in `src/` | the `api-docs` CI job, before the Pages deploy |
 
+The Pages deploy needs **Settings → Pages → Source: GitHub Actions** set once in the repository; until then the
+`deploy-api-docs` job fails after the release is already published.
+
 How to steer `compile_snippets.py` with `<!-- docs-check: ... -->` comments is in
 [the docs style guide](../.claude/docs-style-guide.md#verifying-examples) and the script's header.
 

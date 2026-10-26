@@ -36,7 +36,7 @@ EOF
 
 backup="$(mktemp)"
 cp README.md "$backup"
-trap 'mv "$backup" README.md' EXIT
+trap 'cp "$backup" README.md && rm -f "$backup"' EXIT
 landing_page >README.md
 
 crystal docs src/cql.cr \
