@@ -167,7 +167,7 @@ end
 - Validating state transitions
 - Incrementing counters
 
-CQL has no dirty tracking (`changed?`, `*_was`). To compare against the stored values, load the row with `Post.find(id)` inside the callback.
+Include the opt-in [`CQL::ActiveRecord::DirtyTracking`](../../how-to/models/dirty-tracking.md) (after `Model`) for `changed?`, `changes` (`{old, new}` per attribute) and `attribute_changed?(name)`; there are no `*_was` readers. Without it, load the stored row with `Post.find(id)` inside the callback.
 
 ### after_update
 

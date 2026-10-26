@@ -22,10 +22,10 @@ CQL is actively maintained and used in production applications. However, as with
 
 ### Should I use `class` or `struct` for models?
 
-Both work with CQL. Use `struct` for value semantics (recommended for most cases) or `class` if you need reference semantics.
+Use `class`. `save` assigns the generated id to the instance it is called on, which a struct copy would not see.
 
 ```crystal
-struct User  # Recommended
+class User
   include CQL::ActiveRecord::Model(Int64)
 end
 ```
@@ -122,12 +122,13 @@ For `has_many`, `belongs_to` and `has_one`, use `preload`:
 users = User.preload(:posts).all   # 2 queries, user.posts is already loaded
 ```
 
-`preload` also loads `belongs_to` and `has_one` associations (`Post.preload(:user).all`), but ignores `many_to_many`. For those, load related IDs first, then batch load:
+`preload` also loads `belongs_to` and `has_one` associations (`Post.preload(:user).all`), but ignores `many_to_many`. For those, load the join rows first, then batch load the targets:
 
 ```crystal
-posts = Post.where(published: true).all
-user_ids = posts.compact_map(&.user_id).uniq
-users = User.where { id.in(user_ids) }.all.index_by(&.id)
+post_ids = posts.compact_map(&.id)
+links = PostTag.where { post_id.in(post_ids) }.all
+tag_ids = links.map(&.tag_id).uniq
+tags = Tag.where { id.in(tag_ids) }.all.index_by(&.id)
 ```
 
 ## Migrations
@@ -180,10 +181,9 @@ posts.each { |p| puts p.user.try(&.name) }
 # Good: has_many with preload (2 queries)
 users = User.preload(:posts).all
 
-# Good: belongs_to by batch load
-user_ids = posts.compact_map(&.user_id).uniq
-users = User.where { id.in(user_ids) }.all.index_by(&.id)
-posts.each { |p| puts users[p.user_id]?.try(&.name) }
+# Good: belongs_to with preload (2 queries)
+posts = Post.preload(:user).all
+posts.each { |p| puts p.user.try(&.name) }
 ```
 
 ### Should I add indexes?
@@ -211,7 +211,7 @@ migrator.up
 
 ### "Validation failed" but I don't know why
 
-`save`, `save!` and `create!` raise `CQL::ActiveRecord::Validations::ValidationError` (its message joins the error messages). To inspect the errors yourself:
+`save`, `save!` and the instance `record.create!` raise `CQL::ActiveRecord::Validations::ValidationError` (its message joins the error messages); the class method `Model.create!(...)` inserts without validating. To inspect the errors yourself:
 
 ```crystal
 unless model.valid?

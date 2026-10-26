@@ -12,20 +12,11 @@ puts "User deleted"
 
 ## Delete with delete!
 
-Raises if record doesn't exist:
+`find!` raises if the record doesn't exist; `delete!` returns `false` when the record has no id, a callback halts it, or no row was deleted:
 
 ```crystal
 user = User.find!(1)
-user.delete!
-```
-
-## Delete with destroy!
-
-`destroy!` triggers callbacks:
-
-```crystal
-user = User.find!(1)
-user.destroy!  # Runs before_destroy and after_destroy callbacks
+user.delete!  # => true; runs before_destroy and after_destroy callbacks and the dependent: strategies
 ```
 
 ## Delete by ID
@@ -38,10 +29,10 @@ User.delete!(1)
 
 ```crystal
 # Delete all inactive users
-User.where(active: false).delete!
+User.where(active: false).delete_all
 
 # Delete posts older than a year
-Post.where { created_at < 1.year.ago }.delete!
+Post.where { created_at < 1.year.ago }.delete_all
 ```
 
 ## Delete All Records
