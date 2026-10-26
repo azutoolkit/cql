@@ -12,33 +12,27 @@ module CQL
   # **Example** Inserting a record
   #
   # ```
-  # insert
+  # AcmeDB.insert
   #   .into(:users)
-  #   .values(name: "John", age: 30)
+  #   .values(name: "John", email: "john@example.com", age: 30)
   #   .last_insert_id
   # ```
   #
   # **Example** Inserting multiple records
   #
   # ```
-  # insert
+  # AcmeDB.insert
   #   .into(:users)
-  #   .values(
-  #     [
-  #       {name: "John", age: 30},
-  #       {name: "Jane", age: 25},
-  #     ]
-  #   ).commit
+  #   .values(name: "John", email: "john@example.com")
+  #   .values(name: "Jane", email: "jane@example.com")
+  #   .commit
   # ```
   #
-  # **Example** Inserting a record with a query
+  # **Example** Inserting the rows a query selects
   #
   # ```
-  # insert
-  #   .into(:users)
-  #   .query(
-  #     select.from(:users).where(id: 1)
-  #   ).commit
+  # active = AcmeDB.query.from(:users).select(:name, :email).where(active: true)
+  # AcmeDB.insert.into(:users).query(active).commit
   # ```
   class Insert
     include Pinnable
@@ -73,7 +67,7 @@ module CQL
     # **Example** Getting the last inserted ID
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).last_insert_id
+    # AcmeDB.insert.into(:users).values(name: "John", email: "john@example.com").last_insert_id
     # ```
     def last_insert_id(as type : PrimaryKeyType = Int64)
       return commit.last_insert_id unless adapter.dialect.supports_returning?
@@ -81,12 +75,12 @@ module CQL
     end
 
     # Inserts and reads the row returned by the RETURNING clause (`back`) as *kind*, nil when
-    # nothing was inserted (`on_conflict(...).do_nothing`).
+    # nothing was inserted (`on_conflict(...).do_nothing`). PostgreSQL and CockroachDB only.
     # - **@raise** [CQL::DialectError] Before inserting, when the dialect does not `supports_returning?`
     # - **@raise** [ArgumentError] Before inserting, when no `back` columns are set
     #
     # ```
-    # insert.into(:users).values(name: "John").back(:id, :name).get({Int64, String})
+    # AcmeDB.insert.into(:users).values(name: "John", email: "john@example.com").back(:id, :name).get({Int64, String})
     # ```
     def get(as kind)
       require_returning!
@@ -131,17 +125,16 @@ module CQL
 
     # Executes the insert statement and returns the result
     # The query execution is automatically tracked by CQL::Performance when enabled.
-    # - **@return** [Int64] The last inserted ID
+    # - **@return** [DB::ExecResult] The rows affected and the last inserted ID
     #
     # **Example** Inserting a record
     #
     # ```
-    # insert
+    # result = AcmeDB.insert
     #   .into(:users)
-    #   .values(name: "John", age: 30)
+    #   .values(name: "John", email: "john@example.com")
     #   .commit
-    #
-    # => 1
+    # result.rows_affected
     # ```
     def commit
       query, params = to_sql
@@ -160,28 +153,25 @@ module CQL
     # **Example** Inserting a record
     #
     # ```
-    # insert
-    #   .into(:users)
-    #   .values(name: "John", age: 30)
-    #   .commit
+    # AcmeDB.insert.into(:users)
     # ```
     def into(table : Symbol)
       @table = find_table(table)
       self
     end
 
-    # Set the columns to insert
-    # - **@param** columns [Array(Symbol)] The columns to insert
+    # Set the rows to insert, one hash per row; every row must name the same columns
+    # - **@param** values [Array(Hash(Symbol, DB::Any))] The rows to insert
     # - **@return** [Insert] The insert object
     #
-    # **Example** Inserting a record
+    # **Example** Inserting several records
     #
     # ```
-    # insert
-    #   .into(:users)
-    #   .columns(:name, :age)
-    #   .values("John", 30)
-    #   .commit
+    # rows = [
+    #   {:name => "John", :email => "john@example.com"} of Symbol => DB::Any,
+    #   {:name => "Jane", :email => "jane@example.com"} of Symbol => DB::Any,
+    # ]
+    # AcmeDB.insert.into(:users).values(rows).commit
     # ```
     def values(values : Array(Hash(Symbol, DB::Any)))
       values.map { |hash| build_values(hash) }
@@ -195,7 +185,8 @@ module CQL
     # **Example** Inserting a record
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).commit
+    # row = {:name => "John", :email => "john@example.com"} of Symbol => DB::Any
+    # AcmeDB.insert.into(:users).values(row).commit
     # ```
     def values(hash : Hash(Symbol, DB::Any))
       build_values(hash)
@@ -203,34 +194,37 @@ module CQL
     end
 
     # Set the values to insert
-    # - **@param** fields [Hash(Symbol, DB::Any)] The values to insert
+    # - **@param** fields [NamedTuple] The values to insert, keyed by column
     # - **@return** [Insert] The insert object
     #
     # **Example** Inserting a record
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).commit
+    # AcmeDB.insert.into(:users).values(name: "John", email: "john@example.com").commit
     # ```
     def values(**fields)
       build_values(fields)
       self
     end
 
-    # Set the query to use for the insert
+    # Set the query whose rows are inserted (`INSERT INTO ... SELECT ...`); its selected
+    # columns name the inserted columns
     # - **@param** query [Query] The query to use
     # - **@return** [Insert] The insert object
     #
-    # **Example** Inserting a record with a query
+    # **Example** Inserting the rows a query selects
     #
     # ```
-    # insert.into(:users).query(select.from(:users).where(id: 1)).commit
+    # source = AcmeDB.query.from(:users).select(:name, :email).where { users.id == 1 }
+    # AcmeDB.insert.into(:users).query(source).to_sql
+    # # => {"INSERT INTO users (name, email) SELECT users.name, users.email FROM users WHERE users.id = ?", [1]}
     # ```
     def query(query : Query)
       @query = query
       self
     end
 
-    # Set the columns to return
+    # Set the columns to return (`RETURNING`), read with `get`; for dialects that `supports_returning?`
     # - **@param** columns [Symbol*] The columns to return
     # - **@return** [Insert] The insert object
     # - **@raise** [Exception] If the column does not exist
@@ -238,7 +232,9 @@ module CQL
     # **Example** Inserting a record
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).back(:id).commit
+    # AcmeDB.insert.into(:users).values(name: "John", email: "john@example.com").back(:id)
+    #   .to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
+    # # => {"INSERT INTO users (name, email) VALUES ($1, $2) RETURNING users.id", ["John", "john@example.com"]}
     # ```
     def back(*columns : Symbol)
       @back = columns.to_a.map { |column| Expression::Column.new(find_column(column)) }
@@ -254,7 +250,7 @@ module CQL
     # exists. Follow with `do_nothing` or `do_update`.
     #
     # ```
-    # insert.into(:users).values(email: e, name: n).on_conflict(:email).do_update(:name)
+    # AcmeDB.insert.into(:users).values(email: "john@example.com", name: "John").on_conflict(:email).do_update(:name)
     # ```
     def on_conflict(*columns : Symbol) : self
       conflict_target(columns)
@@ -290,7 +286,7 @@ module CQL
     # **Example** Building the insert statement
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).commit
+    # AcmeDB.insert.into(:users).values(name: "John", email: "john@example.com").build
     # ```
     def build
       Expression::Insert.new(
@@ -307,7 +303,8 @@ module CQL
     # **Example** Generating a SQL query
     #
     # ```
-    # insert.into(:users).values(name: "John", age: 30).to_sql
+    # AcmeDB.insert.into(:users).values(name: "John", email: "john@example.com").to_sql
+    # # => {"INSERT INTO users (name, email) VALUES (?, ?)", ["John", "john@example.com"]}
     # ```
     def to_sql(gen : Expression::Generator? = nil)
       generator = gen || @schema.new_generator

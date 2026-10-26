@@ -10,23 +10,25 @@ module CQL
   # **Example**
   #
   # ```
-  # update = CQL::Update.new(schema)
+  # AcmeDB.update
   #   .table(:users)
   #   .set(name: "John", age: 30)
-  #   .where { |w| w.id == 1 }
+  #   .where { users.id == 1 }
   #   .commit
   # ```
   #
   # ## Usage
   #
-  # - `initialize(schema : Schema)` - Initializes a new instance of `CQL::Update` with the given schema.
-  # - `commit : DB::Result` - Executes the update query and returns the result.
-  # - `to_sql(gen = @schema.gen) : {String, Array(DB::Any)}` - Generates the SQL query and parameters.
+  # - `initialize(schema : Schema)` - Initializes a new instance of `CQL::Update` with the given schema (`schema.update` does the same).
+  # - `commit : DB::ExecResult` - Executes the update query and returns the result.
+  # - `to_sql(gen : Expression::Generator? = nil) : {String, Array(DB::Any)}` - Generates the SQL query and parameters.
   # - `table(table : Symbol) : self` - Sets the table to update.
   # - `set(setters : Hash(Symbol, DB::Any)) : self` - Sets the column values to update using a hash.
   # - `set(**fields) : self` - Sets the column values to update using keyword arguments.
   # - `where(&block) : self` - Sets the WHERE clause using a block.
   # - `where(**fields) : self` - Sets the WHERE clause using keyword arguments.
+  # - `where(attr : Hash(Symbol, DB::Any)) : self` - Sets the WHERE clause using a hash.
+  # - `with_optimistic_lock(version : Int32, column : Symbol? = nil) : self` - Checks and bumps a version column.
   # - `back(*columns : Symbol) : self` - Sets the columns to return after the update.
   # - `build : Expression::Update` - Builds the `Expression::Update` object.
   class Update
@@ -45,14 +47,15 @@ module CQL
     def initialize(@schema : Schema)
     end
 
-    # Enables optimistic locking for this update.
-    # - **@param** version_value [Int32] the current version value to check against
-    # - **@param** version_column [Symbol] the name of the version column (default: inferred from table)
+    # Enables optimistic locking for this update: the row must still hold *version*,
+    # which is incremented; `commit` raises `CQL::OptimisticLockError` when no row matched.
+    # - **@param** version [Int32] the current version value to check against
+    # - **@param** column [Symbol?] the name of the version column (default: the table's version column, or `version`)
     # - **@return** [self] the current instance
     #
-    # **Example** Using optimistic locking
+    # **Example** Using optimistic locking (the table needs a version column)
     # ```
-    # update = CQL::Update.new(schema)
+    # AcmeDB.update
     #   .table(:users)
     #   .set(name: "John", age: 30)
     #   .where(id: 1)
@@ -68,17 +71,16 @@ module CQL
 
     # Executes the update query and returns the result.
     # The query execution is automatically tracked by CQL::Performance when enabled.
-    # - **@return** [DB::Result] the result of the query
+    # - **@return** [DB::ExecResult] the result of the query
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
+    # result = AcmeDB.update
     #   .table(:users)
     #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
+    #   .where { users.id == 1 }
     #   .commit
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
+    # result.rows_affected
     # ```
     def commit
       if @with_optimistic_locking
@@ -101,13 +103,12 @@ module CQL
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
+    # AcmeDB.update
     #   .table(:users)
     #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
+    #   .where { users.id == 1 }
     #   .to_sql
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
+    # # => {"UPDATE users SET name = ?, age = ? WHERE users.id = ?", ["John", 30, 1]}
     # ```
     def to_sql(gen : Expression::Generator? = nil)
       generator = gen || @schema.new_generator
@@ -123,13 +124,7 @@ module CQL
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
-    #   .table(:users)
-    #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
-    #   .commit
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
+    # AcmeDB.update.table(:users)
     # ```
     def table(table : Symbol)
       @table = Expression::Table.new(find_table(table))
@@ -142,13 +137,8 @@ module CQL
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
-    #   .table(:users)
-    #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
-    #   .commit
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
+    # values = {:name => "John", :age => 30} of Symbol => DB::Any
+    # AcmeDB.update.table(:users).set(values).where(id: 1).commit
     # ```
     def set(setters : Hash(Symbol, DB::Any))
       build_setters(setters)
@@ -157,18 +147,12 @@ module CQL
     end
 
     # Sets the column values to update using keyword arguments.
-    # - **@param** fields [Hash(Symbol, DB::Any)] the column values to update
+    # - **@param** fields [NamedTuple] the column values to update
     # - **@return** [self] the current instance
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
-    #   .table(:users)
-    #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
-    #   .commit
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
+    # AcmeDB.update.table(:users).set(name: "John", age: 30).where(id: 1).commit
     # ```
     def set(**fields)
       build_setters(fields)
@@ -176,21 +160,13 @@ module CQL
       self
     end
 
-    # Sets the WHERE clause using a block.
-    # - **@block**  w [Expression::FilterBuilder] the filter builder
+    # Sets the WHERE clause using a block evaluated on an `Expression::FilterBuilder`,
+    # where the table is reachable by name.
     # - **@return** [self] the current instance
-    # - **@raise** [Exception] if the block is not provided
-    # - **@raise** [Exception] if the block does not return an expression
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
-    #   .table(:users)
-    #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
-    #   .commit
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
+    # AcmeDB.update.table(:users).set(active: false).where { users.age < 18 }.commit
     # ```
     def where(&)
       tbl_expr = @table.not_nil!
@@ -215,20 +191,15 @@ module CQL
     end
 
     # Sets the WHERE clause using keyword arguments.
-    # - **@param** fields [Hash(Symbol, DB::Any)] the conditions
+    # - **@param** fields [NamedTuple] the conditions, ANDed together
     # - **@return** [self] the current instance
     # - **@raise** [Exception] if the column does not exist
     # - **@raise** [Exception] if the value is invalid
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
-    #   .table(:users)
-    #   .set(name: "John", age: 30)
-    #   .where(id: 1)
-    #   .commit
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
+    # AcmeDB.update.table(:users).set(name: "John").where(id: 1).to_sql
+    # # => {"UPDATE users SET name = ? WHERE users.id = ?", ["John", 1]}
     # ```
     def where(**fields)
       condition = nil
@@ -242,21 +213,16 @@ module CQL
       self
     end
 
-    # Sets the columns to return after the update.
-    # - **@param** columns [Array(Symbol)] the columns to return
+    # Sets the WHERE clause using a hash of column => value conditions, ANDed together.
+    # - **@param** attr [Hash(Symbol, DB::Any)] the conditions
     # - **@return** [self] the current instance
-    # - **@raise** [Exception] if the column does not exist
-    # - **@raise** [Exception] if the column is not part of the table
+    # - **@raise** [ArgumentError] if a column does not exist
     #
     # **Example**
     #
     # ```
-    # update = CQL::Update.new(schema)
-    #   .table(:users)
-    #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
-    #   .back(:name, :age)
-    #   .commit
+    # conditions = {:id => 1} of Symbol => DB::Any
+    # AcmeDB.update.table(:users).set(name: "John").where(conditions).commit
     # ```
     def where(attr : Hash(Symbol, DB::Any))
       condition = nil
@@ -270,20 +236,19 @@ module CQL
       self
     end
 
-    # Sets the columns to return after the update.
-    # - **@param** columns [Array(Symbol)] the columns to return
+    # Sets the columns to return after the update (`RETURNING`; SQLite raises when SQL is generated).
+    # - **@param** columns [Symbol*] the columns to return
     # - **@return** [self] the current instance
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
+    # AcmeDB.update
     #   .table(:users)
     #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
+    #   .where { users.id == 1 }
     #   .back(:name, :age)
-    #   .commit
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3 RETURNING name, age", ["John", 30, 1]}
+    #   .to_sql(Expression::Generator.new(CQL::Adapter::Postgres))
+    # # => {"UPDATE users SET name = $1, age = $2 WHERE users.id = $3 RETURNING users.name, users.age", ["John", 30, 1]}
     # ```
     #
     def back(*columns : Symbol)
@@ -297,13 +262,7 @@ module CQL
     #
     # **Example**
     # ```
-    # update = CQL::Update.new(schema)
-    #   .table(:users)
-    #   .set(name: "John", age: 30)
-    #   .where { |w| w.id == 1 }
-    #   .commit
-    #
-    # => {"UPDATE users SET name = $1, age = $2 WHERE id = $3", ["John", 30, 1]}
+    # AcmeDB.update.table(:users).set(name: "John").where(id: 1).build
     # ```
     #
     def build

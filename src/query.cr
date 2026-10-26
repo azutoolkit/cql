@@ -36,30 +36,23 @@ module CQL
   # To track queries with context:
   # ```
   # CQL::Performance.with_context("UserController#index") do
-  #   query.from(:users).all(User)
+  #   AcmeDB.query.from(:users).all(User)
   # end
   # ```
   #
   # **Example** Creating a new query
   #
   # ```
-  # schema = CQL::Schema.new
-  #
-  # CQL::Query.new(schema)
-  # query.select(:name, :age).from(:users).where(name: "John").all(User)
-  # => [{"name" => "John", "age" => 30}]
+  # query = CQL::Query.new(AcmeDB) # same as AcmeDB.query
+  # users = query.from(:users).where(name: "John").all(User)
   # ```
   #
   # **Example** Executing a query and iterating over results
   #
   # ```
-  # schema = CQL::Schema.new
-  # query = CQL::Query.new(schema)
-  # query.select(:name, :age).from(:users).where(name: "John").each(User) do |user|
+  # AcmeDB.query.from(:users).where(name: "John").each(User) do |user|
   #   puts user.name
   # end
-  #
-  # => John
   # ```
   class Query
     include Executable
@@ -114,10 +107,7 @@ module CQL
     #
     # **Example** Creating a new query
     # ```
-    # schema = CQL::Schema.new
-    # query = CQL::Query.new(schema)
-    #
-    # => #<CQL::Query:0x00007f8b1b0b3b00>
+    # query = CQL::Query.new(AcmeDB)
     # ```
     def initialize(@schema : Schema)
     end
@@ -165,29 +155,22 @@ module CQL
       first(kind) || raise DB::NoResultsError.new("No records found")
     end
 
-    # Specifies the columns to select.
+    # Specifies the columns to select, grouped by table name or alias.
     # - **@param** fields [Hash(Symbol, Array(Symbol) | Symbol)] The columns to select
     # - **@return** [Query] The query object
     #
     # **Example**
     #
     # ```
-    # query.from(:users, :address).select(users: [:name, :age], address: [:city, :state])
-    # => "SELECT users.name, users.age, address.city, address.state FROM users, address"
+    # AcmeDB.query.from(:users, :posts).select(users: [:name, :age], posts: [:title]).to_sql
+    # # => {"SELECT users.name, users.age, posts.title FROM users, posts", []}
     # ```
     #
-    # ** Example with aggregates **
+    # **Example with aggregates**
     #
     # ```
-    # query.from(:users).select(count: :id)
-    # => "SELECT COUNT(id) FROM users"
-    # ```
-    #
-    # ** Example with aliases **
-    #
-    # ```
-    # query.from(:users, :orders).select(users: [:name, :age], orders: [:total_amount, :status])
-    # => "SELECT users.name, users.age, orders.total_amount, orders.status FROM users, orders"
+    # AcmeDB.query.from(:users).select(count: :id).to_sql
+    # # => {"SELECT COUNT(users.id) FROM users", []}
     # ```
     def select(**fields : Hash(String | Symbol, Array(Symbol) | Symbol))
       fields.each do |key, value|
@@ -264,8 +247,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.select(:name, :age)
-    # => "SELECT name, age FROM users"
+    # AcmeDB.query.from(:users).select(:name, :age).to_sql
+    # # => {"SELECT users.name, users.age FROM users", []}
     # ```
     def select(*columns : Symbol | String)
       added_cols = columns.map do |col_name_or_qualified|
@@ -278,14 +261,13 @@ module CQL
     end
 
     # Specifies the tables to select from.
-    # - **@param** tbls [Symbol*] The tables to select from
+    # - **@param** tbls_or_aliases [Symbol* | Hash(Symbol, Symbol)*] The tables to select from
     # - **@return** [Query] The query object
     #
     # **Example**
     #
     # ```
-    # query.from(:users, :orders)
-    # => "SELECT * FROM users, orders"
+    # AcmeDB.query.from(:users, :posts) # selects every column of both tables
     # ```
     def from(*tbls_or_aliases : Symbol | Hash(Symbol, Symbol))
       @query_tables.clear # FROM clause resets tables
@@ -321,10 +303,11 @@ module CQL
     # Adds `FUNCTION(...) OVER (PARTITION BY ... ORDER BY ... frame) AS name` to the select list.
     #
     # ```
-    # query.window(:row_number, as: :dept_rank, partition_by: :dept, order_by: {salary: :desc})
-    # query.window(:sum, :salary, as: :running, order_by: :id, rows: {:unbounded_preceding, 0})
-    # query.window(:lag, :salary, offset: 1, as: :previous, order_by: :id)
-    # query.window(:ntile, buckets: 4, as: :quartile, order_by: :salary)
+    # query = AcmeDB.query.from(:users)
+    # query.window(:row_number, as: :age_rank, partition_by: :active, order_by: {age: :desc})
+    # query.window(:sum, :age, as: :running_age, order_by: :id, rows: {:unbounded_preceding, 0})
+    # query.window(:lag, :age, offset: 1, as: :previous_age, order_by: :id)
+    # query.window(:ntile, buckets: 4, as: :quartile, order_by: :age)
     # ```
     #
     # Functions: row_number, rank, dense_rank, percent_rank, cume_dist, ntile,
@@ -350,7 +333,9 @@ module CQL
     # like a table, with the columns *source* selects.
     #
     # ```
-    # query.with(:totals, orders.sum(:total, as: :spent).group(:customer_id)).from(:totals)
+    # adults = AcmeDB.query.from(:users).select(:name).where_gt(:age, 17)
+    # AcmeDB.query.with(:adults, adults).from(:adults).to_sql
+    # # => {"WITH adults AS (SELECT users.name FROM users WHERE users.age > ?) SELECT adults.name FROM adults", [17]}
     # ```
     def with(name : Symbol, source : Executable) : self
       declare(name, source.build)
@@ -425,10 +410,12 @@ module CQL
       self
     end
 
-    # A raw SQL fragment with bound `?` / `:name` values, ANDed with other conditions.
+    # A raw SQL fragment with bound `?` or `:name` values (not both in one fragment),
+    # ANDed with other conditions.
     #
     # ```
-    # query.where("lower(name) = ? AND age > :age", "ada", age: 18)
+    # AcmeDB.query.from(:users).where("lower(name) = ? AND age > ?", "ada", 18)
+    # AcmeDB.query.from(:users).where("age > :age", age: 18)
     # ```
     def where(__sql sql : String, *positional, **named)
       merge_where_condition(Expression::Raw.build(sql, positional, named))
@@ -469,8 +456,8 @@ module CQL
     #
     # **Example**
     # ```
-    # # Find users with no deleted_at timestamp
-    # User.query.where_null(:deleted_at).all(User)
+    # # Find posts without a body
+    # AcmeDB.query.from(:posts).where_null(:body).all(Post)
     # ```
     def where_null(field : Symbol | String)
       column = find_column(field)
@@ -488,8 +475,8 @@ module CQL
     #
     # **Example**
     # ```
-    # # Find users with a deleted_at timestamp (soft-deleted users)
-    # User.query.where_not_null(:deleted_at).all(User)
+    # # Find posts with a body
+    # AcmeDB.query.from(:posts).where_not_null(:body).all(Post)
     # ```
     def where_not_null(field : Symbol | String)
       column = find_column(field)
@@ -509,7 +496,7 @@ module CQL
     # **Example**
     # ```
     # # Find records with id greater than 100
-    # User.query.where_gt(:id, 100).all(User)
+    # AcmeDB.query.from(:users).where_gt(:id, 100).all(User)
     # ```
     def where_gt(field : Symbol | String, value : DB::Any)
       column = find_column(field)
@@ -529,7 +516,7 @@ module CQL
     # **Example**
     # ```
     # # Find records with id less than 100
-    # User.query.where_lt(:id, 100).all(User)
+    # AcmeDB.query.from(:users).where_lt(:id, 100).all(User)
     # ```
     def where_lt(field : Symbol | String, value : DB::Any)
       column = find_column(field)
@@ -541,14 +528,14 @@ module CQL
     end
 
     # Adds a JOIN to the query with automatic relationship detection.
-    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@param** table_or_alias [Symbol] The table to join
     # - **@return** [Query] The query object
     def join(table_or_alias : Symbol)
       join_table(table_or_alias, Expression::JoinType::INNER)
     end
 
     # Adds a JOIN to the query using a block for the condition.
-    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@param** table_or_alias [Symbol] The table to join
     # - **@yield** [FilterBuilder] The block to build the ON condition
     # - **@return** [Query] The query object
     def join(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
@@ -556,14 +543,14 @@ module CQL
     end
 
     # Adds a LEFT JOIN to the query with automatic relationship detection.
-    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@param** table_or_alias [Symbol] The table to join
     # - **@return** [Query] The query object
     def left(table_or_alias : Symbol)
       join_table(table_or_alias, Expression::JoinType::LEFT)
     end
 
     # Adds a LEFT JOIN to the query using a block for the condition.
-    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@param** table_or_alias [Symbol] The table to join
     # - **@yield** [FilterBuilder] The block to build the ON condition
     # - **@return** [Query] The query object
     def left(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
@@ -571,14 +558,14 @@ module CQL
     end
 
     # Adds a RIGHT JOIN to the query with automatic relationship detection.
-    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@param** table_or_alias [Symbol] The table to join
     # - **@return** [Query] The query object
     def right(table_or_alias : Symbol)
       join_table(table_or_alias, Expression::JoinType::RIGHT)
     end
 
     # Adds a RIGHT JOIN to the query using a block for the condition.
-    # - **@param** table [Symbol | Hash(Symbol, Symbol)] Table name or alias mapping
+    # - **@param** table_or_alias [Symbol] The table to join
     # - **@yield** [FilterBuilder] The block to build the ON condition
     # - **@return** [Query] The query object
     def right(table_or_alias : Symbol, &block : Expression::FilterBuilder -> _)
@@ -668,8 +655,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.from(:users).group(:age).having { count(:id) > 5 }
-    # => "SELECT * FROM users GROUP BY age HAVING count(id) > 5"
+    # AcmeDB.query.from(:users).select(:age).group(:age).having { count(:id) > 5 }.to_sql
+    # # => {"SELECT users.age FROM users GROUP BY users.age HAVING COUNT(users.id) > ?", [5]}
     # ```
     def having(&)
       # Pass String-keyed query_tables to HavingBuilder
@@ -686,8 +673,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.from(:users).limit(10)
-    # => "SELECT * FROM users LIMIT 10"
+    # AcmeDB.query.from(:users).select(:name).limit(10).to_sql
+    # # => {"SELECT users.name FROM users LIMIT ?", [10]}
     # ```
     def limit(value : Int32)
       @limit = value
@@ -701,8 +688,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.from(:users).limit(10).offset(20)
-    # => "SELECT * FROM users LIMIT 10 OFFSET 20"
+    # AcmeDB.query.from(:users).select(:name).limit(10).offset(20).to_sql
+    # # => {"SELECT users.name FROM users LIMIT ? OFFSET ?", [10, 20]}
     # ```
     def offset(value : Int32)
       @offset = value
@@ -714,8 +701,8 @@ module CQL
     #
     # **Example**
     # ```
-    # query.from(:users).distinct
-    # => "SELECT DISTINCT * FROM users"
+    # AcmeDB.query.from(:users).select(:name).distinct.to_sql
+    # # => {"SELECT DISTINCT users.name FROM users", []}
     # ```
     def distinct
       @distinct = true
@@ -746,8 +733,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.order(:name).reorder(:age)
-    # => "SELECT * FROM users ORDER BY age"
+    # AcmeDB.query.from(:users).select(:name).order(:name).reorder(:age).to_sql
+    # # => {"SELECT users.name FROM users ORDER BY users.age ASC", []}
     # ```
     def reorder(*fields : Symbol | String)
       @order_by = nil
@@ -768,8 +755,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.order(:name).reverse_order
-    # => "SELECT * FROM users ORDER BY name DESC"
+    # AcmeDB.query.from(:users).select(:name).order(:name).reverse_order.to_sql
+    # # => {"SELECT users.name FROM users ORDER BY users.name DESC", []}
     # ```
     def reverse_order
       @order_by.try do |order|
@@ -789,8 +776,9 @@ module CQL
     # **Example**
     #
     # ```
+    # query = AcmeDB.query.from(:users).where(active: true)
     # users = query.with_performance_context("UserController#index") do
-    #   query.from(:users).where(active: true).all(User)
+    #   query.all(User)
     # end
     # ```
     def with_performance_context(context : String, &)
@@ -804,8 +792,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.where(active: true).unscope(:where)
-    # => "SELECT * FROM users"
+    # AcmeDB.query.from(:users).select(:name).where(active: true).unscope(:where).to_sql
+    # # => {"SELECT users.name FROM users", []}
     # ```
     def unscope(*scopes : Symbol)
       scopes.each do |scope|
@@ -867,8 +855,7 @@ module CQL
     # **Example**
     #
     # ```
-    # query.build
-    # => #<Expression::Query:0x00007f8b1b0b3b00>
+    # AcmeDB.query.from(:users).build # an Expression::Query, ready for a generator
     # ```
     def build(limit : Int32? = @limit) : Expression::Query
       select_cols, aggr_exprs = build_select
@@ -898,8 +885,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.count(:id)
-    # => "SELECT COUNT(id) FROM users"
+    # AcmeDB.query.from(:users).count(:id).to_sql
+    # # => {"SELECT COUNT(users.id) FROM users", []}
     # ```
     def count(column : Symbol = :*, as as_name : Symbol? = nil, distinct : Bool = false)
       CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
@@ -928,8 +915,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.from(:users).max(:price)
-    # => "SELECT MAX(price) FROM users"
+    # AcmeDB.query.from(:users).max(:age).to_sql
+    # # => {"SELECT MAX(users.age) FROM users", []}
     # ```
     def max(column : Symbol, as as_name : Symbol? = nil)
       CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
@@ -947,8 +934,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.min(:price)
-    # => "SELECT MIN(price) FROM users"
+    # AcmeDB.query.from(:users).min(:age).to_sql
+    # # => {"SELECT MIN(users.age) FROM users", []}
     # ```
     def min(column : Symbol, as as_name : Symbol? = nil)
       CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
@@ -966,8 +953,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.sum(:total_amount)
-    # => "SELECT SUM(total_amount) FROM users"
+    # AcmeDB.query.from(:users).sum(:age).to_sql
+    # # => {"SELECT SUM(users.age) FROM users", []}
     # ```
     def sum(column : Symbol, as as_name : Symbol? = nil)
       CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
@@ -985,8 +972,8 @@ module CQL
     # **Example**
     #
     # ```
-    # query.avg(:rating)
-    # => "SELECT AVG(rating) FROM users"
+    # AcmeDB.query.from(:users).avg(:age).to_sql
+    # # => {"SELECT AVG(users.age) FROM users", []}
     # ```
     def avg(column : Symbol, as as_name : Symbol? = nil)
       CQL::Identifier.validate!(as_name.to_s, "alias") if as_name
