@@ -225,6 +225,10 @@ module Expression
       raise CQL::DialectError.new(display_name, "row locking (FOR UPDATE / FOR SHARE)", "SQLite serializes writers; use a transaction instead.")
     end
 
+    def format_delete_using(target : String, using : String) : String
+      raise CQL::DialectError.new(display_name, "DELETE ... USING", "Match the other table in a subquery: WHERE id IN (SELECT ...).")
+    end
+
     def explain(sql : String, analyze : Bool) : String
       raise CQL::DialectError.new("SQLite", "EXPLAIN ANALYZE", "Use EXPLAIN without analyze, or run the query under a timer.") if analyze
       "EXPLAIN QUERY PLAN #{sql}"
@@ -280,12 +284,6 @@ module Expression
     protected def format_boolean(value : Bool) : String
       # SQLite uses 1 and 0 for boolean values
       value ? "1" : "0"
-    end
-
-    # Override time formatting for SQLite-specific format
-    protected def format_time(value : Time) : String
-      # Format time values as ISO8601 strings with SQLite-style escaping
-      "''#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}''"
     end
 
     # Returns the SQL function for the current timestamp (evaluated by database)

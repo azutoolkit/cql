@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code that rescued `NilAssertionError` from `Query#get!` should rescue `DB::NoResultsError`.
 - `touch` on a soft-deleted record now stamps its row and returns `true`; before, it raised `CQL::Error`.
 - Code that called `record.run_save_callbacks` or `record.run_after_save_callbacks` can call `run_callbacks(:before_save)` and the other events directly.
+- Code that calls `Delete#using` on SQLite now raises `CQL::DialectError` when the SQL is generated; match the other table in a subquery instead (`WHERE id IN (SELECT ...)`).
+- `Insert#query(...).back(...)` on SQLite now raises `CQL::SQLiteUnsupportedFeatureError` when the SQL is generated, like `back` on a VALUES insert; it used to drop the RETURNING clause silently.
+- An `AlterTable#foreign_key` with no `references_columns` against a table whose primary key is not `id` now references that primary key. Pass `references_columns: [:id]` to keep the old target.
 
 ### Removed
 
@@ -25,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `collection.create(record)` on a `many_to_many` association adds the join row for a soft-deleted record instead of inserting a second copy of it. It now inserts only a new record (`new_record?`), as `save` does.
 - `touch` updates a soft-deleted record instead of raising "Cannot touch on a new record object". It raises only for a record that has no id.
 - `CQL::Repository` can be subclassed outside the `CQL` module (`class UserRepository < CQL::Repository(User, Int64)`). Before, the subclass failed to compile with "undefined constant Schema".
+- A `Time` column default is written as one single-quoted literal in UTC (`DEFAULT '2024-01-01 00:00:00.000'`) on PostgreSQL, MySQL and SQLite; it was wrapped in doubled quotes (`''...''`), which every database rejected, and written in the value's own zone.
+- A PostgreSQL or CockroachDB string column default that contains a backslash is written as an `E'...'` literal with the backslashes doubled, so it is stored as given whatever `standard_conforming_strings` is set to. Before, with the setting off, `\` acted as an escape: `C:\ it's` was stored as `C: it's`, and a value ending in a backslash (`C:\`) left the literal unterminated.
+- `Delete#using` renders MySQL's multi-table form (`DELETE FROM posts USING posts, users ...`) and raises `CQL::DialectError` on SQLite, which has no `DELETE ... USING`. Before, both got PostgreSQL's form, which neither accepts.
+- `INSERT ... SELECT` (`Insert#query`) keeps the `RETURNING` clause asked for with `back(...)`; it was dropped on every dialect.
+- `AlterTable#foreign_key` without `references_columns` references the referenced table's primary key, as `Table#foreign_key` does; it always assumed `id`.
 
 ## [0.0.907] - 2026-10-26
 

@@ -225,9 +225,12 @@ module Expression
       format_returning(columns)
     end
 
-    # Override timestamp formatting for PostgreSQL-specific format
-    protected def format_time(value : Time) : String
-      "''#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}''"
+    # A value holding a backslash becomes an `E'...'` literal with backslashes doubled, which reads the same
+    # whether `standard_conforming_strings` is on or off; a plain literal would treat `\` as an escape when off.
+    protected def quote_string_literal(value : String) : String
+      return super unless value.includes?('\\')
+
+      "E'#{value.gsub({'\\' => "\\\\", '\'' => "''"})}'"
     end
 
     # Returns the SQL function for the current timestamp (evaluated by database)

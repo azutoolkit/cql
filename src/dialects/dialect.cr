@@ -200,6 +200,11 @@ module Expression
       raise CQL::DialectError.new(display_name, "DISTINCT ON", "Use a window function (ROW_NUMBER() OVER (PARTITION BY ...)) and keep row number 1.")
     end
 
+    # The USING clause of a DELETE from *target* that joins *using*.
+    def format_delete_using(target : String, using : String) : String
+      " USING #{using}"
+    end
+
     # Trailing row-lock clause (FOR UPDATE / FOR SHARE ...).
     def format_lock(lock : Expression::RowLock) : String
       wait = case lock.wait
@@ -310,9 +315,9 @@ module Expression
       value ? "TRUE" : "FALSE"
     end
 
-    # Default time formatting - subclasses can override
+    # *value* in UTC, the zone bound `Time` parameters are sent in
     protected def format_time(value : Time) : String
-      "'#{value.to_s("%Y-%m-%d %H:%M:%S.%L")}'"
+      "'#{value.to_utc.to_s("%Y-%m-%d %H:%M:%S.%L")}'"
     end
 
     # Common column definition building pattern

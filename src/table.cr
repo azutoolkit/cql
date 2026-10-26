@@ -118,28 +118,16 @@ module CQL
       on_delete : Symbol = :no_action,
       on_update : Symbol = :no_action,
     )
-      ref_columns = case references_columns
-                    when Array(Symbol) then references_columns
-                    when Symbol        then [references_columns]
-                    when Nil
-                      # If nil, assume it references the primary key of the target table
-                      # We might need to fetch the target table schema definition here,
-                      # but for now, let's assume the primary key is always :id
-                      # A more robust solution would look up the primary key name.
-                      primary_key_columns(references_table) # Use helper to get PK
-                    end
-
-      # Validate column count match
-      ref_cols_nn = ref_columns.not_nil!            # Assert it's not nil
-      unless local_columns.size == ref_cols_nn.size # Use the non-nil variable
-        raise ArgumentError.new("Number of columns (#{local_columns.join(", ")}) must match number of referenced columns (#{ref_cols_nn.join(", ")})")
+      ref_columns = referenced_columns(references_table, references_columns)
+      unless local_columns.size == ref_columns.size
+        raise ArgumentError.new("Number of columns (#{local_columns.join(", ")}) must match number of referenced columns (#{ref_columns.join(", ")})")
       end
 
       fk = ForeignKey.new(
         table: self,
         columns: local_columns,
         references_table: references_table,
-        references_columns: ref_cols_nn, # Use the non-nil variable here too
+        references_columns: ref_columns,
         name: name,
         on_delete: on_delete,
         on_update: on_update
@@ -166,6 +154,16 @@ module CQL
         on_delete: on_delete,
         on_update: on_update
       )
+    end
+
+    # The columns a foreign key to *references_table* points at: *references_columns* when given,
+    # otherwise that table's primary key.
+    def referenced_columns(references_table : Symbol, references_columns : (Array(Symbol) | Symbol)?) : Array(Symbol)
+      case references_columns
+      in Array(Symbol) then references_columns
+      in Symbol        then [references_columns]
+      in Nil           then primary_key_columns(references_table)
+      end
     end
 
     # Helper method to get primary key columns for a referenced table

@@ -146,7 +146,7 @@ module CQL
     #
     # - **@param** columns [Array(Symbol)] the columns in the current table
     # - **@param** references [Symbol] the referenced table
-    # - **@param** references_columns [Array(Symbol), Symbol, nil] the columns in the referenced table (default: `[:id]`)
+    # - **@param** references_columns [Array(Symbol), Symbol, nil] the columns in the referenced table (default: its primary key)
     # - **@param** name [Symbol, nil] the optional name of the foreign key constraint
     # - **@param** on_delete [Symbol] the action on delete (default: :no_action)
     # - **@param** on_update [Symbol] the action on update (default: :no_action)
@@ -167,12 +167,7 @@ module CQL
       on_delete : Symbol = :no_action, # Use Symbol for actions
       on_update : Symbol = :no_action, # Use Symbol for actions
     )
-      # Resolve referenced columns if nil (default to PK :id)
-      ref_columns_array = case references_columns
-                          when Array(Symbol) then references_columns
-                          when Symbol        then [references_columns]
-                          else                    [:id] # Default PK assumption
-                          end
+      ref_columns_array = table.referenced_columns(references_table, references_columns)
 
       # Ensure column counts match
       unless local_columns.size == ref_columns_array.size

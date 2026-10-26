@@ -99,6 +99,8 @@ module CQL
     # # => {"DELETE FROM posts USING users WHERE (posts.user_id = users.id) AND (users.active = $1)", [false]}
     # ```
     #
+    # MySQL renders `DELETE FROM posts USING posts, users ...`; SQLite has no such form, so generating the SQL
+    # raises `CQL::DialectError` there.
     def using(table : Symbol)
       @using = Expression::Table.new(find_table(table))
       self
