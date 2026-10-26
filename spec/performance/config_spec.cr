@@ -318,6 +318,12 @@ describe CQL::Performance::Config::Monitoring do
     monitoring.context_tracking.should be_false
   end
 
+  it "records synchronously unless async is turned on, with a 4096-statement queue" do
+    monitoring = CQL::Performance::Config.new.monitoring
+    monitoring.async?.should be_false
+    monitoring.async_queue_capacity.should eq(4096)
+  end
+
   it "auto-enables context_tracking in development" do
     ENV["CRYSTAL_ENV"] = "development"
     monitoring = CQL::Performance::Config::Monitoring.new
@@ -482,6 +488,11 @@ describe CQL::Performance::ConfigPresets do
       config.reporting.auto_generate?.should be_true
       config.reporting.interval.should eq(10.minutes)
     end
+  end
+
+  it "keeps async monitoring off in every preset, production included" do
+    presets = CQL::Performance::ConfigPresets
+    [presets.development, presets.test, presets.production, presets.minimal].each(&.monitoring.async?.should(be_false))
   end
 
   describe ".minimal" do

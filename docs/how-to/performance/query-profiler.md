@@ -37,6 +37,15 @@ CQL::Performance.configure do |config|
 end
 ```
 
+To record in the background instead:
+
+```crystal
+CQL::Performance.configure(&.monitoring.async=(true)) # queue capacity: config.monitoring.async_queue_capacity (4096)
+CQL::Performance.flush(5.seconds)                     # before reading metrics in a test, or at shutdown (pass a timeout)
+```
+
+With `monitoring.async`, a statement run through CQL hands itself to one background fiber through a bounded queue, which costs the query about 20 ns plus a copy of its bound values instead of the whole recording; profiling, N+1 detection and SQL logging then happen on that fiber. Metrics lag until the queue drains, a full queue drops statements instead of blocking, `track` blocks stay synchronous, and `Monitor#close` stops the queue so later statements are recorded inline. Queued statements keep their SQL, their error (whose message may hold data) and a copy of their bound values in memory until recorded; the bound is a count, not bytes, so lower the capacity for large binary parameters. It is off in every preset. On one Crystal thread this moves the work out of query latency, not out of CPU.
+
 Without any setup the monitor starts from `Config.from_env`:
 
 | Environment | Effect |

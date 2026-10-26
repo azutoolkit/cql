@@ -14,6 +14,8 @@ module CQL::Performance
       property? query_profiling : Bool = true
       property? auto_analyze_slow : Bool = true
       property context_tracking : Bool = false
+      property? async : Bool = false
+      property async_queue_capacity : Int32 = 4096
 
       def initialize
         # Auto-enable in development

@@ -141,4 +141,9 @@ module CQL::Performance
   def self.export_metrics_as_json : String
     monitor.metrics.to_json
   end
+
+  # Waits until the monitor has recorded every statement handed to it; false on timeout. Pass a timeout at shutdown.
+  def self.flush(timeout : Time::Span? = nil) : Bool
+    monitor.flush(timeout)
+  end
 end

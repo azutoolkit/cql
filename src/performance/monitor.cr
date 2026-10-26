@@ -22,7 +22,10 @@ module CQL::Performance
     private OVERHEAD_SAMPLE_INTERVAL = 64
     private FREE_CHECKOUT            = 1.microsecond
 
+    private alias Statement = {CQL::Telemetry::QueryEvent, Array(DB::Any)}
+
     @config : Config
+    @queue : CQL::Telemetry::EventQueue(Statement)?
     @profiler : QueryProfilerInterface?
     @detector : NPlusOneDetectorInterface?
     @sql_formatter : SQLFormatter
@@ -47,6 +50,7 @@ module CQL::Performance
       @detector = detector || (config.detection.enabled? ? NPlusOneDetector.new(config.detection).as(NPlusOneDetectorInterface) : nil)
       @sql_formatter = sql_formatter || create_sql_formatter
       @report_generator = report_generator || UnifiedReportGenerator.new
+      @queue = build_queue if config.monitoring.async?
     end
 
     # Main monitoring methods
@@ -64,9 +68,25 @@ module CQL::Performance
       result
     end
 
-    # Records a statement `CQL::Execution.run` has already timed.
+    # Records a statement `CQL::Execution.run` has already timed, on the async queue's fiber when monitoring is async.
     def record(event : CQL::Telemetry::QueryEvent, params : Array(DB::Any)) : Nil
-      record_statement(event.sql, params, event.duration, event.rows_affected, event.error, event.pool_wait)
+      if queue = @queue
+        queue.push({event, params.empty? ? params : params.map(&.dup)})
+      else
+        record_event(event, params)
+      end
+    end
+
+    # True once every statement recorded before it was handled, at once when recording is synchronous; false on timeout.
+    def flush(timeout : Time::Span? = nil) : Bool
+      queue = @queue
+      queue.nil? || queue.flush(timeout)
+    end
+
+    # Stops the async queue, skipping the statements it still holds; `record` is synchronous afterwards.
+    def close : Nil
+      @queue.try(&.close)
+      @queue = nil
     end
 
     # API - just wrap the query
@@ -176,6 +196,16 @@ module CQL::Performance
     def configure(&)
       yield @config
       reconfigure_components
+    end
+
+    private def build_queue : CQL::Telemetry::EventQueue(Statement)
+      CQL::Telemetry::EventQueue(Statement).new(@config.monitoring.async_queue_capacity) do |(event, params)|
+        record_event(event, params)
+      end
+    end
+
+    private def record_event(event : CQL::Telemetry::QueryEvent, params : Array(DB::Any)) : Nil
+      record_statement(event.sql, params, event.duration, event.rows_affected, event.error, event.pool_wait)
     end
 
     private def record_statement(sql : String, params : Array(DB::Any), duration : Time::Span,
@@ -351,6 +381,8 @@ module CQL::Performance
       elsif !@config.detection.enabled?
         @detector = nil
       end
+
+      @config.monitoring.async? ? (@queue ||= build_queue) : close
     end
   end
 

@@ -613,6 +613,43 @@ class RaisingProfiler
   end
 end
 
+# Real profiler that also notes where and under which context it was called; a gate holds `record_query` until it is closed.
+class AsyncSpyProfiler < CQL::Performance::QueryProfiler
+  getter fibers = [] of Fiber
+  getter contexts = [] of String?
+  getter seen_params = [] of Array(DB::Any)
+
+  def initialize(@gate : Channel(Nil)? = nil)
+    super()
+  end
+
+  def record_query(sql : String, params : Array(DB::Any), execution_time : Time::Span, rows_affected : Int64? = nil,
+                   error : String? = nil, normalized_sql : String? = nil) : Void
+    @gate.try(&.receive?)
+    @fibers << Fiber.current
+    @contexts << CQL::Telemetry.current_context
+    @seen_params << params
+    super
+  end
+end
+
+private def statement_event(params : Array(DB::Any) = [] of DB::Any)
+  CQL::Telemetry.query_event(CQL::Adapter::SQLite, :select, "SELECT 1", params, 1.millisecond, nil, nil)
+end
+
+private def with_async_monitor(profiler : CQL::Performance::QueryProfilerInterface? = nil, capacity : Int32 = 4096, &)
+  config = CQL::Performance::Config.new
+  config.monitoring.enabled = true
+  config.monitoring.async = true
+  config.monitoring.async_queue_capacity = capacity
+  config.detection.enabled = false
+  config.logging.enabled = false
+  monitor = CQL::Performance::Monitor.new(config: config, profiler: profiler)
+  yield monitor
+ensure
+  monitor.try(&.close)
+end
+
 class NormalizationSpyDetector
   include CQL::Performance::NPlusOneDetectorInterface
 
@@ -887,6 +924,18 @@ describe "CQL::Performance::Monitor with CQL::Execution.run" do
 
     events.map(&.operation).should eq([:ddl])
     monitor.profiler.not_nil!.statistics.should be_empty
+  end
+
+  it "records five statements through the async queue once flushed" do
+    with_async_monitor do |monitor|
+      with_global_monitor(monitor) do
+        5.times { select_names.call }
+        CQL::Performance.flush(1.second).should be_true
+      end
+
+      monitor.counters.observed_statements.should eq(5)
+      monitor.metrics.query_metrics.total_queries.should eq(5)
+    end
   end
 
   describe "counters" do
@@ -1172,5 +1221,44 @@ describe "CQL::Performance::Monitor metrics export of bound values" do
     json = build_monitor.call(true).metrics.to_json
 
     JSON.parse(json)["top_queries"]["slowest_queries"][0]["params"].should eq(JSON.parse(%(["#{secret}"])))
+  end
+end
+
+describe "CQL::Performance::Monitor async recording" do
+  it "records off the caller's fiber" do
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |monitor|
+      3.times { monitor.record(statement_event, [] of DB::Any) }
+      monitor.flush(1.second).should be_true
+    end
+
+    spy.fibers.size.should eq(3)
+    spy.fibers.each(&.should_not(eq(Fiber.current)))
+  end
+
+  it "copies the params so a caller that mutates them afterwards changes nothing" do
+    gate = Channel(Nil).new
+    spy = AsyncSpyProfiler.new(gate)
+    with_async_monitor(spy) do |monitor|
+      bytes = Bytes.new(3) { |i| (i + 1).to_u8 }
+      params = [bytes] of DB::Any
+      monitor.record(statement_event(params), params)
+      bytes[0] = 99_u8
+      gate.close
+      monitor.flush(1.second).should be_true
+
+      spy.seen_params.first.first.should eq(Bytes.new(3) { |i| (i + 1).to_u8 })
+    end
+  end
+
+  it "records synchronously again after close, and flush without a queue returns true" do
+    spy = AsyncSpyProfiler.new
+    with_async_monitor(spy) do |monitor|
+      monitor.close
+      monitor.record(statement_event, [] of DB::Any)
+
+      spy.fibers.should eq([Fiber.current])
+      monitor.flush.should be_true
+    end
   end
 end
