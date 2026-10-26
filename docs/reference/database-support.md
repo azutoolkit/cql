@@ -38,6 +38,7 @@ Legend: yes, no (raises `CQL::DialectError` unless stated), or a note.
 | `explain` | `EXPLAIN QUERY PLAN` | `EXPLAIN` | `EXPLAIN` | `EXPLAIN` |
 | `explain(analyze: true)` | no | yes | MySQL 8.0.18+ | yes |
 | `structure_dump` | returns an empty string | via `pg_dump` | via `mysqldump` | no |
+| `foreign_key`, `drop_foreign_key` and `change_column` in `schema.alter` | no: `CQL::SQLiteUnsupportedFeatureError`, with a workaround | yes | yes | yes |
 | `Int32` column type | `INTEGER` | `INTEGER` | `INT` | `INT4` |
 | `JSON::Any` column type | `TEXT` | `JSONB` | `JSON` | `JSONB` |
 

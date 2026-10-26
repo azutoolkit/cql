@@ -68,7 +68,7 @@ def up
 end
 ```
 
-`drop_column` on a column the table definition does not know only logs an error and emits no SQL.
+`drop_column` emits `DROP COLUMN` even for a column the table definition does not declare; the database raises if the table has no such column.
 
 ## Common Error: Cannot Drop Column
 

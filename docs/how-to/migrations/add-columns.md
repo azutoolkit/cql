@@ -91,7 +91,7 @@ end
 
 ## Add Foreign Key Column
 
-Adding a foreign key to an existing table is not supported on SQLite.
+Adding a foreign key to an existing table is not supported on SQLite: `foreign_key` in `schema.alter` raises `CQL::SQLiteUnsupportedFeatureError` with a workaround.
 
 ```crystal
 class AddCategoryToPosts < CQL::Migration(9)

@@ -15,7 +15,9 @@ module CQL
   # ```
   class AlterTable
     Log = CQL.config.logger
-    @actions : Array(Expression::AlterAction) = [] of Expression::AlterAction
+    # In declaration order, each built against the table as it was named then, so a later
+    # `rename_table` in the same block does not rename the statements before it.
+    @statements = [] of Expression::AlterTable | Expression::AlterAction
     private getter schema : CQL::Schema
     private getter table : CQL::Table
 
@@ -55,19 +57,20 @@ module CQL
       new_column = Column(T).new(name, as_name, null, default, unique, size)
       new_column.table = @table
       @table.columns[name] = new_column
-      @actions << Expression::AddColumn.new(new_column)
+      alter Expression::AddColumn.new(new_column.dup)
       add_column_index(new_column, unique) if index
       @table.columns_changed!
     end
 
     # Like `create_index`, the index is created but not recorded in the table's declared indexes.
     private def add_column_index(column : BaseColumn, unique : Bool) : Nil
-      column_index = Index.new(@table, [column.name], unique)
+      column_index = Index.new(as_declared, [column.name], unique)
       column.index = column_index
-      @actions << Expression::CreateIndex.new(column_index)
+      @statements << Expression::CreateIndex.new(column_index)
     end
 
-    # Drops a column from the table.
+    # Drops a column from the table. The column need not be declared in the schema: the database
+    # reports a column it does not have.
     #
     # - **@param** column [Symbol] the name of the column to be dropped
     #
@@ -76,14 +79,8 @@ module CQL
     # drop_column(:age)
     # ```
     def drop_column(column : Symbol)
-      col = @table.columns[column]?
-      if col.nil?
-        Log.error { "Column #{column} does not exist in table #{@table}" }
-        return
-      end
-
       @table.columns.delete(column)
-      @actions << Expression::DropColumn.new(col.name.to_s)
+      alter Expression::DropColumn.new(column.to_s)
       @table.columns_changed!
     end
 
@@ -100,7 +97,7 @@ module CQL
     def rename_column(old_name : Symbol, new_name : Symbol)
       column = @table.columns[old_name]
       column.table = @table
-      @actions << Expression::RenameColumn.new(column.dup, new_name.to_s)
+      alter Expression::RenameColumn.new(column.dup, new_name.to_s)
       column.name = new_name
       @table.columns.delete(old_name)
       @table.columns[new_name] = column
@@ -119,7 +116,7 @@ module CQL
     def change_column(name : Symbol, type : T.class) forall T
       new_column = Column(T).new(name)
       new_column.table = @table
-      @actions << Expression::ChangeColumn.new(new_column, type)
+      alter Expression::ChangeColumn.new(new_column.dup, type)
       @table.columns[name] = new_column
       @table.columns_changed!
     end
@@ -133,7 +130,7 @@ module CQL
     # rename_table(:new_table_name)
     # ```
     def rename_table(new_name : Symbol)
-      @actions << Expression::RenameTable.new(table.dup, new_name.to_s)
+      @statements << Expression::RenameTable.new(as_declared, new_name.to_s)
       schema.tables.delete(table.table_name)
       table.table_name = new_name
       schema.tables[new_name] = table
@@ -173,7 +170,7 @@ module CQL
       end
 
       fk = ForeignKey.new(
-        table: @table, # Pass the table instance
+        table: as_declared,
         columns: local_columns,
         references_table: references_table,
         references_columns: ref_columns_array,
@@ -181,7 +178,7 @@ module CQL
         on_delete: on_delete,
         on_update: on_update
       )
-      @actions << Expression::AddForeignKey.new(fk)
+      alter Expression::AddForeignKey.new(fk)
     end
 
     # Overload for single column case
@@ -212,7 +209,7 @@ module CQL
     # drop_foreign_key(:fk_user_id)
     # ```
     def drop_foreign_key(name : Symbol)
-      @actions << Expression::DropForeignKey.new(name.to_s, @table.table_name.to_s)
+      alter Expression::DropForeignKey.new(name.to_s, @table.table_name.to_s)
     end
 
     # Creates an index on the table.
@@ -226,7 +223,7 @@ module CQL
     # create_index(:index_users_on_email, [:email], unique: true)
     # ```
     def create_index(name : Symbol, columns : Array(Symbol), unique : Bool = false)
-      @actions << Expression::CreateIndex.new(Index.new(@table, columns, unique, name.to_s))
+      @statements << Expression::CreateIndex.new(Index.new(as_declared, columns, unique, name.to_s))
     end
 
     # Drops an index from the table.
@@ -238,10 +235,8 @@ module CQL
     # drop_index(:index_users_on_email)
     # ```
     def drop_index(name : Symbol)
-      index = Index.new(@table, [] of Symbol, false, name.to_s)
-      @actions << Expression::DropIndex.new(index)
-    rescue
-      Log.error { "Index #{name} does not exist in table #{@table}" }
+      index = Index.new(as_declared, [] of Symbol, false, name.to_s)
+      @statements << Expression::DropIndex.new(index)
     end
 
     # Converts the alter table actions to SQL.
@@ -255,16 +250,19 @@ module CQL
     # ```
     def to_sql(visitor : Expression::Visitor)
       String.build do |string|
-        @actions.each do |action|
-          case action
-          when Expression::CreateIndex, Expression::DropIndex, Expression::RenameTable
-            string << action.accept(visitor)
-          else
-            string << Expression::AlterTable.new(@table, action).accept(visitor)
-          end
-          string << ";\n"
-        end
+        @statements.each { |statement| string << statement.accept(visitor) << ";\n" }
       end
+    end
+
+    # Queues *action* as an `ALTER TABLE` statement on the table under its current name.
+    private def alter(action : Expression::AlterAction) : Nil
+      @statements << Expression::AlterTable.new(as_declared, action)
+    end
+
+    # The table under its current name: `rename_table` renames `table`, not this copy. Only the name is
+    # isolated; the copy shares its columns, indexes and foreign keys with `table`.
+    private def as_declared : CQL::Table
+      table.dup
     end
   end
 end

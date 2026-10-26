@@ -142,4 +142,102 @@ describe "CQL::AlterTable" do
         .should eq("ALTER TABLE accounts CHANGE code short_code VARCHAR(12);\n")
     end
   end
+
+  describe "#rename_table" do
+    it "runs the statements declared before it against the old name" do
+      with_widgets do |schema|
+        schema.alter :widgets do
+          add_column :sku, String, null: true, index: true
+          rename_table :gadgets
+          add_column :weight, Int32, null: true
+        end
+
+        query_all_strings(schema, "SELECT name FROM pragma_table_info('gadgets')").should eq(["id", "name", "sku", "weight"])
+        query_all_strings(schema, "SELECT name FROM pragma_index_list('gadgets')").should contain("idx_widgets_sku")
+      end
+    end
+
+    it "renders each statement under the table name in effect when it was declared" do
+      with_widgets do |schema|
+        alter_sql(schema.widgets, CQL::Adapter::SQLite) do
+          add_column :sku, String, null: true
+          create_index :idx_sku, [:sku]
+          rename_table :gadgets
+          add_column :weight, Int32, null: true
+        end.should eq("ALTER TABLE widgets ADD COLUMN sku TEXT;\nCREATE INDEX idx_sku ON widgets (sku);\n" \
+                      "ALTER TABLE widgets RENAME TO gadgets;\nALTER TABLE gadgets ADD COLUMN weight INTEGER;\n")
+      end
+
+      alter_sql(postgres_widgets, CQL::Adapter::Postgres) do
+        foreign_key [:id], references: :owners
+        rename_table :gadgets
+      end.should eq("ALTER TABLE widgets ADD CONSTRAINT fk_widgets_id FOREIGN KEY (id) REFERENCES owners (id) ON DELETE NO ACTION ON UPDATE NO ACTION;\n" \
+                    "ALTER TABLE widgets RENAME TO gadgets;\n")
+    end
+  end
+
+  describe "statement order" do
+    it "renders index, foreign key and column statements on each side of a rename under that side's name" do
+      alter_sql(mysql_widgets, CQL::Adapter::MySql) do
+        drop_index :idx_widgets_name
+        drop_foreign_key :fk_widgets_owner
+        rename_table :gadgets
+        drop_index :idx_gadgets_name
+        drop_column :name
+      end.should eq("DROP INDEX idx_widgets_name ON widgets;\nALTER TABLE widgets DROP FOREIGN KEY fk_widgets_owner;\n" \
+                    "RENAME TABLE widgets TO gadgets;\nDROP INDEX idx_gadgets_name ON gadgets;\nALTER TABLE gadgets DROP COLUMN name;\n")
+    end
+
+    it "changes a column's type under the name it had before a later rename_column" do
+      alter_sql(postgres_widgets, CQL::Adapter::Postgres) do
+        change_column :name, Int32
+        rename_column :name, :title
+      end.should eq("ALTER TABLE widgets ALTER COLUMN name TYPE INTEGER;\nALTER TABLE widgets RENAME COLUMN name TO title;\n")
+    end
+  end
+
+  describe "#rename_column" do
+    it "leaves a column added earlier in the block, and its index, under the declared name" do
+      with_widgets do |schema|
+        schema.alter :widgets do
+          add_column :sku, String, null: true, index: true
+          rename_column :sku, :code
+        end
+
+        query_all_strings(schema, "SELECT name FROM pragma_table_info('widgets')").should eq(["id", "name", "code"])
+      end
+    end
+  end
+
+  describe "#drop_column" do
+    it "drops a column the schema does not declare" do
+      with_widgets do |schema|
+        schema.exec("ALTER TABLE widgets ADD COLUMN legacy TEXT")
+
+        schema.alter :widgets do
+          drop_column :legacy
+        end
+
+        query_all_strings(schema, "SELECT name FROM pragma_table_info('widgets')").should eq(["id", "name"])
+      end
+    end
+
+    it "rejects a column name that is not an identifier" do
+      expect_raises(ArgumentError, /Invalid column name/) do
+        alter_sql(postgres_widgets, CQL::Adapter::Postgres) { drop_column :"name; DROP TABLE widgets" }
+      end
+    end
+  end
+
+  describe "#foreign_key" do
+    it "raises CQL::SQLiteUnsupportedFeatureError on SQLite" do
+      with_widgets do |schema|
+        expect_raises(CQL::SQLiteUnsupportedFeatureError, "adding foreign keys to an existing table") do
+          schema.alter :widgets do
+            foreign_key [:id], references: :widgets
+          end
+        end
+      end
+    end
+  end
 end

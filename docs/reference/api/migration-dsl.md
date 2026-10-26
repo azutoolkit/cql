@@ -241,18 +241,18 @@ end
 | Method | Description |
 |--------|-------------|
 | `add_column :name, Type, options` | Add a new column; takes the `column` options (`null:` defaults to `true` here) and emits its `DEFAULT`. `index: true` also creates `idx_<table>_<column>` |
-| `drop_column :name` | Remove a column |
+| `drop_column :name` | Remove a column; emits `DROP COLUMN` even when the schema does not declare it |
 | `rename_column :old, :new` | Rename a column |
 | `change_column :name, NewType` | Change column type |
 | `create_index :name, [:cols]` | Create an index |
 | `drop_index :name` | Drop an index |
-| `foreign_key [:cols], references: :table` | Add foreign key |
+| `foreign_key [:cols], references: :table` | Add foreign key (not on SQLite) |
 | `drop_foreign_key :name` | Drop foreign key |
-| `rename_table :new_name` | Rename the table |
+| `rename_table :new_name` | Rename the table; the statements before it in the block use the old name, the ones after it the new name |
 
 `unique_constraint [:cols]` and `check_constraint "expression"` exist on tables (inside `schema.table`) but not in `schema.alter`.
 
-`schema.alter` raises `CQL::Schema::Error` if the table is not registered in the schema. SQLite does not support `change_column`, adding a foreign key or dropping a foreign key to an existing table; these raise `CQL::SQLiteUnsupportedFeatureError` with a workaround message. `drop_column` on a column the table does not know only logs an error.
+`schema.alter` raises `CQL::Schema::Error` if the table is not registered in the schema. SQLite does not support `change_column`, adding a foreign key or dropping a foreign key to an existing table; these raise `CQL::SQLiteUnsupportedFeatureError` with a workaround message. The statements of a block run in the order they are declared, each against the table and column names in effect when it was declared. `drop_column` emits `DROP COLUMN` whether or not the schema declares the column, so a `down` block can drop a column its schema object never saw; the database raises for a column the table does not have.
 
 ### Alter Examples
 

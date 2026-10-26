@@ -661,7 +661,7 @@ module Expression
     end
 
     def visit(node : DropColumn) : String
-      @dialect.drop_column(node.column_name.to_s)
+      @dialect.drop_column(CQL::Identifier.validate!(node.column_name, "column name"))
     end
 
     def visit(node : DropIndex) : String
@@ -690,21 +690,6 @@ module Expression
     end
 
     def visit(node : AddForeignKey) : String
-      if @adapter == CQL::Adapter::SQLite
-        message = <<-MSG
-              SQLite does not support adding foreign keys to an \n
-              existing table directly via the ALTER TABLE statement.\n
-              You need to recreate the table with the foreign key constraint.\n
-              Here is an example workflow:
-
-                1. Create the new table with the foreign key.
-                2. Copy data from the old table to the new table.
-                3. Drop the old table.
-                4. Rename the new table to the old table name.
-            MSG
-        raise DB::Error.new message
-      end
-
       # Format actions for SQL
       on_delete_sql = node.fk.on_delete.to_s.upcase.gsub("_", " ")
       on_update_sql = node.fk.on_update.to_s.upcase.gsub("_", " ")
