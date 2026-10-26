@@ -300,4 +300,37 @@ describe "CQL compile-time safety" do
   ensure
     File.delete(db_path) if db_path && File.exists?(db_path)
   end
+
+  it "validates the primary key of a model without db_context" do
+    db_path = File.join(Dir.tempdir, "cql_inferred_key_#{Random.rand(1_000_000)}.db")
+    success, _output, error = Snippets.run <<-CRYSTAL
+      require "sqlite3"
+      require "./src/cql"
+
+      ENV["CQL_VALIDATE_SCHEMA_MAPPINGS"] = "1"
+
+      InferredKeySchema = CQL::Schema.define(
+        :inferred_key_schema,
+        "sqlite3://#{db_path}",
+        CQL::Adapter::SQLite
+      ) do
+        table :inferred_keyed_things do
+          primary :thing_no, Int32
+          column :name, String
+        end
+      end
+
+      class InferredKeyedThing
+        include CQL::ActiveRecord::Model(Int32)
+
+        property name : String
+      end
+      CRYSTAL
+
+    success.should be_false
+    error.should contain("table `inferred_keyed_things` declares primary key `thing_no`, but the model maps `id` to `id`")
+    error.should contain("primary_key: :thing_no")
+  ensure
+    File.delete(db_path) if db_path && File.exists?(db_path)
+  end
 end
