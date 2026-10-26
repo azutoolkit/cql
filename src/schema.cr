@@ -11,7 +11,6 @@ require "./exceptions"
 require "./cql"
 require "./pool_stats"
 require "./connection_source"
-require "./rollback_hooks"
 
 module CQL
   # The `Schema` class represents a database schema.
@@ -93,13 +92,8 @@ module CQL
       @source.close
     end
 
-    # :nodoc:
-    # One entry of a fiber's transaction stack: the transaction and the rollback hooks of the work done in it.
-    record TransactionFrame, transaction : DB::Transaction, rollback_hooks : RollbackHooks
-
-    # Fiber-local transaction stacks: each fiber's entered transactions (and savepoints), innermost last.
-    # A frame's rollback hooks are only touched by the fiber that owns the stack.
-    @fiber_transactions = {} of Fiber => Array(TransactionFrame)
+    # Fiber-local transaction stacks: each fiber's entered transactions (and savepoints), innermost last
+    @fiber_transactions = {} of Fiber => Array(DB::Transaction)
     @fiber_mutex = CQL::Compat::Mutex.new
     # Mirrors `@fiber_transactions.size`: queries skip the mutex only while no fiber has a transaction open
     @fibers_in_transaction = Atomic(Int32).new(0)
@@ -133,25 +127,20 @@ module CQL
       active_transaction.try(&.connection)
     end
 
-    private def active_transaction : DB::Transaction?
-      active_frame.try(&.transaction)
-    end
-
-    # The frame of the fiber's innermost transaction still open; any closed by hand (`tx.commit`/`tx.rollback`)
+    # The fiber's innermost transaction still open; any closed by hand (`tx.commit`/`tx.rollback`)
     # are skipped, so work falls back to the enclosing transaction rather than leaving it.
-    private def active_frame : TransactionFrame?
+    private def active_transaction : DB::Transaction?
       return if @fibers_in_transaction.get.zero? # this fiber's own push is already visible, so 0 means it has none
       @fiber_mutex.synchronize do
-        @fiber_transactions[Fiber.current]?.try { |stack| stack.reverse_each.find { |frame| !frame.transaction.closed? } }
+        @fiber_transactions[Fiber.current]?.try { |stack| stack.reverse_each.find { |tx| !tx.closed? } }
       end
     end
 
-    # Pushes *tx*, with the *rollback_hooks* of the work done in it, onto the fiber's transaction stack for the
-    # block and pops it afterwards.
-    private def with_active_transaction(tx : DB::Transaction, rollback_hooks : RollbackHooks, &)
+    # Pushes *tx* onto the fiber's transaction stack for the block and pops it afterwards.
+    private def with_active_transaction(tx : DB::Transaction, &)
       fiber = Fiber.current
       @fiber_mutex.synchronize do
-        (@fiber_transactions[fiber] ||= [] of TransactionFrame).push(TransactionFrame.new(tx, rollback_hooks))
+        (@fiber_transactions[fiber] ||= [] of DB::Transaction).push(tx)
         @fibers_in_transaction.set(@fiber_transactions.size)
       end
       begin
@@ -349,21 +338,14 @@ module CQL
     # Publishes `Telemetry::TransactionEvent`s to `Telemetry.subscribe_transactions`
     # subscribers. A manual `tx.rollback` followed by a normal return still
     # reports Commit, since CQL cannot see it.
-    #
-    # When the transaction rolls back (the block raises, including `DB::Rollback`,
-    # or the commit fails), table declarations changed by `alter` inside it are
-    # restored. A savepoint that commits leaves them to the enclosing transaction.
-    # A manual `tx.rollback` restores nothing, for the same reason as above.
     def transaction(&)
-      parent = active_frame
-      observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
-      rollback_hooks = RollbackHooks.new
+      outer = active_transaction
+      observer = Telemetry.begin_transaction(@adapter, !outer.nil?)
       # Nested calls open a SAVEPOINT on the outer transaction's connection.
-      (parent.try(&.transaction) || @source).transaction do |tx|
-        with_active_transaction(tx, rollback_hooks) do
+      (outer || @source).transaction do |tx|
+        with_active_transaction(tx) do
           yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
         rescue ex
-          rollback_hooks.run
           observer.try &.failed(ex)
           raise ex
         end
@@ -372,22 +354,16 @@ module CQL
       # DB::Rollback should be caught silently by the outer source transaction
       # and perform the rollback without propagating the exception further.
       # We log it for debugging, but don't convert to ConnectionError.
-      rollback_hooks.try &.run
       Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
     rescue ex
-      rollback_hooks.try &.run
       observer.try &.failed(ex)
       raise ex
     ensure
-      # Hooks still pending belong to work that was kept (committed, or left by a `return` from the block).
-      rollback_hooks.try &.hand_to(parent.try(&.rollback_hooks))
       observer.try &.finish
     end
 
     def transaction(tx : DB::Transaction, &)
-      # Not this schema's transaction to commit or roll back: rollback hooks go to the enclosing one, if any.
-      rollback_hooks = active_frame.try(&.rollback_hooks) || RollbackHooks.new
-      with_active_transaction(tx, rollback_hooks) do
+      with_active_transaction(tx) do
         yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
       end
     end
@@ -471,21 +447,19 @@ module CQL
     #   t.drop_column :age
     # end
     # ```
-    #
-    # Where DDL is transactional, a rollback of the surrounding transaction also restores the table's declaration.
-    # The restore puts back the whole declaration as it was before this `alter`, so it also undoes another fiber's
-    # uncommitted `alter` of the same table.
     def alter(table_name : Symbol, &)
-      table = tables[table_name]? || raise Error.new("Table '#{table_name}' not found")
+      raise Error.new("Table '#{table_name}' not found") unless tables[table_name]?
 
       ddl_transaction do
-        on_rollback(&table.declaration_snapshot)
-        alter_table = AlterTable.new(table, self)
+        alter_table = AlterTable.new(tables[table_name], self)
         with alter_table yield
-        statements = alter_table.statements(new_generator)
+        sql_statements = alter_table.to_sql(new_generator)
 
         with_connection do |connection|
-          statements.each { |sql| connection.exec(sql) }
+          sql_statements.split(";\n").each do |sql|
+            next if sql.empty?
+            connection.exec(sql)
+          end
         end
       end
     end
@@ -496,12 +470,6 @@ module CQL
       require_transactional_ddl!
       return yield unless dialect.supports_transactional_ddl?
       transaction { yield }
-    end
-
-    # Runs *hook* if the fiber's innermost open transaction rolls back, even after the savepoint it was registered in
-    # committed. Outside a transaction there is nothing to roll back, so it is dropped.
-    private def on_rollback(&hook : ->) : Nil
-      active_frame.try { |frame| frame.rollback_hooks << hook }
     end
 
     # Raises where DDL commits implicitly, because running it inside an open transaction would

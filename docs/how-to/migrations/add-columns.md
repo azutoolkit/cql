@@ -1,5 +1,5 @@
 ---
-description: "Add columns to an existing table with schema.alter, with their defaults, lengths and indexes."
+description: "Add columns to an existing table with schema.alter, with defaults, indexes and data backfills."
 ---
 
 # Add Columns
@@ -26,32 +26,32 @@ end
 ```
 {% endcode %}
 
-`add_column` takes the [column options](../../reference/api/migration-dsl.md#column-options) of `column` in a
-`schema.table` block, but makes nullable columns (`null: true`) unless you pass `null: false`.
+`add_column` makes nullable columns (`null: true`) unless you pass `null: false`, unlike `column` in a `schema.table`
+block.
 
-| Option | Effect |
+| Option | Effect on the `ADD COLUMN` statement |
 | :--- | :--- |
-| `default:` | adds `DEFAULT <literal>`, quoted and escaped for the dialect |
-| `unique: true` | adds `UNIQUE`; SQLite rejects it ("Cannot add a UNIQUE column") |
-| `size:` | `VARCHAR(n)` for a `String`; SQLite keeps `TEXT` |
-| `index: true` | runs `CREATE INDEX idx_<t>_<column>` after adding the column; with `unique: true`, both the `UNIQUE` constraint and a unique index, as in `schema.table` |
+| `null: false` | adds `NOT NULL` |
+| `default:` | adds `DEFAULT <value>`, which also fills the existing rows |
+| `unique: true` | adds `UNIQUE`; SQLite rejects it ("Cannot add a UNIQUE column"), so use `create_index ..., unique: true` |
+| `index: true` | runs `CREATE INDEX idx_<table>_<column>` after the column (`UNIQUE` with `unique: true`) |
+| `size:` | `VARCHAR(size)` for a `String` column on PostgreSQL, CockroachDB and MySQL; SQLite's `TEXT` has no length |
+| `as:` | none: it names the column in selects |
 
 ## Add a Column With a Default
 
-{% code title="db/migrations/006_add_status_to_users.cr" %}
+{% code title="db/migrations/006_add_active_to_users.cr" %}
 ```crystal
-class AddStatusToUsers < CQL::Migration(6)
+class AddActiveToUsers < CQL::Migration(6)
   def up
     schema.alter :users do
-      add_column :active, Bool, null: false, default: true # ADD COLUMN active BOOLEAN DEFAULT 1 NOT NULL (SQLite)
-      add_column :status, String, null: false, default: "pending", size: 20
-      # PostgreSQL: ALTER TABLE users ADD COLUMN status VARCHAR(20) DEFAULT 'pending' NOT NULL
+      add_column :active, Bool, default: true, null: false
+      # ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT 1 NOT NULL (SQLite; DEFAULT TRUE on PostgreSQL)
     end
   end
 
   def down
     schema.alter :users do
-      drop_column :status
       drop_column :active
     end
   end
@@ -59,8 +59,9 @@ end
 ```
 {% endcode %}
 
-Existing rows take the default. For a value computed per row, add the column nullable and fill it with
-`schema.update.table(:users).set(...).commit`.
+The default fills the rows already in the table, so a `NOT NULL` column can be added to a table with data. When the
+value depends on each row, add the column nullable and fill it as in
+[Migrate Data in Batches](#migrate-data-in-batches).
 
 ## Migrate Data in Batches
 
@@ -100,17 +101,15 @@ transaction. If `email` is unique, addresses that differ only in case collide; f
 
 ```crystal
 schema.alter :users do
-  add_column :deleted_at, Time, index: true # for SoftDeletable
+  # ADD COLUMN deleted_at TIMESTAMP, for SoftDeletable, then CREATE INDEX idx_users_deleted_at ON users (deleted_at)
+  add_column :deleted_at, Time, index: true
 end
-# ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP
-# CREATE INDEX idx_users_deleted_at ON users (deleted_at)
-# down: drop_index :idx_users_deleted_at, then drop_column :deleted_at
 
-# A unique column, SQLite included (it cannot add a UNIQUE column)
 schema.alter :posts do
   add_column :slug, String
-  create_index :idx_posts_slug, [:slug], unique: true # CREATE UNIQUE INDEX idx_posts_slug ON posts (slug)
+  create_index :idx_posts_slug, [:slug], unique: true  # CREATE UNIQUE INDEX idx_posts_slug ON posts (slug)
 end
+# down: drop_index :idx_posts_slug, then drop_column :slug
 ```
 
 ## Add Timestamps to an Existing Table
@@ -130,7 +129,8 @@ schema.update.table(:posts).set(created_at: now, updated_at: now).commit
 {% tab title="PostgreSQL and MySQL" %}
 ```crystal
 schema.alter :posts do
-  add_column :category_id, Int64, index: true
+  add_column :category_id, Int64
+  create_index :idx_posts_category_id, [:category_id]
   foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: :set_null
 end
 # ALTER TABLE posts ADD COLUMN category_id BIGINT
@@ -142,7 +142,7 @@ end
 
 {% tab title="SQLite" %}
 {% hint style="warning" %}
-`foreign_key` in `schema.alter` raises `DB::Error` while the block's SQL is built, so nothing in that block runs. Add the column alone, or recreate the table with the key declared.
+`foreign_key` in `schema.alter` raises `CQL::SQLiteUnsupportedFeatureError` while the block's SQL is built, so nothing in that block runs. Add the column alone, or recreate the table with the key declared.
 {% endhint %}
 {% endtab %}
 {% endtabs %}

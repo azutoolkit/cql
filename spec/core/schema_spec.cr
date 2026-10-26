@@ -210,55 +210,6 @@ describe CQL::Schema do
       result.should eq "john@example.com"
     end
 
-    it "fills a NOT NULL column added to a table with rows from its default, and indexes it" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
-        table :users do
-          primary :id, Int32
-          column :name, String
-        end
-      end
-      schema.users.create!
-      schema.exec("INSERT INTO users (name) VALUES ('John')")
-
-      schema.alter(:users) { add_column :status, String, null: false, default: "active", index: true }
-
-      schema.exec_query(&.query_one("SELECT status FROM users", as: String)).should eq "active"
-      schema.exec_query(&.query_all("SELECT name FROM pragma_index_list('users')", as: String)).should eq ["idx_users_status"]
-    end
-
-    it "adds a column whose default holds a statement separator" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
-        table :users do
-          primary :id, Int32
-          column :name, String
-        end
-      end
-      schema.users.create!
-
-      schema.alter(:users) { add_column :note, String, null: false, default: "a;\nb" }
-      schema.exec("INSERT INTO users (name) VALUES ('John')")
-
-      schema.exec_query(&.query_one("SELECT note FROM users", as: String)).should eq "a;\nb"
-    end
-
-    it "rolls back the columns and the declaration when a later statement of the alter fails" do
-      schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
-        table :users do
-          primary :id, Int32
-          column :name, String
-        end
-      end
-      schema.users.create!
-      schema.exec("CREATE INDEX idx_users_status ON users (name)")
-
-      expect_raises(Exception, /idx_users_status/) do
-        schema.alter(:users) { add_column :status, String, null: true, index: true }
-      end
-
-      schema.exec_query(&.query_all("SELECT name FROM pragma_table_info('users')", as: String)).should eq ["id", "name"]
-      schema.users.columns.keys.should eq [:id, :name]
-    end
-
     it "raises error when altering non-existent table" do
       schema = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: db_uri) do
         table :users do

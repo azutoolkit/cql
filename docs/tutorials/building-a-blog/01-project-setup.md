@@ -101,7 +101,7 @@ MIGRATOR_CONFIG = CQL::MigratorConfig.new(
 | `adapter` | The database dialect. Part 5 switches it to PostgreSQL for production. |
 | `uri` | Connection URL. A relative SQLite path starts from the directory you run the program in. |
 | `schema_file_path`, `schema_name`, `schema_symbol` | Where the migrator writes the generated schema, and the constant and symbol it defines. |
-| `auto_sync` | Write that file when the migrator starts and it is missing, and rewrite it after every `up` and `down`. |
+| `auto_sync` | Rewrite that file after every `up` and `down`. |
 {% endstep %}
 
 {% step %}
@@ -156,7 +156,7 @@ puts "Setup complete!"
 {% endcode %}
 
 {% hint style="info" %}
-`src/setup.cr` compiles only once a migration exists, so you run it in Part 2.
+You run `src/setup.cr` in Part 2, once there is a migration for it to apply.
 {% endhint %}
 {% endstep %}
 

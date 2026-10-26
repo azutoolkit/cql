@@ -19,7 +19,7 @@ In the tables, "raises" means CQL raises `CQL::DialectError` (or the subclass na
 | :--- | :--- |
 | `adapter.dialect` | The shared dialect instance |
 | `adapter.postgres_compatible?` | `true` for PostgreSQL and CockroachDB |
-| `adapter.sql_type(Int64)`, `adapter.sql_type(String, 50)` | The column type (see [Column types](api/migration-dsl.md#column-types)); the size sets a `String`'s length |
+| `adapter.sql_type(Int64)` | The column type (see [Column types](api/migration-dsl.md#column-types)) |
 | `adapter.driver_uri(uri)` | `cockroachdb://` rewritten to `postgres://`; others unchanged |
 | `query.to_sql(for: CQL::Adapter::Postgres)` | `{sql, params}` for another adapter, without a connection |
 
@@ -40,9 +40,7 @@ Only SQLite runs live in CQL's specs; the other dialects are checked through gen
 | `supports_returning?` (`create!` reads the row from its INSERT) | `false` | `true` | `false` | `true` |
 | `supports_transactional_ddl?` (`ddl_transaction`, used by `alter`, `build`, `create!`/`drop!`/`truncate!` and the migrator, rolls DDL back) | `true` | `true` | `false` | `false` |
 | `current_timestamp` | `datetime('now')` | `CURRENT_TIMESTAMP` | `NOW(3)` | `CURRENT_TIMESTAMP` |
-| `string_type(size)`, `string_type(nil)` | `TEXT`, `TEXT` | `VARCHAR(size)`, `VARCHAR` | `VARCHAR(size)`, `VARCHAR(255)` | same as PostgreSQL |
-| `structure_dump(uri)` | `""` | `pg_dump`'s output; password in `PGPASSWORD`, `sslmode` in `PGSSLMODE`; `CQL::Error` with stderr when it fails | `mysqldump`'s output; password in a temporary 0600 defaults file; `CQL::Error` with stderr when it fails | raises `DialectError` |
-| `structure_dump_command(uri) { \|command\| ... }` | raises `DialectError` | yields `pg_dump`'s `command`, `args` and `env` | yields `mysqldump`'s, deleting the defaults file after the block | raises `DialectError` |
+| `structure_dump(uri)` | `""` | the DDL `pg_dump` prints; `CQL::Error` when it fails | the DDL `mysqldump` prints; `CQL::Error` when it fails | raises |
 | Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |
 
 ## Queries
@@ -84,11 +82,11 @@ CTEs and window functions are on `CQL::Query` (`AppDB.query`), not on `QueryBuil
 | `Bool` default | `1` / `0` | `TRUE` / `FALSE` | `TRUE` / `FALSE` | `TRUE` / `FALSE` |
 | `check_constraint` | yes | yes | raises `MySqlUnsupportedFeatureError` | yes |
 | Unnamed `foreign_key` in a table | unnamed | unnamed | `fk_<t>_<columns>` | unnamed |
-| `add_column` | `ADD COLUMN` | `ADD COLUMN` | `ADD COLUMN` | `ADD COLUMN` |
+| `add_column` | `ADD COLUMN`, with `DEFAULT`; `index: true` adds `CREATE INDEX` | same | same | same |
 | `drop_column` | `DROP COLUMN` (3.35+) | yes | yes | yes |
 | `rename_column` | `RENAME COLUMN` | `RENAME COLUMN` | `CHANGE old new <type>` | `RENAME COLUMN` |
 | `change_column` | raises `SQLiteUnsupportedFeatureError` | `ALTER COLUMN ... TYPE` | `MODIFY COLUMN` | `ALTER COLUMN ... TYPE` |
-| `foreign_key` in `schema.alter` | raises `DB::Error` | `ADD CONSTRAINT` | `ADD CONSTRAINT` | `ADD CONSTRAINT` |
+| `foreign_key` in `schema.alter` | raises `SQLiteUnsupportedFeatureError` | `ADD CONSTRAINT` | `ADD CONSTRAINT` | `ADD CONSTRAINT` |
 | `drop_foreign_key` | raises `SQLiteUnsupportedFeatureError` | `DROP CONSTRAINT` | `DROP FOREIGN KEY` | `DROP CONSTRAINT` |
 | `drop_index` | `DROP INDEX IF EXISTS` | `DROP INDEX IF EXISTS` | `DROP INDEX ... ON <t>` | `DROP INDEX IF EXISTS` |
 | `rename_table` | `ALTER TABLE ... RENAME TO` | same | `RENAME TABLE ... TO` | same as PostgreSQL |

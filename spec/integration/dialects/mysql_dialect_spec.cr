@@ -17,74 +17,20 @@ module Expression
       end
     end
 
-    describe "#structure_dump_command" do
-      it "runs mysqldump with the password in an owner-only defaults file, deleted afterwards, never in its arguments" do
-        defaults_file = nil
-        MySqlDialect.new.structure_dump_command(URI.parse(%(mysql://app:p%40ss%22%5C@db.internal:3307/my%20shop))) do |command|
-          command.command.should eq("mysqldump")
-          defaults_file = command.args.first.lchop("--defaults-extra-file=")
-          command.args.skip(1).should eq([
-            "--no-data", "--skip-comments", "--compact", "--host=db.internal", "--port=3307", "--user=app", "--protocol=tcp", "my shop",
-          ])
-          command.args.join(" ").should_not contain("p@ss")
-          command.env.should be_empty
-          File.read(defaults_file.not_nil!).should eq(%([client]\npassword="p@ss\\"\\\\"\n))
-          File.info(defaults_file.not_nil!).permissions.value.should eq(0o600)
-        end
-
-        File.exists?(defaults_file.not_nil!).should be_false
-      end
-
-      it "deletes the defaults file when the dump raises" do
-        defaults_file = nil
-        expect_raises(Exception, "boom") do
-          MySqlDialect.new.structure_dump_command(URI.parse("mysql://app:secret@localhost/shop")) do |command|
-            defaults_file = command.args.first.lchop("--defaults-extra-file=")
-            raise "boom"
-          end
-        end
-
-        File.exists?(defaults_file.not_nil!).should be_false
-      end
-
-      it "connects over TCP when the URI names a port, which mysqldump ignores on the localhost socket" do
-        MySqlDialect.new.structure_dump_command(URI.parse("mysql://localhost:3307/shop")) do |command|
-          command.args.should eq(["--no-data", "--skip-comments", "--compact", "--host=localhost", "--port=3307", "--protocol=tcp", "shop"])
-        end
-      end
-
-      it "refuses a database name mysqldump would read as an option" do
-        expect_raises(CQL::Error, /--result-file/) do
-          MySqlDialect.new.structure_dump_command(URI.parse("mysql://app:secret@localhost/--result-file=%2Ftmp%2Fx")) { }
-        end
-      end
-
-      it "writes no defaults file without a password" do
-        MySqlDialect.new.structure_dump_command(URI.parse("mysql://localhost/shop")) do |command|
-          command.args.should eq(["--no-data", "--skip-comments", "--compact", "--host=localhost", "shop"])
-        end
-      end
-    end
-
     describe "#structure_dump" do
-      uri = URI.parse("mysql://app:p%40ss@db.internal:3307/shop")
-
-      it "returns what mysqldump printed" do
-        FakeTools.with_tool("mysqldump", "echo 'CREATE TABLE users ();'") do
-          MySqlDialect.new.structure_dump(uri).should eq("CREATE TABLE users ();\n")
+      it "returns what mysqldump prints, run against the URI's server, user, password and database" do
+        FakeExecutable.with("mysqldump", %(echo "CREATE TABLE users ();"; printf '%s\n' "$@")) do
+          MySqlDialect.new.structure_dump(URI.parse("mysql://user:pass@db.example:3307/mydb")).should eq([
+            "CREATE TABLE users ();",
+            "--no-data", "--skip-comments", "--compact", "--user=user", "--password=pass", "--host=db.example", "--port=3307", "mydb",
+          ].join("\n") + "\n")
         end
       end
 
-      it "gives mysqldump the password in the defaults file named by its first argument" do
-        FakeTools.with_tool("mysqldump", %(cat "${1#--defaults-extra-file=}")) do
-          MySqlDialect.new.structure_dump(uri).should eq(%([client]\npassword="p@ss"\n))
-        end
-      end
-
-      it "raises CQL::Error with mysqldump's stderr when it fails" do
-        FakeTools.with_tool("mysqldump", "echo 'mysqldump: Got error: 1045: Access denied' >&2; exit 2") do
-          expect_raises(CQL::Error, "mysqldump failed (exit code 2): mysqldump: Got error: 1045: Access denied") do
-            MySqlDialect.new.structure_dump(uri)
+      it "raises with mysqldump's error output when it fails" do
+        FakeExecutable.with("mysqldump", %(echo "Access denied" >&2; exit 2)) do
+          expect_raises(CQL::Error, "mysqldump failed: Access denied") do
+            MySqlDialect.new.structure_dump(URI.parse("mysql://user@localhost/mydb"))
           end
         end
       end

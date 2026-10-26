@@ -33,7 +33,7 @@ module CQL
     property table : Table? = nil
     # :nodoc:
     property length : Int32? = nil
-    # The most characters a `String` column holds; nil uses the dialect's default length.
+    # The declared length of a String column (`VARCHAR(size)`); SQLite and other types ignore it.
     getter size : Int32? = nil
     # :nodoc:
     property? index : Index? = nil
@@ -99,7 +99,8 @@ module CQL
     end
 
     def type
-      @table.not_nil!.schema.adapter.sql_type(Type, @size)
+      adapter = @table.not_nil!.schema.adapter
+      adapter.dialect.sized_type(adapter.sql_type(Type), @size)
     end
   end
 

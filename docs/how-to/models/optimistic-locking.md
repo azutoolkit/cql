@@ -16,14 +16,14 @@ AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3
 end
 ```
 
-On an existing table, add it in a migration; existing rows start at version 1:
+On an existing table, add it in a migration; the default fills the existing rows (see [Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default)):
 
 {% code title="db/migrations/20260115_add_version_to_users.cr" %}
 ```crystal
 class AddVersionToUsers < CQL::Migration(20260115)
   def up
     schema.alter :users do
-      add_column :version, Int32, null: false, default: 1 # ADD COLUMN version INTEGER DEFAULT 1 NOT NULL
+      add_column :version, Int32, default: 1, null: false
     end
   end
 

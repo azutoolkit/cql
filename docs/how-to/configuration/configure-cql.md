@@ -98,10 +98,10 @@ AppDB.migrator             # ignores CQL.config; a migration applied here is inv
 # Only the migrator differs; skips the bootstrap / verify_schema step
 CQL.build_migrator(AppDB, CQL.migrator_config(migrations_table: :my_migrations))
 
-# With auto_sync on, a migrator writes the schema file when constructed if it is missing, and after
-# each up/down. bootstrap = true dumps the file from the live database. verify_schema = true
-# (development and production) compares it and logs "Schema file is out of sync with database";
-# with auto_sync on, it then rewrites the file.
+# With auto_sync on, a migrator writes the schema file after each up/down; building it writes nothing.
+# bootstrap = true dumps the file from the live database. verify_schema = true (development and
+# production) compares it, logs "Schema file is out of sync with database" on a mismatch, and with
+# auto_sync on rewrites the file.
 ```
 
 <details>
@@ -125,8 +125,6 @@ CQL.configure do |c|
          when "test"       then "sqlite3://./db/test.db"
          else                   "sqlite3://./db/development.db"
          end
-
-  c.pool_size = 2 if c.env == "test"
 end
 
 # ---- app.cr ----
@@ -178,10 +176,6 @@ puts "table=#{migrator.config.migration_table_name} file=#{migrator.config.schem
 
 {% hint style="warning" %}
 The test environment's default `db` is `sqlite3://:memory:`, which `CQL.build_schema` rejects with `URI::Error: Invalid URI: bad port at character 11`. Assign a file URL, as the complete example does.
-{% endhint %}
-
-{% hint style="warning" %}
-Test pools default to one connection, and the schema dump after `migrator.up` needs two: `CQL::Migrator::Error: Schema update failed: Could not check out a connection in 10.0 seconds`. Set `c.pool_size = 2`, or pass `CQL::MigratorConfig.new(auto_sync: false)`.
 {% endhint %}
 
 ## Read the config anywhere

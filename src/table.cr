@@ -52,23 +52,6 @@ module CQL
       @columns_revision += 1
     end
 
-    # :nodoc:
-    # Captures the name and columns that `Schema#alter` may change; the returned proc puts them back.
-    def declaration_snapshot : ->
-      name, columns = @table_name, @columns.dup
-      -> { restore_declaration(name, columns) }
-    end
-
-    private def restore_declaration(name : Symbol, columns : Hash(Symbol, BaseColumn)) : Nil
-      unless name == @table_name
-        @schema.tables.delete(@table_name) if @schema.tables[@table_name]?.try(&.same?(self))
-        @schema.tables[name] = self
-        @table_name = name
-      end
-      @columns = columns
-      columns_changed!
-    end
-
     @primary : BaseColumn = PrimaryKey(Int32).new(:id)
     getter as_name : String?
     getter foreign_keys : Array(ForeignKey) = [] of ForeignKey
@@ -254,7 +237,7 @@ module CQL
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
-    # - **@param** size [Int32, nil] the most characters a `String` column holds (default: nil, the dialect's default length)
+    # - **@param** size [Int32, nil] the size of the column (default: nil)
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
@@ -418,16 +401,8 @@ module CQL
       col
     end
 
-    # Adds a new `String` column declared `VARCHAR(size)` (`TEXT` on SQLite).
+    # Adds a new column to the table.
     # - **@param** name [Symbol] the name of the column to be added
-    # - **@param** size [Int32, nil] the most characters it holds (default: nil, the dialect's default length:
-    #   `VARCHAR` on PostgreSQL, `VARCHAR(255)` on MySQL)
-    #
-    # **Example**
-    #
-    # ```
-    # varchar :code, size: 50
-    # ```
     def varchar(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
       col = Column(String).new(name, as_name, null, default, unique, size)
       col.table = self

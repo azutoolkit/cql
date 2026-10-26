@@ -594,7 +594,15 @@ module Expression
 
         definitions = [] of String
 
-        definitions.concat(node.table.columns.map { |_, column| column_definition(column) })
+        # Define columns
+        columns_sql = node.table.columns.map do |_, column|
+          if column.is_a?(CQL::PrimaryKey)
+            @dialect.auto_increment_primary_key(column, column.type)
+          else
+            column_definition(column)
+          end
+        end
+        definitions.concat(columns_sql)
 
         # Define foreign keys (if any)
         unless node.table.foreign_keys.empty?
@@ -647,15 +655,13 @@ module Expression
       @dialect.add_column(column_definition(node.column), node.column.is_a?(CQL::PrimaryKey))
     end
 
-    # A column as CREATE TABLE and ADD COLUMN both declare it.
+    # A column as declared in CREATE TABLE and ALTER TABLE ... ADD COLUMN: name, type, default and constraints.
     private def column_definition(column : CQL::BaseColumn) : String
-      return @dialect.auto_increment_primary_key(column, column.type) if column.is_a?(CQL::PrimaryKey)
-
       @dialect.define_column(column.name.to_s, column.type, column.default, column.null?, column.unique?, is_auto_timestamp_column?(column))
     end
 
     def visit(node : DropColumn) : String
-      @dialect.drop_column(node.column_name.to_s)
+      @dialect.drop_column(CQL::Identifier.validate!(node.column_name, "column name"))
     end
 
     def visit(node : DropIndex) : String
@@ -684,21 +690,6 @@ module Expression
     end
 
     def visit(node : AddForeignKey) : String
-      if @adapter == CQL::Adapter::SQLite
-        message = <<-MSG
-              SQLite does not support adding foreign keys to an \n
-              existing table directly via the ALTER TABLE statement.\n
-              You need to recreate the table with the foreign key constraint.\n
-              Here is an example workflow:
-
-                1. Create the new table with the foreign key.
-                2. Copy data from the old table to the new table.
-                3. Drop the old table.
-                4. Rename the new table to the old table name.
-            MSG
-        raise DB::Error.new message
-      end
-
       # Format actions for SQL
       on_delete_sql = node.fk.on_delete.to_s.upcase.gsub("_", " ")
       on_update_sql = node.fk.on_update.to_s.upcase.gsub("_", " ")
