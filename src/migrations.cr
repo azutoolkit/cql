@@ -182,8 +182,10 @@ module CQL
     getter repo : Repository(MigrationRecord, Int32)
 
     def initialize(@schema : Schema, @config = MigratorConfig.new)
-      bootstrap_schema if @config.auto_sync?
-      schema.ddl_transaction { ensure_schema_migrations_table }
+      schema.ddl_transaction do
+        bootstrap_schema if @config.auto_sync?
+        ensure_schema_migrations_table
+      end
       @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
 
@@ -386,7 +388,8 @@ module CQL
       print_table(pending_migrations.map { |migration| build_migration_record(migration) }, "⏱".colorize.yellow.to_s)
     end
 
-    # Returns the pending migrations.
+    # Returns the pending migrations. It creates the migrations table if it is missing, so where DDL is not
+    # transactional (MySQL, CockroachDB) it raises `CQL::DialectError` inside an open transaction.
     # - **@return** [Array(MigrationRecord)]
     # **Example** Listing pending migrations
     # ```

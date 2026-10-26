@@ -62,7 +62,8 @@ SQLite, requesting columns raises `CQL::SQLiteUnsupportedFeatureError` whatever 
 separate `SELECT`). `Insert#get(as:)`/`get!(as:)` run the insert and read the returned row. `Dialect#supports_returning?`
 tells whether `Model.create!` can read the new row from its INSERT: true on PostgreSQL and CockroachDB, false on SQLite
 and MySQL, which read it back with a `SELECT`. `Dialect#supports_transactional_ddl?` (used by
-`Schema#ddl_transaction`) tells whether a schema change rolls back with its transaction: true on SQLite and PostgreSQL,
+`Schema#ddl_transaction`, which `alter`, `build`, `Table#create!`/`drop!`/`truncate!` and the migrator go through) tells
+whether a schema change rolls back with its transaction: true on SQLite and PostgreSQL,
 false on MySQL, which commits DDL implicitly, and CockroachDB, which does not run it atomically in an explicit transaction.
 
 ### DISTINCT ON

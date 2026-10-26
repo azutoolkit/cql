@@ -241,9 +241,7 @@ module CQL
     # schema.build
     # ```
     def build
-      @tables.each_value do |table|
-        table.create_statements.each { |sql| exec(sql) }
-      end
+      ddl_transaction { @tables.each_value(&.create!) }
     end
 
     # Executes a SQL statement.

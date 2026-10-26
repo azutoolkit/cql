@@ -113,7 +113,7 @@ The native PostgreSQL/CockroachDB driver raises subclasses of `CQL::Postgres::Er
 
 ### Dialect errors
 
-`CQL::DialectError` (with `dialect`, `feature` and an optional `workaround`) is raised when the adapter cannot express a feature. `CQL::SQLiteUnsupportedFeatureError` and `CQL::MySqlUnsupportedFeatureError` are its subclasses, for example `change_column` or adding a foreign key to an existing SQLite table. On MySQL and CockroachDB (`Dialect#supports_transactional_ddl?` is false) `schema.alter`, `Migrator.new`, `migrator.up` and `migrator.down` raise it when a transaction is open.
+`CQL::DialectError` (with `dialect`, `feature` and an optional `workaround`) is raised when the adapter cannot express a feature. `CQL::SQLiteUnsupportedFeatureError` and `CQL::MySqlUnsupportedFeatureError` are its subclasses, for example `change_column` or adding a foreign key to an existing SQLite table. On MySQL and CockroachDB (`Dialect#supports_transactional_ddl?` is false) `schema.alter`, `schema.build`, a table's `create!`, `drop!` and `truncate!`, `Migrator.new`, `migrator.up`, `migrator.down` and `migrator.pending_migrations` raise it when a transaction is open ("MySQL does not support schema changes inside a transaction").
 
 ### QueryError, TransactionError, PersistenceError, AttributeError, CallbackError, ConnectionError
 

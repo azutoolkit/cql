@@ -710,7 +710,7 @@ module CQL
       Expression::TruncateTable.new(self).accept(schema.new_generator).to_s
     end
 
-    # Creates the table in the database.
+    # Creates the table in the database. Goes through `Schema#ddl_transaction`.
     # - **@return** [Nil]
     #
     # **Example**
@@ -723,12 +723,14 @@ module CQL
     # => nil
     # ```
     def create!
-      schema.tables[table_name] ||= self
-      Log.debug { "Creating table #{table_name}" }
-      create_statements.each { |sql| schema.exec sql }
+      schema.ddl_transaction do
+        schema.tables[table_name] ||= self
+        Log.debug { "Creating table #{table_name}" }
+        create_statements.each { |sql| schema.exec sql }
+      end
     end
 
-    # Drops the table from the database.
+    # Drops the table from the database. Goes through `Schema#ddl_transaction`.
     # - **@return** [Nil]
     #
     # **Example**
@@ -740,10 +742,10 @@ module CQL
     # ```
     def drop!
       Log.debug { "Dropping table #{table_name}" }
-      schema.exec "#{drop_sql};"
+      schema.ddl_transaction { schema.exec "#{drop_sql};" }
     end
 
-    # Truncates the table in the database.
+    # Truncates the table in the database. Goes through `Schema#ddl_transaction`.
     # - **@return** [Nil]
     #
     # **Example**
@@ -754,7 +756,7 @@ module CQL
     # ```
     def truncate!
       Log.debug { "Truncating table #{table_name}" }
-      schema.exec "#{truncate_sql};"
+      schema.ddl_transaction { schema.exec "#{truncate_sql};" }
     end
 
     # Gets table expression for Sql query generation

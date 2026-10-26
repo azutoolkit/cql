@@ -157,7 +157,7 @@ end
 
 If the inner block raises any other exception and it propagates out of the outer block too, everything is rolled back.
 
-A nested `transaction` call on the same fiber, through `schema.transaction { }` or `Model.transaction { }`, needs no `tx` argument: it runs as a SAVEPOINT on the outer connection, so the whole nest uses one connection. An inner `DB::Rollback` or error undoes only the inner block. If the outer block rescues an inner error, the outer transaction still commits; if the error propagates, everything is rolled back. Fibers spawned inside the block do not join the transaction; they check out their own connection. `schema.alter` nests as a SAVEPOINT the same way on SQLite and PostgreSQL; on MySQL and CockroachDB it raises `CQL::DialectError` inside a transaction.
+A nested `transaction` call on the same fiber, through `schema.transaction { }` or `Model.transaction { }`, needs no `tx` argument: it runs as a SAVEPOINT on the outer connection, so the whole nest uses one connection. An inner `DB::Rollback` or error undoes only the inner block. If the outer block rescues an inner error, the outer transaction still commits; if the error propagates, everything is rolled back. Fibers spawned inside the block do not join the transaction; they check out their own connection. Schema changes (`schema.alter`, `schema.build`, and a table's `create!`, `drop!` and `truncate!`) nest as a SAVEPOINT the same way on SQLite and PostgreSQL; on MySQL and CockroachDB they raise `CQL::DialectError` inside a transaction, before running any DDL.
 
 ```crystal
 schema.transaction do
