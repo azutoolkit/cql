@@ -201,8 +201,12 @@ module CQL::Postgres
     # statement the server runs as text raises `ArgumentError` before any data moves.
     #
     # ```
-    # session.copy_in_binary("COPY t (id, name) FROM STDIN (FORMAT binary)", [Types::OID::INT8, Types::OID::TEXT]) do |rows|
-    #   rows.row(1_i64, "a")
+    # engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
+    # types = [CQL::Postgres::Types::OID::INT8, CQL::Postgres::Types::OID::TEXT]
+    # engine.with_connection do |connection|
+    #   connection.session.copy_in_binary("COPY t (id, name) FROM STDIN (FORMAT binary)", types) do |rows|
+    #     rows.row(1_i64, "a")
+    #   end
     # end
     # ```
     def copy_in_binary(sql : String, types : Array(UInt32), timeout : Time::Span? = nil, & : BinaryCopy::Writer ->) : Int64

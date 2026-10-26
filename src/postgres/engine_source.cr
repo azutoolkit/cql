@@ -8,9 +8,16 @@ module CQL::Postgres
   # fiber-safe pool, statement cache and health checks without `using(engine)`.
   #
   # ```
-  # source = CQL::Postgres::EngineSource.connect("postgres://app@db/app?pool_size=10")
-  # AppDB = CQL::Schema.define(:app, "postgres://app@db/app", CQL::Adapter::Postgres, source: source) { ... }
-  # source.engine.pipeline([...]) # the engine's own API stays reachable
+  # SOURCE = CQL::Postgres::EngineSource.connect("postgres://app@db/app?pool_size=10")
+  #
+  # AppDB = CQL::Schema.define(:app, "postgres://app@db/app", CQL::Adapter::Postgres, source: SOURCE) do
+  #   table :users do
+  #     primary :id, Int64, auto_increment: true
+  #     text :name
+  #   end
+  # end
+  #
+  # SOURCE.engine.pipeline([AppDB.query.from(:users).select(:name)]) # the engine's own API stays reachable
   # ```
   #
   # A connection that cannot be opened raises `DB::ConnectionRefused` and a saturated pool `DB::PoolTimeout` (the

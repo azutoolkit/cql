@@ -4,8 +4,9 @@ module CQL::Postgres
   # The rows one pipelined statement returned, readable like a query's:
   #
   # ```
-  # results = engine.pipeline([users_query, orders_query])
-  # results[0].as(PipelineResult).all(as: User)
+  # engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
+  # results = engine.pipeline([User.query.where(active: true), Post.query])
+  # results[0].as(CQL::Postgres::PipelineResult).all(as: User)
   # ```
   class PipelineResult
     getter result : Result

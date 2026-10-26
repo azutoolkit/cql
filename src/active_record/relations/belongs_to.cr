@@ -18,9 +18,12 @@ module CQL::ActiveRecord::Relations
     #
     # **Example**
     # ```
-    # class Post
-    #   include CQL::Model(Int64)
-    #   belongs_to :user, User, :user_id, optional: false, cache: true
+    # class Comment
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :comments
+    #
+    #   property user_id : Int64?
+    #   belongs_to :user, User, :user_id
     # end
     # ```
     macro belongs_to(assoc, klass, foreign_key, optional = true, cache = true)

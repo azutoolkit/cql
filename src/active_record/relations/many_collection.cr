@@ -14,27 +14,40 @@ module CQL
     # **Example**
     # ```
     # class Movie
-    #   include CQL::Model(Int64)
-    #   property id : Int64
-    #   property title : String
-    #   many_to_many :actors, Actor, join_through: MoviesActors
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :movies
+    #
+    #   property title : String = ""
+    #   many_to_many :actors, Actor, join_through: MoviesActor
+    #
+    #   def initialize(@title : String = "")
+    #   end
     # end
     #
     # class Actor
-    #   include CQL::Model(Int64)
-    #   property id : Int64
-    #   property name : String
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :actors
+    #
+    #   property name : String = ""
+    #
+    #   def initialize(@name : String = "")
+    #   end
     # end
     #
-    # class MoviesActors
-    #   include CQL::Model(Int64)
-    #   property id : Int64
-    #   property movie_id : Int64
-    #   property actor_id : Int64
+    # class MoviesActor
+    #   include CQL::ActiveRecord::Model(Int64)
+    #   db_context AcmeDB, :movies_actors
+    #
+    #   property movie_id : Int64?
+    #   property actor_id : Int64?
+    #
+    #   def initialize(@movie_id : Int64? = nil, @actor_id : Int64? = nil)
+    #   end
     # end
     #
-    # movie = Movie.create(title: "The Matrix")
-    # actor = Actor.create(name: "Keanu Reeves")
+    # movie = Movie.create!(title: "The Matrix")
+    # movie.actors.create(name: "Keanu Reeves")
+    # movie.actors.size # => 1
     # ```
     class ManyCollection(Target, Through, Pk) < Collection(Target, Pk)
       @through_table : Symbol

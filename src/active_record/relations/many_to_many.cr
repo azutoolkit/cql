@@ -29,26 +29,29 @@ module CQL::ActiveRecord::Relations
     # ```
     # class Movie
     #   include CQL::ActiveRecord::Model(Int64)
-    #   property id : Int64
-    #   property title : String
-    #   many_to_many :actors, Actor, join_through: MoviesActors,
+    #   db_context AcmeDB, :movies
+    #
+    #   property title : String = ""
+    #   many_to_many :actors, Actor, join_through: MoviesActor,
     #     foreign_key: :movie_id, association_foreign_key: :actor_id,
     #     dependent: :destroy
     # end
     #
     # class Actor
     #   include CQL::ActiveRecord::Model(Int64)
-    #   property id : Int64
-    #   property name : String
-    #   many_to_many :movies, Movie, join_through: MoviesActors,
+    #   db_context AcmeDB, :actors
+    #
+    #   property name : String = ""
+    #   many_to_many :movies, Movie, join_through: MoviesActor,
     #     foreign_key: :actor_id, association_foreign_key: :movie_id
     # end
     #
-    # class MoviesActors
+    # class MoviesActor
     #   include CQL::ActiveRecord::Model(Int64)
-    #   property id : Int64
-    #   property movie_id : Int64
-    #   property actor_id : Int64
+    #   db_context AcmeDB, :movies_actors
+    #
+    #   property movie_id : Int64?
+    #   property actor_id : Int64?
     # end
     # ```
     macro many_to_many(name, klass, join_through, foreign_key = nil, association_foreign_key = nil, dependent = :nullify, validate = true, autosave = false)

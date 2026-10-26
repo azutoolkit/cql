@@ -98,8 +98,11 @@ module CQL::Postgres
     # `Session#stream` for the details, including the timeout.
     #
     # ```
-    # connection.stream("SELECT id, name FROM users WHERE age > $1", 18, fetch_size: 500) do |rows|
-    #   rows.each { puts rows.read(Int64) }
+    # engine = CQL::Postgres::AsyncEngine.connect(ENV["DATABASE_URL"])
+    # engine.with_connection do |connection|
+    #   connection.stream("SELECT id, name FROM users WHERE age > $1", 18, fetch_size: 500) do |rows|
+    #     rows.each { puts "#{rows.read(Int64)} #{rows.read(String)}" }
+    #   end
     # end
     # ```
     def stream(sql : String, *args, fetch_size : Int32 = 1000, timeout : Time::Span? = nil, & : ::DB::ResultSet -> T) : T forall T
