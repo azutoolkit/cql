@@ -1,6 +1,8 @@
-# Fix Schema Mapping Errors
+---
+description: "Run CQL's check that model getter types match the schema's columns, then fix each SchemaMappingError it raises."
+---
 
-Run CQL's check that model getter types match the schema's columns, then fix each `CQL::ActiveRecord::SchemaMappingError` it raises.
+# Fix Schema Mapping Errors
 
 ## Run the check where it can finish
 
@@ -17,11 +19,13 @@ CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/check_mappings.cr
 CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
 ```
 
+{% code title="src/check_mappings.cr" %}
 ```crystal
-# src/check_mappings.cr: require your schema and models, nothing that serves requests
+# Require your schema and models, nothing that serves requests
 require "./config/cql"
 require "./models/**"
 ```
+{% endcode %}
 
 For each model with a schema (from `db_context`, or inferred), CQL compares the zero-argument getters with the table's columns. It skips columns the model has no getter for, ignores nilability, and accepts a `UUID` getter over a `String` column. It is opt-in because models often allow `nil` while a record is transient.
 
@@ -97,7 +101,12 @@ class Account
 end
 ```
 
-If the table is declared and the first error still appears, the lookup cannot see it. It reads only literal `table :name` calls written directly in the `define` block: not tables added later with `Schema.new` and `.table`, through helper macros, or inside `{% if %}` or `begin`. It cannot reference a `private` schema constant in a namespace either. Name the schema in `db_context` in these cases.
+<details>
+<summary>The table is declared, but the first error still appears</summary>
+
+The lookup cannot see it. It reads only literal `table :name` calls written directly in the `define` block: not tables added later with `Schema.new` and `.table`, through helper macros, or inside `{% raw %}{% if %}{% endraw %}` or `begin`. It cannot reference a `private` schema constant in a namespace either. Name the schema in `db_context` in these cases.
+
+</details>
 
 ## See Also
 
