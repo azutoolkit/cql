@@ -68,7 +68,9 @@ For models, `Model.upsert_all(rows, on_conflict: :email)` batches the rows and k
 
 ```crystal
 insert.on_conflict(:email).do_update(:name).back(:id) # RETURNING comes after the conflict clause
-# ... DO UPDATE SET name = EXCLUDED.name RETURNING accounts.id
+# PostgreSQL, CockroachDB: ... DO UPDATE SET name = EXCLUDED.name RETURNING accounts.id
+# SQLite: CQL::SQLiteUnsupportedFeatureError "... RETURNING clause (before SQLite 3.35.0)"
+# MySQL: the RETURNING clause is left out of the SQL
 ```
 
 ## Check Each Dialect

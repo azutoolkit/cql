@@ -79,7 +79,7 @@ User.query.left_joins(:profile) { (profile.country == "US") & (age > 1) }
 
 User.query.joins(:posts).count               # counts joined rows: one per post
 User.query.joins(:profile).pluck(:name, as: String)
-User.query.joins(:posts).find_each { |user| } # yields each user once per batch
+User.query.joins(:posts).find_each { |user| } # yields each user once
 ```
 
 ## Select Columns

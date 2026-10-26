@@ -41,7 +41,7 @@ Post.published.newest_first.limit(10).all
 Post.featured.limit(5).all                # ... ORDER BY posts.views_count DESC LIMIT ?
 Post.active.order(created_at: :desc).all  # ... WHERE (posts.deleted_at IS NULL) AND (posts.published = ?)
 
-# After other query methods. user.posts is a Collection without scopes, so start from the model:
+# Scopes also follow where, order and limit. user.posts is a Collection without scopes, so start from Post:
 Post.where(user_id: user.id!).published.all
 Post.by_author(user.id!).draft.count
 ```
@@ -71,7 +71,7 @@ Scope methods are added to the `QueryBuilder` class that every model shares, so 
 {% endhint %}
 
 {% hint style="warning" %}
-Once the program calls `pluck`, `pick` or `select(:column)` on the model, `Post.published.order(...).all` is typed `Array(Post) | Array(Post::Row)`. Start the chain with `Post.query.published` to keep `Array(Post)`.
+Once the program calls `pluck`, `pick` or `select(:column)` on `Post`, `Post.published.all` is typed `Array(Post) | Array(Post::Row)`, so reading an attribute may not compile. Start with `Post.query.published` to keep `Array(Post)`.
 {% endhint %}
 
 {% hint style="info" %}

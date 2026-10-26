@@ -123,7 +123,7 @@ rows = AppDB.exec_query do |conn|
   conn.query_all(<<-SQL, as: {String, Int64})
     SELECT u.name, COUNT(p.id) AS post_count
     FROM users u
-    LEFT JOIN posts p ON p.user_id = u.id AND p.published = 1
+    LEFT JOIN posts p ON p.user_id = u.id AND p.published = 1 -- SQLite stores booleans as 1/0
     GROUP BY u.id
     ORDER BY post_count DESC
     LIMIT 10

@@ -31,7 +31,7 @@ documents_query.where { documents.data.json_eq(["profile", "country"], "US") }
 
 documents_query.where { documents.data.json_eq(["tags", 0], "y") }.all(as: String) # SQLite path "$.tags[0]"
 documents_query.where { documents.data.json_eq("age", 40) }.all(as: String)       # => ["grace"]; binds "40"
-documents_query.where { documents.data.json_eq("ok", true) }                      # binds "true"; SQLite still matches its 1/0
+documents_query.where { documents.data.json_eq("ok", true) }                      # binds "true"; "1" on SQLite (json_extract gives 1/0)
 
 # Keys may hold only word characters; indexes must not be negative
 documents_query.where { documents.data.json_eq("a'] OR 1=1 --", "x") }
