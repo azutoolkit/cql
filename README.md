@@ -67,9 +67,7 @@ AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3
   table :users do
     primary :id, Int64, auto_increment: true
     text :name
-    text :email
   end
-
   table :posts do
     primary :id, Int64, auto_increment: true
     text :title
@@ -80,43 +78,37 @@ end
 class User
   include CQL::ActiveRecord::Model(Int64)
   db_context AppDB, :users
-
   property name : String
-  property email : String
-
   has_many :posts, Post, foreign_key: :user_id
-  validate :email, presence: true
+  validate :name, presence: true
 
-  def initialize(@name : String, @email : String)
+  def initialize(@name : String)
   end
 end
 
 class Post
   include CQL::ActiveRecord::Model(Int64)
   db_context AppDB, :posts
-
   property title : String
   property user_id : Int64?
-
   belongs_to :user, User, foreign_key: :user_id
 
   def initialize(@title : String, @user_id : Int64? = nil)
   end
 end
 
-AppDB.users.create! # CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, ...)
+AppDB.users.create! # CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)
 AppDB.posts.create!
 
-ada = User.create!(name: "Ada", email: "ada@example.com")  # INSERT INTO users (name, email) VALUES (?, ?)
-ada.posts.create(title: "Notes on the Analytical Engine")  # INSERT INTO posts (title, user_id) VALUES (?, ?)
+ada = User.create!(name: "Ada")                           # INSERT INTO users (name) VALUES (?)
+ada.posts.create(title: "Notes on the Analytical Engine") # INSERT INTO posts (title, user_id) VALUES (?, ?)
 
 # Two queries: SELECT ... FROM posts, then SELECT ... FROM users WHERE users.id IN (?)
-Post.preload(:user).all.each do |post|
-  puts "#{post.title} by #{post.user.try(&.name)}" # => Notes on the Analytical Engine by Ada
-end
+Post.preload(:user).all.each { |post| puts "#{post.title} by #{post.user.try(&.name)}" }
+# => Notes on the Analytical Engine by Ada
 
 puts User.where { name == "Ada" }.count # => 1   SELECT COUNT(*) FROM users WHERE users.name = ?
-puts User.new("Grace", "").valid?       # => false (email is blank)
+puts User.new("").valid?                # => false (name is blank)
 ```
 
 ```bash
@@ -153,11 +145,11 @@ compile with `-Dcql_no_postgres_driver` to keep CQL's driver out of crystal-db's
 url = "postgres://app:secret@db.internal/app?sslmode=verify-full&pool_size=10"
 engine = CQL::Postgres::AsyncEngine.connect(url)
 
-User.query.where(name: "Ada").using(engine).to_a
-AppDB.query.from(:users).select(:name).where("id > ?", 10).using(engine).all(as: String)
+User.query.where(name: "Ada").using(engine).to_a                                         # ... WHERE users.name = $1
+AppDB.query.from(:users).select(:name).where("id > ?", 10).using(engine).all(as: String) # ... WHERE id > $1
 
 engine.transaction(isolation: :serializable) do |tx|
-  AppDB.insert.into(:users).values(name: "Ada", email: "ada@example.com").using(tx).commit
+  AppDB.insert.into(:users).values(name: "Ada").using(tx).commit
   tx.savepoint { |inner| AppDB.insert.into(:posts).values(title: "Draft", user_id: 1_i64).using(inner).commit }
 end
 
@@ -207,7 +199,8 @@ also sets `DATABASE_URL` to a `postgres` service container, so `spec/postgres/li
 - **TLS refusal**: `script/tls-probes` checks that a TLS requirement that cannot be met raises
   `CQL::Postgres::TLSRefused` and that crystal-db's pool does not retry it. `spec/postgres/blackhole_spec.cr` drops a
   TLS connection on a path that stops answering: 50 timed-out requests, 50 pings and 10 writes finished without
-  hanging.
+  hanging. Other TLS modes and Unix sockets were tried by hand against PostgreSQL 16; beyond that they have byte-level
+  fixture and fake-server specs only.
 
 Two measurements on PostgreSQL 16 over loopback, one machine, one run each:
 

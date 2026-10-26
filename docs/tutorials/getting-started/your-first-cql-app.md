@@ -1,8 +1,8 @@
 # Your First CQL App
 
-Build a small SQLite application with CQL: connect, migrate, define models, query, validate and use transactions.
+Build a small SQLite app: connect, migrate, define models, query, validate and use a transaction.
 
-**You need:** Crystal 1.12.2 or later, and SQLite 3 with its development library (`libsqlite3-dev` on Debian and Ubuntu).
+**You need:** Crystal 1.12.2 or later and the SQLite 3 development library (`libsqlite3-dev` on Debian and Ubuntu).
 
 ## Step 1: Create the project
 
@@ -30,14 +30,7 @@ dependencies:
 shards install
 ```
 
-Check: the output lists `Installing cql` and `Installing sqlite3`, and `lib/cql` exists.
-
-For another database, change the driver, the adapter and the URL in Step 3:
-
-| Database | Shard | Adapter | URL |
-| :--- | :--- | :--- | :--- |
-| PostgreSQL | none: `require "cql"` registers a native driver (the `pg` shard also works) | `CQL::Adapter::Postgres` | `postgres://user:pass@localhost:5432/myapp` |
-| MySQL | `mysql` (`github: crystal-lang/crystal-mysql`), plus `require "mysql"` | `CQL::Adapter::MySql` | `mysql://user:pass@localhost:3306/myapp` |
+Check: the output lists `Installing cql` and `Installing sqlite3`.
 
 ## Step 3: Connect to the database
 
@@ -54,6 +47,12 @@ require "sqlite3"
 AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./db/development.db?foreign_keys=1") do
   # Empty: the migrations declare the tables
 end
+
+# Other databases:
+#   PostgreSQL: no shard or require needed (CQL ships a native driver; the pg shard also works)
+#     adapter: CQL::Adapter::Postgres, uri: "postgres://user:pass@localhost:5432/myapp"
+#   MySQL: add the mysql shard (github: crystal-lang/crystal-mysql) and require "mysql"
+#     adapter: CQL::Adapter::MySql, uri: "mysql://user:pass@localhost:3306/myapp"
 ```
 
 ```crystal
@@ -73,8 +72,6 @@ Connected to sqlite3://./db/development.db?foreign_keys=1
 ```
 
 ## Step 4: Create the users table
-
-A migration describes one schema change and how to undo it.
 
 ```crystal
 # migrations/001_create_users.cr
@@ -125,7 +122,7 @@ crystal src/setup.cr
 Applied 1 migration(s)
 ```
 
-CQL's development logger also prints timestamped `INFO` and `DEBUG` lines. Check that `src/schemas/app_schema.cr` now exists: it defines `AppSchema`, which knows every table in the database. `AppDB` declares none, so the application uses `AppSchema`.
+CQL's development logger adds `INFO` and `DEBUG` lines. Check that `src/schemas/app_schema.cr` exists: its `AppSchema` knows every table, so the app uses it instead of the empty `AppDB`.
 
 ## Step 5: Define a model and run CRUD queries
 
@@ -146,7 +143,7 @@ class User
 end
 ```
 
-Models are classes, not structs, so that `save` can assign the new id to your instance. Replace the generated `src/myapp.cr`:
+Models are classes so that `save` can set the new id on your instance. Replace `src/myapp.cr`:
 
 ```crystal
 # src/myapp.cr
@@ -195,7 +192,7 @@ Updated: ["Alice Johnson", "Robert Smith"]
 Remaining: ["Robert Smith"]
 ```
 
-The id grows on every run, because SQLite does not reuse ids.
+The id grows on every run.
 
 ## Step 6: Add posts
 
@@ -245,7 +242,7 @@ class Post
 end
 ```
 
-In `src/models/user.cr`, add the other side of the association below the properties:
+In `src/models/user.cr`, add below the properties:
 
 ```crystal
   has_many :posts, Post, :user_id
@@ -263,7 +260,7 @@ first_post = Post.find_by!(title: "My First Post")
 puts "'#{first_post.title}' was written by #{first_post.user.try(&.name)}"
 ```
 
-Run the migration first, so `AppSchema` gains the `posts` table, then the app:
+Migrate first, so that `AppSchema` gains `posts`:
 
 ```bash
 crystal src/setup.cr
@@ -278,7 +275,7 @@ Carol has 2 posts: ["My First Post", "Another Post"]
 'My First Post' was written by Carol
 ```
 
-`User.delete_all` at the top of the script now removes posts too: the `on_delete: :cascade` foreign key deletes them in the database.
+`User.delete_all` now removes posts too, through the `on_delete: :cascade` foreign key.
 
 ## Step 7: Validate input
 
@@ -314,7 +311,7 @@ valid? false
 save raised: name must be present,name must have a size of 1..100,email must match the pattern /@/
 ```
 
-`save` and `save!` run the validations and raise when the record is invalid; `create!` skips them.
+`save` and `save!` raise on an invalid record; `create!` skips validations.
 
 ## Step 8: Use a transaction
 
@@ -347,7 +344,7 @@ Dave saved: 1 post
 Rolled back (payment failed): Erin saved? no
 ```
 
-An exception inside the block rolls back every statement in it, then propagates.
+An exception rolls back the whole block, then propagates.
 
 ## Project structure
 
@@ -372,9 +369,9 @@ myapp/
 
 ## Troubleshooting
 
-The connection pool opens the first time code uses `AppDB`, so a wrong PostgreSQL or MySQL URL, or a stopped server, raises there, for example `DB::ConnectionRefused`. `crystal src/check_connection.cr` shows it.
+The pool opens when code first uses `AppDB`, so a bad PostgreSQL or MySQL URL raises there (for example `DB::ConnectionRefused`); `src/check_connection.cr` shows it.
 
-To inspect or reset the migrations (development only), run the migrator on `AppSchema`. A `down` method such as `schema.posts.drop!` needs a schema that knows the table, and `AppDB` declares none (it raises `KeyError`):
+To reset the migrations in development, run the migrator on `AppSchema`: `down` methods such as `schema.posts.drop!` raise `KeyError` on `AppDB`, which knows no tables.
 
 ```crystal
 # src/reset.cr

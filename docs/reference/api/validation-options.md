@@ -2,11 +2,7 @@
 
 Every predicate the `validate` macro accepts, the value it takes, when it passes and its default message. The message is what `errors.map(&.message)` returns.
 
-```crystal
-validate :name, presence: true, size: 2..50, message: "Name is invalid"
-```
-
-`validate attribute, **options` stores the options per attribute: a second `validate` for the same attribute replaces the first, so put every rule for one attribute in one call. An unknown option or an attribute without a getter is a compile-time error (`CQL validation error in User: ...`).
+`validate attribute, **options` (for example `validate :name, presence: true, size: 2..50, message: "Name is invalid"`) stores the options per attribute: a second `validate` for the same attribute replaces the first, so put every rule for one attribute in one call. An unknown option or an attribute without a getter is a compile-time error (`CQL validation error in User: ...`).
 
 ## Predicates
 

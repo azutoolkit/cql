@@ -179,7 +179,7 @@ Methods available inside `schema.alter :name do ... end`. Statements run in orde
 
 | Method | Defaults | Notes |
 | :--- | :--- | :--- |
-| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | **`default`, `index` and `size` are ignored**: no `DEFAULT` clause and no index are emitted |
+| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | **`default`, `index` and `size` are ignored**: no `DEFAULT` clause and no index are emitted, so `null: false` fails on a table with rows (SQLite: `Cannot add a NOT NULL column with default value NULL`). Use raw DDL for a default, below. |
 | **`drop_column(name)`** | | An undeclared column only logs an error |
 | **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column |
 | **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
@@ -205,6 +205,15 @@ schema.alter :users do
 end
 ```
 
+A column with a default, added with raw DDL and then declared so the schema knows it:
+
+```crystal
+def up
+  schema.exec "ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 1 NOT NULL"
+  schema.users.integer :level, default: 1 # declares only; runs no SQL
+end
+```
+
 | Method | SQLite | PostgreSQL / CockroachDB | MySQL |
 | :--- | :--- | :--- | :--- |
 | `add_column :phone, String` | `ALTER TABLE users ADD COLUMN phone TEXT` | `... ADD COLUMN phone VARCHAR` | `... ADD COLUMN phone VARCHAR(255)` |
@@ -226,9 +235,9 @@ migrator = AppDB.migrator(config)
 
 migrator.up                         # apply every pending migration
 migrator.pending_migrations         # => [] of CQL::BaseMigration.class
-migrator.applied_migrations.size    # => 3
+migrator.applied_migrations.size    # => 1
 migrator.rollback                   # revert the newest migration
-migrator.up_to(20250125001402_i64)
+migrator.up_to(20250125001401_i64)  # apply up to and including this version
 ```
 
 | Method | Behavior |

@@ -265,7 +265,7 @@ With the test pool of 1, `migrator.up` and `down` with `auto_sync` on raise `CQL
 | :--- | :--- | :--- |
 | `CRYSTAL_ENV` | `Config#env`, `CacheConfig`, `CQL::Performance::Config` | Picks the environment. Unset means `development` (without SQL logging). |
 | `CQL_NO_SQL_LOG` | `Config#sql_logging?` | Present (any value) and `sql_logging` never assigned: development does not log SQL. |
-| `CQL_VALIDATE_SCHEMA_MAPPINGS` | model definitions | `1` checks model getter types and primary keys against the schema at load; a mismatch raises `CQL::ActiveRecord::SchemaMappingError`. |
+| `CQL_VALIDATE_SCHEMA_MAPPINGS` | model definitions | `1` checks model getter types and primary keys against the schema; a mismatch raises `CQL::ActiveRecord::SchemaMappingError`. The check is emitted from `macro finished`, so it runs after all other top-level code: a server that blocks in `listen` never reaches it. Run it from a spec or a script that only requires the models. |
 | `CQL_CACHE_TYPE` | `CQL::Cache::CacheStoreConfig.from_env` | `redis` or `memory`. |
 | `CQL_CACHE_TTL` | same | TTL in whole seconds. |
 | `CQL_CACHE_PREFIX` | same | Key prefix. |
@@ -307,7 +307,9 @@ With the test pool of 1, `migrator.up` and `down` with `auto_sync` on raise `CQL
 CQL.config.full_db_url
 # => "postgres://app@localhost/app?initial_pool_size=2&max_pool_size=5&max_idle_pool_size=3&checkout_timeout=10.0
 #     &retry_attempts=3&retry_delay=1.0&prepared_statements=true&sslmode=prefer&auth_methods=scram-sha-256%2Cmd5"
+```
 
+```crystal
 AppDB = CQL.build_schema(:app_db) do
   table :users do
     primary :id, Int64, auto_increment: true

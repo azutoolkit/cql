@@ -1,133 +1,48 @@
 # CQL Blog Application Demo
 
-This is an organized, modular version of the CQL blog application demo that showcases all the key features of the CQL ORM framework using a migration-based database schema approach.
-
-## 📁 Structure
-
-The demo has been organized into logical components for better maintainability and understanding:
-
-### 🏗️ Core Components
-
-- **`blog_demo.cr`** - Main demo runner that orchestrates all components
-- **Configuration** - Database configuration and setup within the main demo
-- **Migrations** - Migration runner and loader
-- **`seeders.cr`** - Data seeding logic to populate the database
-
-### 📋 Models (`models/`)
-
-Individual model files for each entity:
-
-- **`user.cr`** - User model with relationships and methods
-- **`category.cr`** - Category model for organizing posts
-- **`post.cr`** - Post model with content and metadata
-- **`comment.cr`** - Comment model for user feedback
-
-### 🔄 Migrations (`migrations/`)
-
-Individual migration files for each table:
-
-- **`001_create_users.cr`** - Users table creation
-- **`002_create_categories.cr`** - Categories table creation
-- **`003_create_posts.cr`** - Posts table creation
-- **`004_create_comments.cr`** - Comments table creation
-
-### 🎯 Demo Modules (`demos/`)
-
-Focused demo modules showcasing specific features:
-
-- **`crud_operations.cr`** - Create, Read, Update, Delete operations
-- **`complex_queries.cr`** - Advanced queries, joins, and aggregations
-- **`relationships.cr`** - Model relationship navigation
-- **`performance_features.cr`** - Performance optimization features
-- **`statistics_and_reporting.cr`** - Reporting and performance monitoring
-
-## 🚀 Running the Demo
-
-To run the complete demo:
+A small blog on SQLite: four migrations, a seeder, four models and five demo modules, run in one program.
 
 ```bash
-crystal examples/blog/blog_demo.cr
+crystal run examples/blog/blog_demo.cr
 ```
 
-The demo will:
+> [!WARNING]
+> Run from the repository root, and expect two files to change: `examples/blog/blog.db` (ignored by git) and
+> `src/schemas/app_schema.cr`, which is tracked. `BlogDB.migrator` uses `CQL::MigratorConfig`'s default
+> `schema_file_path`, so the schema file written after the migrations lands there instead of under
+> `config.schema_dir`. Restore it with `git checkout src/schemas/app_schema.cr`.
 
-1. Configure the database connection
-2. Run all migrations to set up the schema
-3. Seed the database with sample data
-4. Execute all demo modules showcasing CQL features
-5. Generate a comprehensive performance report
+`blog.cr` is not an entry point: it requires `./blog/blog_demo`, which does not exist, so it does not compile.
 
-## ✨ Features Demonstrated
+## Files
 
-### Core CQL Features
+| Path | Contents |
+| --- | --- |
+| `blog_demo.cr` | `CQL.configure` (`db = "sqlite3://examples/blog/blog.db"`, `migrations_table = :cql_schema_migrations`, `auto_sync`, `bootstrap`, `verify_schema`, `monitor_performance`), then `BlogDemo.run` |
+| `schemas/app_schema.cr` | `BlogDB = CQL::Schema.define(...)` with `users`, `categories`, `posts` and `comments`, plus the migrations table |
+| `migrations/001_create_users.cr` to `004_create_comments.cr` | `CQL::Migration(1)` to `(4)`: one table each, with foreign keys and indexes |
+| `models/` | `User`, `Category`, `Post`, `Comment`: structs including `CQL::ActiveRecord::Model(Int64)`, with `has_many` and `belongs_to` (`optional: true` for a post's category and a comment's user) |
+| `seeders.cr` | `BlogDemo::Seeders.seed_data`: deletes all rows, then creates 2 users, 2 categories, 3 posts (2 published) and 2 comments |
+| `demos/crud_operations.cr` | `count`, `find_by`, `where.order.limit`, `save!` after a change, `Comment.create!` |
+| `demos/complex_queries.cr` | published posts with their authors (an N+1 on purpose), a raw `JOIN` through `BlogDB.exec`, `sum` and `avg`, per-category and per-author counts |
+| `demos/relationships.cr` | `user.posts.where(...)`, `post.comments`, `comment.user`, `category.posts` |
+| `demos/performance_features.cr` | `Post.find_each(batch_size: 2)`, `pluck(:title, as: String)` |
+| `demos/statistics.cr` | `statistics_and_reporting`: counts, average word count, the most active author, a raw `GROUP BY` |
 
-- **Configuration Management** - Centralized database configuration
-- **Schema Definition** - Type-safe schema design with relationships
-- **Database Migrations** - Version-controlled schema evolution
-- **Active Record Models** - Intuitive model definitions and operations
-- **CRUD Operations** - Complete Create, Read, Update, Delete functionality
-- **Complex Queries** - Advanced queries with joins and aggregations
-- **Relationship Navigation** - Seamless model association traversal
-- **Performance Optimizations** - Batch processing and query optimization
-- **Raw SQL Capabilities** - Direct SQL execution when needed
-- **Performance Monitoring** - Real-time query analysis and reporting
+`BlogDemo.run` applies the migrations, seeds, calls `CQL::Performance.monitor.generate_report("logger")`, runs the
+five demos in the order above and prints a summary.
 
-### 📊 Performance Monitoring
+## Known Output Problems
 
-- **Real-time Query Tracking** - Monitor query performance as it happens
-- **N+1 Query Detection** - Automatically identify inefficient query patterns
-- **Slow Query Identification** - Flag queries that exceed performance thresholds
-- **Developer-Friendly Reports** - Beautiful, actionable performance insights
-- **Performance Recommendations** - Automated suggestions for query optimization
-- **Query Pattern Analysis** - Understand your application's query behavior
+- The "Posts by Category" lines and "Tech category posts" print `#<CQL::Query:0x...>` instead of a number.
+  `category.posts.where(published: true)` returns a `CQL::Query`, and its `count` adds a `COUNT` column instead of
+  running the query; `.count.get(Int64)`, as the "Active Authors" lines use it, returns the number.
+- No performance report appears: `generate_report` returns the report as a `String`, and the demo never prints it.
+- The summary names `examples/blog/blog_demo.db`; the database is `examples/blog/blog.db`.
 
-## 🗄️ Database Schema
+## See Also
 
-The demo creates a blog application with the following entities:
-
-- **Users** - Blog authors and commenters with authentication data
-- **Categories** - Post categorization for content organization
-- **Posts** - Blog content with metadata and relationships
-- **Comments** - User feedback on posts with threading support
-
-All relationships are properly defined with foreign keys and indexes for optimal performance.
-
-## 📋 Demo Output
-
-When you run the demo, you'll see:
-
-1. **Configuration** - Database setup and connection verification
-2. **Migrations** - Schema creation with version tracking
-3. **Seeding** - Sample data creation for testing
-4. **CRUD Operations** - Basic database operations demonstration
-5. **Complex Queries** - Advanced query patterns and joins
-6. **Relationships** - Model association navigation examples
-7. **Performance Features** - Batch processing and optimization techniques
-8. **Statistics** - Data analysis and reporting capabilities
-9. **Performance Report** - Comprehensive monitoring results and insights
-
-## 🎯 Benefits of This Organization
-
-1. **Modularity** - Each component has a single responsibility
-2. **Maintainability** - Easy to update individual features
-3. **Reusability** - Components can be used independently
-4. **Clarity** - Clean separation of concerns
-5. **Testability** - Individual modules can be tested in isolation
-6. **Migration-based Schema** - Individual migration files for better version control and team collaboration
-
-## 🔧 Recent Improvements
-
-The demo has been updated to resolve several issues and enhance functionality:
-
-- **SQL Generation** - Fixed `SELECT *` handling when no columns are specified
-- **Relationship Loading** - Resolved relationship loading issues with proper column selection
-- **Foreign Key Relationships** - Fixed foreign key relationships in model definitions
-- **Error Handling** - Improved error handling and debugging capabilities
-- **Performance Monitoring** - Enhanced real-time performance tracking
-- **Documentation** - Comprehensive inline documentation and examples
-
-## 🏁 Getting Started
-
-This organized structure demonstrates CQL as a production-ready ORM suitable for real-world applications with comprehensive performance monitoring and debugging capabilities.
-
-Ready to explore CQL's features? Run the demo and see the power of type-safe database operations in action! 🚀
+- [Building a Blog](../../docs/tutorials/building-a-blog/01-project-setup.md): the same domain, built step by step
+- [Configure CQL](../../docs/how-to/configuration/configure-cql.md#build_migrator-versus-schemamigrator): why
+  `CQL.build_migrator(schema)` follows `CQL.config` and `schema.migrator` does not
+- [Set Up Has Many](../../docs/how-to/relationships/has-many.md)

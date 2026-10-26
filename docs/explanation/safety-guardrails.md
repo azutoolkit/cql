@@ -7,7 +7,7 @@ CQL makes the unsafe version of a query hard to write. This page explains each g
 | Values are bound as parameters | A value rewriting the statement | The text of a raw fragment or of `Schema#exec` |
 | Identifiers are resolved, validated or quoted | A name smuggling SQL into the statement's structure | Names your own code and schema define |
 | Typed queries and associations are checked by the compiler | Unknown columns, mismatched types and keys | The live database |
-| Optional startup checks | Models that drifted from the schema | Run only when switched on |
+| An opt-in mapping check | Models that drifted from the schema | Runs only when switched on, after other top-level code |
 
 ## Values Never Become SQL Text
 
@@ -103,9 +103,9 @@ Some mistakes cannot be compiled at all:
 
 A missing foreign key getter and a non-literal association name are reported the same way. The association check also works when the target model is defined later, as long as it is required before compilation finishes.
 
-## Startup Checks Compare Models With the Schema
+## An Opt-In Check Compares Models With the Schema
 
-The compiler cannot see the database. Set `CQL_VALIDATE_SCHEMA_MAPPINGS=1` and each model's getter types are compared with its schema's column types when the program starts; a mismatch raises a `CQL schema mapping error`. It is opt-in because models may legitimately omit columns or hold `nil` before an id is assigned. See [Dump and Validate Your Schema](../how-to/migrations/schema-dump-and-validation.md).
+The compiler does not compare a model with its schema definition. With `CQL_VALIDATE_SCHEMA_MAPPINGS=1`, each model's getter types are compared with its schema's column types, and a mismatch raises a `CQL schema mapping error`. The check is emitted at the end of the program, after all other top-level code, so an application that starts a blocking server never reaches it; run it from a program that only requires the models, such as a CI step. It is opt-in because models may legitimately omit columns or hold `nil` before an id is assigned. See [Dump and Validate Your Schema](../how-to/migrations/schema-dump-and-validation.md).
 
 ## Bound Values Stay Out of Logs and Errors
 

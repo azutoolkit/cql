@@ -1,98 +1,133 @@
 # Benchmarks
 
-Two scripts measure the native PostgreSQL driver (`CQL::Postgres`) against a real server, and two run on SQLite without a server: one measures query building and ActiveRecord operations, the other what telemetry and monitoring add to a statement. None ships with results: numbers depend on your hardware, network, server settings and Crystal build, so run them in the environment you care about.
-
-The PostgreSQL scripts read the server from `DATABASE_URL` and create their own scratch table. All of them should be run with `--release` for meaningful timings, from the repository root.
-
-## Requirements (PostgreSQL scripts)
-
-- Crystal and the repository's dependencies (`shards install --ignore-crystal-version`). `pg_wire_bench.cr` also compiles the `pg` shard, which is a development dependency in `shard.yml`.
-- A PostgreSQL server you can write to. Use a disposable database: the scripts drop and create tables.
-- Put `sslmode=` in `DATABASE_URL` if the server requires TLS (for example `?sslmode=require`), so every driver negotiates TLS the same way.
-
-## `pg_wire_bench.cr`
-
-Compares CQL's wire driver (`CQL::Postgres::AsyncEngine`) with the `pg` shard on the same server, through the same crystal-db calls.
+Four scripts, run from the repository root with `--release`. Two need no server (SQLite in memory); two measure the
+native PostgreSQL driver (`CQL::Postgres`) against a real server. None ships with results: numbers depend on your
+hardware, network, server settings and Crystal build.
 
 ```bash
+crystal run --release benchmarks/sqlite_bench.cr
+crystal run --release benchmarks/telemetry_overhead_bench.cr
 DATABASE_URL=postgres://user:pass@localhost/db crystal run --release benchmarks/pg_wire_bench.cr
+DATABASE_URL=postgres://user:pass@localhost/db crystal run --release benchmarks/pg_binary_params_bench.cr
 ```
 
-Workloads, each run for both drivers:
+| Script | Measures | Needs |
+| --- | --- | --- |
+| `sqlite_bench.cr` | query building and `to_sql`, then ActiveRecord operations | nothing |
+| `telemetry_overhead_bench.cr` | what telemetry and the performance monitor add to one statement | nothing |
+| `pg_wire_bench.cr` | CQL's wire driver against the `pg` shard, and streaming memory | PostgreSQL |
+| `pg_binary_params_bench.cr` | text against binary bind parameters | PostgreSQL |
+
+## `sqlite_bench.cr`
+
+```bash
+BENCH_ONLY=join crystal run --release benchmarks/sqlite_bench.cr   # workloads whose name contains "join"
+```
+
+It seeds 10,000 `ar_users` with 3 `ar_posts` each, plus an empty `ar_events`, in a single-connection
+`sqlite3::memory:` pool, with indexes on `ar_posts.user_id` and `ar_users.age`. Seeding runs on every invocation,
+even with `BENCH_ONLY`. It uses the library's default configuration, so the numbers are what an application gets out
+of the box. `Benchmark.ips` reports iterations per second, time per iteration and bytes allocated per iteration.
+
+| Workloads | What is timed |
+| --- | --- |
+| `simple where by id` (also `quoted ...`, on a schema with `quote_identifiers: true`), `10-condition where`, `join with order and limit`, `insert 500 rows` | building the query and `to_sql`, no round trip; the insert's row hashes are built beforehand |
+| `ar: find by id`, `ar: where + order + first`, `ar: load 100 rows`, `ar: last`, `ar: exists?`, `ar: find_each 10000 rows` | building, executing and hydrating |
+| `ar: has_many children` | one parent through the association; 100 parents through the association against `preload(:posts)` |
+| `ar: insert one`, `ar: update one`, `ar: insert 1000 records` | `create!` into `ar_events` and `update!` of one user, after the reads |
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BENCH_ONLY` | none | run only workloads whose name contains this text, ignoring case; a filter that matches nothing exits with an error |
+
+The [Performance](../README.md#performance) table in the root README is one run of this script.
+
+## `telemetry_overhead_bench.cr`
+
+```bash
+BENCH_ONLY=tracer crystal run --release benchmarks/telemetry_overhead_bench.cr   # one configuration
+```
+
+`find` by id and `create!` against 1,000 seeded rows (a single-connection in-memory pool), under each configuration
+in this order:
+
+| Configuration | Set up with |
+| --- | --- |
+| `all off` | a monitor built from `CQL::Performance.minimal_config`, `CQL::Telemetry.reset!` |
+| `sync subscriber` | `CQL::Telemetry.subscribe("bench") { }` |
+| `async subscriber` | `subscribe("bench", async: true)`; the loop never yields, so this mostly measures the push and drop path |
+| `tracer` | a no-op `CQL::Telemetry::Tracer` |
+| `production monitor` | `CQL::Performance.enable_production_mode!` |
+| `async monitor` | the production config with `monitoring.async = true`; mostly the push and drop path again |
+| `sql logging, filtered out` | `CQL::Performance.enable_sql_logging(colorize: false)` with info lines below the log level |
+| `baseline again` | `all off` repeated, so drift over the run is visible |
+
+Every configuration starts from the 1,000 seeded rows, logging is set to errors only before timing (failed or very
+slow statements would still be logged, with their bound values), and `all off` is restored between configurations.
+Compare each row's bytes per iteration and iterations per second with `all off`. Bytes per iteration is the reliable
+column; time differences under about 10% are run-to-run noise. The production monitor row repeats one statement, so
+the N+1 detector takes its full pattern path every time: treat it as a worst case. `BENCH_ONLY` matches configuration
+names by substring, ignoring case. `spec/performance/overhead_spec.cr` asserts that the instrumentation around a
+statement allocates nothing with everything off and with one subscriber.
+
+## PostgreSQL Scripts
+
+Both read the server from `DATABASE_URL` and create their own scratch table, so use a disposable database. Put
+`sslmode=` in `DATABASE_URL` when the server requires TLS (for example `?sslmode=require`), so every driver
+negotiates TLS the same way. `pg_wire_bench.cr` also compiles the `pg` shard, a development dependency in
+`shard.yml` (`shards install --ignore-crystal-version`).
+
+### `pg_wire_bench.cr`
+
+Compares `CQL::Postgres::AsyncEngine` with the `pg` shard through the same crystal-db calls. It first reads one large
+result twice, with `Session#stream` 1000 rows per fetch and then whole, and prints the rows held at once, the time and
+the peak resident memory from `/proc` (Linux only). Then each driver runs, wire driver first:
 
 - select one value, 1 fiber and `BENCH_CONCURRENCY` fibers
-- select 100 rows, 1 fiber
+- select 100 rows, 1 fiber (`BENCH_OPS / 10` operations)
 - insert one row, 1 fiber and `BENCH_CONCURRENCY` fibers
 - a one-row lookup through the CQL query DSL, 1 fiber and `BENCH_CONCURRENCY` fibers
 
-It prints operations per second, mean, p50 and p99 latency per workload and driver. It then compares memory for one large result: read with `Session#stream` a fetch at a time against read whole, using the process's peak resident memory from `/proc` (Linux only).
+It prints operations per second and mean, p50 and p99 latency per workload and driver, and creates and drops
+`cql_wire_bench_items`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `DATABASE_URL` | required | server to test |
 | `BENCH_OPS` | 5000 | operations per workload |
-| `BENCH_CONCURRENCY` | 8 | fibers for the concurrent workloads, and the size of each driver's pool |
+| `BENCH_CONCURRENCY` | 8 | fibers for the concurrent workloads, and each driver's pool size (filled before timing) |
 | `BENCH_WARMUP` | 200 | warm-up operations before timing |
-| `BENCH_STREAM_ROWS` | 200000 | rows in the streaming-memory comparison; `0` skips it |
+| `BENCH_STREAM_ROWS` | 200000 | rows in the streaming comparison; `0` skips it |
 
-It creates and drops the table `cql_wire_bench_items`.
+Reading the results: the wire driver caches prepared statements per connection and reads binary results, while the
+`pg` shard parses on every call; inserts are dominated by the server's commit; everything runs on one Crystal
+thread; and the `pg` shard's query-DSL rows go through a `CQL::Schema` with its own pool of the same maximum size, so
+that side can hold up to twice as many connections.
 
-### Reading the Results
-
-- The drivers differ by design. The wire driver caches prepared statements per connection and reads binary results; the `pg` shard parses on every call.
-- The wire driver runs first, and inserts are dominated by the server's commit.
-- Everything runs on one Crystal thread.
-- The `pg` shard's query-DSL rows go through a `CQL::Schema` with its own pool of the same maximum size, so that side can hold up to twice as many connections.
-
-## `pg_binary_params_bench.cr`
-
-Compares text and binary bind parameters (`binary_params=true`) on the same server, using the wire driver's session directly.
+### `pg_binary_params_bench.cr`
 
 ```bash
-DATABASE_URL=postgres://user@localhost/db crystal run --release benchmarks/pg_binary_params_bench.cr
 BENCH_ONLY=int8 DATABASE_URL=... crystal run --release benchmarks/pg_binary_params_bench.cr   # one workload
 ```
 
-Workloads: six mixed scalars in one statement, single `int8`, `timestamptz` and `numeric` values, arrays (`int8[1000]`, `text[200]`, `timestamptz[500]`, `numeric[200]`) and a seven-column insert. For each one it first checks that the text and binary runs return the same rows (and aborts if not), then alternates the two modes within every round and reports the median statements per second and the binary-to-text ratio. A row marked `(no binary form)` means the driver fell back to text for that workload, so the two columns measure the same thing.
+Compares text and binary bind parameters (`binary_params=true`) on the wire driver's session. Workloads: six mixed
+scalars in one statement; single `int8`, `timestamptz` and `numeric` values; `int8[1000]`, `text[200]`,
+`timestamptz[500]` and `numeric[200]`; a seven-column insert into the unlogged table `cql_binary_bench_items`, which it
+creates and drops. For each workload it first checks that text and binary return the same rows (and aborts if not),
+then alternates the two modes within every round and reports the median statements per second and the binary-to-text
+ratio. Parameter encoding is part of what is timed. A row marked `(no binary form)` fell back to text, so both
+columns measure the same thing.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `DATABASE_URL` | required | server to test |
 | `BENCH_OPS` | 5000 | statements per workload and round |
 | `BENCH_ROUNDS` | 7 | rounds; text and binary alternate inside each, the median is reported |
-| `BENCH_ONLY` | none | run only workloads whose name contains this text |
+| `BENCH_ONLY` | none | run only workloads whose name contains this text (case-sensitive) |
 
-Parameter encoding is part of what is timed. It creates and drops the unlogged table `cql_binary_bench_items`.
+## See Also
 
-## `sqlite_bench.cr`
-
-Measures query building and SQL generation (`to_sql`, no round trip), then ActiveRecord operations against a real in-memory SQLite database. It needs no server and no `DATABASE_URL`: it creates and seeds its own `ar_users`, `ar_posts` and `ar_events` tables (10,000 users with 3 posts each) in a single-connection `sqlite3::memory:` pool, with indexes on `ar_posts.user_id` and `ar_users.age`.
-
-```bash
-crystal run --release benchmarks/sqlite_bench.cr
-BENCH_ONLY=join crystal run --release benchmarks/sqlite_bench.cr   # one workload
-```
-
-Query-building workloads: a `where` by id (also on a schema with `quote_identifiers: true`), a ten-condition `where`, a join with order and limit, and a 500-row multi-row insert. ActiveRecord workloads (prefixed `ar:`): `find` by id, `where.order.first`, loading 100 rows with `limit(100).all`, `last`, `exists?`, `find_each` over 10,000 rows, has_many children (one parent through the association, and 100 parents through the association versus `preload`), `create!` of one record, `update!` of one record, and 1,000 `create!` calls per iteration. Writes go to `ar_events` (inserts) or one user row (update) and run after the reads. Each one is reported by `Benchmark.ips` as iterations per second, time per iteration and bytes allocated per iteration.
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `BENCH_ONLY` | none | run only workloads whose name contains this text |
-
-Building the query is part of what is timed (and, for `ar:` workloads, execution and row hydration); the insert's row hashes are built once beforehand. Seeding runs on every invocation, even with `BENCH_ONLY`. It runs with the library's default configuration, so the numbers reflect what an application gets out of the box. `BENCH_ONLY` ignores case, and a filter that matches nothing exits with an error.
-
-## `telemetry_overhead_bench.cr`
-
-Measures what CQL's telemetry and performance monitoring add to one statement. It runs `find` by id and `create!` against a seeded in-memory SQLite table (1,000 rows, a single-connection pool) under seven configurations, in this order: all off, one synchronous `CQL::Telemetry.subscribe` subscriber, one `async: true` subscriber (the benchmark loop never yields, so the consumer fiber rarely runs and this row mostly measures the push and drop path), a no-op `CQL::Telemetry::Tracer`, `CQL::Performance.enable_production_mode!`, the same monitor with `monitoring.async` on (again mostly the push and drop path), and SQL logging with the info lines filtered out by the log level, then a "baseline again" repeat of "all off" so drift over the run is visible. Every configuration starts from the 1,000 seeded rows, logging is set to errors only before timing starts (failed or very slow statements would still be logged, with their bound values), and "all off" is restored between configurations.
-
-```bash
-crystal run --release benchmarks/telemetry_overhead_bench.cr
-BENCH_ONLY=tracer crystal run --release benchmarks/telemetry_overhead_bench.cr   # one configuration
-```
-
-Read each configuration's bytes per iteration and iterations per second against the "all off" run of the same operation: the difference is the cost of that instrumentation. Bytes per iteration is the reliable column; time differences under about 10% are within run-to-run noise. The production monitor row repeats one statement, so the N+1 detector takes its full pattern path every time: treat it as a worst case. `BENCH_ONLY` matches configuration names by substring, ignoring case. `spec/performance/overhead_spec.cr` asserts that the instrumentation around a statement allocates nothing with everything off and with one subscriber.
-
-## Related
-
-- The README section "Native PostgreSQL Driver" describes `binary_params`, pooling and streaming.
-- `script/README.md` covers the scripts that verify the driver against many servers and poolers.
+- [Native PostgreSQL Driver](../README.md#native-postgresql-driver): `binary_params`, pooling, streaming, and the
+  measured results of both PostgreSQL scripts
+- [Benchmark CQL](../docs/how-to/performance/benchmark.md)
+- [script/README.md](../script/README.md): the scripts that check the driver against many servers and poolers
