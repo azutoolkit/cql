@@ -36,7 +36,7 @@ Only SQLite runs live in CQL's specs; the other dialects are checked through gen
 | `supports_returning?` (`create!` reads the row from its INSERT) | `false` | `true` | `false` | `true` |
 | `supports_transactional_ddl?` (`ddl_transaction` rolls DDL back) | `true` | `true` | `false` | `false` |
 | `current_timestamp` | `datetime('now')` | `CURRENT_TIMESTAMP` | `NOW(3)` | `CURRENT_TIMESTAMP` |
-| `structure_dump(uri)` | `""` | runs `pg_dump` | runs `mysqldump` | raises |
+| `structure_dump(uri)` | `""` | starts `pg_dump` but returns the pipe's description (`#<IO::FileDescriptor…>`), not the DDL | same, with `mysqldump` | raises |
 | Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |
 
 ## Queries

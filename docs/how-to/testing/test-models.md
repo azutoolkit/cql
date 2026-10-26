@@ -1,224 +1,145 @@
 # Test Models
 
-Write effective tests for your CQL Active Record models.
+Spec validations, persistence, callbacks, associations and scopes of CQL models against a test database.
 
-## Prerequisites
-
-- CQL application with models
-- Crystal spec testing framework
-- Test database configured
-
-## Basic Model Tests
+## The Models Under Test
 
 ```crystal
-require "spec"
-require "../src/models/*"
+class User
+  include CQL::ActiveRecord::Model(Int64)
+  # name, email, created_at, updated_at properties, has_many :posts
 
-describe User do
-  describe "#valid?" do
-    it "is valid with valid attributes" do
-      user = User.new("John", "john@example.com")
-      user.valid?.should be_true
-    end
+  validate :name, presence: true
+  validate :email, match: /\A[^@\s]+@[^@\s]+\z/, message: "is not an email"
+end
 
-    it "is invalid without email" do
-      user = User.new("John", "")
-      user.valid?.should be_false
-    end
+class Post
+  include CQL::ActiveRecord::Model(Int64)
+  # title, body, slug, published, user_id properties, belongs_to :user, has_many :comments
 
-    it "is invalid with malformed email" do
-      user = User.new("John", "invalid-email")
-      user.valid?.should be_false
-    end
+  before_save :generate_slug
+  scope :published, -> { where(published: true) }
+  scope :draft, -> { where(published: false) }
 
-    it "reports which field failed" do
-      user = User.new("John", "invalid-email")
-      user.errors.map(&.field).should contain(:email)
-    end
+  private def generate_slug
+    @slug = title.downcase.gsub(/[^a-z0-9]+/, "-").strip('-')
+    true
   end
 end
 ```
 
-## Testing Persistence
+[Set Up Test Databases](test-database.md) creates the tables and rolls back each example.
+
+## Validations
 
 ```crystal
 describe User do
-  describe "#save" do
-    it "persists to database" do
-      user = User.new("John", "john@example.com")
-      user.save.should be_true
-      user.id.should_not be_nil
-    end
-
-    it "sets timestamps" do
-      user = User.new("John", "john@example.com")
-      user.save
-      user.created_at.should_not be_nil
-    end
-
-    it "raises for an invalid record" do
-      user = User.new("John", "invalid-email")
-      expect_raises(CQL::ActiveRecord::Validations::ValidationError) do
-        user.save!
-      end
-    end
+  it "is valid with a name and an email" do
+    User.new("John", "john@example.com").valid?.should be_true
   end
 
-  describe ".find" do
-    it "retrieves a saved user" do
-      user = User.create!(name: "John", email: "john@example.com")
-      found = User.find(user.id!)
-      found.should_not be_nil
-      found.not_nil!.name.should eq("John")
-    end
-
-    it "returns nil for a missing id" do
-      User.find(0).should be_nil
-      expect_raises(DB::NoResultsError) { User.find!(0) }
-    end
+  it "reports the failing field" do
+    user = User.new("John", "invalid-email")
+    user.valid?.should be_false
+    user.errors.map(&.field).should contain(:email)
   end
 end
 ```
 
-## Testing Callbacks
+## Persistence
+
+```crystal
+describe User do
+  it "inserts the row and sets id and timestamps" do
+    user = User.new("John", "john@example.com")
+    user.save.should be_true
+    user.id.should_not be_nil
+    user.created_at.should_not be_nil
+  end
+
+  it "raises for an invalid record" do
+    expect_raises(CQL::ActiveRecord::Validations::ValidationError) do
+      User.new("John", "invalid-email").save   # save raises; it does not return false
+    end
+  end
+
+  it "finds by id" do
+    User.find(0).should be_nil
+    expect_raises(DB::NoResultsError) { User.find!(0) }
+  end
+end
+```
+
+## Callbacks
 
 ```crystal
 describe Post do
-  describe "callbacks" do
-    it "generates slug before save" do
-      post = Post.new(title: "Hello World", body: "Content")
-      post.save
-      post.slug.should eq("hello-world")
-    end
-
-    it "normalizes title" do
-      post = Post.new(title: "  HELLO  ", body: "Content")
-      post.save
-      post.title.should eq("Hello")
-    end
+  it "generates a slug before save" do
+    post = Post.new("Hello World", "Content")
+    post.save
+    post.slug.should eq("hello-world")
   end
+
+  # ❌ Post.create!(title: "Hello World", body: "x").slug  # => "": create! runs no callbacks
 end
 ```
 
-## Testing Relationships
+## Associations and Scopes
 
 ```crystal
 describe Post do
-  describe "relationships" do
-    it "belongs to user" do
-      user = User.create!(name: "John", email: "john@example.com")
-      post = Post.create!(user_id: user.id!, title: "Test", body: "Body")
+  it "belongs to a user and has many comments" do
+    user = Factory.user
+    post = Factory.post(user)
+    Comment.create!(post_id: post.id!, body: "Nice!")
+    Comment.create!(post_id: post.id!, body: "Great!")
 
-      post.user.try(&.id).should eq(user.id)
-    end
+    post.user.try(&.id).should eq(user.id)
+    post.comments.count.should eq(2)
+  end
 
-    it "has many comments" do
-      user = User.create!(name: "John", email: "john@example.com")
-      post = Post.create!(user_id: user.id!, title: "Test", body: "Body")
-      Comment.create!(post_id: post.id!, body: "Nice!")
-      Comment.create!(post_id: post.id!, body: "Great!")
+  it "filters with scopes" do
+    Post.create!(title: "Published", body: "...", published: true)
+    Post.create!(title: "Draft", body: "...")
 
-      post.comments.count.should eq(2)
-    end
+    Post.published.count.should eq(1)
+    Post.published.first!.title.should eq("Published")
+    Post.draft.count.should eq(1)
   end
 end
 ```
 
-## Testing Scopes
+## Factories
 
 ```crystal
-describe Post do
-  describe "scopes" do
-    before_each do
-      Post.create!(title: "Published", body: "...", published: true)
-      Post.create!(title: "Draft", body: "...", published: false)
-    end
-
-    it ".published returns only published posts" do
-      Post.published.count.should eq(1)
-      Post.published.first!.title.should eq("Published")
-    end
-
-    it ".draft returns only draft posts" do
-      Post.draft.count.should eq(1)
-    end
-  end
-end
-```
-
-## Test Helpers
-
-Create helpers for common operations:
-
-```crystal
-module TestHelpers
-  def self.create_user(name = "Test User", email = "test@example.com")
+# spec/support/factory.cr
+module Factory
+  def self.user(name = "Test User", email = "user#{Random.rand(1_000_000)}@example.com") : User
     User.create!(name: name, email: email)
   end
 
-  def self.create_post(user : User, title = "Test Post")
+  def self.post(user : User = self.user, title = "Test Post") : Post
     Post.create!(user_id: user.id!, title: title, body: "Content")
   end
 end
-
-# In a spec
-user = TestHelpers.create_user
-post = TestHelpers.create_post(user)
 ```
 
-## Factory Pattern
+`create!` skips validations and callbacks, which keeps factories fast; build with `new` and `save` when a spec needs
+them to run.
 
-```crystal
-module Factory
-  def self.user(name : String = "Test User #{rand(1000)}", email : String = "test#{rand(100000)}@example.com")
-    User.create!(name: name, email: email)
-  end
-
-  def self.post(user : User? = nil, title : String = "Test Post", body : String = "Test content")
-    user ||= self.user
-    Post.create!(user_id: user.id!, title: title, body: body)
-  end
-end
-
-# Usage
-user = Factory.user(name: "John")
-post = Factory.post(user, title: "My Post")
-```
-
-## Database Cleanup
-
-Clean up between tests:
-
-```crystal
-Spec.before_each do
-  # Truncate tables
-  MyDB.exec("TRUNCATE users, posts, comments RESTART IDENTITY CASCADE")
-end
-
-# Or use transactions
-Spec.around_each do |example|
-  MyDB.transaction do
-    example.run
-    raise DB::Rollback.new  # Always rollback
-  end
-end
-```
-
-## Running Tests
+## Run the Specs
 
 ```bash
-# Run all tests
-crystal spec
-
-# Run specific file
-crystal spec spec/models/user_spec.cr
-
-# Run with verbose output
-crystal spec --verbose
+crystal spec                               # every spec
+crystal spec spec/models/user_spec.cr      # one file
+crystal spec spec/models/user_spec.cr:12   # the example on line 12
+crystal spec --verbose                     # one line per example
 ```
 
 ## See Also
 
 - [Set Up Test Databases](test-database.md)
+- [Create Records](../data-operations/create.md)
 - [Add Validations](../models/add-validations.md)
 - [Use Callbacks](../models/use-callbacks.md)
+- [Create Query Scopes](../querying/scopes.md)

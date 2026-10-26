@@ -72,7 +72,7 @@ end
 | `schema_name` | `Symbol` | `:app_schema` (`:test_schema` in test) | Schema symbol written into the schema file (`MigratorConfig#schema_symbol`). |
 | `auto_sync` | `Bool` | `true` (`false` in production) | Passed to the migrator: rewrite the schema file when the migrator is built and after `up` / `down`. Also gates the rewrite in `build_migrator` and `CQL.verify_schema(auto_fix: true)`. |
 | `bootstrap` | `Bool` | `false` | `CQL.build_migrator` dumps the schema file from the database right away. |
-| `verify_schema` | `Bool` | `true` (`false` in test) | `CQL.build_migrator` compares the schema file with the database (skipped when `bootstrap` is on) and logs a warning on mismatch; with `auto_sync` it rewrites the file. |
+| `verify_schema` | `Bool` | `true` (`false` in test) | `CQL.build_migrator` compares the schema file with the database (skipped when `bootstrap` is on) and logs a warning on mismatch. With `auto_sync` on, the migrator rewrites the file before comparing, so the check always passes. |
 | `sql_logging` | `Bool` | `true` only when the environment is *named* `development` (`CRYSTAL_ENV=development` or `c.env = "development"`) and `CQL_NO_SQL_LOG` is unset; otherwise `false`, including when `CRYSTAL_ENV` is unset | `CQL.build_schema` calls `CQL::Performance.enable_sql_logging` (which also enables the performance monitor). An assigned value overrides the default. |
 | `sql_logging_colorize` | `Bool` | `true` | Passed as `enable_sql_logging(colorize:)`. |
 | `pool_size` | `Int32` | `10`, then 5 / 1 / 25 by environment | Writes `pool.size` too, and lowers `pool.initial_size` and `pool.max_idle_size` to at most the new size. Must be positive. |
@@ -300,7 +300,7 @@ With the test pool of 1, `migrator.up` and `down` with `auto_sync` on raise `CQL
 | `CQL.build_schema(name) { ... }` | `CQL::Schema` | `Schema.new(name, full_db_url, adapter)`, runs the block in the schema, then sets up the cache (`cache.on`) and SQL logging (`sql_logging?`). |
 | `CQL.build_migrator(schema, custom_config = nil)` | `CQL::Migrator` | `config.build_migrator(schema)`; with `custom_config`, `schema.migrator(custom_config)`. |
 | `CQL.bootstrap_schema(schema)` | `CQL::Migrator` | `build_migrator`, then `bootstrap_schema`. |
-| `CQL.verify_schema(schema, auto_fix = false)` | `Bool` | Compares the schema file with the database; with `auto_fix` and `auto_sync` it rewrites the file and returns `true`. |
+| `CQL.verify_schema(schema, auto_fix = false)` | `Bool` | Builds a migrator, then compares the schema file with the database. With `auto_sync` on, building the migrator rewrites the file first, so this returns `true` even for a stale file and `auto_fix` never acts. |
 
 ```crystal
 # CRYSTAL_ENV=development, c.db = "postgres://app@localhost/app"

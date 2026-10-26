@@ -1,57 +1,54 @@
 # Add Columns
 
-This guide shows you how to add columns to existing tables using migrations.
+Add columns to an existing table with `schema.alter`, and give them defaults with a backfill or raw DDL.
 
-`schema.alter` columns are nullable by default (`null: true`), unlike `column` in a `schema.table` block. Supported `add_column` options are `null:`, `default:`, `unique:`, `size:` and `as:`; the `index:` option is accepted but ignored, so create indexes with `create_index`.
-
-## Add a Single Column
+## Add Nullable Columns
 
 ```crystal
-class AddAvatarToUsers < CQL::Migration(5)
+class AddProfileFieldsToUsers < CQL::Migration(5)
   def up
     schema.alter :users do
-      add_column :avatar_url, String, null: true
+      add_column :avatar_url, String   # ALTER TABLE users ADD COLUMN avatar_url TEXT
+      add_column :bio, String
     end
   end
 
   def down
     schema.alter :users do
       drop_column :avatar_url
-    end
-  end
-end
-```
-
-## Add Multiple Columns
-
-```crystal
-class AddProfileFieldsToUsers < CQL::Migration(6)
-  def up
-    schema.alter :users do
-      add_column :bio, String, null: true
-      add_column :website, String, null: true
-      add_column :location, String, null: true
-    end
-  end
-
-  def down
-    schema.alter :users do
       drop_column :bio
-      drop_column :website
-      drop_column :location
     end
   end
 end
 ```
 
-## Add Column with Default
+`add_column` makes nullable columns (`null: true`) unless you pass `null: false`, unlike `column` in a `schema.table`
+block.
+
+| Option | Effect on the `ADD COLUMN` statement |
+| :--- | :--- |
+| `null: false` | adds `NOT NULL` |
+| `default:` | none: the default is never written |
+| `unique: true` | adds `UNIQUE`; SQLite rejects it ("Cannot add a UNIQUE column"), so use `create_index ..., unique: true` |
+| `size:`, `index:`, `as:` | none |
+
+## Add a Column With a Default
 
 ```crystal
-class AddActiveToUsers < CQL::Migration(7)
+# ❌ default: is dropped: ALTER TABLE users ADD COLUMN active BOOLEAN NOT NULL
+add_column :active, Bool, default: true, null: false
+# Table with rows -> SQLite3::Exception: Cannot add a NOT NULL column with default value NULL
+# Empty table     -> succeeds, then an INSERT without active fails: NOT NULL constraint failed: users.active
+```
+
+```crystal
+# ✅ Nullable column, then a backfill with a bound value
+class AddActiveToUsers < CQL::Migration(6)
   def up
     schema.alter :users do
-      add_column :active, Bool, default: true, null: false
+      add_column :active, Bool
     end
+    schema.update.table(:users).set(active: true).commit  # UPDATE users SET active = ?
   end
 
   def down
@@ -60,154 +57,89 @@ class AddActiveToUsers < CQL::Migration(7)
     end
   end
 end
-```
 
-## Add Column with Index
-
-```crystal
-class AddSlugToPosts < CQL::Migration(8)
+# ✅ Raw DDL when the database must enforce NOT NULL and the default
+class AddVersionToUsers < CQL::Migration(7)
   def up
-    schema.alter :posts do
-      add_column :slug, String, null: true
-    end
-
-    schema.alter :posts do
-      create_index :idx_posts_slug, [:slug], unique: true
-    end
+    schema.exec("ALTER TABLE users ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
   end
 
   def down
-    schema.alter :posts do
-      drop_index :idx_posts_slug
-      drop_column :slug
-    end
+    schema.exec("ALTER TABLE users DROP COLUMN version")
   end
 end
 ```
 
-## Add Foreign Key Column
+`schema.exec` does not change the schema's table declaration, so `drop_column :version` would emit nothing; drop it
+with raw DDL too. Raw DDL is not translated per dialect, so write it for your database.
 
-Adding a foreign key to an existing table is not supported on SQLite.
+## Add an Indexed Column
 
 ```crystal
-class AddCategoryToPosts < CQL::Migration(9)
-  def up
-    schema.alter :posts do
-      add_column :category_id, Int64, null: true
-      create_index :idx_posts_category_id, [:category_id]
-      foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: :set_null
-    end
-  end
+schema.alter :posts do
+  add_column :slug, String
+  create_index :idx_posts_slug, [:slug], unique: true  # CREATE UNIQUE INDEX idx_posts_slug ON posts (slug)
+end
+# down: drop_index :idx_posts_slug, then drop_column :slug
 
-  def down
-    schema.alter :posts do
-      drop_foreign_key :fk_posts_category_id
-      drop_index :idx_posts_category_id
-      drop_column :category_id
-    end
-  end
+schema.alter :users do
+  add_column :deleted_at, Time                         # ADD COLUMN deleted_at TIMESTAMP, for SoftDeletable
+  create_index :idx_users_deleted_at, [:deleted_at]
 end
 ```
 
-## Add Timestamp Columns
+## Add Timestamps to an Existing Table
 
 ```crystal
-class AddTimestampsToPosts < CQL::Migration(10)
-  def up
-    schema.alter :posts do
-      add_column :created_at, Time, null: true
-      add_column :updated_at, Time, null: true
-    end
-
-    # Optionally set current time for existing records
-    # NOW() is PostgreSQL/MySQL; use CURRENT_TIMESTAMP for SQLite
-    schema.exec("UPDATE posts SET created_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
-  end
-
-  def down
-    schema.alter :posts do
-      drop_column :created_at
-      drop_column :updated_at
-    end
-  end
+schema.alter :posts do
+  add_column :created_at, Time
+  add_column :updated_at, Time
 end
+now = Time.utc
+schema.update.table(:posts).set(created_at: now, updated_at: now).commit
 ```
 
-## Add Column for Soft Deletes
+## Add a Foreign Key Column
 
 ```crystal
-class AddDeletedAtToUsers < CQL::Migration(11)
-  def up
-    schema.alter :users do
-      add_column :deleted_at, Time, null: true
-    end
-
-    schema.alter :users do
-      create_index :idx_users_deleted_at, [:deleted_at]
-    end
-  end
-
-  def down
-    schema.alter :users do
-      drop_index :idx_users_deleted_at
-      drop_column :deleted_at
-    end
-  end
+# PostgreSQL and MySQL
+schema.alter :posts do
+  add_column :category_id, Int64
+  create_index :idx_posts_category_id, [:category_id]
+  foreign_key [:category_id], references: :categories, references_columns: [:id], on_delete: :set_null
 end
+# ALTER TABLE posts ADD COLUMN category_id BIGINT
+# CREATE INDEX idx_posts_category_id ON posts (category_id)
+# ALTER TABLE posts ADD CONSTRAINT fk_posts_category_id FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL ON UPDATE NO ACTION
+# down: drop_foreign_key :fk_posts_category_id, drop_index, drop_column
 ```
 
-## Add Version Column for Locking
+{% hint style="warning" %}
+On SQLite, `foreign_key` in `schema.alter` raises `DB::Error` while the block's SQL is built, so nothing in that block runs. Add the column alone, or recreate the table with the key declared.
+{% endhint %}
 
-```crystal
-class AddVersionToUsers < CQL::Migration(12)
-  def up
-    schema.alter :users do
-      add_column :version, Int32, default: 1, null: false
-    end
-  end
-
-  def down
-    schema.alter :users do
-      drop_column :version
-    end
-  end
-end
-```
-
-## Update Model After Migration
-
-After running the migration, update your model:
+## Use the Column in the Model
 
 ```crystal
 class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context schema: MyDB, table: :users
 
-  # Existing properties...
-
-  # New property
+  property name : String = ""
+  property email : String = ""
   property avatar_url : String?
-
-  # Don't forget to update constructor if needed
-  def initialize(@name : String, @email : String, @avatar_url : String? = nil)
-  end
 end
-```
 
-If you use schema-file sync, the schema file (`app_schema.cr`) is regenerated by the migrator when `auto_sync` is on.
-
-## Verify Column Added
-
-```crystal
-migrator.up
-
-# Test the new column works
 user = User.create!(name: "John", email: "john@example.com", avatar_url: "/avatars/john.png")
-user.avatar_url  # => "/avatars/john.png"
+user.avatar_url # => "/avatars/john.png"
 ```
 
-## Related
+`create!` writes only columns the schema declares, so add the column to your `CQL::Schema.define` block too (with
+`auto_sync`, the migrator rewrites the generated schema file for you).
+
+## See Also
 
 - [Create a Migration](create-migration.md)
 - [Create Indexes](indexes.md)
+- [Implement Soft Deletes](../models/soft-delete.md)
+- [Add Optimistic Locking](../models/optimistic-locking.md)
 - [Migration DSL Reference](../../reference/api/migration-dsl.md)

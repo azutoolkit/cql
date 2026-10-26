@@ -1,130 +1,104 @@
 # Delete Records
 
-This guide shows you how to delete records from the database.
+Delete one record with its callbacks, or many rows with one statement, and soft delete when rows must stay.
 
-## Delete a Single Record
-
-```crystal
-user = User.find(1)
-user.try(&.delete!)
-puts "User deleted"
-```
-
-## Delete with delete!
-
-`find!` raises if the record doesn't exist; `delete!` returns `false` when the record has no id, a callback halts it, or no row was deleted:
+## Delete One Record
 
 ```crystal
 user = User.find!(1)
-user.delete!  # => true; runs before_destroy and after_destroy callbacks and the dependent: strategies
+user.delete!     # => true
+# DELETE FROM users WHERE users.id = ?
+user.id          # => nil, cleared after the delete
+user.destroyed?  # => true
+user.delete!     # => false: no id any more
+
+User.find(1)     # => nil
 ```
 
-## Delete by ID
+`delete!` runs `before_destroy` / `after_destroy` and the associations' `dependent:` strategies. It returns `false`
+when the record has no id, a `before_destroy` callback returns `false`, or no row matched. A `restrict_with_error`
+association that has records raises and deletes nothing.
+
+## Delete Without Loading Records
 
 ```crystal
-User.delete!(1)
+User.delete!(1)                    # => DB::ExecResult; DELETE FROM users WHERE users.id = ?
+User.delete_by!(email: "a@x.com")  # => DB::ExecResult
+Comment.delete_all                 # => DB::ExecResult; DELETE FROM comments (every row)
 ```
 
-## Delete with Conditions
+These run no callbacks and no `dependent:` strategies.
+
+## Delete the Rows a Query Matches
 
 ```crystal
-# Delete all inactive users
-User.where(active: false).delete_all
+User.where(active: false).delete_all              # => 2 (Int64)
+# SELECT users.id FROM users WHERE users.active = ?
+# DELETE FROM users WHERE users.id IN (?, ?)
 
-# Delete posts older than a year
 Post.where { created_at < 1.year.ago }.delete_all
 ```
 
-## Delete All Records
+Without destroy callbacks or `dependent:` associations (or `many_to_many`), this reads the ids and deletes them with one
+`DELETE ... IN` per chunk of the bind limit, outside any transaction; wrap it in one if it must be all or nothing.
+Otherwise it loads each record and calls its `delete!`, all in one transaction, so callbacks and the
+[association strategies](../relationships/has-many.md#when-the-parent-is-deleted) run.
 
-```crystal
-# Delete all comments
-Comment.delete_all
-
-# Delete all with condition
-User.where(role: "guest").delete_all
-```
-
-`delete_all` on a query returns the number of rows deleted. When the model declares no `before_destroy` or
-`after_destroy` callbacks and no `dependent:` associations (or many_to_many), it reads the matching ids with one SELECT
-and deletes them with one `DELETE ... WHERE id IN (...)` per chunk of the database's bind-parameter limit, without
-loading records (a soft-deletable model sets `deleted_at` with an UPDATE instead). These statements are not wrapped in a
-transaction; open one if the delete must be all or nothing. Otherwise it loads each record and calls its `delete!`, all
-in one transaction, so the callbacks and the [association strategies](../relationships/has-many.md#when-the-parent-is-deleted)
-run and an error (such as a `restrict_with_error` association with records) deletes nothing. An override of the instance
-`delete!` alone does not count: declare a destroy callback if that code must run.
-
-## Soft Delete (if enabled)
-
-If using soft deletes:
-
-```crystal
-user = User.find!(1)
-user.delete!         # Sets deleted_at timestamp
-user.deleted?        # => true
-
-user.restore!        # Restores the record
-user.deleted?        # => false
-
-user.force_delete!   # Permanently removes from database
-```
-
-## Cascade Delete
-
-With foreign key cascade:
-
-```crystal
-# If posts have: on_delete: :cascade
-user = User.find!(1)
-user.delete!  # Also deletes all user's posts
-```
-
-## Delete Related Records First
-
-Without cascade, delete children first:
-
-```crystal
-user = User.find!(1)
-user.posts.all.each(&.delete!)
-user.delete!
-```
-
-## Delete with Transaction
-
-Ensure atomic deletion:
+## Delete Children First
 
 ```crystal
 User.transaction do
   user = User.find!(1)
-  user.posts.all.each(&.delete!)
-  user.comments.all.each(&.delete!)
+  user.posts.delete_all   # => 2; DELETE FROM posts WHERE posts.user_id = ? (no callbacks)
   user.delete!
 end
+
+# Or refuse
+user.posts.exists? ? puts("Cannot delete user with posts") : user.delete!
 ```
 
-## Check Before Delete
+A foreign key declared with `on_delete: :cascade` lets the database delete the children. SQLite enforces foreign keys
+only when the connection enables them: `uri: "sqlite3://./app.db?foreign_keys=true"`.
+
+## Soft Delete
+
+With `include CQL::ActiveRecord::SoftDeletable` and a nullable `deleted_at` column:
 
 ```crystal
 user = User.find!(1)
+user.delete!          # => true; UPDATE users SET deleted_at = ? WHERE users.id = ?
+user.deleted?         # => true; the id stays
+User.find(1)          # => nil: default queries skip deleted rows
+User.with_deleted.find(1)
+User.only_deleted.count
 
-if user.posts.count > 0
-  puts "Cannot delete user with posts"
-else
-  user.delete!
-end
+user.restore!         # => true; deleted_at = NULL
+User.restore!(1)      # by id
+user.force_delete!    # DELETE FROM users WHERE users.id = ?
+
+User.delete_all       # soft deletes every active row (Int64)
+User.restore_all
+User.force_delete_all
 ```
 
-## Verify Deletion
-
 ```crystal
-user = User.find!(1)
+# ❌ A soft-deleted record is not persisted?, so save INSERTs a second row
 user.delete!
+user.save             # => true; user.id is now the new row's, also marked deleted
 
-User.find(1)  # => nil
+# ✅ Restore it first
+user.restore!
+user.save
 ```
 
-## Related
+{% hint style="warning" %}
+`dependent:` strategies still run on a soft delete, and `restore!` does not undo them.
+{% endhint %}
+
+## See Also
 
 - [Create Records](create.md)
 - [Update Records](update.md)
+- [Use Transactions](transactions.md)
 - [Implement Soft Deletes](../models/soft-delete.md)
+- [Set Up Has Many](../relationships/has-many.md)

@@ -1,235 +1,132 @@
 # Set Up Test Databases
 
-Configure a separate database for running tests without affecting development data.
+Point CQL at a separate database for specs, create its tables, and clean it between examples.
 
-## Prerequisites
-
-- CQL installed
-- Database server running
-- Test framework configured
-
-## Create Test Database
-
-### PostgreSQL
+## Create the Database
 
 ```bash
-createdb myapp_test
+createdb myapp_test                     # PostgreSQL
+mysql -e "CREATE DATABASE myapp_test"   # MySQL
+# SQLite creates the file on the first connection
 ```
 
-### MySQL
-
-```bash
-mysql -e "CREATE DATABASE myapp_test"
-```
-
-### SQLite
-
-SQLite creates the file automatically; use a separate path.
-
-## Configure Test Environment
-
-Create a test configuration:
+## Choose the URL by Environment
 
 ```crystal
 # src/config/database.cr
 module Config
-  def self.database_url
+  def self.database_url : String
     case ENV["APP_ENV"]?
-    when "test"
-      ENV["TEST_DATABASE_URL"]? || "postgres://localhost/myapp_test"
-    when "production"
-      ENV["DATABASE_URL"]
-    else
-      ENV["DATABASE_URL"]? || "postgres://localhost/myapp_development"
+    when "test"       then ENV["TEST_DATABASE_URL"]? || "postgres://localhost/myapp_test"
+    when "production" then ENV["DATABASE_URL"]
+    else                   ENV["DATABASE_URL"]? || "postgres://localhost/myapp_development"
     end
   end
 end
 
 # src/db.cr
-MyDB = CQL::Schema.define(
-  :my_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: Config.database_url
-) do
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::Postgres, uri: Config.database_url) do
+  table :users do
+    primary :id, Int64, auto_increment: true
+    column :name, String
+    column :email, String
+    timestamps
+  end
 end
 ```
 
-## Environment Variables
-
-Set test database URL:
-
-```bash
-# .env.test
-TEST_DATABASE_URL=postgres://localhost/myapp_test
-
-# Run tests
-APP_ENV=test crystal spec
-```
-
-Or in your test helper:
-
 ```crystal
 # spec/spec_helper.cr
-ENV["APP_ENV"] = "test"
-ENV["TEST_DATABASE_URL"] = "postgres://localhost/myapp_test"
-
+ENV["APP_ENV"] = "test"   # before the schema is defined
+require "spec"
 require "../src/db"
 require "../src/models/*"
 ```
 
-## Run Migrations for Tests
+Models compile against one schema constant, so switch databases through the URL rather than redefining models.
 
-Before running tests, migrate the test database. Turn `auto_sync` off so the migrator does not rewrite your schema file:
+## Create the Tables
 
 ```crystal
-# spec/spec_helper.cr
-ENV["APP_ENV"] = "test"
-require "../src/db"
+# spec/spec_helper.cr: run the migrations, leaving the schema file alone
+AppDB.migrator(CQL::MigratorConfig.new(auto_sync: false)).up
 
-# Run migrations
-MyDB.migrator(CQL::MigratorConfig.new(auto_sync: false)).up
+# Or, when the schema declares the tables in code
+AppDB.build             # CREATE TABLE IF NOT EXISTS ... and its indexes, for every declared table
+AppDB.users.create!     # one table
+AppDB.users.drop!       # DROP TABLE IF EXISTS users
 ```
-
-If the schema is declared in code (as in CQL's own specs), you can skip migrations and create every declared table with `MyDB.build`, or one at a time with `MyDB.users.create!` and `MyDB.users.drop!`.
-
-Or with a script:
 
 ```bash
-#!/bin/bash
-# bin/test (src/migrate.cr calls MyDB.migrator(...).up)
-APP_ENV=test crystal run src/migrate.cr
-APP_ENV=test crystal spec "$@"
+APP_ENV=test crystal src/migrate.cr up && APP_ENV=test crystal spec
 ```
 
-## Database Cleaning Strategies
-
-### Truncation (Recommended)
-
-Fast cleanup by truncating tables:
-
-```crystal
-# spec/spec_helper.cr
-Spec.before_each do
-  # PostgreSQL
-  MyDB.exec(<<-SQL
-    TRUNCATE users, posts, comments
-    RESTART IDENTITY CASCADE
-  SQL
-  )
-
-  # MySQL
-  # MyDB.exec("SET FOREIGN_KEY_CHECKS = 0")
-  # MyDB.exec("TRUNCATE users")
-  # MyDB.exec("SET FOREIGN_KEY_CHECKS = 1")
-
-  # SQLite
-  # MyDB.exec("DELETE FROM users")
-  # MyDB.exec("DELETE FROM sqlite_sequence WHERE name='users'")
-end
-```
-
-### Transaction Rollback
-
-Wrap each test in a transaction that rolls back:
+## Roll Back Each Example
 
 ```crystal
 Spec.around_each do |example|
-  MyDB.transaction do
+  AppDB.transaction do
     example.run
-    raise DB::Rollback.new
+    raise DB::Rollback.new   # nothing the example wrote survives
   end
 end
 ```
 
-`Schema#transaction` pins the fiber to one connection and swallows `DB::Rollback`, so queries issued by the example run inside the transaction.
+Every query the example runs on its own fiber joins that transaction. A fiber the example spawns gets another
+connection: it does not see the example's rows, and its writes are not rolled back. On MySQL and CockroachDB, DDL
+inside the example raises `CQL::DialectError`.
 
-**Note:** This won't work if your tests use multiple connections or spawn fibers, because other fibers do not see the transaction's connection.
-
-### Delete Strategy
-
-Slower but compatible with all scenarios:
+## Empty the Tables
 
 ```crystal
-Spec.after_each do
-  Comment.delete_all
-  Post.delete_all
-  User.delete_all
+Spec.before_each do
+  AppDB.comments.truncate!   # SQLite: DELETE FROM comments; PostgreSQL and MySQL: TRUNCATE TABLE comments
+  AppDB.posts.truncate!
+  AppDB.users.truncate!
+  AppDB.exec("DELETE FROM sqlite_sequence")  # SQLite: restart AUTOINCREMENT ids
+end
+
+# PostgreSQL: one statement, past foreign keys, with ids restarted
+AppDB.exec("TRUNCATE users, posts, comments RESTART IDENTITY CASCADE")
+
+# Through the models: one DELETE per table, no callbacks
+Comment.delete_all
+Post.delete_all
+User.delete_all
+```
+
+## Use SQLite Files, Not :memory:
+
+```crystal
+# ❌ Every connection gets its own empty :memory: database
+TestDB = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3::memory:") do
+  # ...
+end
+# a second pooled connection (a spawned fiber, for one) -> no such table: users
+
+# ✅ A file in the temp directory, as CQL's own specs do
+TestDB = CQL::Schema.define(:test_db, adapter: CQL::Adapter::SQLite,
+  uri: "sqlite3://#{File.join(Dir.tempdir, "myapp_test.db")}") do
+  # ...
 end
 ```
 
-## In-Memory SQLite
-
-For fastest tests, use in-memory SQLite:
+For parallel CI jobs, give each job its own database before the schema is defined:
 
 ```crystal
-# spec/spec_helper.cr
-TestDB = CQL::Schema.define(
-  :test_db,
-  adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3::memory:"
-) do
-  table :users do
-    primary :id, Int64
-    column :name, String
-    column :email, String
-    timestamps
-  end
-end
-
-Spec.before_suite do
-  # Create the declared tables
-  TestDB.build
-end
+ENV["TEST_DATABASE_URL"] = "postgres://localhost/myapp_test_#{ENV["TEST_WORKER_ID"]? || "0"}"
 ```
 
-SQLite gives every connection its own private `:memory:` database, so a test that ends up on a second pooled connection can see an empty database. CQL's own specs use SQLite files in the temp directory instead (`CQL::Schema.define(:name, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{File.join(Dir.tempdir, "cql_test.db")}")`) and create and drop tables around each example with `TestDB.users.create!` / `TestDB.users.drop!`.
-
-## Separate Test Schema
-
-Use a dedicated schema module for tests:
+## Check the Setup
 
 ```crystal
-# spec/support/test_schema.cr
-TestDB = CQL::Schema.define(:test, adapter: CQL::Adapter::SQLite, uri: "sqlite3::memory:") do
-  table :users do
-    primary :id, Int64
-    column :name, String
-    column :email, String
-    timestamps
-  end
-end
-
-# Redefine models to use test database
-struct User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context TestDB, :users
-  # ... properties
-end
-```
-
-## Parallel Tests
-
-For parallel test execution, use separate databases:
-
-```crystal
-worker_id = ENV["TEST_WORKER_ID"]? || "0"
-test_db = "myapp_test_#{worker_id}"
-
-TestDB = CQL::Schema.define(:test, adapter: CQL::Adapter::Postgres, uri: "postgres://localhost/#{test_db}") do
-end
-```
-
-## Verify Setup
-
-```crystal
-# spec/database_spec.cr
-describe "Database" do
-  it "connects to test database" do
-    MyDB.exec_query { |conn| conn.scalar("SELECT 1") }.should eq(1)
+describe "database" do
+  it "connects to the test database" do
+    AppDB.exec_query { |conn| conn.scalar("SELECT 1") }.should eq(1)
   end
 
-  it "has migrated schema" do
-    User.count.should eq(0)  # Table exists
+  it "has the migrated tables" do
+    User.count.should eq(0)
   end
 end
 ```
@@ -239,3 +136,4 @@ end
 - [Test Models](test-models.md)
 - [Configure Multiple Environments](../configuration/environments.md)
 - [Run Migrations](../migrations/run-migrations.md)
+- [Use Transactions](../data-operations/transactions.md)
