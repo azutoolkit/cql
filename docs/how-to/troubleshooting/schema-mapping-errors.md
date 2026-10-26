@@ -1,46 +1,63 @@
 # Fix Schema Mapping Errors
 
-CQL can validate model getter types against schema column types when your application starts.
+Run CQL's check that model getter types match the schema's columns, then fix each `CQL::ActiveRecord::SchemaMappingError` it raises.
 
-Enable it with:
+## Run the check where it can finish
+
+The check runs only when `CQL_VALIDATE_SCHEMA_MAPPINGS` is exactly `1`, and it runs after all of the program's top-level code. An app that starts a blocking server at the top level never reaches it, so run it from your specs or from a script that loads the models and exits:
 
 ```bash
+# ✅ Specs start after top-level code: a mapping error aborts the run before any example (exit 1)
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec
+
+# ✅ A script that requires the schema and models but starts no server
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/check_mappings.cr
+
+# ❌ Never checks: the server blocks before the check runs
 CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
 ```
 
-When enabled, CQL reads each model's schema and table (from `db_context`, or inferred when it is left out) and compares the model's zero-argument getters with the corresponding table columns.
+```crystal
+# src/check_mappings.cr: require your schema and models, nothing that serves requests
+require "./config/cql"
+require "./models/**"
+```
 
-## Example Error
+For each model with a schema (from `db_context`, or inferred), CQL compares the zero-argument getters with the table's columns. It skips columns the model has no getter for, ignores nilability, and accepts a `UUID` getter over a `String` column. It is opt-in because models often allow `nil` while a record is transient.
+
+## Fix type mismatches
 
 ```text
 CQL schema mapping error in User: schema column `users.name` type String does not match model getter `name` type Int32. Update the schema column or the model property type.
 ```
 
-## Fix Type Mismatches
-
-Make the model property match the schema:
-
 ```crystal
-schema.table :users do
-  primary :id, Int64
-  column :name, String
+AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./db/app.db") do
+  table :users do
+    primary :id, Int64
+    text :name
+  end
 end
 
 class User
   include CQL::ActiveRecord::Model(Int64)
-  db_context schema: MyDB, table: :users
+  db_context schema: AppDB, table: :users
 
-  property name : String
+  property name : String = "" # ❌ was Int32
 end
 ```
 
-Or change the schema column type if the model type is correct.
+Or change the column if the model is right.
 
-If the model's table is not defined in the schema, the error reads ``CQL schema mapping error in User: table `users` is not defined in schema `my_db`.`` Both cases raise `CQL::ActiveRecord::SchemaMappingError`.
+## Fix a table the schema does not define
+
+```text
+CQL schema mapping error in Post: table `posts` is not defined in schema `app_db`.
+```
+
+Declare `table :posts` in the schema block, or point `db_context` at the right table.
 
 ## Fix Primary Key Mismatches
-
-The validator also compares the model's primary key with the table's declared one:
 
 ```text
 CQL schema mapping error in Label: table `labels` declares primary key `label_no`, but the model maps `id` to `id`. Declare `db_context ..., primary_key: :label_no` on the model.
@@ -49,48 +66,42 @@ CQL schema mapping error in Label: table `labels` declares primary key `label_no
 Declare the schema's key column on the model, as in [Primary Key on Another Column](../models/define-model.md#primary-key-on-another-column):
 
 ```crystal
-db_context LabelKeyDB, :labels, primary_key: :label_no
+class Label
+  include CQL::ActiveRecord::Model(Int32)
+  db_context AppDB, :labels, primary_key: :label_no
+
+  property name : String = ""
+end
 ```
 
-Or rename the schema's `primary` column to `id` if the model is right. A table without a declared primary key is not checked.
+Or rename the schema's `primary` column to `id`. A table with no declared primary key is not checked.
 
-## Fix a Schema That Cannot Be Inferred
+## Fix a schema that cannot be inferred
 
-A model without a complete `db_context` finds its schema at compile time. When it cannot, the model still compiles and `Model.schema` raises `CQL::ActiveRecord::SchemaMappingError` on its first call, whether or not validation is enabled. Validation skips such models.
-
-No `CQL::Schema.define` block declares the table:
+A model without a schema in `db_context` finds one at compile time: the single `CQL::Schema.define` block that declares its table. When there is none, or more than one, the model still compiles and `Model.schema` raises on its first call, whether or not the check is on. The check skips such models.
 
 ```text
 CQL schema mapping error in Person: no `CQL::Schema.define` block declares table `persons`. Declare the table in a schema, or add `db_context MySchema, :persons` to Person.
+CQL schema mapping error in Account: schemas `::AppDB`, `::ReplicaDB` all declare table `accounts`. Add `db_context <one of them>, :accounts` to Account to pick one.
 ```
-
-Declare the table in a schema, or name it. `Person` maps to `:persons`, not `:people`:
 
 ```crystal
 class Person
   include CQL::ActiveRecord::Model(Int64)
-  db_context table: :people
+  db_context table: :people # Person maps to :persons by default
+end
+
+class Account
+  include CQL::ActiveRecord::Model(Int64)
+  db_context AppDB, :accounts # pick one of the schemas
 end
 ```
 
-Several blocks declare the table:
+If the table is declared and the first error still appears, the lookup cannot see it. It reads only literal `table :name` calls written directly in the `define` block: not tables added later with `Schema.new` and `.table`, through helper macros, or inside `{% if %}` or `begin`. It cannot reference a `private` schema constant in a namespace either. Name the schema in `db_context` in these cases.
 
-```text
-CQL schema mapping error in User: schemas `::PrimaryDB`, `::ReplicaDB` all declare table `users`. Add `db_context <one of them>, :users` to User to pick one.
-```
+## See Also
 
-Pick one with `db_context PrimaryDB, :users`.
-
-If the table is declared and the first error still appears, the lookup cannot see it. It reads only literal `table :name` calls written directly in the `define` block, not tables added later with `Schema.new` and `.table`, through helper macros, or inside `{% if %}` or `begin`, and it cannot reference a `private` schema constant in a namespace. Use `db_context` in these cases.
-
-## What Is Checked
-
-CQL checks columns that have matching model getters. It does not require every schema column to appear on the model, which lets you omit database-managed columns or fields that are not part of the public model.
-
-The validator also allows UUID model getters backed by string database storage, which is the standard CQL UUID storage path.
-
-## Why It Is Opt-In
-
-Some models intentionally allow nil while records are transient, before database defaults, foreign keys, or generated primary keys are assigned. For that reason, strict schema mapping validation focuses on concrete type mismatches and is disabled by default.
-
-Use it in CI, staging, or production boot checks when you want an extra guardrail against schema drift.
+- [Define a Model](../models/define-model.md)
+- [Dump and Validate Your Schema](../migrations/schema-dump-and-validation.md)
+- [Fix Migration Errors](migration-errors.md)
+- [Fix Validation Errors](validation-errors.md)

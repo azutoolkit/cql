@@ -1,188 +1,95 @@
 # Use Per-Request Caching
 
-Track the queries executed during a single HTTP request, and reset that state when the request ends.
+Count the statements each HTTP request runs so that repeated queries within one request show up.
 
-## Prerequisites
-
-- CQL installed and configured
-- Web application with a request lifecycle
-
-## The Problem
-
-Within a single request, the same query may run several times:
+## See What It Tracks
 
 ```crystal
-# Header partial
-current_user = User.find(session[:user_id])  # Query 1
+CQL::Cache::RequestQueryCacheHelper.start_request("req-123")  # clears tracked statements and starts tracking
 
-# Sidebar partial
-current_user = User.find(session[:user_id])  # Query 2 (duplicate!)
+current_user = User.find(session_user_id)  # header partial
+current_user = User.find(session_user_id)  # sidebar partial: runs again, counted as a hit
+
+CQL::Cache::RequestQueryCacheHelper.stats["hits"]  # => 1
+CQL::Cache::RequestQueryCacheHelper.end_request    # clears tracked statements; tracking stops with the last request
 ```
 
-`CQL::Cache::RequestQueryCache` keys every SQL statement by its text plus a hash of its bound parameters; the parameter values themselves are not kept. Every `all`, `get` and `each` call on a query goes through `RequestQueryCacheHelper.with_cache(sql, params)`, so a repeated statement within one request is counted as a hit. Tracking is off until a request starts: outside `start_request`/`end_request` (or an explicit `enabled = true`), `with_cache` just runs the block, so queries pay nothing for it.
+Every select a query runs (`all`, `get`, `each`, `find` and the like) passes through `RequestQueryCacheHelper.with_cache(sql, params)`. It keys the statement by its SQL and a hash of its bound values, keeps no values, and **always runs the block**: no rows are stored or replayed. Use the counts to find duplicates, then memoize the result or cache it with [Enable Query Caching](query-cache.md). Outside a request, tracking is off and costs nothing.
 
-## What It Does (and Does Not Do)
+## Hook It Into Your Framework
 
-`with_cache(sql, params) { ... }` records that the statement was seen and then **always runs the block**. It does not store or replay rows, so it will not remove the duplicate query by itself. Use it to find duplicates: the `hits` counter in `stats` is the number of repeated statements. To avoid the duplicate database round trip, memoize the result in your own code or use the value cache from [Enable Query Caching](query-cache.md).
-
-## Enable the Request Cache
-
-Pick the integration for your framework. Each one calls `start_request` when the request begins and `end_request` when it finishes, using the `X-Request-ID` header as the request ID (or a random one).
-
-### Generic `HTTP::Server`
+Each integration starts a request with the `X-Request-ID` header (or a random id) and ends it when the response is done.
 
 ```crystal
-server = HTTP::Server.new([
-  CQL::Cache::Middleware::HTTP.new,
-  # ... other handlers
-  MyApp.new,
-])
-```
+# HTTP::Server: a handler that ends the request in an ensure
+server = HTTP::Server.new([CQL::Cache::Middleware::HTTP.new, MyApp.new])
 
-### Azu
+# Azu: add CQL::Cache::Middleware::Azu::Handler.new to the handler chain,
+# or call CQL::Cache::Middleware::Azu.before_request(context) and .after_request(context)
 
-```crystal
-Azu::Server.new([
-  CQL::Cache::Middleware::Azu::Handler.new,
-  # ... other handlers
-])
-```
+# Kemal (CQL::Cache::Middleware::Kemal.setup! is an empty stub: register the hooks)
+before_all { |env| CQL::Cache::Middleware::Kemal.before_request(env) }
+after_all { |env| CQL::Cache::Middleware::Kemal.after_request(env) }
 
-Or call the hooks yourself: `CQL::Cache::Middleware::Azu.before_request(ctx)` and `.after_request(ctx)`.
-
-### Kemal
-
-```crystal
-before_all do |env|
-  CQL::Cache::Middleware::Kemal.before_request(env)
-end
-
-after_all do |env|
-  CQL::Cache::Middleware::Kemal.after_request(env)
-end
-```
-
-### Lucky
-
-```crystal
+# Lucky
 abstract class ApplicationAction < Lucky::Action
   include CQL::Cache::Middleware::Lucky
 end
-```
 
-### Amber
-
-```crystal
+# Amber: then add QueryCachePipe to a pipeline in config/routes.cr
 class QueryCachePipe < Amber::Pipe::Base
   include CQL::Cache::Middleware::Amber
 end
+# SpiderGazelle and Azu controllers: include CQL::Cache::Middleware::SpiderGazelle / ::Azu::Controller
 
-# config/routes.cr
-pipeline :web, [QueryCachePipe]
+# Anything else
+CQL::Cache::Middleware::Manual.with_request { handle(request) }  # or Manual.start_request / Manual.end_request
 ```
 
-`CQL::Cache::Middleware::SpiderGazelle` also exists and is included in a controller the same way.
+The Lucky, Amber, SpiderGazelle and Azu controller modules rely on those frameworks' macros and are not exercised by CQL's specs.
 
-### Any other framework
+## Call the Helper Directly
 
 ```crystal
-CQL::Cache::Middleware::Manual.with_request do
-  # handle the request
-end
+CQL::Cache::RequestQueryCacheHelper.start_request   # a random 32-character id
+CQL::Cache::RequestQueryCacheHelper.end_request
+
+CQL.configure { |c| c.cache.on = true }          # c.cache.request_cache is true by default
+CQL.with_request_cache("req-123") { handle(request) }  # does nothing unless both are on; ends in an ensure
+
+CQL::Cache::RequestQueryCacheHelper.with_cache("SELECT 1", [] of DB::Any) { legacy_lookup }  # track your own call
 ```
 
-`Manual.start_request` and `Manual.end_request` are available if you cannot wrap the request in a block.
-
-These adapters are thin wrappers around the helper in the next section. The Lucky, Amber, SpiderGazelle and Azu controller adapters rely on macros and callbacks of those frameworks and are not exercised by CQL's own specs.
-
-## Calling the Helper Directly
-
-```crystal
-CQL::Cache::RequestQueryCacheHelper.start_request("req-123")  # clears state, sets request ID
-# ... run queries ...
-CQL::Cache::RequestQueryCacheHelper.end_request               # clears state
-```
-
-`start_request` without an argument generates a random ID.
-
-If you use `CQL.configure`, `CQL.with_request_cache { ... }` does the same thing, but only when `c.cache.on = true` and `c.cache.request_cache` is true (the default).
-
-```crystal
-CQL.configure do |c|
-  c.cache.on = true
-end
-
-CQL.with_request_cache("req-123") do
-  # handle the request
-end
-```
-
-## Manual Cache Control
-
-### Clear the Request Cache
-
-```crystal
-CQL::Cache::RequestQueryCacheHelper.clear
-```
-
-Clears the tracked statements and keeps the request ID.
-
-### Disable and Re-enable
-
-```crystal
-CQL::Cache::RequestQueryCacheHelper.enabled = true   # track outside requests too
-CQL::Cache::RequestQueryCacheHelper.enabled = false  # stop tracking, even inside a request
-CQL::Cache::RequestQueryCacheHelper.enabled?
-```
-
-Tracking is on while any request is active (between `start_request` and `end_request`), or after `enabled = true`. While it is off, `with_cache` just runs the block. When the last active request ends, `end_request` clears the tracked statements and turns request tracking off again. The cache is process-wide: overlapping requests share it, and their stats are combined. `enabled = false` turns tracking off even for requests that are still active.
-
-### Track a Specific Statement
-
-```crystal
-CQL::Cache::RequestQueryCacheHelper.with_cache("SELECT 1", [] of DB::Any) do
-  # your code
-end
-```
-
-## Debugging
+## Read the Counts
 
 ```crystal
 stats = CQL::Cache::RequestQueryCacheHelper.stats
-puts stats["hits"]              # statements seen more than once
-puts stats["misses"]            # distinct statements
-puts stats["hit_rate_percent"]
-puts stats["size"]              # distinct statements tracked now
-puts stats["request_id"]        # "none" outside a request
+stats["hits"]              # statements seen again: the duplicates
+stats["misses"]            # distinct statements
+stats["hit_rate_percent"]  # hits / (hits + misses) * 100
+stats["size"]              # distinct statements tracked now, at most max_size (1000; the oldest goes first)
+stats["request_id"]        # "none" outside a request
+stats["enabled"]           # "true" or "false"; also "max_size", "sets" and "clears"
 ```
 
-Other keys: `enabled`, `max_size`, `sets`, `clears`. A high `hits` count on an endpoint points at an N+1 or at duplicated lookups.
+`hits` and `misses` are totals for the process: starting or ending a request clears the tracked statements, not the counters. A high `hits` count on an endpoint points at an N+1 or a duplicated lookup; see [Avoid N+1 Queries](../performance/n-plus-one.md).
 
-## Memory Bound
+## Control Tracking
 
-`RequestQueryCache.new(max_size : Int32 = 1000)` caps the tracked statements. When the cap is reached the oldest tracked statement is evicted. The shared instance used by the helper is `RequestQueryCache.instance`, created with the default of 1000.
+```crystal
+CQL::Cache::RequestQueryCacheHelper.enabled = true   # track outside requests too
+CQL::Cache::RequestQueryCacheHelper.enabled = false  # stop, even for requests still active
+CQL::Cache::RequestQueryCacheHelper.enabled?         # true while a request is active or after enabled = true
+CQL::Cache::RequestQueryCacheHelper.clear            # drop tracked statements, keep the request id
+```
 
-## Best Practices
-
-1. **Enable for all requests** - Use middleware so every request starts clean.
-2. **Always pair start with end** - Tracking stays on while any request is active, so an `end_request` skipped on an error path keeps it on for the life of the process. Use `CQL.with_request_cache` or call `end_request` in an `ensure`.
-3. **Use the stats to find duplicates** - Then fix them at the source.
-4. **Don't rely on it for long-term caching** - See [Configure Redis Cache](redis.md).
-
-## Troubleshooting
-
-**`hits` and `misses` stay at zero:**
-- Tracking is off outside a request: check that your middleware calls `start_request`, or `RequestQueryCacheHelper.enabled?`.
-- With `CQL.with_request_cache`, check that `c.cache.on` is true.
-
-**Counters keep growing across requests:**
-- `start_request` and `end_request` clear the tracked statements but not the `hits`/`misses` counters. They are totals for the process.
-
-**Kemal `setup!` does nothing:**
-- `CQL::Cache::Middleware::Kemal.setup!` is an empty stub. Register the `before_all`/`after_all` hooks shown above.
+{% hint style="warning" %}
+The tracker is one per process: overlapping requests share its statements and counters, and tracking stays on while any request is active. An `end_request` skipped on an error path keeps it on for good, so end requests in an `ensure` (as `Manual.with_request` and `CQL.with_request_cache` do).
+{% endhint %}
 
 ## See Also
 
 - [Enable Query Caching](query-cache.md)
 - [Configure Redis Cache](redis.md)
 - [Avoid N+1 Queries](../performance/n-plus-one.md)
+- [Monitor Performance](../performance/monitoring.md)

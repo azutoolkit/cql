@@ -1,101 +1,138 @@
 # Telemetry
 
-Every query and DML statement CQL runs (selects, inserts, updates, deletes, `Schema#exec` DDL and `explain`) passes through
-`CQL::Execution.run`, which publishes a `CQL::Telemetry::QueryEvent` to your subscribers.
+Subscribe to an event for every statement CQL runs, alert on slow ones, trace them, and watch transactions and the connection pool.
+
+## Subscribe to Query Events
 
 ```crystal
 CQL::Telemetry.subscribe("metrics") do |event|
-  StatsD.timing("sql.#{event.operation}", event.duration)
+  event.sql            # "SELECT users.id, ... FROM users WHERE users.id = ? LIMIT ?"
+  event.operation      # :select, :insert, :update, :delete, :ddl or :explain
+  event.duration       # Time::Span, including the wait for a pooled connection
+  event.pool_wait      # the part of duration spent waiting for that connection
+  event.param_count    # 2
+  event.params         # nil unless capture_params is on
+  event.rows_affected  # Int64 for writes and Schema#exec, nil for selects
+  event.adapter        # CQL::Adapter::SQLite
+  event.context        # from with_context, else nil
+  event.error          # the exception of a failed statement, else nil
+  event.success?       # error.nil?
 end
 
-CQL::Telemetry.alert_on_slow(200.milliseconds) { |event| Alerts.warn(event.sql) }
-CQL::Telemetry.log_queries                       # one debug log line per statement (plain text)
+CQL::Telemetry.subscribed?("metrics")  # => true
+CQL::Telemetry.unsubscribe("metrics")
+CQL::Telemetry.reset!                  # in specs: drops every subscriber, the tracer and capture_params
 ```
 
-An event carries `sql`, `operation` (`:select`, `:insert`, `:update`, `:delete`, `:ddl`,
-`:explain`), `duration`, `pool_wait`, `param_count`, `adapter`, `error`, `rows_affected`, `context`, `params` (only with `capture_params`) and `success?`.
+Events cover queries, inserts, updates, deletes, `Schema#exec` and `explain`; `Schema#alter` and migrations publish none. Subscribers run inline before the statement returns. One that raises is logged and never affects the query or other subscribers.
 
-Subscribers run inline, before the statement returns. `subscribe(name, async: true)` runs one on a background fiber through a bounded queue: a full queue drops events (`Telemetry.dropped_events`) rather than blocking, and `Telemetry.flush(timeout)` waits for delivery (pass a timeout at shutdown, so a stuck subscriber cannot hang it). Set `Telemetry.async_queue_capacity` (default 4096) before the first async subscriber: the queue allocates its whole buffer then and lives until `reset!`, which also restores the default. `alert_on_slow`, `log_queries` and `subscribe_transactions` take `async: true` too. Subscribing a name in one mode removes it from the other, and once `unsubscribe` returns and `flush` returns true, a removed subscriber receives nothing more.
-
-Async delivery takes the work out of query latency, not out of CPU. On one thread the consumer runs only when the application yields, so a tight loop of SQLite statements can fill the queue and drop events; with several threads a hand-off to a parked consumer costs a scheduler wake (about half a microsecond). Queued events keep their SQL, their `error` (whose message may hold data) and, with `capture_params`, their bound values in memory until delivered.
-
-## Parameters are redacted by default
-
-`event.params` is `nil` unless you opt in with `CQL::Telemetry.capture_params = true`; the count is
-always available.
-
-## Context
+## Alert on Slow Queries and Log SQL
 
 ```crystal
-CQL::Telemetry.with_context("req-123") { ... } # fiber-local, attached to events in the block
-CQL::Telemetry.current_context                   # => "req-123" inside that block, nil outside
+CQL::Telemetry.alert_on_slow(200.milliseconds) do |event|  # subscriber name "cql.slow_query"
+  Log.warn { "slow query (#{event.duration.total_milliseconds.round(1)}ms): #{event.sql}" }
+end
+
+CQL::Telemetry.log_queries         # name "cql.log", debug lines on the "cql.telemetry" log source
+CQL::Telemetry.log_queries(:info)  # another severity
+# [select] 0.02ms SELECT users.id, ... FROM users WHERE users.id = ? LIMIT ? (2 params)
+# [select] 0.04ms SELECT users.id FROM users WHERE nope = ? (1 params) FAILED: SQLite3::Exception
 ```
 
-The context is shared with `CQL::Performance.with_context`: every subscriber receives it, and it appears in SQL
-log lines when SQL logging is on, whatever `capture_params` says. Use a request id, not personal data.
+Log lines never contain bound values or error messages. For formatted SQL with durations, use [Log SQL](query-profiler.md#log-sql).
 
-## Tracing (OpenTelemetry, Dashforge, ...)
+## Deliver Off the Query Path
 
-Subclass `CQL::Telemetry::Tracer` and implement `in_span(operation, sql, &)` to wrap each
-statement in a span. `in_span` must call the block exactly once and let its exceptions propagate;
-a tracer that skips the block raises, and one that swallows an error has it re-raised. CQL adds no hard dependency on any tracing library.
+```crystal
+CQL::Telemetry.async_queue_capacity = 8192  # default 4096; read when the first async subscriber builds the queue
+CQL::Telemetry.subscribe("exporter", async: true) { |event| Exporter.record(event) }
+CQL::Telemetry.alert_on_slow(200.milliseconds, async: true) { |event| Exporter.slow(event) }
+CQL::Telemetry.log_queries(async: true)
+
+CQL::Telemetry.flush(5.seconds)  # => true once every earlier event was delivered, false on timeout
+CQL::Telemetry.dropped_events    # => Int64: a full queue drops events instead of blocking the statement
+```
+
+Async subscribers share one background fiber and one FIFO queue, kept until `reset!` (which restores the default capacity). Subscribing a name in one mode removes it from the other. After `unsubscribe` and a `flush` that returns true, a removed subscriber gets nothing more.
+
+{% hint style="warning" %}
+Async moves work out of query latency, not off the CPU. On one thread the consumer runs only when the application yields, so a tight loop of statements can fill the queue; queued events keep their SQL, error and captured values in memory until delivered.
+{% endhint %}
+
+## Capture Parameters and Tag Events
+
+```crystal
+CQL::Telemetry.capture_params = true  # event.params becomes a copy of the bound values; off by default
+
+CQL::Telemetry.with_context("req-123") do
+  User.find(1)                       # event.context == "req-123"
+  CQL::Telemetry.current_context     # => "req-123"
+  spawn { User.find(2) }             # a spawned fiber is not tagged
+end
+```
+
+The context is per fiber and is the same one `CQL::Performance.with_context` sets. It also appears in SQL log lines whatever `capture_params` says, so use a request id, not personal data. `event.error.message` may hold data too: redact it before shipping it.
+
+## Trace Statements
+
+```crystal
+class TimingTracer < CQL::Telemetry::Tracer
+  def in_span(operation : Symbol, sql : String, & : -> T) : T forall T
+    started = Time.instant
+    begin
+      yield  # runs the statement: call it exactly once and let its exceptions propagate
+    ensure
+      Log.info { "span sql.#{operation}: #{(Time.instant - started).total_microseconds.round}µs" }
+    end
+  end
+end
+
+CQL::Telemetry.tracer = TimingTracer.new  # wrap an OpenTelemetry (or other) span the same way
+```
+
+A tracer that skips the block raises, and one that swallows the statement's error has it re-raised. CQL depends on no tracing library.
 
 ## Transactions
 
-`Schema#transaction` publishes a `CQL::Telemetry::TransactionEvent` to transaction subscribers:
-
 ```crystal
-CQL::Telemetry.subscribe_transactions("dashboard") do |event|
-  # event.state: Begin, Commit or Rollback
-  Dashboard.record(event.id, event.state, event.duration, event.nested, event.error)
+CQL::Telemetry.subscribe_transactions("tx") do |event|  # also takes async: true
+  event.state     # CQL::Telemetry::TransactionState::Begin, Commit or Rollback
+  event.id        # shared by a Begin and its Commit or Rollback
+  event.duration  # time since Begin, pool wait included; zero for Begin
+  event.nested    # a transaction was already open on this fiber
+  event.error     # what caused the Rollback (a DB::Rollback too), or why COMMIT failed
 end
+
+CQL::Telemetry.unsubscribe_transactions("tx")
 ```
 
-- `Begin` is published before the connection is checked out, so the `duration` of the matching `Commit`/`Rollback`
-  (same `id`) includes pool wait time. `Begin` has a zero duration.
-- A `DB::Rollback` or any exception is a `Rollback` with the exception in `error`; exceptions are still re-raised and
-  `DB::Rollback` is still swallowed, as before. A `Commit` whose `COMMIT` statement fails is reported as a `Rollback` too.
-- An async transaction subscriber shares the query subscribers' queue and its bound: it receives `Begin` before the
-  matching `Commit`/`Rollback`, but a full queue can drop either, so handle an end event whose `id` never began.
-- `nested` is informational: a transaction was already open on this fiber when this one started.
-- `Schema#transaction(tx)` (an existing transaction) publishes nothing.
-- **Known limit:** calling `tx.rollback` yourself and then returning normally still reports `Commit`.
-- Subscribers fail in isolation, like query subscribers, and nothing is allocated or timed while none are registered.
-  A transaction that began before the first subscriber registered publishes no events.
+`Schema#transaction` publishes `Begin` before it checks out a connection. An exception ends in `Rollback` and is re-raised, `DB::Rollback` is still swallowed, and a failing `COMMIT` is reported as `Rollback`. `Schema#transaction(tx)` publishes nothing, and a transaction that began before the first subscriber registered publishes nothing. Where DDL is transactional (SQLite, PostgreSQL), `alter` and the migrator run inside `Schema#transaction` and publish these events.
 
-`Telemetry.unsubscribe_transactions(name)` removes one, `Telemetry.subscribed?(name)` tells whether a query or
-transaction subscriber is registered under that name, and `reset!` clears both kinds.
+{% hint style="warning" %}
+Calling `tx.rollback` yourself and returning normally still reports `Commit`. An async transaction subscriber shares the query queue and its bound, so handle an end event whose `Begin` was dropped.
+{% endhint %}
 
-## Connection pool
+## Connection Pool
 
 ```crystal
-stats = schema.pool_stats # CQL::PoolStats
-stats.open      # connections currently open
-stats.idle      # open and not checked out
-stats.in_flight # checked out right now (open - idle)
-stats.max       # 0 means unlimited
-```
+stats = AppDB.pool_stats  # CQL::PoolStats; never checks out a connection, never raises
+stats.open       # connections open
+stats.idle       # open and not checked out
+stats.in_flight  # checked out now (open - idle)
+stats.max        # 0 means unlimited
 
-`pool_stats` never checks out a connection and never raises; with `?initial_pool_size=0` it returns zeros until the
-first query.
-
-## Pinning a connection
-
-```crystal
-schema.with_connection do |connection|
+# Pin statements to one connection; pool_wait is then about zero
+AppDB.with_connection do |connection|
   User.query.using(connection).to_a
 end
 ```
 
-`using` works on queries, inserts, updates and deletes, so a transaction's connection can be
-passed explicitly instead of relying on the fiber-local one.
+`pool_stats` returns zeros until the first query when the pool opens with `?initial_pool_size=0`. `using` also works on inserts, updates and deletes, and inside a transaction `with_connection` yields the transaction's connection. A checkout that fails reports its wait until the failure.
 
-Every executed statement emits an event, and the duration includes pool wait time:
-`event.pool_wait` is the part of it spent waiting for a pooled connection (about zero on a transaction or pinned
-connection), and a checkout that fails counts its wait until the failure.
-`Schema#alter` statements (including those inside migrations) bypass telemetry; where DDL is transactional (SQLite,
-PostgreSQL), `alter`, `Migrator.new`, `Migrator#up` and `Migrator#down` run inside `Schema#transaction`, so they publish
-transaction events (`nested` when a transaction is already open). `event.error.message` may contain data, so
-redact it before shipping it anywhere.
+## See Also
 
-Call `CQL::Telemetry.reset!` in specs to remove all subscribers.
+- [Monitor Performance](monitoring.md)
+- [Profile Queries and Detect N+1](query-profiler.md)
+- [What Monitoring Costs](query-profiler.md#what-monitoring-costs)
+- [Avoid N+1 Queries](n-plus-one.md)
+- [Use Transactions](../data-operations/transactions.md)

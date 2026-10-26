@@ -1,8 +1,8 @@
 # Configure Database Connection
 
-`CQL.configure` is the entrypoint for connection settings: one configuration object holds the URL, environment, pool, SSL and database-specific options, and `CQL.build_schema` opens the connection from it. `CQL::Schema.define` is the low-level alternative, covered [below](#low-level-schemadefine).
+Point CQL at a database with a URL in `CQL.configure`; the URL scheme picks the adapter.
 
-For the lifecycle (when settings are read, reset, validation) see [Configure CQL](configure-cql.md). Every setting is listed in the [configuration reference](../../reference/configuration.md).
+For when settings are read and validated see [Configure CQL](configure-cql.md). Every setting is in the [configuration reference](../../reference/configuration.md).
 
 ## Connect with `CQL.configure`
 
@@ -11,10 +11,10 @@ require "cql"
 require "sqlite3"
 
 CQL.configure do |config|
-  config.db = "sqlite3://./db/development.db"
+  config.db = ENV["DATABASE_URL"]? || "sqlite3://./db/development.db" # the default db
 end
 
-MyDB = CQL.build_schema(:my_db) do
+AppDB = CQL.build_schema(:app) do
   table :users do
     primary :id, Int64
     text :name
@@ -22,164 +22,101 @@ MyDB = CQL.build_schema(:my_db) do
 end
 ```
 
-`CQL.build_schema` opens the schema through `config.full_db_url`, runs the block with the schema DSL, then sets up the cache and SQL logging when the configuration enables them. Pool, SSL, database-specific and `adapter_options` settings therefore reach the connection. Parameters already in `config.db` win over configured ones.
+`CQL.build_schema` opens `config.full_db_url`, so pool, SSL, database-specific and `adapter_options` settings reach the connection. `CQL.config` is process-wide: it describes one database.
 
-`config.db` defaults to `sqlite3://./db/development.db`.
+## Pick the URL for your database
 
-### The adapter comes from the URL
-
-`config.adapter` is detected from the URL scheme:
-
-| Scheme | Adapter |
-|--------|---------|
-| `postgres://`, `postgresql://` | `CQL::Adapter::Postgres` |
-| `cockroachdb://` | `CQL::Adapter::CockroachDB` |
-| `mysql://` | `CQL::Adapter::MySql` |
-| `sqlite3://` | `CQL::Adapter::SQLite` |
-
-Any other scheme raises `ArgumentError` ("Unsupported database URL").
-
-### Read `DATABASE_URL` yourself
-
-CQL does not read `DATABASE_URL`. Pass it in:
-
-```crystal
-CQL.configure do |config|
-  config.db = ENV["DATABASE_URL"]? || "postgres://localhost/myapp_development"
-end
+```text
+postgres://user:pass@localhost:5432/myapp    CQL::Adapter::Postgres     native driver, loaded by require "cql"
+postgresql://localhost/myapp                 CQL::Adapter::Postgres     default user and port
+cockroachdb://root@localhost:26257/app       CQL::Adapter::CockroachDB  see cockroachdb.md
+mysql://user:pass@localhost:3306/myapp       CQL::Adapter::MySql        add require "mysql"
+sqlite3://./db/development.db                CQL::Adapter::SQLite       add require "sqlite3"
+redis://localhost:6379                       ArgumentError: Unsupported database URL: redis://localhost:6379
 ```
 
-### What `full_db_url` adds
+`config.adapter` reports the adapter. If the app also requires the `pg` shard, `pg` serves `postgres://` URLs instead of the native driver; see the [native PostgreSQL driver guide](../postgres-native/README.md).
+
+## See what `full_db_url` adds
 
 ```crystal
 CQL.configure do |config|
-  config.db = ENV["DATABASE_URL"]
-  config.pool_size = 25                        # see connection-pooling.md
-  config.ssl.mode = "require"                  # see ssl.md
-  config.postgres.auth_methods = "scram-sha-256"
+  config.db = "postgres://app:secret@db.internal:5432/app"
+  config.pool_size = 25                                  # connection-pooling.md
+  config.ssl.mode = "verify-full"                        # ssl.md
+  config.ssl.ca_path = "/etc/ssl/certs/db-ca.crt"
   config.adapter_options["application_name"] = "billing"
 end
 
 puts CQL.config.full_db_url
+# postgres://app:secret@db.internal:5432/app?initial_pool_size=2&max_pool_size=25&max_idle_pool_size=3
+#   &checkout_timeout=10.0&retry_attempts=3&retry_delay=1.0&prepared_statements=true
+#   &sslmode=verify-full&sslrootcert=%2Fetc%2Fssl%2Fcerts%2Fdb-ca.crt
+#   &auth_methods=scram-sha-256%2Cmd5&application_name=billing
 ```
 
-`full_db_url` appends, in this order: pool parameters, SSL parameters (PostgreSQL, CockroachDB and MySQL only), the database-specific settings, then `adapter_options`. The database-specific settings follow the adapter:
+The order is pool, SSL (not for SQLite), database-specific settings, then `adapter_options`. The database-specific settings follow the adapter:
 
-| Adapter | Settings object | Settings (default) |
-|---------|-----------------|--------------------|
-| Postgres, CockroachDB | `config.postgres` | `auth_methods` (`scram-sha-256,md5`) |
-| MySql | `config.mysql` | `encoding` (`utf8mb4_unicode_ci`) |
-| SQLite | `config.sqlite` | `journal_mode` (`wal`), `synchronous` (`normal`), `cache_size` (`-4000`), `foreign_keys` (`true`), `busy_timeout` (`5000`) |
+| Settings object | Adapters | URL parameters (default) |
+|---|---|---|
+| `config.postgres` | Postgres, CockroachDB | `auth_methods` (`scram-sha-256,md5`); the native driver accepts and ignores it |
+| `config.mysql` | MySql | `encoding` (`utf8mb4_unicode_ci`) |
+| `config.sqlite` | SQLite | `journal_mode` (`wal`), `synchronous` (`normal`), `cache_size` (`-4000`), `foreign_keys` (`1`), `busy_timeout` (`5000`) |
 
-`adapter_options` is a `Hash(String, String)` of extra URL parameters, added as given. Each driver decides what to do with a parameter it does not know. The native PostgreSQL driver sends unrecognised keys to the server as startup parameters, so only add keys the server understands. It accepts and ignores `auth_methods` (the option `config.postgres.auth_methods` adds for the `pg` shard) because it negotiates SCRAM and MD5 itself.
+`adapter_options` keys are passed as given. The native PostgreSQL driver sends keys it does not recognise to the server as startup parameters, so add only keys the server understands.
 
-`CQL.configure` validates the settings and raises `ArgumentError` on a bad value, for example an unknown `sqlite.journal_mode`.
-
-### URL parameters
-
-Recognised query parameters configure the driver (`sslmode`, `connect_timeout`, `application_name`, `statement_cache_size`, pool settings); with the native PostgreSQL driver any other key is sent to the server as a startup parameter such as `search_path`. You can put them in `config.db`, and they win over the matching configured settings:
+## Put driver options in the URL
 
 ```crystal
 CQL.configure do |config|
-  config.db = "postgres://user:pass@localhost:5432/myapp?sslmode=require&search_path=app"
+  # sslmode, connect_timeout, application_name, statement_cache_size and pool keys
+  # configure the driver; other keys such as search_path go to the server
+  config.db = "postgres://app:secret@db.internal/app?sslmode=disable&max_pool_size=5&search_path=app"
 end
+
+CQL.config.full_db_url # => "...&max_pool_size=5&...&sslmode=disable&...": parameters in db win
 ```
 
-See [Enable SSL Connections](ssl.md) and [Set Up Connection Pooling](connection-pooling.md).
+## Prepare a SQLite file
 
-### Test the connection
+```crystal
+# ❌ CQL.build_schema raises DB::ConnectionRefused (with no message): the directory is missing
+CQL.configure { |config| config.db = "sqlite3://./db/missing/app.db" }
+
+# ✅ Create the directory first
+db_path = "./db/development.db"
+Dir.mkdir_p(File.dirname(db_path))
+CQL.configure { |config| config.db = "sqlite3://#{db_path}" }
+```
+
+{% hint style="warning" %}
+`sqlite3://:memory:` does not parse: `CQL.build_schema` raises `URI::Error` and `Schema.define` raises `CQL::Schema::InvalidURIError`. Use a file URL.
+{% endhint %}
+
+## Test the connection
 
 ```crystal
 begin
-  MyDB.exec_query(&.scalar("SELECT 1"))
-  puts "Connected successfully"
+  AppDB.exec_query(&.scalar("SELECT 1"))
+  puts "Connected"
 rescue ex
-  puts "Connection failed: #{ex.message}"
+  puts "Connection failed: #{ex.class}: #{ex.message}"
+  # Connection failed: DB::ConnectionRefused: cannot connect to localhost:5432: Error connecting to 'localhost:5432': Connection refused
   exit 1
 end
 ```
 
-### One configuration, one database
+The schema opens its first connection when it is built, so a refused connection usually raises from `CQL.build_schema` itself. See [Fix Connection Errors](../troubleshooting/connection-errors.md).
 
-`CQL.config` is process-wide, so `CQL.build_schema` builds from a single URL. For several databases use `Schema.define` for each (see [Multiple databases](#multiple-databases)).
+## Use `Schema.define` for several databases
 
-## Connection String Format
-
-### PostgreSQL
-
-```
-postgres://username:password@host:port/database
-postgres://user:pass@localhost:5432/myapp
-postgres://localhost/myapp  # Uses default user and port
-```
-
-`postgres://` and `postgresql://` URLs are opened by CQL's native PostgreSQL driver, so no `pg` shard is needed. If you `require "pg"` before CQL, the `pg` shard keeps those scheme names instead. See the [native PostgreSQL driver guide](../postgres-native/README.md).
-
-### CockroachDB
-
-```
-cockroachdb://user@host:26257/database
-```
-
-`cockroachdb://` is rewritten to `postgres://` for crystal-db. Using the native driver for it is opt-in: compile with `-Dcql_postgres_driver_cockroachdb` or call `CQL::Postgres::Driver.register_cockroachdb`. See [CockroachDB](cockroachdb.md).
-
-### MySQL
-
-```
-mysql://username:password@host:port/database
-mysql://user:pass@localhost:3306/myapp
-```
-
-Add `require "mysql"`.
-
-### SQLite
-
-```
-sqlite3://path/to/database.db
-sqlite3://./db/development.db
-sqlite3://:memory:  # In-memory database
-```
-
-Add `require "sqlite3"`. Create the directory of a file database first:
-
-```crystal
-db_path = "./db/development.db"
-Dir.mkdir_p(File.dirname(db_path))
-
-CQL.configure do |config|
-  config.db = "sqlite3://#{db_path}"
-end
-```
-
-## Low-Level: `Schema.define`
-
-`CQL::Schema.define` takes the adapter and URI directly and ignores `CQL.config`: no pool, SSL or database-specific settings are added. It validates the URI (`CQL::Schema::InvalidURIError`) and opens the pool. Use it for several databases, or when you do not want the global configuration.
-
-```crystal
-MyDB = CQL::Schema.define(
-  :my_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]
-) do
-end
-```
-
-The same shape works for `CQL::Adapter::CockroachDB` (`cockroachdb://root@localhost:26257/defaultdb?sslmode=disable`), `CQL::Adapter::SQLite` (`sqlite3://./db/development.db`) and `CQL::Adapter::MySql` (`mysql://username:password@localhost:3306/myapp_development`). Put pool and SSL settings in the URI yourself, for example `?sslmode=require&max_pool_size=25`.
-
-To get the configured settings with `Schema.define`, pass the built URL:
-
-```crystal
-MyDB = CQL::Schema.define(:my_db, CQL.config.full_db_url, CQL.config.adapter) do
-end
-```
-
-### Multiple Databases
+`CQL::Schema.define` takes the adapter and URL directly and ignores `CQL.config`: no pool, SSL or database-specific parameters are added.
 
 ```crystal
 PrimaryDB = CQL::Schema.define(
   :primary,
   adapter: CQL::Adapter::Postgres,
-  uri: ENV["PRIMARY_DATABASE_URL"]
+  uri: ENV["PRIMARY_DATABASE_URL"] # add ?sslmode=require&max_pool_size=25 yourself
 ) do
 end
 
@@ -190,7 +127,10 @@ AnalyticsDB = CQL::Schema.define(
 ) do
 end
 
-# Use different schemas for different models
+# Or reuse the configured URL and adapter
+ConfiguredDB = CQL::Schema.define(:configured, CQL.config.full_db_url, CQL.config.adapter) do
+end
+
 class User
   include CQL::ActiveRecord::Model(Int64)
   db_context schema: PrimaryDB, table: :users
@@ -200,12 +140,18 @@ class PageView
   include CQL::ActiveRecord::Model(Int64)
   db_context schema: AnalyticsDB, table: :page_views
 end
+
+# A malformed URI raises CQL::Schema::InvalidURIError before connecting:
+#   "redis://localhost"   -> Unsupported database type: redis
+#   "cockroachdb:///app"  -> Missing host in CockroachDB URI (same for MySQL)
+#   "localhost/app"       -> Invalid database URI format
 ```
 
-## Related
+## See Also
 
 - [Configure CQL](configure-cql.md)
 - [Configuration reference](../../reference/configuration.md)
-- [Configure Multiple Environments](environments.md)
 - [Set Up Connection Pooling](connection-pooling.md)
 - [Enable SSL Connections](ssl.md)
+- [Use CockroachDB](cockroachdb.md)
+- [Fix Connection Errors](../troubleshooting/connection-errors.md)

@@ -1,128 +1,77 @@
 # Enable Query Caching
 
-Improve performance by caching expensive query results and rendered fragments in a cache store.
-
-## Prerequisites
-
-- CQL installed and configured
-- Understanding of your query patterns
-
-## How Caching Is Organized
+Cache expensive results and rendered fragments in a memory or Redis store, and drop them by key or by tag.
 
 | Piece | Class | Use it for |
-|---|---|---|
-| Value cache | `CQL::Cache::Cache` | Caching results under keys you choose, with a TTL |
-| Stores | `MemoryCache`, `RedisCache` | Where values live (selected through `CacheStoreConfig`) |
-| Fragment cache | `CQL::Cache::FragmentCache` | Keyed fragments and query results with tags |
-| Per-request tracking | `RequestQueryCache` | Counting duplicate statements in one request, see [Use Per-Request Caching](per-request.md) |
+| :--- | :--- | :--- |
+| Value cache | `CQL::Cache::Cache`, `GlobalCache` | Results under keys you choose, with a TTL |
+| Stores | `MemoryCache`, `RedisCache` | Where values live, chosen with `CacheStoreConfig` |
+| Fragment cache | `FragmentCache` | Strings and query results, grouped by tags |
+| Request tracking | `RequestQueryCache` | Duplicate statements in one request: [Use Per-Request Caching](per-request.md) |
 
-Query objects are not cached automatically. You wrap the call you want cached.
+## Cache a Result
 
-## Basic Query Caching
+CQL caches nothing on its own: wrap the call whose result you want to keep.
 
 ```crystal
-key = CQL::Cache::Cache.generate_cache_key(sql, params)
-
-posts = CQL::Cache::Cache.with_cache(key, 1.minute) do
-  # run the query and return something JSON-serializable
-  Post.where(published: true).all.map(&.to_h)
+titles = CQL::Cache::Cache.with_cache("homepage_titles", 1.minute) do
+  Post.where(published: true).all.map(&.title)  # runs only on a miss; the value is stored as JSON
 end
+# miss: the block's value, Array(String); hit: the stored JSON parsed into a JSON::Any
+
+# Keyed by a name and a Hash: "homepage:<md5 of the params>"; same return types as with_cache
+CQL::Cache::Cache.cache("homepage", {"page" => 1}, 1.minute) { Post.limit(10).all.map(&.title) }
+
+# Typed on hits too, through T.from_json
+titles = CQL::Cache::GlobalCache.cache("homepage_titles:typed", 1.minute) do
+  Post.where(published: true).all.map(&.title)
+end
+
+key = CQL::Cache::Cache.generate_cache_key(sql, params)  # "cql:<md5 of sql and params>"; a third argument replaces "cql"
+CQL::Cache::Cache.set(key, ["Ada", 36] of DB::Any, 5.minutes)
+CQL::Cache::Cache.get(key)      # => ["Ada", 36] as Array(DB::Any)?
+CQL::Cache::Cache.cached?(key)  # => true
+
+CQL::Cache::Cache.enabled = false  # with_cache runs the block, get returns nil, cached? false
 ```
 
-`generate_cache_key(sql, params)` builds `cql:<md5 of sql + params>`; pass a third argument to use a different name than `"cql"`. Use any string you like as a key instead.
+`with_cache` without a TTL uses `Cache.default_ttl` (1 hour). `GlobalCache` ignores `Cache.enabled` and is not counted in `Cache.stats`.
 
-`with_cache(key, ttl)` runs the block only on a miss and stores the result as JSON. A hit returns the parsed `JSON::Any`, a miss returns the block's own value, so convert at the call site if you need one type.
-
-The lower-level calls:
-
-```crystal
-CQL::Cache::Cache.set(key, rows, 5.minutes)  # rows : Array(DB::Any)
-CQL::Cache::Cache.get(key)                   # => Array(DB::Any)?
-CQL::Cache::Cache.cached?(key)               # => Bool
-```
-
-## Configure the Cache Store
-
-The default store is an in-process `MemoryCache` with no size limit. To choose a store, pass a config:
+## Choose a Store
 
 ```crystal
 CQL::Cache::Cache.configure(
-  CQL::Cache::CacheStoreConfig.new(
-    type: CQL::Cache::CacheStoreType::Memory,
-    memory_max_size: 1000
-  )
+  CQL::Cache::CacheStoreConfig.new(type: CQL::Cache::CacheStoreType::Memory, memory_max_size: 1000)
 )
-
 CQL::Cache::Cache.default_ttl = 5.minutes
-```
+CQL::Cache::Cache.configure_from_env  # CQL_CACHE_* variables, see Configure Redis Cache
 
-Or from environment variables: `CQL::Cache::Cache.configure_from_env` (see [Configure Redis Cache](redis.md#configure-from-the-environment)).
+store = CQL::Cache::Cache.cache_store         # a MemoryCache unless configured: per process, unbounded
+store.as(CQL::Cache::MemoryCache).cleanup_expired  # expired entries are otherwise dropped when read
 
-You can also use the central settings:
-
-```crystal
 CQL.configure do |c|
-  c.cache.on = true
-  c.cache.ttl = 5.minutes
-  c.cache.key_prefix = "myapp"
+  c.cache.on = true        # default: on when CRYSTAL_ENV is development or unset, off otherwise
+  c.cache.ttl = 5.minutes  # with c.cache.on, CQL.build_schema copies it to Cache.default_ttl
 end
 ```
 
-`c.cache.on` is off by default in production and test, and on in development, including when `CRYSTAL_ENV` is unset (unlike SQL logging); any other environment name leaves it off. `CQL.build_schema` applies these settings to the cache classes when `on` is true.
+A full `MemoryCache` evicts its least recently used entry. For a store shared across processes, see [Configure Redis Cache](redis.md).
 
-## Cache Stores
-
-### Memory Cache
-
-In-memory, per process, least-recently-used eviction once `max_size` is reached:
+## Invalidate by Key
 
 ```crystal
-cache = CQL::Cache::MemoryCache.new(max_size: 1000)
-```
+CQL::Cache::Cache.cache_store.delete("homepage_titles")  # one key
+CQL::Cache::Cache.clear                                  # every entry in the store
 
-Expired entries are removed on access; `cache.cleanup_expired` sweeps them all.
+class Post
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: AppDB, table: :posts
+  # ...
+  after_save :expire_cache
+  after_destroy :expire_cache
 
-### Redis Cache
-
-Shared across processes:
-
-```crystal
-cache = CQL::Cache::RedisCache.new(ENV["REDIS_URL"], "myapp")
-```
-
-See [Configure Redis Cache](redis.md) for details.
-
-## Cache Keys
-
-Keys derive from the SQL text and parameters, so the same statement with the same parameters is a hit and any change is a different key:
-
-```crystal
-CQL::Cache::Cache.generate_cache_key("SELECT * FROM users WHERE id = ?", [1] of DB::Any)
-CQL::Cache::Cache.generate_cache_key("SELECT * FROM users WHERE id = ?", [2] of DB::Any)  # different key
-```
-
-## Cache Invalidation
-
-### Manual Invalidation
-
-```crystal
-store = CQL::Cache::Cache.cache_store
-
-store.delete("homepage_posts")  # one key
-CQL::Cache::Cache.clear         # everything in the store
-```
-
-### Invalidate on Model Changes
-
-Delete or tag-invalidate from your model callbacks:
-
-```crystal
-struct Post
-  after_save :invalidate_cache
-  after_destroy :invalidate_cache
-
-  private def invalidate_cache
-    CQL::Cache::Cache.cache_store.invalidate_tags(["posts"])
+  private def expire_cache
+    CQL::Cache::Cache.cache_store.delete("homepage_titles")
     true
   end
 end
@@ -130,179 +79,81 @@ end
 
 ## Fragment Cache and Tag Invalidation
 
-`FragmentCache` caches a string fragment (such as rendered HTML or JSON) or a query result, and lets you tag entries so a whole group can be dropped at once.
-
 ```crystal
 store = CQL::Cache::MemoryCache.new(max_size: 1000)
-strategy = CQL::Cache::TimestampInvalidation.new(1.hour)
-fragments = CQL::Cache::FragmentCache.new(store, strategy)
-```
+fragments = CQL::Cache::FragmentCache.new(store, CQL::Cache::TimestampInvalidation.new(1.hour))
 
-Or build one from `CQL.configure` settings with `CQL.fragment_cache` (it uses a new `MemoryCache` sized by `c.cache.memory_size`).
-
-### Cache a fragment
-
-```crystal
-html = fragments.cache_fragment(
-  "sidebar",
-  params: {"user_id" => 7_i64} of String => DB::Any,
-  tags: ["posts", "user:7"],
-  ttl: 10.minutes
-) do
-  render_sidebar(7)   # block returns a String
+params = {"user_id" => 7_i64} of String => DB::Any
+html = fragments.cache_fragment("sidebar", params: params, tags: ["posts", "user:7"], ttl: 10.minutes) do
+  render_sidebar(7)  # returns a String; runs only on a miss
 end
-```
+# key: "cql:fragment:sidebar:<md5 of the sorted params>"; the default TTL is 1 hour
 
-The key is `<prefix>:fragment:sidebar:<md5 of sorted params>`. The block runs only on a miss. Other helpers:
+fragments.get_fragment("sidebar", params)      # => String?
+fragments.fragment_cached?("sidebar", params)  # => true
+fragments.delete_fragment("sidebar", params)   # => true
+fragments.cache_with_key("nav", ["posts"]) { render_nav }
 
-```crystal
-fragments.get_fragment("sidebar", params)        # => String?
-fragments.fragment_cached?("sidebar", params)    # => Bool
-fragments.delete_fragment("sidebar", params)     # => Bool
-fragments.cache_with_key("my:key", ["posts"]) { "value" }
-```
-
-### Cache a query result
-
-```crystal
-rows = fragments.cache_query(
-  "SELECT * FROM posts WHERE published = ?",
-  [true] of DB::Any,
-  cache_tags: ["posts"],
-  ttl: 5.minutes
-) do
-  run_query   # returns rows that respond to to_json
+rows = fragments.cache_query("SELECT title FROM posts WHERE published = ?", [true] of DB::Any,
+  cache_tags: ["posts"], ttl: 5.minutes) do
+  AppDB.query.from(:posts).select(:title).where(published: true).all(as: String).map { |t| {"title" => t} }
 end
+# miss: the block's value; hit: Array(Hash(String, DB::Any)) parsed from the stored JSON
+
+fragments.invalidate_tags(["posts"])  # => 2, every entry tagged "posts", whichever call stored it
+
+CQL::Cache::CacheKeyBuilder.new("myapp").add_component("posts").add_param("page", 2).build
+# => "myapp:posts:<md5 of page=2>"
 ```
 
-On a hit the cached JSON is parsed into an array of hashes of `DB::Any` values; on a miss the block's result is returned as is.
+Tags work with both stores; deleting or evicting a `MemoryCache` entry also removes it from its tags. `FragmentCache` keeps its strategy only for `fragments.stats["invalidation_strategy"]`: TTLs and tags are what remove entries.
 
-### Invalidate by tag
-
-```crystal
-fragments.invalidate_tags(["posts"])  # => number of entries removed
-```
-
-Every entry tagged `posts` is removed, whichever fragment or query stored it. Tags work with both stores. With `MemoryCache` an entry must exist before it can be tagged, which `FragmentCache` handles by storing the value first.
-
-### Build keys by hand
-
-```crystal
-key = CQL::Cache::CacheKeyBuilder.new("myapp")
-  .add_component("posts")
-  .add_param("page", 2)
-  .build
-```
-
-## Invalidation Strategies
-
-Strategies decide when a cached entry is stale. All of them implement `should_invalidate?(key, metadata)` and `generate_metadata(key)`.
-
-| Strategy | Stale when |
-|---|---|
-| `TimestampInvalidation.new(max_age)` | The entry's `timestamp` metadata is older than `max_age` (default 1 hour) |
-| `VersionInvalidation.new` | The entry's `version` metadata is behind the key's current version |
-| `TransactionAwareInvalidation.new(base)` | Defers invalidations until you run them after a commit; otherwise delegates to `base` |
+## Use an Invalidation Strategy
 
 ```crystal
 versions = CQL::Cache::VersionInvalidation.new
-versions.increment_version("posts")      # => 1
-versions.get_current_version("posts")    # => 1
+versions.increment_version("posts")                       # => 1
+versions.should_invalidate?("posts", {"version" => "0"})  # => true: behind the current version
 versions.reset_version("posts")
+
+stale = CQL::Cache::TimestampInvalidation.new(1.hour)     # default max age 1 hour
+stale.should_invalidate?("k", stale.generate_metadata("k"))  # => false while younger than 1 hour
+
+# Drop entries only once a transaction commits
+deferred = CQL::Cache::TransactionAwareInvalidation.new(CQL::Cache::TimestampInvalidation.new)
+AppDB.transaction do
+  Post.create!(title: "New", published: true)
+  deferred.mark_for_invalidation("homepage_titles")  # or an Array of keys
+  deferred.mark_tags_for_invalidation(["posts"])
+end
+deferred.execute_pending_invalidations(store)  # after commit; CQL does not call it for you
+deferred.clear_pending_invalidations           # after a rollback instead
 ```
 
-### Invalidate after a transaction commits
+{% hint style="warning" %}
+`TransactionAwareInvalidation` is not an `InvalidationStrategy`, so `FragmentCache.new` rejects it, and `CQL.fragment_cache` fails to compile for the same reason. Build the `FragmentCache` yourself.
+{% endhint %}
 
-Avoid dropping cache entries for a transaction that rolls back:
-
-```crystal
-deferred = CQL::Cache::TransactionAwareInvalidation.new(
-  CQL::Cache::TimestampInvalidation.new
-)
-
-deferred.mark_for_invalidation("post:1")             # or an Array of keys
-deferred.mark_tags_for_invalidation(["posts"])
-
-deferred.execute_pending_invalidations(store)        # after commit
-deferred.clear_pending_invalidations                 # after rollback
-```
-
-You call `execute_pending_invalidations` and `clear_pending_invalidations` yourself; CQL does not hook them into transactions for you.
-
-From `CQL.configure`, `c.cache.invalidation` selects `"timestamp"`, `"version"` or `"transaction_aware"`, and `c.cache.max_age` sets the timestamp age. Anything else fails validation when the cache is on.
-
-`FragmentCache` records the strategy you give it (its class name appears in `fragments.stats`) but expiry and tag invalidation are what actually remove entries today. Keep the strategy objects for your own staleness checks, or use the store's TTL.
-
-## Cache Statistics
-
-Library-level counters live in `CacheStats`:
+## Read Cache Statistics
 
 ```crystal
-stats = CQL::Cache::Cache.stats
-puts "Requests: #{stats.total_requests}"
-puts "Hits: #{stats.hits}"
-puts "Misses: #{stats.misses}"
-puts "Hit rate: #{stats.hit_rate.round(2)}%"
-puts "Avg cache time: #{stats.average_cache_time}s"
-puts "Avg execution time: #{stats.average_execution_time}s"
-puts "Uptime: #{stats.uptime}"
-stats.reset
-```
+stats = CQL::Cache::Cache.stats  # CacheStats for with_cache, Cache.cache and get
+stats.hits                       # => 1
+stats.misses                     # => 1
+stats.hit_rate                   # => 50.0 (percent; also miss_rate)
+stats.average_execution_time     # seconds per request spent in blocks (also average_cache_time, uptime)
+CQL::Cache::Cache.reset_stats
 
-`CacheStats` has `hits`, `misses`, `total_requests`, `total_cache_time`, `total_execution_time`, `start_time`, `hit_rate`, `miss_rate`, `average_cache_time`, `average_execution_time`, `uptime` and `reset`. `Cache.reset_stats` resets the shared instance.
-
-A merged view with the store's own numbers (size, memory, and so on):
-
-```crystal
-CQL::Cache::Cache.statistics["hit_rate"]
-CQL::Cache::Cache.statistics["cache_store_type"]  # "memory" or "redis"
-
+CQL::Cache::Cache.statistics["cache_store_type"]  # "memory" or "redis", merged with the store's stats
+CQL::Cache::Cache.cache_store.stats               # the store's own: hits, misses, hit_rate_percent, sets, deletes, evictions
 puts CQL::Cache::Cache.performance_summary
 ```
 
-The store reports its own counters too: `CQL::Cache::Cache.cache_store.stats` returns `hits`, `misses`, `hit_rate_percent`, `sets`, `deletes`, `evictions` and more.
-
-## Verify Caching
-
-```crystal
-key = "verify:users:1"
-
-CQL::Cache::Cache.with_cache(key, 1.minute) { puts "computing"; "alice" }  # prints "computing"
-CQL::Cache::Cache.with_cache(key, 1.minute) { puts "computing"; "alice" }  # no output, a hit
-
-puts CQL::Cache::Cache.stats.hits  # => 1
-```
-
-## Enable and Disable
-
-```crystal
-CQL::Cache::Cache.enabled = false  # with_cache just runs the block
-CQL::Cache::Cache.enabled?
-```
-
-## Best Practices
-
-1. **Cache read-heavy queries** - Queries run many times with the same parameters
-2. **Short TTLs for volatile data** - Data that changes frequently
-3. **Long TTLs for static data** - Reference tables, configurations
-4. **Tag related entries** - Invalidate a group in one call instead of tracking keys
-5. **Invalidate on writes** - Clear or tag-invalidate when data changes
-
-## Troubleshooting
-
-**Block runs every time:**
-- Check `Cache.enabled?`.
-- Check the key is stable: it must not include timestamps or object IDs.
-
-**`invalidate_tags` returns 0:**
-- Entries must have been stored with `tags:` (or `cache_tags:`) and not expired.
-- On `MemoryCache`, evicted entries are also removed from their tags.
-
-**Different processes see different data:**
-- `MemoryCache` is per process. Use Redis, see [Configure Redis Cache](redis.md).
+When the block runs every time, check `Cache.enabled?` and that the key holds no timestamps or object ids. When `invalidate_tags` returns 0, the entries were stored without tags or have expired.
 
 ## See Also
 
 - [Configure Redis Cache](redis.md)
 - [Use Per-Request Caching](per-request.md)
 - [Optimize Queries](../performance/optimize-queries.md)
+- [Avoid N+1 Queries](../performance/n-plus-one.md)

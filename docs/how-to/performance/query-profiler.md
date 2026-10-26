@@ -1,206 +1,161 @@
 # Profile Queries and Detect N+1
 
-This guide shows you how to use CQL's built-in performance monitor: the query profiler, the N+1 detector, health metrics and reports.
-
-It lives in `CQL::Performance`. Every select, insert, update and delete CQL runs is timed once in `CQL::Execution.run` and recorded by the monitor, so once monitoring is enabled you get data without wrapping your queries; `Schema#exec` (DDL and any other raw SQL), `explain` and the native engine's `exec` and `pipeline` pass `track: false`, so [Telemetry](telemetry.md) sees them but the monitor does not (wrap one in `CQL::Performance.track` to profile it); a failed statement is recorded with its real duration. A profiler or detector that raises while recording is logged at error and never changes the statement's outcome. For events you can subscribe to and ship to a metrics system, see [Telemetry](telemetry.md). The two are independent and can run together.
+Turn on the `CQL::Performance` monitor to profile statements, find N+1 patterns, log SQL, and read health metrics and reports.
 
 ## Turn It On
 
-Monitoring is opt-in and off unless you enable it; [What monitoring costs](#what-monitoring-costs) says what it adds to a statement. Any of these turns it on:
-
 ```crystal
-CQL.configure { |c| c.monitor_performance = true } # when the configure block finishes
-CQL::Performance.enable_monitoring
-CQL::Performance.enable_sql_logging                # SQL is logged by the monitor, so this enables it too
-```
+CQL::Performance.enable_development_mode!          # profiler, N+1 detector and SQL logging
+CQL::Performance.enable_production_mode!           # profiler and strict N+1 detection, no SQL logging
+CQL::Performance.enable_monitoring                 # switch on the current monitor
+CQL.configure { |c| c.monitor_performance = true } # the same, when the block finishes
+CQL::Performance.disable!                          # everything off
 
-The environment can enable it as well: `CQL_MONITORING_ENABLED=true`, or `CRYSTAL_ENV`/`CQL_ENV=development` (see the table below). `CQL.build_schema` calls `enable_sql_logging` when `sql_logging` is on, which is the default when `CRYSTAL_ENV=development` (not when it is unset). Enabling is one-way: `monitor_performance = false` and `CQL.reset_config!` do not switch off a monitor that is already on; use `CQL::Performance.disable!` for that.
-
-Health checks and dashboards that read `CQL::Performance.metrics` only see data once monitoring is on, so enable it explicitly in production if you rely on them. The profiler keeps slow queries, including their bound parameters, in memory; the JSON export leaves the parameters out unless `logging.include_params` is on (see [Health and Metrics](#health-and-metrics)).
-
-Quick setups:
-
-```crystal
-CQL::Performance.enable_development_mode!   # profiling, N+1 detection and SQL logging
-CQL::Performance.enable_production_mode!    # profiling and strict N+1 detection, no SQL logging
-CQL::Performance.disable!                   # everything off
-```
-
-Or configure the pieces you want:
-
-```crystal
 CQL::Performance.configure do |config|
-  config.profiling.slow_query_threshold = 50.milliseconds
-  config.profiling.very_slow_threshold = 500.milliseconds
-  config.detection.threshold = 3
-  config.logging.enabled = true
+  config.profiling.slow_query_threshold = 50.milliseconds # default 100 ms
+  config.profiling.very_slow_threshold = 500.milliseconds # default 1 s
+  config.detection.threshold = 3                          # default 2 repetitions
 end
+
+# Presets: development_config, test_config, production_config, minimal_config
+CQL::Performance.monitor = CQL::Performance::Monitor.new(CQL::Performance.production_config)
 ```
 
-To record in the background instead:
+Without setup, the monitor reads the environment:
+
+```bash
+CRYSTAL_ENV=development      # or CQL_ENV: monitoring and SQL logging on
+CRYSTAL_ENV=test             # off; slow threshold 10 ms, 100 recorded queries
+CRYSTAL_ENV=production       # off, as with any other value or none
+CQL_MONITORING_ENABLED=true  # overrides monitoring
+CQL_SQL_LOGGING=true         # overrides SQL logging, which logs only while monitoring is on
+CQL_SLOW_QUERY_MS=200        # slow query threshold
+```
+
+The monitor records every select, insert, update and delete CQL runs, failed ones included, but not `Schema#exec`, `explain` or the native engine's `exec` and `pipeline` (wrap those in `track`). A component that raises while recording is logged and never fails the statement.
+
+{% hint style="warning" %}
+Enabling is one-way: `monitor_performance = false` and `CQL.reset_config!` leave a running monitor on. Use `CQL::Performance.disable!`.
+{% endhint %}
 
 ```crystal
-CQL::Performance.configure(&.monitoring.async=(true)) # queue capacity: config.monitoring.async_queue_capacity (4096)
-CQL::Performance.flush(5.seconds)                     # before reading metrics in a test, or at shutdown (pass a timeout)
+# Record on a background fiber instead (off in every preset): a statement pays ~20 ns plus a copy of its params
+CQL::Performance.configure(&.monitoring.async=(true))
+# config.monitoring.async_queue_capacity  # default 4096; a full queue drops statements (monitor_dropped_events)
+CQL::Performance.flush(5.seconds)         # metrics lag until the queue drains: flush in tests and at shutdown
 ```
 
-With `monitoring.async`, a statement run through CQL hands itself to one background fiber through a bounded queue, which costs the query about 20 ns plus a copy of its bound values instead of the whole recording (a statement the full queue drops copies nothing); profiling, N+1 detection and SQL logging then happen on that fiber. Metrics lag until the queue drains, a full queue drops statements instead of blocking (`counters.dropped_events`), `track` blocks stay synchronous, and `Monitor#close` stops the queue so later statements are recorded inline; replacing the global monitor (`CQL::Performance.monitor =`, `enable_production_mode!`, ...) closes the old one. The capacity is read when async turns on. Log lines, the profiler and the N+1 detector keep each statement's context, but `start_relation_loading` hints take effect when called, so they may not line up with queued statements. Treat `QueryData#params` and `QueryEvent#params` as read-only: the monitor may share them between consumers. Queued statements keep their SQL, their error (whose message may hold data) and a copy of their bound values in memory until recorded; the bound is a count, not bytes, so lower the capacity for large binary parameters. It is off in every preset. On one Crystal thread this moves the work out of query latency, not out of CPU.
-
-Without any setup the monitor starts from `Config.from_env`:
-
-| Environment | Effect |
-| --- | --- |
-| `CRYSTAL_ENV=development` or `CQL_ENV=development` | monitoring and SQL logging on |
-| `CRYSTAL_ENV=test` or `CQL_ENV=test` | monitoring and logging off, slow threshold 10 ms |
-| `CRYSTAL_ENV=production` or `CQL_ENV=production` | monitoring and logging off |
-| none of the above | monitoring and logging off |
-| `CQL_MONITORING_ENABLED=true\|false` | override monitoring |
-| `CQL_SQL_LOGGING=true\|false` | override SQL logging (logs only while monitoring is on) |
-| `CQL_SLOW_QUERY_MS=200` | slow query threshold in milliseconds |
-
-Presets are available as `CQL::Performance.development_config`, `test_config`, `production_config` and `minimal_config`. Install your own with `CQL::Performance.monitor = CQL::Performance::Monitor.new(config)`.
+`track` blocks stay synchronous, and replacing the monitor closes the old queue.
 
 ## Log SQL
 
-With SQL logging on, the monitor logs each statement to the `cql.performance.monitor` source: at info, at warn once it takes `profiling.slow_query_threshold` or longer, and at error from `profiling.very_slow_threshold`. A statement that raises is logged at error as `Query failed: <message>` followed by its SQL.
-
-Bound parameter values are left out of these lines, since they often hold personal data or secrets. To log them, opt in:
-
 ```crystal
-CQL::Performance.enable_sql_logging
-CQL::Performance.configure do |config|
-  config.logging.include_params = true  # adds "Parameters: [...]", and "Params: [...]" to a failure
-  config.logging.max_param_length = 20  # characters kept of each value
+CQL::Performance.enable_sql_logging(colorize: false, pretty: true) # turns monitoring on too; NO_COLOR disables colors
+CQL::Performance.configure do |config| # info; warn from slow_query_threshold; error from very_slow_threshold
+  config.logging.include_params = true # default false: adds bound values and unredacted driver errors
+  config.logging.max_param_length = 20 # default 50 characters per value
+  config.logging.max_sql_length = 500  # default 500 characters of SQL
 end
+CQL::Performance.disable_sql_logging
 ```
 
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `logging.include_params` | false | log the bound values of each statement and of a failed one |
-| `logging.max_param_length` | 50 | characters kept of each logged value (`...` marks the cut) |
-| `logging.max_sql_length` | 500 | characters kept of the SQL in a statement's line |
-| `logging.colorize` | true | ANSI colors; `enable_sql_logging(colorize:)` sets it |
-| `logging.pretty_format` | true | break the SQL over lines at its clauses; `enable_sql_logging(pretty:)` sets it |
+```text
+INFO - cql.performance.monitor: ✅ SQL (12.04μs) {req-123}
+  SELECT users.id, users.name, users.email
+    FROM users
+    WHERE users.name = ?
+📊 Parameters: [A very long name tha...]
+ERROR - cql.performance.monitor: Query failed: no such column: nope
+SQL: SELECT users.id FROM users WHERE nope = ?
+Params: [secret]
+```
 
-`include_params` covers the bound values and a failed statement's driver error message. Drivers print the offending value inside quotes without escaping the quotes it holds, so one span, from the earliest to the latest quote of either kind, is replaced by `'?'` / `"?"` (`Duplicate entry 'x' for key 'y'` is logged, and kept in the metrics JSON, as `Duplicate entry '?'`); when a kind of quote occurs only once, everything from it to the end of the message is replaced (`can't connect` becomes `can'?`). Text outside quotes is not redacted: encoding errors that print the value's bytes, and messages raised by the database itself (`RAISE EXCEPTION`, `SIGNAL`, `RAISE(ABORT)`). Values written into the SQL text itself are logged as they are. The `include_params` value in force when a failed query is recorded decides its stored and exported error text.
+`{req-123}` is the [context](telemetry.md#capture-parameters-and-tag-events). Without `include_params`, a driver error's quoted span becomes `'?'` in logs and the metrics JSON (`Duplicate entry '?'`); text outside quotes and values written into the SQL itself are kept.
 
 ## Read the Profile
 
-The profiler keeps running statistics per normalized query (literal numbers, quoted strings and placeholders are replaced by `?`, so `WHERE id = 1` and `WHERE id = 2` count as one query).
-
 ```crystal
-CQL::Performance.enable_monitoring
 profiler = CQL::Performance.monitor.profiler.not_nil!
 
-profiler.statistics.each do |sql, stats|
-  puts "#{stats[:count]}x avg #{stats[:avg_ms].round(2)}ms max #{stats[:max_ms].round(2)}ms  #{sql}"
+# Per normalized statement (numbers and placeholders become ?, quoted strings '?')
+profiler.statistics.each do |sql, stats|  # count, total_ms, avg_ms, min_ms, max_ms
+  puts "#{stats[:count]}x avg #{stats[:avg_ms].round(2)}ms  #{sql}"
 end
+# 3x avg 0.01ms  SELECT users.id, users.name, users.email FROM users WHERE users.id = ? LIMIT ?
 
-profiler.slowest_queries(5).each do |query|
-  puts "#{query.execution_time.total_milliseconds.round(1)}ms  #{query.sql}"
+profiler.slowest_queries(5)  # QueryData: sql, params, execution_time, timestamp, rows_affected, error
+profiler.issues              # :very_slow_queries (critical), :high_frequency_slow_query (> 100 runs averaging > 50 ms)
+
+CQL::Performance.configure do |config|
+  config.profiling.log_slow_queries = true       # default: WARN "SLOW QUERY (7.75μs): SELECT ..."
+  config.profiling.log_all_queries = false       # default: record only slow queries (at most 1000 kept)
+  config.profiling.max_recorded_queries = 10_000 # default cap on recorded queries
+  config.profiling.max_tracked_statements = 1000 # distinct statements; later ones count under "(other)"
 end
+# Slow-query and N+1 warnings use the "cql.performance.base_performance_component" log source
 ```
-
-`statistics` returns `count`, `total_ms`, `avg_ms`, `min_ms` and `max_ms` for each query. `slowest_queries(limit)` returns `QueryData` with `sql`, `params`, `execution_time`, `timestamp`, `rows_affected` and `error`.
-
-### What Is Recorded
-
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `profiling.slow_query_threshold` | 100 ms | a query slower than this is "slow" |
-| `profiling.very_slow_threshold` | 1 s | a slow query above this is reported as critical |
-| `profiling.log_slow_queries` | true | log slow queries as warnings |
-| `profiling.log_all_queries` | false | keep every query, not only slow ones, in the recorded list |
-| `profiling.max_recorded_queries` | 10,000 (100 in test) | cap on the recorded list |
-| `profiling.max_tracked_statements` | 1000 | distinct statement shapes tracked in the statistics; later shapes are aggregated under `"(other)"` |
-
-Statistics are kept for all queries. The slow query list holds up to 1000 entries.
-
-### Profiler Issues
-
-`profiler.issues` flags:
-
-- `very_slow_queries` (critical): queries slower than `very_slow_threshold`;
-- `high_frequency_slow_query` (high): a query run more than 100 times with an average above 50 ms.
 
 ## Detect N+1 Queries
 
-The detector watches the most recent queries (`detection.detection_window`, default 10). When the same normalized query appears at least `detection.threshold` times (default 2), it records a pattern together with the query that came just before it.
-
 ```crystal
-CQL::Performance.enable_monitoring
 detector = CQL::Performance.monitor.detector.not_nil!
-
 detector.patterns.each do |pattern|
   puts "#{pattern.repetition_count}x #{pattern.repeated_query}"
-  puts "  after #{pattern.parent_query}"
+  puts "  after #{pattern.parent_query}"  # "Unknown" once it left the window
 end
+# 3x SELECT users.id, users.name, users.email FROM users WHERE users.id = ? LIMIT ?
+#   after SELECT posts.id, posts.title, posts.user_id FROM posts
 
-detector.issues.each do |issue|
-  puts "[#{issue.severity}] #{issue.message}"
+detector.issues  # severity by repetitions: 2-5 low, 6-20 medium, 21-50 high, more critical
+
+CQL::Performance.configure do |config|
+  config.detection.detection_window = 10  # default: recent statements compared
+  config.detection.strict_mode = true     # warn at each new pattern (production preset)
+  # config.detection.ignore_patterns      # ["COMMIT", "BEGIN", "ROLLBACK"]: prefixes never counted
 end
-```
+# WARN - N+1 Query Pattern Detected: SELECT users.id, ... WHERE users.id = ? LIMIT ? (2 times)
 
-Severity grows with repetitions: 2 to 5 is `low`, 6 to 20 `medium`, 21 to 50 `high`, above that `critical`. Statements starting with `COMMIT`, `BEGIN` or `ROLLBACK` are ignored (`detection.ignore_patterns`).
-
-With `config.detection.strict_mode = true` a warning is logged as soon as a new pattern is found, which suits staging and specs:
-
-```text
-N+1 Query Pattern Detected: SELECT * FROM users WHERE id = ? (12 times)
-```
-
-You can mark relation loading yourself so the report shows where a burst of queries came from:
-
-```crystal
-CQL::Performance.start_relation_loading("author", "Post")
-posts.each(&.author)
+CQL::Performance.start_relation_loading("user", "Post")  # markers take window slots; reports do not show them
 CQL::Performance.end_relation_loading
 ```
 
-CQL's own relation loaders do not call these hooks, so without them the detector relies on the repeated SQL alone. To fix what it finds, see [Avoid N+1 Queries](n-plus-one.md).
+To fix a pattern, see [Avoid N+1 Queries](n-plus-one.md).
 
-## Label Work With a Context
-
-```crystal
-CQL::Performance.with_context("PostsController#index") do
-  Post.query.limit(20).to_a
-end
-```
-
-The context is attached to log lines produced while SQL logging is on, and to the telemetry events of the block (`QueryEvent#context`). It is the same per-fiber context as `CQL::Telemetry.with_context`, so concurrent requests each keep their own; work you `spawn` inside the block is not tagged.
+{% hint style="info" %}
+A count never exceeds `detection_window`, so with the default of 10 an N+1 issue is at most `medium` and never appears in `critical_issues` or `high_priority_issues`.
+{% endhint %}
 
 ## Health and Metrics
 
 ```crystal
-CQL::Performance.healthy?              # => true when the health score is 80 or higher
-CQL::Performance.critical_issues       # => Array(Issue)
-CQL::Performance.high_priority_issues
+CQL::Performance.healthy?              # => true while the health score is 80 or more
+CQL::Performance.critical_issues       # => Array(CQL::Performance::Issue)
+CQL::Performance.high_priority_issues  # critical and high
 CQL::Performance.metrics_summary
-# => {"total_queries" => ..., "slow_queries" => ..., "error_rate_percent" => ...,
-#     "avg_query_time_ms" => ..., "p95_query_time_ms" => ..., "n_plus_one_patterns" => ...,
-#     "health_score" => ..., "total_issues" => ..., "uptime_seconds" => ...,
-#     "observed_statements" => ..., "monitor_overhead_ms" => ..., "p95_pool_wait_ms" => ...,
-#     "monitor_dropped_events" => ...}
+# => {"total_queries" => 8, "slow_queries" => 4, "error_rate_percent" => 0.0, "avg_query_time_ms" => 0.0068,
+#     "p95_query_time_ms" => 0.0113, "n_plus_one_patterns" => 1, "health_score" => "97", "total_issues" => 1,
+#     "uptime_seconds" => 0.00036, "observed_statements" => 8, "monitor_overhead_ms" => 0.0259,
+#     "p95_pool_wait_ms" => 0.0, "monitor_dropped_events" => 0}
+
+metrics = CQL::Performance.metrics       # PerformanceMetrics
+metrics.query_metrics.latency            # p50, p95, p99 from a histogram: within 25% from 4 µs up
+metrics.monitor                          # observed_statements, overhead (timed on 1 statement in 64), pool_wait, dropped_events
+                                         # (a pool wait under 1 µs is a free connection and counts as zero)
+metrics.issues_by_type(:n_plus_one)
+metrics.issues_by_severity(:critical)
+metrics.slowest_queries(5)               # Array(QueryData), params included
+metrics.most_frequent_queries(5)         # {sql:, count:, avg_time:}
+CQL::Performance.export_metrics_as_json  # metrics.to_json; slow queries carry params only with include_params
 ```
-
-`CQL::Performance.metrics` returns a `PerformanceMetrics` with the full breakdown (query, N+1, cache, system and health metrics, top queries and patterns). It also offers `to_json`, `issues_by_type(:n_plus_one)`, `issues_by_severity(:critical)`, `slowest_queries(limit)` and `most_frequent_queries(limit)`. The slow queries in `to_json` (and `CQL::Performance.export_metrics_as_json`) have no `params` key unless `config.logging.include_params` is on; `slowest_queries(limit)` still returns each `QueryData` with its `params`. In the query lists, `avg_time` and `total_time` are in milliseconds.
-
-`metrics.query_metrics.latency` is a `LatencyPercentiles` (`p50`, `p95`, `p99`) over every statement the profiler recorded, and `query_metrics.to_h` has them as `p50_execution_time_ms`, `p95_execution_time_ms` and `p99_execution_time_ms`. They come from a fixed-size histogram, so an estimate is within 25% from 4 µs up and never outside the recorded minimum and maximum; recording one costs no allocation. `metrics.monitor` (also `Monitor#counters`, and `"monitor"` in `to_h`) is what the monitor observed itself: `observed_statements`, the time spent recording them (`overhead`, estimated by timing one statement in 64, so it settles after a few thousand statements) and the p50/p95/p99 wait for a pooled connection (`pool_wait`, from statements run through `CQL::Execution.run`; `track` blocks have none; a wait under 1 µs is a free connection and counts as zero, without taking a lock). Together they add about 15 ns and no allocation to each monitored statement on one thread; with several threads recording at once (`-Dpreview_mt`) the shared counters add contention.
 
 ## Generate a Report
 
 ```crystal
-puts CQL::Performance.report             # format from config.reporting.format ("text" by default)
-puts CQL::Performance.report("console")  # colored terminal output
+puts CQL::Performance.report             # config.reporting.format: "text" ("logger" in the development preset)
+puts CQL::Performance.report("console")  # colored; "logger" is an alias
 File.write("tmp/perf.html", CQL::Performance.report("html"))
-File.write("tmp/perf.json", CQL::Performance.report("json"))
-```
+File.write("tmp/perf.json", CQL::Performance.report("json"))  # an unknown format falls back to text
 
-`UnifiedReportGenerator` renders a `PerformanceReport` with one formatter per format: `text`, `json`, `html`, `console` and `logger` (an alias of `console`). An unknown format falls back to `text`. Every format shows the overall latency: a `Latency: p50 … / p95 … / p99 …` line in `text` and `console`, a p95 card in `html`, and `p50_ms`, `p95_ms` and `p99_ms` under `metrics` in `json` (`PerformanceReport#latency`, and `"latency"` in its `to_h`). Each per-statement tracker in a report's `stats` adds `p50_time_ms`, `p95_time_ms` and `p99_time_ms`.
-
-### Add Your Own Format
-
-```crystal
 class CsvReportFormatter < CQL::Performance::ReportFormatter
   def format(report : CQL::Performance::PerformanceReport) : String
     "queries,slow,errors\n#{report.total_queries},#{report.slow_queries},#{report.errors}\n"
@@ -209,53 +164,26 @@ end
 
 generator = CQL::Performance::UnifiedReportGenerator.new
 generator.register_formatter("csv", CsvReportFormatter.new)
-generator.available_formats # => ["text", "json", "html", "console", "logger", "csv"]
-```
-
-Hand the generator to a monitor and use it:
-
-```crystal
-CQL::Performance.monitor = CQL::Performance::Monitor.new(report_generator: generator)
+generator.available_formats  # => ["text", "json", "html", "console", "logger", "csv"]
+CQL::Performance.monitor = CQL::Performance::Monitor.new(CQL::Performance.production_config, report_generator: generator)
 puts CQL::Performance.report("csv")
 ```
 
 ## Track Statements CQL Does Not Run
 
-Wrap other database calls to include them in the profile:
-
 ```crystal
-result = CQL::Performance.track("SELECT * FROM legacy_users WHERE id = ?", [1_i64] of DB::Any) do
-  legacy_db.query_one("SELECT * FROM legacy_users WHERE id = ?", 1)
-end
+name = CQL::Performance.track("SELECT name FROM users WHERE id = ?", [1_i64] of DB::Any) do
+  legacy_db.query_one("SELECT name FROM users WHERE id = ?", 1, as: String)
+end  # an exception is counted as an error, recorded and re-raised
+
+CQL::Performance.monitor.clear  # profile, patterns and counters; call it in before_each
 ```
 
-An exception in the block is counted as an error, recorded with the query, and re-raised.
-
-## Transactions and the Connection Pool
-
-The profiler measures statements. The `BEGIN` and `COMMIT` of a transaction are issued by the database driver, not by CQL, so a transaction does not appear as a query here. The statements inside it do.
-
-To observe transactions, subscribe to the transaction events from [Telemetry](telemetry.md#transactions):
-
-```crystal
-CQL::Telemetry.subscribe_transactions("perf") do |event|
-  Log.info { "tx #{event.id} #{event.state} #{event.duration.total_milliseconds.round(1)}ms nested=#{event.nested}" }
-end
-```
-
-A long transaction shows up as a `Commit` or `Rollback` event with a large `duration` (which includes the wait for a pooled connection). For pool pressure, read `schema.pool_stats` (`open`, `idle`, `in_flight`, `max`; see [Telemetry](telemetry.md#connection-pool)). `in_flight` close to `max` while queries are slow usually means the pool, not the SQL, is the bottleneck.
-
-## Reset Between Runs
-
-```crystal
-CQL::Performance.monitor.clear   # profiler data, detector patterns and the error count
-```
-
-Call it in `before_each` of specs that assert on the profile. Use `CQL::Performance.monitor = CQL::Performance::Monitor.new(CQL::Performance.test_config)` to switch monitoring off for a spec suite.
+Transactions and pool pressure are not profiled: see [Telemetry](telemetry.md#transactions) and [`pool_stats`](telemetry.md#connection-pool).
 
 ## What monitoring costs
 
-What telemetry and monitoring add to one statement, measured by `benchmarks/telemetry_overhead_bench.cr` (`find` by id and `create!` on in-memory SQLite, one thread; see `benchmarks/README.md`). Compare each row with "all off": bytes per iteration is the reliable column, and time differences under about 10% are within noise.
+From `benchmarks/telemetry_overhead_bench.cr`: `find` and `create!` on in-memory SQLite, one thread, `--release` on a 4-core VM (Crystal 1.22), mean of two runs. Compare bytes per iteration; time differences under about 10% are noise.
 
 | Configuration | `find` | `create!` |
 | --- | --- | --- |
@@ -263,21 +191,18 @@ What telemetry and monitoring add to one statement, measured by `benchmarks/tele
 | one synchronous subscriber | +80 ns, +0 B | +130 ns, +0 B |
 | one `async: true` subscriber¹ | +45 ns, +0 B | about 0, +0 B |
 | no-op tracer | about 0, +0 B | about 0, +0 B |
-| production monitor (`enable_production_mode!`) | +340 ns, +0 B | +260 ns, +0 B |
-| production monitor with `monitoring.async`¹ | +35 ns, +0 B | about 0, +0 B |
-| SQL logging, filtered out by the log level | +40 ns, +0 B | about 0, +0 B |
+| production monitor | +340 ns, +0 B | +260 ns, +0 B |
+| production monitor, `monitoring.async`¹ | +35 ns, +0 B | about 0, +0 B |
+| SQL logging filtered out by the log level | +40 ns, +0 B | about 0, +0 B |
 
-Measured with `--release` on a 4-core VM (Crystal 1.22), the mean of two runs; absolute numbers depend on the machine. Before these changes the production monitor added about 0.8 µs and 600 B to each statement. ¹ The benchmark never yields, so the consumer seldom runs: these rows show what the statement pays (the hand-off, or the drop when the queue is full), not the background work, which costs about as much as the synchronous version.
+¹ The benchmark never yields, so these rows show the hand-off, not the background work, which costs about as much as the synchronous version.
 
-- With everything off, and with one synchronous subscriber, a statement allocates no extra bytes (`spec/performance/overhead_spec.cr` asserts it).
-- The production monitor (`enable_production_mode!`) adds no bytes in steady state: the profiler, the N+1 detector and the counters record without allocating. A statement slow enough to be kept (or any statement with `profiling.log_all_queries`) still allocates its `QueryData`, and SQL logging allocates its lines. The benchmark repeats one statement, so the N+1 detector takes its full pattern path every time: read it as a worst case.
-- Async delivery, for subscribers (`subscribe(name, async: true)`) and for the monitor (`monitoring.async`), moves work out of query latency, not out of CPU. On one thread the consumer runs only when the application yields.
-- Under `-Dpreview_mt`, handing an event to a parked consumer costs a scheduler wake, about half a microsecond.
-- The overhead counter is sampled (one statement in 64) and a free connection's pool wait takes no lock; see [Health and Metrics](#health-and-metrics).
+The monitor allocates only a slow query's `QueryData` and SQL log lines. The benchmark repeats one statement, so the monitor rows are the N+1 detector's worst case. Under `-Dpreview_mt`, waking a parked consumer costs about half a microsecond.
 
-## Related
+## See Also
 
 - [Monitor Performance](monitoring.md)
 - [Telemetry](telemetry.md)
 - [Avoid N+1 Queries](n-plus-one.md)
 - [Optimize Queries](optimize-queries.md)
+- [How CQL Keeps Queries Fast](../../explanation/performance-design.md)

@@ -373,6 +373,8 @@ export CRYSTAL_ENV=production
 export DATABASE_URL=postgres://user:pass@host:5432/blog_production
 ```
 
+Check: without those variables, `crystal src/demo.cr` still prints the Step 6 output on SQLite.
+
 | Before deploying | Where |
 | :--- | :--- |
 | CQL binds every value as a parameter; keep raw SQL to literals you control | [Use Raw SQL Fragments Safely](../../how-to/querying/raw-fragments.md) |

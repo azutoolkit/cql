@@ -57,12 +57,12 @@ Created 3 users, 3 categories, 4 posts, 2 comments
 Add to `src/crud.cr`:
 
 ```crystal
-puts User.find(alice.id!).try(&.username)          # find: nil when missing
+puts User.find(alice.id!).try(&.username) # find: nil when missing
 puts User.find_by(email: "jane@example.com").try(&.display_name)
 puts Post.find_by(published: false, user_id: bob.id!).try(&.title)
 
 begin
-  User.find!(999_999)                                 # find!: raises when missing
+  User.find!(999_999) # find!: raises when missing
 rescue ex : DB::NoResultsError
   puts "find!: #{ex.message}"
 end
@@ -169,10 +169,10 @@ Add to `src/crud.cr`:
 
 ```crystal
 bob.first_name = "Bob"
-bob.save                                               # assign, then save
-intro.update!(views_count: 151_i64)                    # assign and write in one call
-Post.update!(intro.id!, published: true)               # by primary key, without loading
-intro.increment_views!                                 # the model method from Part 3
+bob.save                                 # assign, then save
+intro.update!(views_count: 151_i64)      # assign and write in one call
+Post.update!(intro.id!, published: true) # by primary key, without loading
+intro.increment_views!                   # the model method from Part 3
 
 drafts = AppSchema.update.table(:posts).set(published: true).where(user_id: bob.id!, published: false).commit
 puts "Bob is #{User.find!(bob.id!).full_name}; intro has #{Post.find!(intro.id!).views_count} views; published #{drafts.rows_affected} draft(s)"
@@ -196,6 +196,7 @@ def search_posts(term : String)
     .order(views_count: :desc)
     .all
 end
+
 puts "Search 'crystal': #{search_posts("Crystal").map(&.title)}"
 ```
 
@@ -229,12 +230,12 @@ Post.find_each(batch_size: 2) { |post| puts "  batch: #{post.title}" }
 Add to `src/crud.cr`:
 
 ```crystal
-puts "delete!: #{intro.comments.all.first.delete!}"          # one record, runs destroy callbacks
-puts "delete_by!: #{Comment.delete_by!(post_id: intro.id!).rows_affected}"  # one DELETE statement
+puts "delete!: #{intro.comments.all.first.delete!}"                        # one record, runs destroy callbacks
+puts "delete_by!: #{Comment.delete_by!(post_id: intro.id!).rows_affected}" # one DELETE statement
 puts "Post.delete!: #{Post.delete!(intro.id!).rows_affected}"
 AppSchema.delete.from(:comments).where { comments.created_at < 1.year.ago }.commit
 
-jane.delete!                                                 # cascades to her posts and their comments
+jane.delete! # cascades to her posts and their comments
 puts "After deleting Jane: #{Post.count} posts"
 ```
 

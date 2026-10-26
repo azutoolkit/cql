@@ -1,256 +1,163 @@
 # Monitor Performance
 
-Track query performance and identify bottlenecks in your CQL application.
+Wire [telemetry](telemetry.md) and the [performance monitor](query-profiler.md) into a production app: logs, alerts, metrics, health checks and reports.
 
-## Prerequisites
-
-- Working CQL application
-- Log or metrics infrastructure
-
-## Enable Query Logging
-
-CQL publishes every statement it runs (selects, inserts, updates, deletes, DDL) to `CQL::Telemetry`. Log one line per statement:
+## Log and Alert Off the Query Path
 
 ```crystal
-require "log"
-
 Log.setup do |c|
-  c.bind("cql.*", :debug, Log::IOBackend.new)
+  c.bind("cql.*", :info, Log::IOBackend.new)  # cql.telemetry and cql.performance.* sources
 end
 
-# [select] 1.23ms SELECT ... (1 params)
-CQL::Telemetry.log_queries
-```
-
-Bound parameter values are not part of the line and are not captured unless you set `CQL::Telemetry.capture_params = true`.
-
-## Log Slow Queries
-
-Only react to queries exceeding a threshold:
-
-```crystal
-CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
-  Log.warn { "[SLOW QUERY] (#{event.duration.total_milliseconds.round(2)}ms) #{event.sql}" }
+CQL::Telemetry.log_queries(:info, async: true)
+CQL::Telemetry.alert_on_slow(100.milliseconds, async: true) do |event|
+  Log.warn { "slow query (#{event.duration.total_milliseconds.round(1)}ms): #{event.sql}" }
 end
 ```
 
-## Track Query Metrics
+`async: true` hands each event to a background fiber, so log I/O does not add to query latency.
 
-Collect metrics for monitoring systems by subscribing to events:
+## Export Query Metrics
 
 ```crystal
 module QueryMetrics
-  @@query_count = Atomic(Int64).new(0)
-  @@total_time = Atomic(Int64).new(0)
+  @@count = Atomic(Int64).new(0)
+  @@errors = Atomic(Int64).new(0)
+  @@micros = Atomic(Int64).new(0)
+  @@wait_micros = Atomic(Int64).new(0)
 
-  def self.record(duration : Time::Span)
-    @@query_count.add(1)
-    @@total_time.add(duration.total_microseconds.to_i64)
+  def self.record(event : CQL::Telemetry::QueryEvent) : Nil
+    @@count.add(1)
+    @@errors.add(1) unless event.success?
+    @@micros.add(event.duration.total_microseconds.to_i64)
+    @@wait_micros.add(event.pool_wait.total_microseconds.to_i64)  # part of duration
   end
 
-  def self.stats
-    {
-      count: @@query_count.get,
-      total_ms: @@total_time.get / 1000.0,
-      avg_ms: @@total_time.get / [@@query_count.get, 1].max / 1000.0
-    }
-  end
-
-  def self.reset
-    @@query_count.set(0)
-    @@total_time.set(0)
+  def self.snapshot
+    count = Math.max(@@count.get, 1)
+    {queries: @@count.get, errors: @@errors.get,
+     avg_ms: @@micros.get / count / 1000.0, avg_pool_wait_ms: @@wait_micros.get / count / 1000.0,
+     dropped: CQL::Telemetry.dropped_events}
   end
 end
 
-CQL::Telemetry.subscribe("query_metrics") do |event|
-  QueryMetrics.record(event.duration)
-end
+CQL::Telemetry.subscribe("query_metrics", async: true) { |event| QueryMetrics.record(event) }
+
+QueryMetrics.snapshot  # after three statements, one of them failed
+# => {queries: 3, errors: 1, avg_ms: 0.028, avg_pool_wait_ms: 0.0, dropped: 0}
 ```
 
-Each event also carries `operation` (`:select`, `:insert`, `:update`, `:delete`, `:ddl`, `:explain`), `rows_affected`, `adapter`, `param_count` and `error`, so you can break metrics down by operation or count failures. Subscribers are isolated: one that raises does not affect queries or other subscribers. Remove one with `CQL::Telemetry.unsubscribe("query_metrics")`.
+Push the snapshot to your metrics system on a timer. A rising pool wait with a steady statement time means the pool, not the SQL, is the bottleneck; a growing `dropped` count means the async queue is too small or its consumer too slow.
 
-## Per-Request Tracking
-
-Tag everything a request does with `CQL::Telemetry.with_context`, then group events by that tag:
+## Count Queries per Request
 
 ```crystal
 module RequestQueries
-  @@events = Hash(String, Array(CQL::Telemetry::QueryEvent)).new
+  @@counts = Hash(String, Int32).new(0)
   @@mutex = Mutex.new
 
-  def self.install
+  def self.install : Nil
     CQL::Telemetry.subscribe("request_queries") do |event|
-      if request_id = event.context
-        @@mutex.synchronize { (@@events[request_id] ||= [] of CQL::Telemetry::QueryEvent) << event }
+      if id = event.context
+        @@mutex.synchronize { @@counts[id] += 1 }
       end
     end
   end
 
-  def self.finish(request_id : String)
-    events = @@mutex.synchronize { @@events.delete(request_id) } || [] of CQL::Telemetry::QueryEvent
-    {count: events.size, total_ms: events.sum(&.duration.total_milliseconds)}
+  def self.finish(id : String) : Int32
+    @@mutex.synchronize { @@counts.delete(id) || 0 }
   end
 end
 
-# In your request middleware
-RequestQueries.install
-CQL::Telemetry.with_context(request_id) do
-  response = handle_request(request)
-  summary = RequestQueries.finish(request_id)
-  Log.info { "Request completed: #{summary[:count]} queries in #{summary[:total_ms].round(2)}ms" }
-  response
-end
-```
+class QueryCountHandler
+  include HTTP::Handler
 
-The context is fiber-local, so work you `spawn` inside the block is not tagged.
-
-## Query Analysis
-
-Analyze query patterns:
-
-```crystal
-module QueryAnalyzer
-  @@patterns = Hash(String, {count: Int32, total_time: Time::Span}).new
-
-  def self.install
-    CQL::Telemetry.subscribe("query_analyzer") { |event| record(event.sql, event.duration) }
-  end
-
-  def self.record(sql : String, duration : Time::Span)
-    # Normalize query by removing specific values
-    pattern = sql.gsub(/= \d+/, "= ?")
-                 .gsub(/= '[^']*'/, "= ?")
-                 .gsub(/IN \([^)]+\)/, "IN (?)")
-
-    existing = @@patterns[pattern]? || {count: 0, total_time: Time::Span.zero}
-    @@patterns[pattern] = {
-      count: existing[:count] + 1,
-      total_time: existing[:total_time] + duration
-    }
-  end
-
-  def self.report
-    @@patterns.to_a
-      .sort_by { |_, stats| -stats[:total_time].total_milliseconds }
-      .first(10)
-      .each do |pattern, stats|
-        puts "#{stats[:count]}x (#{stats[:total_time].total_milliseconds.round(2)}ms total): #{pattern[0..100]}"
-      end
+  def call(context)
+    id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
+    CQL::Telemetry.with_context(id) { call_next(context) }
+    Log.info { "#{context.request.path}: #{RequestQueries.finish(id)} queries" }
   end
 end
+# INFO - /posts: 2 queries
 ```
 
-CQL binds values as `?` (or `$1` on PostgreSQL) placeholders, so `event.sql` is usually already normalized; the regexes only matter for raw SQL you executed with literals.
+The context is per fiber, so queries in fibers the request spawns are not counted. To find repeated statements within a request, see [Use Per-Request Caching](../caching/per-request.md).
 
-## Built-in Profiler and N+1 Detector
-
-The `CQL::Performance` module profiles queries, detects N+1 patterns and produces reports:
+## Expose a Health Check
 
 ```crystal
-CQL::Performance.enable_development_mode!   # or enable_production_mode!
+CQL::Performance.enable_production_mode!  # health data needs the monitor on
 
-CQL::Performance.with_context("UsersController#index") do
-  User.all
+class HealthHandler
+  include HTTP::Handler
+
+  def call(context)
+    return call_next(context) unless context.request.path == "/health/db"
+
+    summary = CQL::Performance.metrics_summary
+    pool = AppDB.pool_stats
+    context.response.status_code = CQL::Performance.healthy? ? 200 : 503
+    context.response.content_type = "application/json"
+    {
+      healthy:          CQL::Performance.healthy?,
+      p95_ms:           summary["p95_query_time_ms"],
+      p95_pool_wait_ms: summary["p95_pool_wait_ms"],
+      pool:             {in_flight: pool.in_flight, idle: pool.idle, max: pool.max},
+      critical:         CQL::Performance.critical_issues.map(&.message),
+    }.to_json(context.response)
+  end
 end
-
-puts CQL::Performance.report                # formatted performance report
-CQL::Performance.metrics_summary            # Hash of headline numbers
-CQL::Performance.healthy?                   # => Bool
-CQL::Performance.critical_issues            # => Array(CQL::Performance::Issue)
+# {"healthy":true,"p95_ms":0.0329,"p95_pool_wait_ms":0.0016,"pool":{"in_flight":0,"idle":1,"max":0},"critical":[]}
 ```
 
-Use `CQL::Performance.enable_sql_logging` / `disable_sql_logging` for formatted SQL logging (bound values are left out unless `config.logging.include_params` is on; see [Log SQL](query-profiler.md#log-sql)), and `CQL::Performance.configure { |config| ... }` to tune thresholds. See [Telemetry](telemetry.md) for the event API.
+What feeds the health score and each key is in [Health and Metrics](query-profiler.md#health-and-metrics).
 
-## Database Statistics
-
-Query database statistics directly on a pooled connection:
+## Write Periodic Reports
 
 ```crystal
-# PostgreSQL
-rows = MyDB.exec_query do |conn|
-  conn.query_all(<<-SQL, as: {String, Int64, Int64, Int64})
-    SELECT relname, seq_scan, COALESCE(idx_scan, 0), n_live_tup
-    FROM pg_stat_user_tables
-    ORDER BY seq_scan DESC
-    LIMIT 10
-  SQL
-end
-
-rows.each do |table, seq_scan, idx_scan, _live_rows|
-  puts "#{table}: #{seq_scan} seq scans, #{idx_scan} idx scans"
-end
-```
-
-## Connection Pool Monitoring
-
-Monitor pool usage with `Schema#pool_stats` (it never checks out a connection):
-
-```crystal
-spawn do
+spawn(name: "cql.report") do
   loop do
-    stats = MyDB.pool_stats
-    limit = stats.max == 0 ? "unlimited" : stats.max.to_s
-    Log.info { "Pool: #{stats.in_flight} in use, #{stats.idle} idle, #{stats.open} open (max #{limit})" }
-    sleep 30.seconds
+    sleep 10.minutes
+    File.write("log/cql-performance.json", CQL::Performance.report("json"))
+    CQL::Performance.monitor.clear  # start the next window empty
   end
 end
 ```
 
-## Export to Prometheus
+{% hint style="info" %}
+CQL never writes reports on its own: `config.reporting.auto_generate` and `reporting.interval` (set by the production preset) are not read.
+{% endhint %}
+
+## Query the Database's Own Statistics
 
 ```crystal
-require "prometheus"
+# PostgreSQL: the tables read by sequential scan most often
+rows = AppDB.exec_query do |conn|  # a pooled connection; these statements bypass telemetry
+  conn.query_all(<<-SQL, as: {String, Int64, Int64})
+    SELECT relname, seq_scan, COALESCE(idx_scan, 0)
+    FROM pg_stat_user_tables ORDER BY seq_scan DESC LIMIT 10
+    SQL
+end
+rows.each { |table, seq, idx| puts "#{table}: #{seq} seq scans, #{idx} index scans" }
+```
 
-query_counter = Prometheus.counter("cql_queries_total", "Total CQL queries")
-query_duration = Prometheus.histogram("cql_query_duration_seconds", "Query duration")
+## Shut Down Cleanly
 
-CQL::Telemetry.subscribe("prometheus") do |event|
-  query_counter.inc
-  query_duration.observe(event.duration.total_seconds)
+```crystal
+at_exit do
+  CQL::Telemetry.flush(5.seconds)    # deliver queued events; the timeout keeps a stuck exporter from hanging exit
+  CQL::Performance.flush(5.seconds)  # the same for an async monitor
 end
 ```
 
-## Export From a Background Subscriber
+## Keep the Cost Down
 
-An exporter that does I/O should not add to query latency. Subscribe it with `async: true` and read pool pressure from the event:
-
-```crystal
-CQL::Telemetry.subscribe("statsd", async: true) do |event|
-  StatsD.timing("sql.#{event.operation}", event.duration)
-  StatsD.timing("sql.pool_wait", event.pool_wait) # the part of duration spent waiting for a pooled connection
-end
-
-CQL::Telemetry.flush(5.seconds)    # at shutdown or in a spec: waits for delivery; the timeout keeps a stuck exporter from hanging it
-CQL::Telemetry.dropped_events      # events a full queue discarded; alert when it grows
-```
-
-A rising `pool_wait` with a steady statement time means the pool, not the SQL, is the bottleneck. For headline numbers without a subscriber, read the profiler's p95 and the p95 wait for a pooled connection (the monitor must be on):
-
-```crystal
-summary = CQL::Performance.metrics_summary
-StatsD.gauge("sql.p95_ms", summary["p95_query_time_ms"].as(Float64))
-StatsD.gauge("sql.pool_wait_p95_ms", summary["p95_pool_wait_ms"].as(Float64))
-```
-
-Queue capacity, ordering and drops are in [Telemetry](telemetry.md); what the monitor measures and costs is in [Profile Queries](query-profiler.md#health-and-metrics) and [What monitoring costs](query-profiler.md#what-monitoring-costs).
-
-## Verify Setup
-
-Test your monitoring:
-
-```crystal
-# Run some queries
-User.all
-Post.where(published: true).all
-User.find(1)
-
-# Check your logs/metrics
-QueryMetrics.stats  # => {count: 3, total_ms: 15.5, avg_ms: 5.17}  (counts every statement CQL ran)
-```
+Keep SQL logging off in production; the production preset does. Give exporters that do I/O `async: true`, and keep inline subscribers to counters. The production monitor adds about 0.3 µs per statement and no allocations; the measured numbers are in [What monitoring costs](query-profiler.md#what-monitoring-costs).
 
 ## See Also
 
-- [Optimize Queries](optimize-queries.md)
-- [Avoid N+1 Queries](n-plus-one.md)
 - [Telemetry](telemetry.md)
+- [Profile Queries and Detect N+1](query-profiler.md)
+- [Avoid N+1 Queries](n-plus-one.md)
+- [Optimize Queries](optimize-queries.md)
 - [Performance Monitoring Tutorial](../../tutorials/real-world-examples/performance-monitoring.md)

@@ -1,149 +1,91 @@
 # Performance Monitoring
 
-This tutorial shows you how to track and optimize query performance in your CQL application.
+Log the blog engine's queries, find and fix an N+1 query, guard query counts in a spec, and turn on CQL's profiler.
 
-## What You'll Learn
+**You need:** the blog engine from all five parts of [Building a Blog](../building-a-blog/01-project-setup.md), or any app with `User` and `Post` models.
 
-- Setting up query logging
-- Identifying slow queries
-- Detecting N+1 query problems
-- Building a performance dashboard
-- Optimization strategies
+## Step 1: Log every query
 
-## Prerequisites
-
-- A working CQL application
-- Basic understanding of database performance concepts
-
-## Step 1: Enable Query Logging
-
-CQL publishes every statement it runs (selects, inserts, updates, deletes, DDL) to `CQL::Telemetry` as a `QueryEvent`. Transactions are not queries: `Schema#transaction` publishes `TransactionEvent`s to `CQL::Telemetry.subscribe_transactions` (see [Telemetry](../../how-to/performance/telemetry.md#transactions)). Turn on one log line per statement:
+CQL publishes every statement it runs, DDL included, to `CQL::Telemetry` as a `QueryEvent`:
 
 ```crystal
-# src/database.cr
-require "cql"
-require "log"
+# src/perf.cr
+require "./blog_engine"
+require "./seeders"
 
-DATABASE_URL = ENV["DATABASE_URL"]
+Seeders.run # the same sample data on every run
 
-AppDB = CQL::Schema.define(
-  :app_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: DATABASE_URL
-) do
-end
-
-# Send the query log to STDOUT at debug level
 Log.setup do |c|
-  c.bind("cql.*", :debug, Log::IOBackend.new)
+  c.bind("cql.*", :debug, Log::IOBackend.new) # send CQL's query log to STDOUT
 end
-
-# One line per statement: [select] 1.23ms SELECT ... (1 params)
-CQL::Telemetry.log_queries
+CQL::Telemetry.log_queries # one line per statement, at debug level
+Post.where(published: true).count
+CQL::Telemetry.unsubscribe("cql.log") # log_queries subscribes under this name
 ```
 
-Bound parameter values are not part of the log line (and are not captured at all unless you set `CQL::Telemetry.capture_params = true`), so the log stays safe to ship.
+```bash
+crystal src/perf.cr
+```
 
-## Step 2: Create a Query Monitor
+```text
+...
+2026-10-26T02:30:12.700075Z  DEBUG - cql.telemetry: [select] 0.08ms SELECT COUNT(*) FROM posts WHERE posts.published = ? (1 params)
+```
 
-Subscribe to telemetry events and keep them in memory to analyse execution times:
+Bound values stay out of the line, and out of events unless `CQL::Telemetry.capture_params = true`. Transactions publish `TransactionEvent`s to `subscribe_transactions` instead (see [Telemetry](../../how-to/performance/telemetry.md#transactions)).
+
+## Step 2: Collect queries in a monitor
 
 ```crystal
 # src/monitoring/query_monitor.cr
+# Keeps every statement CQL runs, to count queries and spot slow or repeated ones
 module QueryMonitor
-  @@queries = [] of QueryRecord
-  @@enabled = true
-
-  struct QueryRecord
-    property sql : String
-    property duration_ms : Float64
-    property timestamp : Time
-    property source : String
-
-    def initialize(@sql, @duration_ms, @source = "")
-      @timestamp = Time.utc
-    end
-
-    def slow?(threshold_ms = 100.0)
+  record QueryRecord, sql : String, duration_ms : Float64, source : String do
+    def slow?(threshold_ms = 100.0) : Bool
       duration_ms > threshold_ms
     end
   end
 
-  # Feed the monitor from CQL's telemetry events
-  def self.install
+  @@queries = [] of QueryRecord
+
+  def self.install : Nil
     CQL::Telemetry.subscribe("query_monitor") do |event|
-      record(event.sql, event.duration.total_milliseconds, event.context || "")
+      @@queries << QueryRecord.new(event.sql, event.duration.total_milliseconds, event.context || "")
     end
   end
 
-  def self.enable
-    @@enabled = true
-  end
-
-  def self.disable
-    @@enabled = false
-  end
-
-  def self.record(sql : String, duration_ms : Float64, source = "")
-    return unless @@enabled
-    @@queries << QueryRecord.new(sql, duration_ms, source)
-  end
-
-  def self.queries
+  def self.queries : Array(QueryRecord)
     @@queries
   end
 
-  def self.clear
+  def self.clear : Nil
     @@queries.clear
   end
 
-  def self.slow_queries(threshold_ms = 100.0)
+  def self.slow_queries(threshold_ms = 100.0) : Array(QueryRecord)
     @@queries.select(&.slow?(threshold_ms))
   end
 
-  def self.total_time_ms
+  def self.total_time_ms : Float64
     @@queries.sum(&.duration_ms)
   end
 
-  def self.report
-    puts "Query Performance Report"
-    puts "========================"
-    puts "Total queries: #{@@queries.size}"
-    puts "Total time: #{total_time_ms.round(2)}ms"
-    puts ""
-
-    if (slow = slow_queries).any?
-      puts "Slow queries (>100ms):"
-      slow.each do |q|
-        puts "  #{q.duration_ms.round(2)}ms - #{q.sql[0, 80]}..."
-      end
-      puts ""
-    end
-
-    # Group by similar queries (potential N+1)
-    grouped = @@queries.group_by { |q| normalize_query(q.sql) }
-    repeated = grouped.select { |_, v| v.size > 1 }
-
-    if repeated.any?
-      puts "Repeated queries (potential N+1):"
-      repeated.each do |pattern, instances|
-        puts "  #{instances.size}x - #{pattern[0, 60]}..."
-      end
-    end
+  # SQL text that repeats is a sign of N+1: CQL binds values, so the SQL is identical
+  def self.repeated(min_count = 2) : Hash(String, Int32)
+    @@queries.group_by(&.sql).transform_values(&.size).select { |_, count| count >= min_count }
   end
 
-  private def self.normalize_query(sql : String)
-    # Replace specific values with placeholders
-    sql.gsub(/= \d+/, "= ?")
-       .gsub(/= '[^']*'/, "= ?")
-       .gsub(/IN \([^)]+\)/, "IN (?)")
+  def self.report : Nil
+    puts "Queries: #{@@queries.size} in #{total_time_ms.round(2)}ms"
+    slow_queries.each { |q| puts "  slow #{q.duration_ms.round(2)}ms: #{q.sql[0, 80]}" }
+    repeated.each { |sql, count| puts "  #{count}x #{sql[0, 80]}" }
   end
 end
 ```
 
-## Step 3: Tag Database Operations
+## Step 3: Tag queries with their source
 
-Call `QueryMonitor.install` once at startup. To see where queries come from, wrap code in `CQL::Telemetry.with_context`; every statement run inside the block carries the context, which the monitor stores as the query's source:
+`with_context` tags the statements its block runs and returns the block's value; `alert_on_slow` reports slow statements. Add to `src/perf.cr`, with `require "./monitoring/query_monitor"` at its top:
 
 ```crystal
 QueryMonitor.install
@@ -151,203 +93,132 @@ QueryMonitor.install
 posts = CQL::Telemetry.with_context("load_posts") do
   Post.where(published: true).all
 end
-```
+puts "Loaded #{posts.size} posts; source: #{QueryMonitor.queries.last.source}"
 
-To be told about slow statements as they happen, use `alert_on_slow`:
-
-```crystal
 CQL::Telemetry.alert_on_slow(100.milliseconds) do |event|
   Log.warn { "Slow query (#{event.duration.total_milliseconds.round(2)}ms): #{event.sql}" }
 end
 ```
 
-## Step 4: Detect N+1 Queries
-
-N+1 queries happen when you load a list, then query for each item:
-
-```crystal
-# BAD: N+1 problem
-posts = Post.where(published: true).all
-posts.each do |post|
-  author = post.user  # This triggers a query for EACH post!
-  puts "#{post.title} by #{author.try(&.username)}"
-end
-
-# The monitor would show something like:
-# 1x SELECT ... FROM posts WHERE posts.published = ?
-# 10x SELECT ... FROM users WHERE users.id = ?
+```text
+...
+Loaded 9 posts; source: load_posts
 ```
 
-### Solution: Eager Loading
+## Step 4: Find an N+1 query and fix it
 
-For `has_many`, `belongs_to` and `has_one` associations, `preload` loads the related records in one extra query:
-
-```crystal
-users = User.where(active: true).preload(:posts).all # 2 queries, however many users
-users.each { |user| puts "#{user.username}: #{user.posts.size} posts" }
-```
-
-A `belongs_to` association preloads the same way:
+Add to `src/perf.cr`:
 
 ```crystal
-# GOOD: two queries in total
-posts = Post.where(published: true).preload(:user).all
+# ❌ One query for the posts, then one per post for its author
+QueryMonitor.clear
+Post.where(published: true).all.each { |post| post.user.try(&.username) }
+QueryMonitor.report
 
-posts.each do |post|
-  puts "#{post.title} by #{post.user.try(&.username)}"
-end
+# ✅ preload: one more query, SELECT ... FROM users WHERE users.id IN (?, ?, ...)
+QueryMonitor.clear
+Post.where(published: true).preload(:user).all.each { |post| post.user.try(&.username) }
+QueryMonitor.report
 
-# The monitor shows:
-# 1x SELECT ... FROM posts WHERE posts.published = ?
-# 1x SELECT ... FROM users WHERE users.id IN (?, ?, ...)
+# ✅ has_many and has_one preload the same way
+QueryMonitor.clear
+User.where(active: true).preload(:posts).all.each { |user| puts "#{user.username}: #{user.posts.size} posts" }
+QueryMonitor.report
 ```
 
-CQL also ships an automatic detector, `CQL::Performance::NPlusOneDetector`, which flags repeated queries (see Step 7).
+```text
+...
+Queries: 10 in 0.17ms
+  9x SELECT users.id, users.username, users.email, users.first_name, users.last_name,
+Queries: 2 in 0.14ms
+alice: 2 posts
+bob: 4 posts
+charlie: 4 posts
+Queries: 2 in 0.17ms
+```
 
-## Step 5: Create a Dashboard
+Your timings will differ.
 
-Build a simple performance dashboard:
+## Step 5: Print a dashboard
 
 ```crystal
 # src/monitoring/dashboard.cr
 require "./query_monitor"
 
 module PerformanceDashboard
-  def self.display
-    puts ""
-    puts "="*60
-    puts "CQL Performance Dashboard"
-    puts "="*60
-    puts ""
-
-    display_query_stats
-    display_slow_queries
-    display_n_plus_one_warnings
-    display_recommendations
-  end
-
-  private def self.display_query_stats
+  def self.display(slow_ms = 50.0, repeat_limit = 3) : Nil
     queries = QueryMonitor.queries
     return puts "No queries recorded" if queries.empty?
 
-    puts "Query Statistics"
-    puts "-"*40
+    total = QueryMonitor.total_time_ms
+    puts "Queries: #{queries.size} | total #{total.round(2)}ms | average #{(total / queries.size).round(3)}ms"
 
-    total = queries.size
-    total_time = QueryMonitor.total_time_ms
-
-    puts "Total queries: #{total}"
-    puts "Total time: #{total_time.round(2)}ms"
-    puts "Average time: #{(total_time / total).round(2)}ms"
-    puts ""
-  end
-
-  private def self.display_slow_queries
-    slow = QueryMonitor.slow_queries(50.0)
-    return if slow.empty?
-
-    puts "Slow Queries (>50ms)"
-    puts "-"*40
-
-    slow.sort_by(&.duration_ms).reverse.first(5).each do |q|
-      puts "#{q.duration_ms.round(2)}ms"
-      puts "  #{q.sql[0, 70]}..."
-      puts ""
-    end
-  end
-
-  private def self.display_n_plus_one_warnings
-    grouped = QueryMonitor.queries.group_by { |q|
-      q.sql.gsub(/= \d+/, "= ?").gsub(/= '[^']*'/, "= ?")
-    }
-
-    warnings = grouped.select { |_, v| v.size > 3 }
-    return if warnings.empty?
-
-    puts "Potential N+1 Queries"
-    puts "-"*40
-
-    warnings.each do |pattern, instances|
-      puts "Executed #{instances.size} times:"
-      puts "  #{pattern[0, 60]}..."
-      puts ""
-    end
-  end
-
-  private def self.display_recommendations
-    queries = QueryMonitor.queries
-    return if queries.empty?
-
-    puts "Recommendations"
-    puts "-"*40
-
-    # Check for too many queries
-    if queries.size > 50
-      puts "- High query count (#{queries.size}). Consider:"
-      puts "  * Caching frequently accessed data"
-      puts "  * Combining queries with joins"
-      puts ""
+    QueryMonitor.slow_queries(slow_ms).sort_by(&.duration_ms).reverse.first(5).each do |q|
+      puts "Slow (#{q.duration_ms.round(2)}ms): #{q.sql[0, 70]}"
     end
 
-    # Check for slow average
-    avg = QueryMonitor.total_time_ms / queries.size
-    if avg > 50
-      puts "- Slow average query time (#{avg.round(2)}ms). Consider:"
-      puts "  * Adding indexes to filtered columns"
-      puts "  * Optimizing complex queries"
-      puts ""
-    end
-
-    # Check for N+1
-    grouped = queries.group_by { |q| q.sql.gsub(/= \d+/, "= ?") }
-    repeated = grouped.count { |_, v| v.size > 3 }
-    if repeated > 0
-      puts "- Detected #{repeated} potential N+1 patterns. Consider:"
-      puts "  * Using eager loading"
-      puts "  * Batching related queries"
-      puts ""
-    end
-
-    if queries.size <= 50 && avg <= 50 && repeated == 0
-      puts "Performance looks good!"
+    QueryMonitor.repeated(repeat_limit).each do |sql, count|
+      puts "Possible N+1 (#{count}x): #{sql[0, 70]}"
+      puts "  -> preload the association, or join it"
     end
   end
 end
 ```
 
-## Step 6: Monitor in Tests
+Add to `src/perf.cr`, with `require "./monitoring/dashboard"` at its top:
 
-Add performance assertions to your tests:
+```crystal
+QueryMonitor.clear
+Post.where(published: true).all.each { |post| post.user.try(&.username) }
+PerformanceDashboard.display
+```
+
+```text
+...
+Queries: 10 | total 0.32ms | average 0.032ms
+Possible N+1 (9x): SELECT users.id, users.username, users.email, users.first_name, users.
+  -> preload the association, or join it
+```
+
+## Step 6: Guard query counts in a spec
 
 ```crystal
 # spec/performance_spec.cr
-describe "Performance" do
-  before_each do
-    QueryMonitor.clear
-  end
+require "spec"
+require "../src/blog_engine"
+require "../src/seeders"
+require "../src/monitoring/query_monitor"
 
-  it "loads post list efficiently" do
-    # Create test data
-    10.times { create_post }
+Seeders.run
+QueryMonitor.install
 
-    # Load posts and their authors
-    QueryMonitor.install # once per test run, e.g. in spec_helper.cr
-    QueryMonitor.clear
+describe "Post list" do
+  before_each { QueryMonitor.clear }
+
+  it "loads posts and their authors in two queries" do
     posts = Post.where(published: true).preload(:user).all
     posts.each(&.user)
 
-    # Assert query count
-    QueryMonitor.queries.size.should be <= 2
-
-    # Assert no slow queries
+    QueryMonitor.queries.size.should eq(2)
     QueryMonitor.slow_queries(100.0).should be_empty
   end
 end
 ```
 
-## Step 7: Production Monitoring
+```bash
+crystal spec spec/performance_spec.cr
+```
 
-`CQL::Performance` is off by default (outside development). Once enabled, it profiles every query, detects N+1 patterns and produces reports. Enable and configure it once at startup:
+```text
+...
+1 examples, 0 failures, 0 errors, 0 pending
+```
+
+Remove `preload(:user)` and the spec fails with 10 queries.
+
+## Step 7: Turn on CQL's profiler
+
+`CQL::Performance` is off by default in every environment. Enabled, it profiles queries, detects N+1 patterns and builds reports. Add to `src/perf.cr`:
 
 ```crystal
 CQL::Performance.configure do |config|
@@ -356,13 +227,22 @@ CQL::Performance.configure do |config|
   config.detection.threshold = 3 # repeats of one query before it counts as N+1
 end
 
-# Later, e.g. from a health endpoint or a scheduled job
+Post.where(published: true).all.each { |post| post.user.try(&.username) }
+
 puts CQL::Performance.report("console") # also "text", "json" and "html"
 pp CQL::Performance.metrics_summary
 Log.warn { "Performance issues found" } unless CQL::Performance.healthy?
 ```
 
-To forward timings to your metrics stack (StatsD, Prometheus, OpenTelemetry), subscribe to telemetry events:
+```text
+...
+     Message: N+1 pattern detected: Query repeated 9 times
+...
+ "n_plus_one_patterns" => 1,
+...
+```
+
+To forward timings to a metrics system, subscribe to the events; for tracing, assign a `CQL::Telemetry::Tracer` subclass to `CQL::Telemetry.tracer`:
 
 ```crystal
 CQL::Telemetry.subscribe("metrics") do |event|
@@ -371,56 +251,22 @@ CQL::Telemetry.subscribe("metrics") do |event|
 end
 ```
 
-For OpenTelemetry-style tracing, implement `CQL::Telemetry::Tracer` and assign it to `CQL::Telemetry.tracer`. See the [telemetry how-to](../../how-to/performance/telemetry.md).
-
-## Optimization Checklist
-
-When you find performance issues:
-
-### 1. Add Missing Indexes
+## What to fix first
 
 ```crystal
-# Check if filtering on a column without an index
-Post.where(published: true).all  # Is published indexed?
+# Index the columns you filter on: Part 2 indexed posts.published for this query
+Post.where(published: true).all
+
+# Load only the columns you need: Array(Post::Row), with the other fields nil
+titles = Post.where(published: true).select(:id, :title).to_a
+
+# Walk large tables in batches instead of loading every row
+Post.find_each(batch_size: 100) { |post| puts post.title }
 ```
 
-### 2. Use Select to Limit Columns
+## Next steps
 
-```crystal
-# Instead of loading entire records
-titles = Post.where(published: true).select(:id, :title).to_a # rows with only id and title filled in
-```
-
-### 3. Batch Large Operations
-
-```crystal
-# Instead of loading all records
-Post.find_each(batch_size: 100) do |post|
-  process(post)
-end
-```
-
-### 4. Cache Expensive Queries
-
-```crystal
-# Cache results of expensive aggregations
-def total_views
-  @total_views ||= Post.where(published: true).sum(:views_count)
-end
-```
-
-## Summary
-
-You've learned:
-
-1. How to enable query logging with `CQL::Telemetry`
-2. Building a query monitor on telemetry events
-3. Detecting N+1 queries
-4. Creating a performance dashboard
-5. Monitoring in tests and production with `CQL::Performance`
-
-## Next Steps
-
-- [Optimize Queries](../../how-to/performance/optimize-queries.md)
+- [Optimizing Queries in CQL](../../how-to/performance/optimize-queries.md)
 - [Avoid N+1 Queries](../../how-to/performance/n-plus-one.md)
+- [Profile Queries and Detect N+1](../../how-to/performance/query-profiler.md)
 - [Enable Query Caching](../../how-to/caching/query-cache.md)

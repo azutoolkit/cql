@@ -1,335 +1,106 @@
 # Installation
 
-Complete setup guide for CQL with PostgreSQL, MySQL, SQLite and CockroachDB.
+Add CQL and your database's driver to a Crystal project, then check that it connects.
 
-## Prerequisites
+CQL needs Crystal 1.12.2 or later (`shard.yml`); CI builds with Crystal 1.22.0.
 
-**Crystal Language:** Version 1.12.2 or higher
-
-```bash
-crystal --version
-```
-
-**Database Server:** Choose one or more:
-
-- **SQLite** - Built into most systems (development/testing)
-- **PostgreSQL** - `brew install postgresql` (production recommended)
-- **MySQL** - `brew install mysql` (legacy support)
-
-## Quick Start
-
-### 1. Create Crystal Project
-
-```bash
-crystal init app myapp
-cd myapp
-```
-
-### 2. Add Dependencies
+## 1. Add the Shards
 
 ```yaml
 # shard.yml
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: "~> 0.0.589"
+    version: ~> 0.0.798
 
-  # Choose your database driver
+  # SQLite
   sqlite3:
     github: crystal-lang/crystal-sqlite3
-  # OR
+
+  # MySQL
   mysql:
     github: crystal-lang/crystal-mysql
-  # OR nothing for PostgreSQL/CockroachDB: CQL ships its own native driver.
-  # You can still use the pg shard instead:
-  # pg:
-  #   github: will/crystal-pg
-```
 
-### 3. Install and Test
+  # PostgreSQL and CockroachDB: no driver shard; CQL ships one
+```
 
 ```bash
-shards install
+shards install   # also installs db (crystal-db), ulid and redis, which CQL depends on
 ```
 
-### 4. Basic Setup
+## 2. Require CQL and the Driver
 
 ```crystal
-# src/myapp.cr
+require "cql"     # CQL and its PostgreSQL/CockroachDB driver
+require "sqlite3" # SQLite only
+require "mysql"   # MySQL only
+
+# Adapter and URL for each database
+CQL::Adapter::SQLite      # "sqlite3://./db/app.db"
+CQL::Adapter::Postgres    # "postgres://app:secret@localhost:5432/app" (or postgresql://)
+CQL::Adapter::MySql       # "mysql://app:secret@localhost:3306/app"
+CQL::Adapter::CockroachDB # "cockroachdb://root@localhost:26257/app"
+```
+
+## 3. Check the Connection
+
+```crystal
+# src/check_cql.cr
 require "cql"
 require "sqlite3"
 
-MyDB = CQL::Schema.define(
-  :myapp,
-  adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://./app.db"
-) do
+AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::SQLite, uri: "sqlite3://./app.db") do
   table :users do
     primary :id, Int64, auto_increment: true
-    column :name, String
-    column :email, String
-    timestamps
+    text :name
   end
 end
 
-class User
-  include CQL::ActiveRecord::Model(Int64)
-  db_context MyDB, :users
-
-  property name : String
-  property email : String
-  property created_at : Time?
-  property updated_at : Time?
-
-  def initialize(@name : String, @email : String)
-  end
-end
-
-MyDB.build # creates every table defined in the schema
-user = User.create!(name: "Alice", email: "alice@example.com")
-puts "Created user: #{user.name}"
+AppDB.users.create! # CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)
+id = AppDB.insert.into(:users).values(name: "Ada").last_insert_id
+puts AppDB.query.from(:users).select(:name).where(id: id).get(as: String)
 ```
 
 ```bash
-crystal run src/myapp.cr
+crystal run src/check_cql.cr
+# Ada
 ```
 
-The `id` primary key is provided by `CQL::ActiveRecord::Model(Int64)`, and models are classes so that `save` can assign the new id to your instance.
+For another database, change `adapter:` and `uri:` and add its `require`. The [first tutorial](tutorials/getting-started/your-first-cql-app.md) continues from here with models and migrations.
 
-## Database-Specific Setup
-
-### PostgreSQL Configuration
-
-`require "cql"` registers a native PostgreSQL driver for `postgres://` and `postgresql://` URLs, so the `pg` shard is optional. Pool settings are query parameters on the URL (see [Connection Pooling](how-to/configuration/connection-pooling.md)); `Schema.define` has no `pool_size` argument.
+## PostgreSQL and CockroachDB
 
 ```crystal
-# Production setup
-AppDB = CQL::Schema.define(
-  :production_db,
-  adapter: CQL::Adapter::Postgres,
-  uri: ENV["DATABASE_URL"]? || "postgresql://username:password@localhost:5432/myapp_production?max_pool_size=20&checkout_timeout=10",
-) do
+require "cql" # postgres:// and postgresql:// URLs now open through CQL's driver
+
+AppDB = CQL::Schema.define(:app, adapter: CQL::Adapter::Postgres,
+  uri: "postgres://app:secret@localhost:5432/app?sslmode=require&max_pool_size=20") do
   table :users do
     primary :id, Int64, auto_increment: true
-    column :name, String, size: 100, null: false
-    column :email, String, size: 255, null: false
-    column :active, Bool, default: true
-    timestamps
-
-    unique_constraint [:email]
+    text :name
   end
 end
+# sslmode: disable, prefer (default), require or verify-full.
+# Pool settings are crystal-db URL options: initial_pool_size, max_pool_size, checkout_timeout, retry_attempts.
 ```
 
-**Connection Examples:**
+{% hint style="info" %}
+If your app requires the `pg` shard anywhere, that shard serves `postgres://` URLs instead. Compile with `-Dcql_no_postgres_driver` to keep CQL's driver out of crystal-db's registry.
+{% endhint %}
 
-```crystal
-# Production with SSL (native driver: disable, prefer, require or verify-full)
-"postgresql://user:pass@prod-server:5432/myapp_prod?sslmode=require"
-
-# Development
-"postgresql://user:pass@localhost:5432/myapp_dev"
-```
-
-### MySQL Configuration
-
-```crystal
-AppDB = CQL::Schema.define(
-  :mysql_db,
-  adapter: CQL::Adapter::MySql,
-  uri: ENV["DATABASE_URL"]? || "mysql://username:password@localhost:3306/myapp_development?max_pool_size=15&encoding=utf8mb4_unicode_ci"
-) do
-  table :users do
-    primary :id, Int64, auto_increment: true
-    column :name, String, size: 100
-    column :email, String, size: 320
-    timestamps
-
-    unique_constraint [:email]
-  end
-end
-```
-
-### SQLite Configuration
-
-```crystal
-# Multi-environment setup
-database_url = case ENV["CRYSTAL_ENV"]?
-when "test"        then "sqlite3::memory:"
-when "production"  then "sqlite3://#{ENV["DATA_PATH"]? || "./"}/production.db"
-else                    "sqlite3://./db/development.db"
-end
-
-AppDB = CQL::Schema.define(
-  :app_db,
-  adapter: CQL::Adapter::SQLite,
-  uri: database_url
-) do
-  table :users do
-    primary :id, Int64, auto_increment: true
-    column :name, String
-    column :email, String
-    timestamps
-
-    unique_constraint [:email]
-  end
-end
-```
-
-## Environment Configuration
-
-### Multi-Environment Setup
-
-```crystal
-# config/database.cr
-module DatabaseConfig
-  ENV_NAME = ENV["CRYSTAL_ENV"]? || "development"
-
-  DATABASE_URLS = {
-    "development" => "sqlite3://./db/development.db",
-    "test"        => "sqlite3::memory:",
-    "production"  => ENV["DATABASE_URL"]? || raise("DATABASE_URL required")
-  }
-
-  def self.adapter_for(url : String)
-    case url
-    when .starts_with?("postgres://"), .starts_with?("postgresql://") then CQL::Adapter::Postgres
-    when .starts_with?("cockroachdb://")                              then CQL::Adapter::CockroachDB
-    when .starts_with?("mysql://")                                    then CQL::Adapter::MySql
-    when .starts_with?("sqlite3:")                                    then CQL::Adapter::SQLite
-    else raise "Unsupported database URL: #{url}"
-    end
-  end
-
-  POOL_SIZES = {
-    "development" => 5,
-    "test"        => 1,
-    "production"  => 25
-  }
-
-  # Pool size is a URL parameter understood by crystal-db's pool
-  def self.with_pool_size(url : String, size : Int32) : String
-    separator = url.includes?("?") ? "&" : "?"
-    "#{url}#{separator}max_pool_size=#{size}"
-  end
-end
-
-database_url = DatabaseConfig::DATABASE_URLS[DatabaseConfig::ENV_NAME]
-adapter = DatabaseConfig.adapter_for(database_url)
-pool_size = DatabaseConfig::POOL_SIZES[DatabaseConfig::ENV_NAME]
-
-AppDB = CQL::Schema.define(
-  :app_database,
-  adapter: adapter,
-  uri: DatabaseConfig.with_pool_size(database_url, pool_size)
-) do
-end
-```
-
-`CQL.configure` can also build the URL and pool settings for you; see [Configuration](how-to/configuration/database-connection.md).
-
-### File Structure
-
-```
-src/
-├── config/
-│   ├── database.cr
-│   └── environments/
-│       ├── development.cr
-│       ├── test.cr
-│       └── production.cr
-├── models/
-│   ├── user.cr
-│   └── post.cr
-└── myapp.cr
-```
-
-## Connection Testing
-
-```crystal
-# test_connection.cr
-require "./config/database"
-require "./models/user"
-
-puts "Testing database connection..."
-
-begin
-  AppDB.build
-  puts "✅ Database connection successful"
-  puts "Tables: #{AppDB.tables.keys}"
-
-  if AppDB.tables.has_key?(:users)
-    user = User.create!(name: "Test", email: "test@example.com")
-    puts "✅ Created test user: #{user.name}"
-    user.delete!
-    puts "✅ CRUD operations working"
-  end
-rescue ex
-  puts "❌ Connection failed: #{ex.message}"
-  exit 1
-end
-```
-
-## Docker Development
-
-```yaml
-# docker-compose.yml
-version: "3.8"
-services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: myapp_development
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: myapp_development
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-volumes:
-  postgres_data:
-  mysql_data:
-```
-
-```bash
-docker-compose up -d postgres
-# Use: postgres://postgres:password@localhost:5432/myapp_development
-```
+A schema with `CQL::Adapter::CockroachDB` and a `cockroachdb://` URL uses the native driver as is; `DB.open("cockroachdb://...")` needs `CQL::Postgres::Driver.register_cockroachdb` or `-Dcql_postgres_driver_cockroachdb`.
 
 ## Troubleshooting
 
-**Connection Issues:**
+**`shards install` rejects a shard's Crystal version**: run `shards install --ignore-crystal-version`, as CI does.
 
-- Verify database server is running
-- Check connection string format
-- Confirm database exists
-- Verify user permissions
+**`DB::ConnectionRefused` or `cannot connect to localhost:5432`**: the server is not running or the host, port or credentials in the URL are wrong; see [Fix Connection Errors](how-to/troubleshooting/connection-errors.md).
 
-**Dependencies:**
+## See Also
 
-```bash
-# Reinstall dependencies
-rm -rf lib/ shard.lock
-shards install
-```
-
-**Common Errors:**
-
-- `Database not found` - Create database first
-- `Permission denied` - Check user privileges
-- `Connection refused` - Verify server is running
-
-## Next Steps
-
-- [Configuration Guide](how-to/configuration/database-connection.md) - Environment-specific setup
-- [Getting Started](tutorials/getting-started/your-first-cql-app.md) - Build your first app
+- [Your First CQL App](tutorials/getting-started/your-first-cql-app.md)
+- [Configure Database Connection](how-to/configuration/database-connection.md)
+- [Configure CQL](how-to/configuration/configure-cql.md)
+- [Configure Multiple Environments](how-to/configuration/environments.md)
+- [Native PostgreSQL Driver](how-to/postgres-native/README.md)
+- [Use CockroachDB](how-to/configuration/cockroachdb.md)
