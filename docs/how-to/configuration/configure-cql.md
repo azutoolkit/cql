@@ -108,8 +108,6 @@ CQL.configure do |c|
          when "test"       then "sqlite3://./db/test.db"
          else                   "sqlite3://./db/development.db"
          end
-
-  c.pool_size = 2 if c.env == "test"
 end
 
 # ---- app.cr ----
@@ -165,7 +163,7 @@ What differs between them comes from the environment defaults, not from your cod
 Notes on the test branch:
 
 - The test environment's default `db` is `sqlite3://:memory:`, which cannot be parsed by `CQL.build_schema`. Assign a file URL as above.
-- The test pool defaults to 1. `Migrator#up` runs on it, but with `auto_sync` on the schema file dump that follows needs a second connection and raises `CQL::Migrator::Error` ("Schema update failed: Could not check out a connection"). `c.pool_size = 2` or `CQL::MigratorConfig.new(auto_sync: false)` fixes it.
+- The test pool defaults to 1. Migrations and the `auto_sync` schema file dump that follows each need only one connection, so they run on it.
 
 ## Read config in an initializer
 

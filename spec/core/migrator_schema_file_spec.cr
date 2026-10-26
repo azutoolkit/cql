@@ -64,3 +64,39 @@ describe "CQL::Migrator schema file" do
     end
   end
 end
+
+describe "CQL::Migrator schema file on a pool of one connection" do
+  it "is written after up" do
+    original = CQL::Migrator.migrations
+    db_file = File.join(Dir.tempdir, "cql_migrator_pool_of_one_#{Process.pid}_#{Random::Secure.hex(4)}.db")
+    schema_file = temp_schema_file
+    schema = CQL::Schema.new(:migrator_pool_of_one, "sqlite3://#{db_file}?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05", CQL::Adapter::SQLite)
+    begin
+      CQL::Migrator.migrations = [SchemaFileMigration] of CQL::BaseMigration.class
+      CQL::Migrator.new(schema, CQL::MigratorConfig.new(schema_file_path: schema_file, auto_sync: true)).up
+
+      File.read(schema_file).should contain("table :schema_file_widgets do")
+    ensure
+      CQL::Migrator.migrations = original
+      schema.close
+      [db_file, schema_file].each { |path| File.delete(path) if File.exists?(path) }
+    end
+  end
+end
+
+describe "CQL::Migrator#update_schema_file" do
+  it "closes the connections its dump opens" do
+    pending!("needs /proc/self/fd") unless FileHandles.supported?
+
+    schema_file = temp_schema_file
+    with_schema_file_migrator(schema_file) do |migrator|
+      db_file = migrator.schema.uri.lchop("sqlite3://")
+      migrator.update_schema_file
+      before = FileHandles.count(db_file)
+
+      3.times { migrator.update_schema_file }
+
+      FileHandles.count(db_file).should eq(before)
+    end
+  end
+end

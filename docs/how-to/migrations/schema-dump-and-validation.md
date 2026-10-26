@@ -40,6 +40,12 @@ dumper.close
 
 `generate_schema_content` returns the file text without writing it, which is handy for a diff or a spec.
 
+A dumper opens its own connection pool from the schema's URI. `CQL::SchemaDump.open` closes it when the block returns and gives back the block's value:
+
+```crystal
+content = CQL::SchemaDump.open(MyDB, &.generate_schema_content(:AppSchema, :app_schema))
+```
+
 ### What the Output Looks Like
 
 ```crystal

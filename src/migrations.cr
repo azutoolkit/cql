@@ -253,12 +253,9 @@ module CQL
       Log.debug { "Updating schema file: #{config.schema_file_path}" }
 
       begin
-        schema_dumper = SchemaDump.new(schema.adapter, schema.uri)
-        schema_dumper.dump_to_file(
-          config.schema_file_path,
-          config.schema_name,
-          config.schema_symbol
-        )
+        SchemaDump.open(schema) do |schema_dumper|
+          schema_dumper.dump_to_file(config.schema_file_path, config.schema_name, config.schema_symbol)
+        end
         Log.info { "Schema file updated: #{config.schema_file_path}" }
       rescue ex : Exception
         Log.error { "Failed to update schema file: #{ex.message}" }
@@ -275,8 +272,7 @@ module CQL
       Log.debug { "Verifying schema consistency..." }
 
       begin
-        schema_dumper = SchemaDump.new(schema.adapter, schema.uri)
-        current_schema = schema_dumper.generate_schema_content(config.schema_name, config.schema_symbol)
+        current_schema = SchemaDump.open(schema, &.generate_schema_content(config.schema_name, config.schema_symbol))
 
         if File.exists?(config.schema_file_path)
           existing_schema = File.read(config.schema_file_path)

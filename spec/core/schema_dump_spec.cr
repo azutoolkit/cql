@@ -90,6 +90,36 @@ describe CQL::SchemaDump do
     dumper.try(&.close)
   end
 
+  it "dumps on a pool of one connection" do
+    uri = spec_sqlite_uri("schema_dump_pool_of_one.db")
+    DB.open(uri) do |db|
+      db.exec("DROP TABLE IF EXISTS pooled_rows")
+      db.exec("CREATE TABLE pooled_rows (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES pooled_rows (id))")
+    end
+    dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "#{uri}?initial_pool_size=0&max_pool_size=1&checkout_timeout=0.05")
+
+    content = dumper.generate_schema_content(:PooledDB, :pooled_db)
+
+    content.should contain("table :pooled_rows do")
+    content.should contain("foreign_key [:parent_id], references: :pooled_rows")
+  ensure
+    dumper.try(&.close)
+  end
+
+  describe ".open" do
+    it "returns the block's value and closes the dumper's connections" do
+      pending!("needs /proc/self/fd") unless FileHandles.supported?
+      UserDB.build
+      db_file = UserDB.uri.lchop("sqlite3://")
+      before = FileHandles.count(db_file)
+
+      content = CQL::SchemaDump.open(UserDB, &.generate_schema_content(:TestDB, :test_db))
+
+      content.should contain("table :users do")
+      FileHandles.count(db_file).should eq(before)
+    end
+  end
+
   describe "error handling" do
     it "raises error for invalid database connection" do
       expect_raises(CQL::SchemaDump::Error, "Failed to connect to database") do

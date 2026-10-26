@@ -181,8 +181,6 @@ Cache helpers on `CQL`: `cache_on(enabled = true)`, `cache_on?`, `cache_stats`, 
 
 Warning: `URI.parse("sqlite3://:memory:")` raises, so `CQL.build_schema` fails with the test strategy's default `db`. Assign a file URL in test (`c.db = "sqlite3://./db/test.db"`).
 
-Warning: `Migrator#up` and `#down` run on a pool of 1, but with `auto_sync` on the schema file dump that follows needs a second connection and raises `CQL::Migrator::Error` ("Schema update failed: Could not check out a connection"). Use `c.pool_size = 2` or `CQL::MigratorConfig.new(auto_sync: false)` when running migrations in test.
-
 ## Environment variables read
 
 | Variable | Read by | Effect |
