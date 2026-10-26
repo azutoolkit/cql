@@ -482,13 +482,10 @@ module CQL
         on_rollback(&table.declaration_snapshot)
         alter_table = AlterTable.new(table, self)
         with alter_table yield
-        sql_statements = alter_table.to_sql(new_generator)
+        statements = alter_table.statements(new_generator)
 
         with_connection do |connection|
-          sql_statements.split(";\n").each do |sql|
-            next if sql.empty?
-            connection.exec(sql)
-          end
+          statements.each { |sql| connection.exec(sql) }
         end
       end
     end

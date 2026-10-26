@@ -41,6 +41,8 @@ end
 | `Record must be persisted for optimistic locking`, `Version value missing for optimistic locking` | `update!` on an `optimistic_locking` model | |
 | `Specified version column '<c>' not found in table '<t>'`, `No version column found in table '<t>' ...`, `Current version value is required for optimistic locking` | `Update#with_optimistic_lock` | |
 | `Table name cannot be empty` / `cannot contain spaces` / `cannot start with a number` | `schema.table`, `CQL::Table.new` | `CQL::Table.new(:"1users", AppDB)` |
+| `<tool> failed (exit code <n>): <stderr>`, `<tool> failed (signal <name>): <stderr>`, `<tool> could not be started: <reason>` | `dialect.structure_dump(uri)` on PostgreSQL and MySQL, when `pg_dump` / `mysqldump` fails or is not on `PATH` | `pg_dump failed (exit code 1): pg_dump: error: connection ... failed` |
+| `mysqldump would read the database name "<name>" as an option` | `dialect.structure_dump(uri)` on MySQL with a database name starting with `-` | |
 
 ### Dialect errors
 

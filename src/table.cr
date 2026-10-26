@@ -254,7 +254,7 @@ module CQL
     # - **@param** null [Bool] whether the column allows null values (default: false)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
-    # - **@param** size [Int32, nil] the size of the column (default: nil)
+    # - **@param** size [Int32, nil] the most characters a `String` column holds (default: nil, the dialect's default length)
     # - **@param** index [Bool] whether the column should be indexed (default: false)
     # - **@return** [Column] the new column
     #
@@ -418,9 +418,17 @@ module CQL
       col
     end
 
-    # Adds a new column to the table.
+    # Adds a new `String` column declared `VARCHAR(size)` (`TEXT` on SQLite).
     # - **@param** name [Symbol] the name of the column to be added
-    def varchar(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = 1000, index : Bool = false)
+    # - **@param** size [Int32, nil] the most characters it holds (default: nil, the dialect's default length:
+    #   `VARCHAR` on PostgreSQL, `VARCHAR(255)` on MySQL)
+    #
+    # **Example**
+    #
+    # ```
+    # varchar :code, size: 50
+    # ```
+    def varchar(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
       col = Column(String).new(name, as_name, null, default, unique, size)
       col.table = self
       @columns[name] = col

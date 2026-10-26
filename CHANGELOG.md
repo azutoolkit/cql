@@ -27,6 +27,7 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 - **NULL lookups.** `where(col: nil)`, `find_by`, `exists?`, `delete_by!` and `update_by` with a nil value match the rows whose column is NULL (`IS NULL`) instead of none, and so does `col == nil` in a schema query's `where { }` block (`!= nil` matches `IS NOT NULL`); reject a nil from untrusted input first.
 - **Migration steps.** `up(n)` applies the next n *pending* migrations and `down(n)`/`rollback(n)` revert the n newest *applied* ones (they counted registered migrations). `down_to(v)` keeps `v` applied, and `down_to(0_i64)` reverts every migration. The docs' `rollback_to` helper is gone: use `migrator.down_to(version)`.
 - **Schema file.** With `auto_sync`, building a migrator no longer rewrites an existing schema file; `up` and `down` still do. `CQL.verify_schema` reports a stale or missing file as `false` instead of writing it first (`auto_fix: true` still rewrites it).
+- **Column sizes and dumps.** An explicit `size:` on a String column (`varchar`, `text`, `column ..., String, size:`) now renders `VARCHAR(n)` on PostgreSQL, MySQL and CockroachDB; it was ignored, so a fresh database now enforces it. `varchar` no longer defaults to `size: 1000` (never emitted), so unsized columns render as before. `structure_dump` raises `CQL::Error` when `pg_dump`/`mysqldump` fails or is missing, instead of returning an unrelated string. A custom dialect must implement the new hooks listed under Changed.
 
 ### Added
 
@@ -105,6 +106,7 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Changed
 
+- Dialect hooks: `add_column(column_definition, primary_key)` replaces the per-dialect bodies; new `string_type(size)`, `quote_string_literal(value)` and `structure_dump_command(uri) { |command| }`; `structure_dump` is a Template Method on `GeneralDialect`. `AlterTable#statements(visitor)` returns one statement per action.
 - Releases: CI tags the commit that sets the new version in `shard.yml` (the tag used to point at the commit before it), moves the `[Unreleased]` changelog entries under the released version, and uses them as the GitHub release notes.
 - `healthy?`, `critical_issues` and `high_priority_issues` (on `Monitor` and on `CQL::Performance`) no longer build the whole `PerformanceMetrics`. `healthy?` reads the profiler's statistics and slow queries and the N+1 detector's patterns, and the issue methods read only the issues. At 1000 statement shapes `healthy?` takes about a third of the time (311 to 99 µs) and the issue methods about a twentieth (316 to 15 µs). Results are unchanged.
 - `QueryProfiler#slowest_queries` sorts outside the profiler lock. While it holds the lock it copies the slow queries (about 25 µs for 1000) instead of sorting them (about 80–95 µs), so `record_query` waits less on a report. The sort is still cached until a slow query is added, and it is not cached when one arrives during the sort.
@@ -187,6 +189,9 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Fixed
 
+- `add_column` emits its `default:`, honours `size:` and creates the index for `index: true`; it now builds the column with the same code as CREATE TABLE. `Schema#alter` runs each generated statement on its own instead of splitting its SQL on `;\n`, so a default containing `;\n` applies.
+- String defaults stay inside their literal: MySQL also escapes `\` and NUL, so `default: "C:\\"` no longer leaves the literal open and a crafted default can no longer end it early, in CREATE TABLE and ADD COLUMN. A timestamp default is emitted unquoted only when it is a whole `NOW(n)` call (MySQL) or `datetime('...')` call (SQLite), not when it merely starts with one.
+- `structure_dump` returns the dump: it waits for `pg_dump`/`mysqldump` and raises `CQL::Error` with its stderr on failure, uses the URL's host, port, decoded credentials and (PostgreSQL) `sslmode`, and never puts the password on the command line (`PGPASSWORD`, or a 0600 MySQL option file deleted afterwards). `pg_dump` no longer gets `--no-data`, which versions before 18 reject; a MySQL database name starting with `-` raises.
 - `Migrator#up(n)`, `down(n)`, `rollback(n)`, `up_to` and `down_to` select pending and applied migrations instead of slicing the registered list, so they no longer re-run applied migrations or skip pending ones; `Migrator.new` compiles when no migration class is defined. `up` and `down` re-check each migration inside their transaction, so two processes migrating at once do not apply one twice.
 - With `auto_sync`, building a migrator creates the migrations table before it writes a missing schema file, and `CQL.verify_schema` compares the file as it is instead of after rewriting it.
 - A rolled-back `Schema#alter` (the block raising, `DB::Rollback`, a failed commit, or an outer transaction rolling back a committed savepoint) restores the table's declared name and columns, so models no longer read columns that were never created. `rename_column` no longer renames the declared column in place.

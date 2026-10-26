@@ -57,16 +57,37 @@ module Expression
       "?"
     end
 
-    def structure_dump(uri : URI) : String
-      args = [
-        "--no-data",
-        "--skip-comments",
-        "--compact",
-        "--user=#{uri.user}",
-        "--password=#{uri.password}",
-        uri.path[1..-1],
-      ]
-      Process.new("mysqldump", args: args, output: Process::Redirect::Pipe).output.to_s
+    # mysqldump, with the password in a defaults file that exists only while the block runs.
+    def structure_dump_command(uri : URI, &)
+      database = database_name(uri)
+      if database.starts_with?('-') # mysqldump takes the database as a bare argument
+        raise CQL::Error.new("mysqldump would read the database name #{database.inspect} as an option")
+      end
+
+      if password = uri.password.presence
+        defaults_file = File.tempfile("cql-mysqldump", ".cnf") # readable only by its owner (0600)
+        write_password(defaults_file, password)
+      end
+      args = [] of String
+      args << "--defaults-extra-file=#{defaults_file.path}" if defaults_file # read only as the first option
+      args.concat(["--no-data", "--skip-comments", "--compact"]).concat(connection_options(uri, "--user"))
+      args << "--protocol=tcp" if uri.port # on the localhost socket, mysqldump ignores --port
+      args << database
+      yield StructureDumpCommand.new("mysqldump", args)
+    ensure
+      defaults_file.try { |file| File.delete?(file.path) }
+    end
+
+    # Writes *password* to *file* as a `[client]` option file, then closes it.
+    private def write_password(file : File, password : String) : Nil
+      file << "[client]\npassword=" << option_file_value(password) << '\n'
+    ensure
+      file.close
+    end
+
+    # *value* double-quoted, with the escapes MySQL option files read.
+    private def option_file_value(value : String) : String
+      %("#{value.gsub({'\\' => "\\\\", '"' => "\\\"", '\n' => "\\n", '\r' => "\\r", '\t' => "\\t"})}")
     end
 
     def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
@@ -128,7 +149,7 @@ module Expression
       timestamp_column : Bool,
     ) : String
       # For timestamp columns, use the database function directly (without quoting)
-      if timestamp_column && default_value.is_a?(String) && default_value.starts_with?("NOW(")
+      if timestamp_column && default_value.is_a?(String) && default_value.matches?(/\ANOW\(\d?\)\z/)
         build_sql(128) do |str|
           str << column_name << " " << column_type
           str << " DEFAULT " << default_value
@@ -140,19 +161,9 @@ module Expression
       end
     end
 
-    def add_column(
-      column_name : String,
-      column_type : String,
-      primary_key : Bool,
-      nullable : Bool,
-      unique : Bool,
-    ) : String
-      build_sql(64) do |str|
-        str << "ADD COLUMN " << column_name << " " << column_type
-        str << " PRIMARY KEY" if primary_key
-        str << " NOT NULL" unless nullable
-        str << " UNIQUE" if unique
-      end
+    # MySQL requires a length; 255 characters keep a utf8mb4 index under its 3072-byte key limit.
+    def string_type(size : Int32?) : String
+      "VARCHAR(#{size || 255})"
     end
 
     def drop_column(column_name : String) : String
@@ -244,6 +255,12 @@ module Expression
 
     def format_delete_returning(columns : Array(String)) : String
       ""
+    end
+
+    # MySQL also reads backslash escapes in a string literal, so a backslash is doubled and NUL written as `\0`.
+    # Under `sql_mode=NO_BACKSLASH_ESCAPES` a stored default keeps both backslashes; the literal still stays closed.
+    protected def quote_string_literal(value : String) : String
+      "'#{value.gsub({'\\' => "\\\\", '\'' => "''", '\0' => "\\0"})}'"
     end
 
     # Override time formatting for MySQL-specific format (with milliseconds)

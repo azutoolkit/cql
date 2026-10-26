@@ -25,8 +25,6 @@ shards install --ignore-crystal-version
 | Docs | `python3 script/docs/check_links.py`, `check_nav.py`, `gitbook_lint.py` | Links and anchors, navigation and redirects, GitBook markup. The last two need PyYAML. |
 | Docs programs | `python3 script/docs/compile_snippets.py [PAGE.md ...]` | Compiles the programs and tutorials in `README.md` and `docs/`. The script's header explains which blocks count. |
 
-Without a MySQL client, one spec errors because `mysqldump` is not installed (`spec/integration/dialects/mysql_dialect_spec.cr`). That is an environment issue, not a regression.
-
 ## What CI Runs
 
 `.github/workflows/crystal.yml` runs on every push and pull request to `master`, in the `crystallang/crystal:1.22.1` image:

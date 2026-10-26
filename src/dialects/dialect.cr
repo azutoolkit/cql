@@ -1,4 +1,5 @@
 require "../constraint"
+require "./structure_dump_command"
 
 module Expression
   # Handles general dialect-specific functionalities like placeholders and structure dumps.
@@ -33,9 +34,32 @@ module Expression
       false
     end
 
-    # Dumps only the DB structure (no data) to a string
-    # that can be executed by the database client
-    abstract def structure_dump(uri : URI) : String
+    # Dumps only the DB structure (no data) as SQL the database client can run, by running the
+    # tool `structure_dump_command` yields. Raises `CQL::Error` when the tool fails.
+    def structure_dump(uri : URI) : String
+      structure_dump_command(uri, &.run)
+    end
+
+    # Yields the tool that dumps the structure of the database at *uri*; a dialect keeps any
+    # credentials file only while the block runs. Raises `CQL::DialectError` where there is none.
+    def structure_dump_command(uri : URI, &)
+      raise CQL::DialectError.new(display_name, "structure dumps")
+    end
+
+    # The database a dump tool connects to: *uri*'s path, percent-decoded.
+    private def database_name(uri : URI) : String
+      URI.decode(uri.path.lchop('/'))
+    end
+
+    # A dump tool's `--host`, `--port` and *user_option* arguments for what *uri* names. `URI.parse`
+    # has already percent-decoded the user.
+    private def connection_options(uri : URI, user_option : String) : Array(String)
+      options = [] of String
+      uri.hostname.presence.try { |host| options << "--host=#{host}" }
+      uri.port.try { |port| options << "--port=#{port}" }
+      uri.user.presence.try { |user| options << "#{user_option}=#{user}" }
+      options
+    end
 
     # Generates the SQL fragment for defining an auto-incrementing primary key.
     abstract def auto_increment_primary_key(column : CQL::BaseColumn, col_type : String) : String
@@ -83,14 +107,11 @@ module Expression
       timestamp_column : Bool,
     ) : String
 
-    # Generates SQL to add a column to a table.
-    abstract def add_column(
-      column_name : String,
-      column_type : String,
-      primary_key : Bool,
-      nullable : Bool,
-      unique : Bool,
-    ) : String
+    # Generates the ALTER TABLE action that adds a column, given the column as CREATE TABLE defines it.
+    abstract def add_column(column_definition : String, primary_key : Bool) : String
+
+    # The type of a `String` column holding at most *size* characters (nil: the dialect's default length).
+    abstract def string_type(size : Int32?) : String
 
     # Generates SQL to drop a column from a table.
     abstract def drop_column(column_name : String) : String
@@ -274,8 +295,7 @@ module Expression
 
       case value
       when String
-        # Quote and escape string values
-        "'#{value.to_s.gsub("'", "''")}'"
+        quote_string_literal(value)
       when Bool
         # Let subclasses override boolean representation
         format_boolean(value)
@@ -288,6 +308,11 @@ module Expression
         # Numbers and other types can be used as-is
         value.to_s
       end
+    end
+
+    # *value* as a string literal in DDL, where it cannot be bound: single-quoted, quotes doubled.
+    protected def quote_string_literal(value : String) : String
+      "'#{value.gsub('\'', "''")}'"
     end
 
     # Default boolean formatting - subclasses can override
@@ -417,6 +442,14 @@ module Expression
         str << "CONSTRAINT #{constraint.name} " if constraint.name
         str << "CHECK (" << constraint.condition << ")"
       end
+    end
+
+    def add_column(column_definition : String, primary_key : Bool) : String
+      "ADD COLUMN #{column_definition}"
+    end
+
+    def string_type(size : Int32?) : String
+      size ? "VARCHAR(#{size})" : "VARCHAR"
     end
 
     # Generates SQL to create an index that is skipped when it already exists.

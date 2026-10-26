@@ -84,7 +84,7 @@ Set `CQL_VALIDATE_SCHEMA_MAPPINGS=1`: each model's getter types are compared wit
 
 ### How do I add a column to an existing table?
 
-Call `add_column` inside `schema.alter` in a migration; it ignores `default:`, so see [Add Columns](../how-to/migrations/add-columns.md#add-a-column-with-a-default) for a column that needs one.
+Call `add_column` inside `schema.alter` in a migration. It takes the options `column` does, so `null: false, default: ...` works on a table with rows; see [Add Columns](../how-to/migrations/add-columns.md#add-a-column-with-a-default).
 
 ### How do I roll back a migration?
 

@@ -30,17 +30,17 @@ module CQL
     # - **@param** null [Bool] whether the column allows null values (default: true)
     # - **@param** default [DB::Any, nil] the default value for the column (default: nil)
     # - **@param** unique [Bool] whether the column should have a unique constraint (default: false)
-    # - **@param** size [Int32, nil] the size of the column (default: nil)
-    # - **@param** index [Bool] whether the column should be indexed (default: false)
+    # - **@param** size [Int32, nil] the most characters a `String` column holds (default: nil, the dialect's default length)
+    # - **@param** index [Bool] whether to create `idx_<table>_<name>` after adding the column (default: false)
     #
     # **Example**  Adding a new column with default options
     # ```
-    # add_column(:email, "string")
+    # add_column(:email, String)
     # ```
     #
     # **Example**  Adding a new column with custom options
     # ```
-    # add_column(:age, "integer", null: false, default: "18")
+    # add_column(:status, String, null: false, default: "active", size: 20, index: true)
     # ```
     def add_column(
       name : Symbol,
@@ -56,6 +56,7 @@ module CQL
       new_column.table = @table
       @table.columns[name] = new_column
       @actions << Expression::AddColumn.new(new_column)
+      @actions << Expression::CreateIndex.new(Index.new(@table, [name], unique)) if index
       @table.columns_changed!
     end
 
@@ -237,27 +238,27 @@ module CQL
       Log.error { "Index #{name} does not exist in table #{@table}" }
     end
 
-    # Converts the alter table actions to SQL.
-    #
-    # - **@param** visitor [Expression::Visitor] the visitor to generate SQL
-    # - **@return** [String] the generated SQL
+    # The alter table actions as SQL statements, one per action, in order. `Schema#alter` runs
+    # them one by one, so a statement is never split on text inside it (such as a default value).
     #
     # **Example**  Generating SQL for alter table actions
     # ```
-    # sql = to_sql(visitor)
+    # statements(visitor) # => ["ALTER TABLE users ADD COLUMN email TEXT"]
     # ```
-    def to_sql(visitor : Expression::Visitor)
-      String.build do |string|
-        @actions.each do |action|
-          case action
-          when Expression::CreateIndex, Expression::DropIndex, Expression::RenameTable
-            string << action.accept(visitor)
-          else
-            string << Expression::AlterTable.new(@table, action).accept(visitor)
-          end
-          string << ";\n"
+    def statements(visitor : Expression::Visitor) : Array(String)
+      @actions.map do |action|
+        case action
+        when Expression::CreateIndex, Expression::DropIndex, Expression::RenameTable
+          action.accept(visitor)
+        else
+          Expression::AlterTable.new(@table, action).accept(visitor)
         end
       end
+    end
+
+    # The statements as one script, each ended by `;` and a newline.
+    def to_sql(visitor : Expression::Visitor) : String
+      statements(visitor).join { |statement| "#{statement};\n" }
     end
   end
 end

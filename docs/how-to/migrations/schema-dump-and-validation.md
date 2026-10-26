@@ -92,23 +92,20 @@ CQL.verify_schema(AppDB, auto_fix: true) # with auto_sync on, rewrites a stale f
 
 ## Dump Raw DDL
 
-{% tabs %}
-{% tab title="PostgreSQL" %}
-```bash
-pg_dump --schema-only --no-comments --username=app app_db > db/structure.sql
+```crystal
+File.write("db/structure.sql", AppDB.dialect.structure_dump(URI.parse(AppDB.uri)))
 ```
-{% endtab %}
 
-{% tab title="MySQL" %}
-```bash
-mysqldump --no-data --skip-comments --compact --user=app -p app_db > db/structure.sql
-```
-{% endtab %}
-{% endtabs %}
+| Adapter | `structure_dump(uri)` runs |
+| :--- | :--- |
+| PostgreSQL | `pg_dump --schema-only --no-comments --no-password --host=... --port=... --username=... --dbname=...`, with the password in `PGPASSWORD` and the URL's `sslmode` in `PGSSLMODE` |
+| MySQL | `mysqldump --defaults-extra-file=<temporary 0600 file holding the password> --no-data --skip-comments --compact --host=... --port=... --user=... --protocol=tcp <database>` (`--protocol=tcp` only with a port) |
+| SQLite | nothing: returns `""` |
+| CockroachDB | nothing: raises `CQL::DialectError` (run `SHOW CREATE ALL TABLES`) |
 
-Run the tools yourself. The dialects' `structure_dump(uri)` returns `""` on SQLite, raises `CQL::DialectError` on
-CockroachDB, and on PostgreSQL and MySQL currently returns the pipe's description (`#<IO::FileDescriptor:...>`),
-not the DDL.
+The host, port, user, password and database come from the URI, percent-decoded, and the password never appears on
+the command line. Of the URL's query parameters only PostgreSQL's `sslmode` is used; the others are ignored. The tool
+must be on `PATH`; when it is missing or fails, `structure_dump` raises `CQL::Error` with its stderr.
 
 ## Validate Models Against the Schema
 

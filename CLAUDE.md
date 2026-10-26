@@ -14,9 +14,6 @@ python3 script/docs/check_links.py && python3 script/docs/check_nav.py && python
 python3 script/docs/compile_snippets.py docs/how-to/models/timestamps.md   # compile a page's programs (CI: all pages)
 ```
 
-Baseline on a machine without MySQL tools: one spec errors because `mysqldump` is not installed
-(`spec/integration/dialects/mysql_dialect_spec.cr:15`). That is an environment issue, not a regression.
-
 ## Required: code review before every commit
 
 Every commit that changes `src/`, `spec/`, `playground/` or `benchmarks/` must be reviewed by the

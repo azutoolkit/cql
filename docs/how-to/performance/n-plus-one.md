@@ -71,13 +71,12 @@ counts = AppDB.query
 posts.each { |post| puts counts[post.id!]? || 0 }
 ```
 
-For a count read on every page, keep it in a column. Add it with raw DDL so it gets its default, as
-[Add a Column With a Default](../migrations/add-columns.md#add-a-column-with-a-default) explains:
+For a count read on every page, keep it in a column, added with
+[a default](../migrations/add-columns.md#add-a-column-with-a-default):
 
 ```crystal
-# Migration: add the column, then declare it
-schema.exec "ALTER TABLE posts ADD COLUMN comments_total INTEGER DEFAULT 0 NOT NULL"
-schema.posts.integer :comments_total, default: 0  # declares only; runs no SQL
+# Migration: ALTER TABLE posts ADD COLUMN comments_total INTEGER DEFAULT 0 NOT NULL
+schema.alter(:posts) { add_column :comments_total, Int32, null: false, default: 0 }
 
 # In the Post model: property comments_total : Int32 = 0
 def add_comment(post : Post, body : String)
