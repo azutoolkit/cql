@@ -39,8 +39,8 @@ CREATE INDEX IF NOT EXISTS idx_accounts_by_status ON accounts (status)
 -- MySQL has no IF NOT EXISTS for indexes: CREATE INDEX idx_accounts_email ON accounts (email)
 ```
 
-- Without `name:`, an index is named `idx_`, then the table and the columns joined by `_` (`idx_accounts_name_status`). A name longer than 63 characters raises
-  `ArgumentError`; pass a shorter `name:`.
+- Without `name:`, an index is named after its table and columns, as `idx_accounts_name_status` above. A name longer
+  than 63 characters raises `ArgumentError`; pass a shorter `name:`.
 - `IF NOT EXISTS` makes a second `create!` safe on SQLite, PostgreSQL and CockroachDB. On MySQL it fails with a
   duplicate key name error.
 - SQLite and PostgreSQL share index names across the whole schema, so a second table that reuses an explicit `name:`

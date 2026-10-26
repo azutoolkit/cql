@@ -1,6 +1,8 @@
-# Create Query Scopes
+---
+description: "Name reusable query fragments on a model with scope, then chain them like any query method."
+---
 
-Name reusable query fragments on a model with `scope`, then chain them like any query method.
+# Create Query Scopes
 
 ## Define Scopes
 

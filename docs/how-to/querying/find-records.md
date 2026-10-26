@@ -1,6 +1,8 @@
-# Find Records
+---
+description: "Look up model records by primary key or by attributes, and read single values without loading records."
+---
 
-Look up model records by primary key or by attributes, and read single values without loading records.
+# Find Records
 
 ## Find by Primary Key
 

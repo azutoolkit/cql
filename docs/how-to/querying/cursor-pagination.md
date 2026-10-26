@@ -1,6 +1,8 @@
-# Use Cursor Pagination
+---
+description: "Page through large or changing result sets by filtering past the last row seen instead of skipping rows with OFFSET."
+---
 
-Page through large or changing result sets by filtering past the last row seen (`WHERE id < ?`) instead of skipping rows with `OFFSET`.
+# Use Cursor Pagination
 
 ## Use the Built-in Helpers
 
