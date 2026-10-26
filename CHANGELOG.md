@@ -187,6 +187,9 @@ Behaviour changes an upgrading application may need to act on (details under Cha
 
 ### Fixed
 
+- The native PostgreSQL driver's `engine.stream`, `tx.stream` and `engine.pipeline` take a model's `QueryBuilder` (`engine.stream(User.query.where(active: true))`). Before, they destructured `to_sql`, which on a `QueryBuilder` is the SQL text alone, so the call did not compile. The `pipeline` doc comment no longer shows a nonexistent `User.query_sql`.
+- `CQL::Postgres::Connection#copy_out_binary` compiles: it `yield`ed inside the block `Session#copy_out_binary` captures. `Connection#stream(sql)` without arguments compiles: an empty argument list could not type its parameters.
+- `AsyncEngine.connect` and `EngineSource.connect` ignore `auth_methods` in the URL (`CQL.configure` adds it), as `DB.open` already did. Before, the engine sent it to the server as a startup parameter, which PostgreSQL rejects with SQLSTATE 42704.
 - An empty list in `where(col: [])`, `Query#where`, `Update`/`Delete` `where` and the typed `in`/`not_in` renders `1 = 0` (and `NOT (1 = 0)` for `not_in`) instead of `col IN ()`, which PostgreSQL and MySQL reject as a syntax error. SQLite already matched no rows.
 - The typed DSL's `in` and `not_in` compile on a UUID column (`where { id.in([uuid]) }`); each UUID is bound as text, like `==`.
 - The typed DSL's overflow error names the column (`3000000000 does not fit a Int32 column (users.age)`) instead of printing the expression object.

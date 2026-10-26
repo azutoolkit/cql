@@ -124,7 +124,7 @@ describe "CQL.configure" do
 
         driver_config = CQL::Postgres::Config.from_uri(
           URI.parse(CQL.config.full_db_url),
-          ignoring: CQL::Postgres::Driver::DB_OWNED_KEYS + CQL::Postgres::Driver::COMPAT_IGNORED_KEYS)
+          ignoring: CQL::Postgres::Driver::DB_OWNED_KEYS)
         driver_config.startup_options.should be_empty
       end
     end
