@@ -1,19 +1,33 @@
-# Set Up Test Databases
+---
+description: "Point CQL at a separate database for specs, create its tables, clean it between examples, and build records with factories."
+---
 
-Point CQL at a separate database for specs, create its tables, and clean it between examples.
+# Set Up Test Databases and Factories
 
 ## Create the Database
 
+{% tabs %}
+{% tab title="PostgreSQL" %}
 ```bash
-createdb myapp_test                     # PostgreSQL
-mysql -e "CREATE DATABASE myapp_test"   # MySQL
-# SQLite creates the file on the first connection
+createdb myapp_test
 ```
+{% endtab %}
+
+{% tab title="MySQL" %}
+```bash
+mysql -e "CREATE DATABASE myapp_test"
+```
+{% endtab %}
+
+{% tab title="SQLite" %}
+SQLite creates the file on the first connection.
+{% endtab %}
+{% endtabs %}
 
 ## Choose the URL by Environment
 
+{% code title="src/config/database.cr" %}
 ```crystal
-# src/config/database.cr
 module Config
   def self.database_url : String
     case ENV["APP_ENV"]?
@@ -23,8 +37,11 @@ module Config
     end
   end
 end
+```
+{% endcode %}
 
-# src/db.cr
+{% code title="src/db.cr" %}
+```crystal
 AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::Postgres, uri: Config.database_url) do
   table :users do
     primary :id, Int64, auto_increment: true
@@ -34,14 +51,17 @@ AppDB = CQL::Schema.define(:app_db, adapter: CQL::Adapter::Postgres, uri: Config
   end
 end
 ```
+{% endcode %}
 
+{% code title="spec/spec_helper.cr" %}
 ```crystal
-# spec/spec_helper.cr
 ENV["APP_ENV"] = "test"   # before the schema is defined
 require "spec"
 require "../src/db"
 require "../src/models/*"
+require "./support/*"     # factories
 ```
+{% endcode %}
 
 Models compile against one schema constant, so switch databases through the URL rather than redefining models.
 
@@ -117,9 +137,49 @@ For parallel CI jobs, give each job its own database before the schema is define
 ENV["TEST_DATABASE_URL"] = "postgres://localhost/myapp_test_#{ENV["TEST_WORKER_ID"]? || "0"}"
 ```
 
-## Check the Setup
+## Build Records With Factories
+
+{% code title="spec/support/factory.cr" %}
+```crystal
+module Factory
+  def self.user(name = "Test User", email = "user#{Random.rand(1_000_000)}@example.com") : User
+    User.create!(name: name, email: email)
+  end
+
+  def self.post(user : User = self.user, title = "Test Post") : Post
+    Post.create!(user_id: user.id!, title: title, body: "Content")
+  end
+end
+```
+{% endcode %}
+
+`create!` skips validations and callbacks, which keeps factories fast. Build with `new` and `save` when a spec is
+about them:
 
 ```crystal
+# ❌ create! runs no callbacks: Post's before_save :generate_slug never ran
+Factory.post.slug.should eq("hello-world")       # slug is ""
+
+# ✅ save runs them
+post = Post.new("Hello World", "Content")
+post.save
+post.slug.should eq("hello-world")
+
+# ❌ save raises ValidationError for an invalid record; it never returns false
+User.new("John", "invalid-email").save.should be_false
+
+# ✅
+expect_raises(CQL::ActiveRecord::Validations::ValidationError) do
+  User.new("John", "invalid-email").save
+end
+```
+
+## Check the Setup
+
+{% code title="spec/database_spec.cr" %}
+```crystal
+require "./spec_helper"
+
 describe "database" do
   it "connects to the test database" do
     AppDB.exec_query { |conn| conn.scalar("SELECT 1") }.should eq(1)
@@ -130,10 +190,13 @@ describe "database" do
   end
 end
 ```
+{% endcode %}
 
 ## See Also
 
-- [Test Models](test-models.md)
 - [Configure Multiple Environments](../configuration/environments.md)
 - [Run Migrations](../migrations/run-migrations.md)
 - [Use Transactions](../data-operations/transactions.md)
+- [Create Records](../data-operations/create.md)
+- [Use Callbacks](../models/use-callbacks.md)
+- [Fix Validation Errors](../troubleshooting/validation-errors.md)

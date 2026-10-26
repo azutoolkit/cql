@@ -75,7 +75,7 @@ Called macro defined in src/active_record/dsl/column.cr:14:7
 
 Which expanded to:
 
-   147 | 
+   147 |
    148 |         def >(other : U) : NoReturn forall U
  > 149 |           {% raise "CQL: cannot compare a #{T} column with #{U} using `>`; use a #{T} value or another #{T} column" %}
                       ^----

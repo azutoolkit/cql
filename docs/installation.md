@@ -7,7 +7,7 @@ icon: "download"
 
 CQL needs Crystal 1.12.2 or later (`shard.yml`); CI builds with Crystal 1.22.0.
 
-## 1. Add the Shards
+## 1. Add CQL and Your Driver
 
 Each tab shows one database's `shard.yml` dependencies, `require` lines, and the adapter and URL its schema takes.
 

@@ -1,6 +1,8 @@
-# Use Raw SQL Fragments Safely
+---
+description: "Write a piece of SQL by hand inside a query, such as a database function or a JSON operator, while every value stays a bound parameter."
+---
 
-Write a piece of SQL by hand inside a query (`lower(name) = ?`, a database function, a JSON operator) while every value stays a bound parameter.
+# Use Raw SQL Fragments Safely
 
 ## Add a Fragment to where
 
@@ -60,6 +62,8 @@ customers_query.where(CQL.raw("balance > :b", b: 3))  # CQL.raw(sql, *positional
 User.where("age > ?", 18).all
 User.query.where("age > :a", a: 18).where("name = ?", "x")  # ... WHERE (age > ?) AND (name = ?)
 User.where("name IN (?)", ["ada", "grace"]).all
+User.query.where { (age >= 18) & CQL.raw("lower(name) = ?", "ada") } # raw alone does not compile here
+# ... WHERE (users.age >= ?) AND (lower(name) = ?)   params: [18, "ada"]
 
 AppDB.update.table(:customers).set(city: "X").where("balance > :b", b: 3) # params: ["X", 3], SET first
 AppDB.delete.from(:customers).where("balance > ?", 3)
@@ -97,4 +101,3 @@ A column literally named `sql` still filters with `where(sql: "abc")`.
 - [Filter with Where Clauses](../querying/filter-records.md)
 - [Write Typed Queries](../querying/typed-where-dsl.md)
 - [Query JSON and Geospatial Columns](json-and-geo-predicates.md)
-- [The query DSL: before and after](../../explanation/dsl-before-after.md)
