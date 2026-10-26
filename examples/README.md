@@ -27,8 +27,8 @@ crystal run examples/run_examples.cr                      # interactive menu
 
 ## Status
 
-Checked with Crystal 1.22.0: every `.cr` file in these directories was compiled with `crystal build --no-codegen`, and
-the SQLite and Redis examples were also run.
+Checked with Crystal 1.22.0: every program here was compiled with `crystal build --no-codegen` (the blog's models,
+migrations and demos as part of `blog_demo.cr`), and the SQLite and Redis examples were also run.
 
 | Example | Result |
 | --- | --- |

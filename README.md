@@ -27,7 +27,8 @@ Full documentation: [azutopia.gitbook.io/cql](https://azutopia.gitbook.io/cql) (
   `find_in_batches` and `pluck` keep large reads small.
 - **Transactions** with nested savepoints on every adapter.
 - **Guardrails**: identifiers that cannot be bound (index, constraint and alias names) are validated, and
-  `CQL_VALIDATE_SCHEMA_MAPPINGS=1` checks model attribute types against the schema at boot.
+  `CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec` checks model attribute types against the schema (the check runs
+  after top-level code, so a blocking server never reaches it).
 - **Caching**: memory and Redis stores, a fragment cache with tag invalidation, and a per-request query cache with
   middleware for Kemal, Azu, Lucky, Amber, SpiderGazelle and plain `HTTP::Server`.
 - **Observability**: `CQL::Telemetry.subscribe` sees every statement; the `CQL::Performance` monitor adds a query
