@@ -1,80 +1,68 @@
+---
+description: "Generate a schema file from a live database, keep it in sync with migrations, and check that models still match it."
+---
+
 # Dump and Validate Your Schema
 
-This guide shows you how to turn an existing database into a CQL schema file, keep that file in sync with migrations, and check that your models still match it.
-
-There are three separate tools:
-
-| Tool | Reads | Produces |
-| --- | --- | --- |
-| `CQL::SchemaDump` | a live database | a Crystal schema file |
-| `structure_dump` (dialect) | a live database | raw DDL from `pg_dump` / `mysqldump` |
-| `CQL::ActiveRecord::SchemaValidator` | your `CQL::Schema` and model getters | an error if the types disagree |
+| Tool | Compares or reads | Gives |
+| :--- | :--- | :--- |
+| `CQL::SchemaDump` | a live database | a `CQL::Schema.define` file |
+| `Migrator#verify_schema_consistency` | the database and the schema file | `Bool` |
+| `CQL::ActiveRecord::SchemaValidator` | a `CQL::Schema` and the model getters | `SchemaMappingError` on a mismatch |
 
 ## Generate a Schema File From a Database
 
-`SchemaDump` inspects tables, columns and foreign keys and writes a `CQL::Schema.define` block.
-
 ```crystal
 dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://db/myapp.db")
-dumper.dump_to_file("src/schemas/myapp_schema.cr", :MyApp, :myapp)
+dumper.dump_to_file("src/schemas/myapp_schema.cr", :MyApp, :myapp) # creates directories, overwrites the file
+dumper.close
+
+dumper = AppDB.schema_dumper                                 # same as CQL::SchemaDump.from_schema(AppDB)
+text = dumper.generate_schema_content(:AppSchema, :app_schema) # the file's text, nothing written
+dumper.dump_to_file                                          # ./src/schemas/schema.cr, :AppSchema, :app_schema
 dumper.close
 ```
 
-`dump_to_file` takes three optional arguments:
-
-| Argument | Default |
-| --- | --- |
-| `file_path` | `"./src/schemas/schema.cr"` (`SchemaDump::DEFAULT_SCHEMA_DUMP_FILE_PATH`) |
-| `schema_name` | `:AppSchema`, the constant in the generated file |
-| `schema_symbol` | `:app_schema`, the name passed to `CQL::Schema.define` |
-
-Missing directories are created. An existing file is overwritten.
-
-### Build It From a Schema You Already Have
-
+{% code title="src/schemas/myapp_schema.cr" %}
 ```crystal
-dumper = MyDB.schema_dumper            # same as CQL::SchemaDump.from_schema(MyDB)
-puts dumper.generate_schema_content(:AppSchema, :app_schema)
-dumper.close
-```
-
-`generate_schema_content` returns the file text without writing it, which is handy for a diff or a spec.
-
-### What the Output Looks Like
-
-```crystal
-AppSchema = CQL::Schema.define(
-  :app_schema,
+MyApp = CQL::Schema.define(
+  :myapp,
   adapter: CQL::Adapter::SQLite,
   uri: "sqlite3://db/myapp.db") do
+  table :users do
+    primary :id, Int32
+    text :name
+    text :email
+    text :role, default: "'member'"
+    text :bio, null: true
+    timestamps
+  end
+
   table :posts do
     primary :id, Int32
     text :title
-    text :body, null: true
-    integer :user_id
+    integer :views, default: "0"
+    bigint :user_id
     timestamps
-    foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
+    foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade, on_update: :no_action
   end
 
 end
 ```
+{% endcode %}
 
-### What Is Mapped
+- SQLite, MySQL, PostgreSQL and CockroachDB (through the PostgreSQL path) are read. Unknown types become `text`.
+- A one-column primary key gets `primary`; a composite key gets none. SQLite reports every `INTEGER PRIMARY KEY` as
+  `Int32`, including keys declared `Int64`; edit those lines for `Model(Int64)` models.
+- `created_at` plus `updated_at` become `timestamps`. Defaults are copied as the database reports them, as strings.
+- Foreign keys are written one column each. PostgreSQL and MySQL omit `no_action` rules; SQLite writes them.
+- Indexes are not dumped. The migrations table is, like any other table.
 
-- SQLite, MySQL, PostgreSQL and CockroachDB are inspected. CockroachDB uses the PostgreSQL path.
-- A table with exactly one primary key column gets `primary :name, Type`. A table with a composite key gets no `primary` line.
-- A table with both `created_at` and `updated_at` gets the `timestamps` macro instead of two columns.
-- Nullable columns get `null: true`; column defaults are written as `default: "..."` strings.
-- Foreign keys are written one column at a time. On PostgreSQL and MySQL, `on_delete` / `on_update` are omitted when the rule is `no_action`; SQLite always writes them.
-- Types it does not recognise fall back to `String` (`text`).
-
-Indexes are not dumped. Treat the generated file as a starting point and add the pieces it cannot see.
-
-**Warning:** the database URI, including any password, is written into the generated file. Pass a URI without credentials, or edit the `uri:` line before you commit the file.
+{% hint style="danger" %}
+The URI, password included, is written into the file. Dump with a URI without credentials, or edit the `uri:` line before committing.
+{% endhint %}
 
 ## Keep the File in Sync With Migrations
-
-The migrator rewrites the schema file after `up` and `down` when `auto_sync` is on (the default):
 
 ```crystal
 config = CQL::MigratorConfig.new(
@@ -83,93 +71,81 @@ config = CQL::MigratorConfig.new(
   schema_symbol: :app_schema,
   auto_sync: true
 )
-migrator = MyDB.migrator(config)
-
-migrator.up                       # runs migrations, then rewrites the file
-migrator.update_schema_file       # rewrite it on demand
-migrator.bootstrap_schema         # same thing, for an existing database
+migrator = AppDB.migrator(config)  # writes the file now
+migrator.up                        # and again after every up and down
+migrator.update_schema_file        # on demand; bootstrap_schema does the same
 ```
 
-To check whether the file has drifted, without changing it:
+## Check the File for Drift
 
 ```crystal
-unless migrator.verify_schema_consistency
-  abort "src/schemas/app_schema.cr is out of date. Run migrations or update_schema_file."
-end
+# ❌ auto_sync: true rewrites the file when the migrator is built, so a stale file passes
+AppDB.migrator(config).verify_schema_consistency  # => true
+
+# ✅ Check with a migrator that leaves the file alone
+check = AppDB.migrator(CQL::MigratorConfig.new(
+  schema_file_path: "src/schemas/app_schema.cr",
+  schema_name: :AppSchema,
+  auto_sync: false
+))
+abort "src/schemas/app_schema.cr is out of date" unless check.verify_schema_consistency
 ```
 
-`verify_schema_consistency` regenerates the schema text and compares it to the file. It returns `false` when the file is missing, differs, or the database cannot be read. The comparison is exact text, so keep hand edits out of generated files (see [Run Migrations](run-migrations.md)).
+`verify_schema_consistency` regenerates the text and compares it exactly, so hand edits count as drift. It returns
+`false` when the file is missing, differs, or the database cannot be read. `CQL.verify_schema(AppDB)` builds its
+migrator from `CQL.configure`, so it only detects drift with `auto_sync = false`, and then `auto_fix: true` has
+nothing to fix with.
 
-`CQL.verify_schema(schema, auto_fix: true)` does the same check and rewrites the file when `auto_sync` is enabled in your configuration.
+## Dump Raw DDL
 
-## Raw Structure Dumps
-
-Each dialect exposes `structure_dump(uri)`, which returns the database DDL as a string using the vendor's own tool:
-
-```crystal
-dialect = CQL::Adapter::Postgres.dialect
-ddl = dialect.structure_dump(URI.parse("postgresql://app@localhost/app_db"))
-File.write("db/structure.sql", ddl)
+{% tabs %}
+{% tab title="PostgreSQL" %}
+```bash
+pg_dump --schema-only --no-comments --username=app app_db > db/structure.sql
 ```
+{% endtab %}
 
-| Adapter | Behavior |
-| --- | --- |
-| PostgreSQL | runs `pg_dump --schema-only --no-data --no-comments`, using the user and database name from the URI |
-| MySQL | runs `mysqldump --no-data --skip-comments --compact`, using user, password and database name from the URI |
-| SQLite | returns an empty string |
-| CockroachDB | raises `CQL::DialectError`; run `SHOW CREATE ALL TABLES` instead |
+{% tab title="MySQL" %}
+```bash
+mysqldump --no-data --skip-comments --compact --user=app -p app_db > db/structure.sql
+```
+{% endtab %}
+{% endtabs %}
 
-`pg_dump` and `mysqldump` must be installed and on `PATH`. The PostgreSQL call passes only the user, so supply the password through `PGPASSWORD` or `~/.pgpass`.
+Run the tools yourself. The dialects' `structure_dump(uri)` returns `""` on SQLite, raises `CQL::DialectError` on
+CockroachDB, and on PostgreSQL and MySQL currently returns the pipe's description (`#<IO::FileDescriptor:...>`),
+not the DDL.
 
 ## Validate Models Against the Schema
 
-`SchemaValidator` compares each model getter with the schema column of the same name and raises `CQL::ActiveRecord::SchemaMappingError` on a type mismatch.
-
-It runs once per model, when the program starts, if you set an environment variable:
-
 ```bash
-CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal run src/app.cr
+CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec   # checks every model before the first example
 ```
-
-The error names the model, column and both types:
 
 ```text
 CQL schema mapping error in User: schema column `users.name` type String does not match model getter `name` type Int32. Update the schema column or the model property type.
 ```
 
-See [Fix Schema Mapping Errors](../troubleshooting/schema-mapping-errors.md) for fixes.
-
-### Rules
-
-- A model whose table is not in the schema raises `table ... is not defined in schema ...`.
-- Only columns that have a matching zero-argument getter are compared. Columns the model does not expose are fine.
-- `Nil` is ignored on both sides, so `Int64?` matches an `Int64` column.
-- A `UUID` getter matches a `String` column, because UUIDs are stored as text (see [UUID and ULID Primary Keys](../models/uuid-ulid-primary-keys.md)).
-
-### Call It Yourself
-
-You can run the same check in a spec or a boot script:
-
 ```crystal
+# At boot, before the server starts: the same check, one model at a time
 CQL::ActiveRecord::SchemaValidator.validate_model!(
-  "User",
-  MyDB,
-  :users,
-  {"id" => "Int64 | ::Nil", "name" => "String"}
+  "User", AppDB, :users,
+  {"id" => "Int64 | ::Nil", "name" => "String"}, # getter name => type name
+  primary_key: :id
 )
 ```
 
-The last argument maps getter names to their type names.
+With the variable set, each model runs the check once, after the program's top-level code. That suits specs, which
+start after it, but an app that blocks in `server.listen` never reaches it, so call `validate_model!` there.
 
-## Recommended Workflow
+- A model whose table is not in the schema fails, and so does a table whose primary key is not the model's
+  `primary_key:`.
+- Only columns with a zero-argument getter of the same name are compared. `Nil` is ignored, so `Int64?` matches an
+  `Int64` column, and a `UUID` getter matches a `String` column. See [Fix Schema Mapping Errors](../troubleshooting/schema-mapping-errors.md).
 
-1. Write and run migrations with `auto_sync: true` in development, so the schema file follows the database.
-2. Commit the schema file.
-3. In CI, run `verify_schema_consistency` against a freshly migrated database.
-4. Run the specs, or a boot check, with `CQL_VALIDATE_SCHEMA_MAPPINGS=1` to catch model drift.
-
-## Related
+## See Also
 
 - [Run Migrations](run-migrations.md)
 - [Create a Migration](create-migration.md)
 - [Fix Schema Mapping Errors](../troubleshooting/schema-mapping-errors.md)
+- [Configure CQL](../configuration/configure-cql.md)

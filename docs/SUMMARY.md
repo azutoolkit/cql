@@ -6,18 +6,19 @@
 ## Tutorials
 
 - [Tutorials Overview](tutorials/README.md)
-- [Getting Started](tutorials/getting-started/your-first-cql-app.md)
-  - [Your First CQL App](tutorials/getting-started/your-first-cql-app.md)
-  - [Adding CQL to Existing Project](tutorials/getting-started/adding-cql-to-existing-project.md)
-- [Building a Blog](tutorials/building-a-blog/01-project-setup.md)
-  - [Part 1: Project Setup](tutorials/building-a-blog/01-project-setup.md)
-  - [Part 2: Database Schema](tutorials/building-a-blog/02-database-schema.md)
-  - [Part 3: Models and Relationships](tutorials/building-a-blog/03-models-and-relationships.md)
-  - [Part 4: CRUD Operations](tutorials/building-a-blog/04-crud-operations.md)
-  - [Part 5: Adding Features](tutorials/building-a-blog/05-adding-features.md)
-- [Real-World Examples](tutorials/real-world-examples/migration-workflows.md)
-  - [Migration Workflows](tutorials/real-world-examples/migration-workflows.md)
-  - [Performance Monitoring](tutorials/real-world-examples/performance-monitoring.md)
+
+### Getting Started
+
+- [Your First CQL App](tutorials/getting-started/your-first-cql-app.md)
+- [Adding CQL to an Existing Project](tutorials/getting-started/adding-cql-to-existing-project.md)
+
+### Building a Blog
+
+- [Part 1: Project Setup](tutorials/building-a-blog/01-project-setup.md)
+- [Part 2: Database Schema](tutorials/building-a-blog/02-database-schema.md)
+- [Part 3: Models and Relationships](tutorials/building-a-blog/03-models-and-relationships.md)
+- [Part 4: CRUD Operations](tutorials/building-a-blog/04-crud-operations.md)
+- [Part 5: Adding Features](tutorials/building-a-blog/05-adding-features.md)
 
 ## How-to Guides
 
@@ -28,10 +29,10 @@
 - [Define a Model](how-to/models/define-model.md)
 - [Add Validations](how-to/models/add-validations.md)
 - [Use Callbacks](how-to/models/use-callbacks.md)
+- [Use Timestamps](how-to/models/timestamps.md)
 - [Implement Soft Deletes](how-to/models/soft-delete.md)
 - [Add Optimistic Locking](how-to/models/optimistic-locking.md)
 - [Track Changes and Update Only Changed Columns](how-to/models/dirty-tracking.md)
-- [Use Timestamps](how-to/models/timestamps.md)
 - [Use UUID and ULID Primary Keys](how-to/models/uuid-ulid-primary-keys.md)
 
 ### Relationships
@@ -45,27 +46,30 @@
 
 - [Find Records](how-to/querying/find-records.md)
 - [Filter with Where Clauses](how-to/querying/filter-records.md)
+- [Write Typed Queries](how-to/querying/typed-where-dsl.md)
 - [Build Complex Queries](how-to/querying/complex-queries.md)
 - [Create Query Scopes](how-to/querying/scopes.md)
 - [Paginate Results](how-to/querying/pagination.md)
 - [Use Cursor Pagination](how-to/querying/cursor-pagination.md)
-- [Write Typed Queries](how-to/querying/typed-where-dsl.md)
-- [Use CTEs and Recursive CTEs](how-to/querying/ctes.md)
-- [Use Window Functions](how-to/querying/window-functions.md)
-- [Combine Queries with Set Operations](how-to/querying/set-operations.md)
-- [Upsert Records](how-to/querying/upsert.md)
-- [Lock Rows](how-to/querying/row-locking.md)
-- [Use FULL and CROSS Joins](how-to/querying/joins-full-cross.md)
-- [Use Raw SQL Fragments Safely](how-to/querying/raw-fragments.md)
 - [Inspect Queries with to_sql and explain](how-to/querying/explain-and-to-sql.md)
-- [Query JSON and Geospatial Columns](how-to/querying/json-and-geo-predicates.md)
+
+### Advanced SQL
+
+- [Use CTEs and Recursive CTEs](how-to/advanced-sql/ctes.md)
+- [Use Window Functions](how-to/advanced-sql/window-functions.md)
+- [Combine Queries with Set Operations](how-to/advanced-sql/set-operations.md)
+- [Use FULL and CROSS Joins](how-to/advanced-sql/joins-full-cross.md)
+- [Use Raw SQL Fragments Safely](how-to/advanced-sql/raw-fragments.md)
+- [Query JSON and Geospatial Columns](how-to/advanced-sql/json-and-geo-predicates.md)
 
 ### Data Operations
 
 - [Create Records](how-to/data-operations/create.md)
 - [Update Records](how-to/data-operations/update.md)
 - [Delete Records](how-to/data-operations/delete.md)
+- [Upsert Records](how-to/data-operations/upsert.md)
 - [Use Transactions](how-to/data-operations/transactions.md)
+- [Lock Rows](how-to/data-operations/row-locking.md)
 
 ### Migrations
 
@@ -102,58 +106,50 @@
 
 ### Performance
 
-- [Optimize Queries](how-to/performance/optimize-queries.md)
+- [Optimizing Queries in CQL](how-to/performance/optimize-queries.md)
 - [Avoid N+1 Queries](how-to/performance/n-plus-one.md)
-- [Monitor Performance](how-to/performance/monitoring.md)
-- [Telemetry](how-to/performance/telemetry.md)
-- [Profile Queries and Detect N+1](how-to/performance/query-profiler.md)
-- [Benchmark CQL](how-to/performance/benchmark.md)
+
+### Observability
+
+- [Telemetry](how-to/observability/telemetry.md)
+- [Profile Queries and Detect N+1](how-to/observability/query-profiler.md)
+- [Monitor Performance](how-to/observability/monitoring.md)
 
 ### Testing
 
-- [Test Models](how-to/testing/test-models.md)
-- [Set Up Test Databases](how-to/testing/test-database.md)
+- [Set Up Test Databases and Factories](how-to/testing/test-database.md)
 
 ### Troubleshooting
 
 - [Fix Connection Errors](how-to/troubleshooting/connection-errors.md)
 - [Fix Migration Errors](how-to/troubleshooting/migration-errors.md)
-- [Fix Validation Errors](how-to/troubleshooting/validation-errors.md)
 - [Fix Schema Mapping Errors](how-to/troubleshooting/schema-mapping-errors.md)
+- [Fix Validation Errors](how-to/troubleshooting/validation-errors.md)
 
 ## Reference
 
 - [Reference Overview](reference/README.md)
 - [Quick Reference](reference/quick-reference.md)
 - [Configuration Reference](reference/configuration.md)
+- [Database Support](reference/database-support.md)
+- [Error Codes](reference/error-codes.md)
 
 ### API Reference
 
-- [Migration DSL](reference/api/migration-dsl.md)
-- [Validation Options](reference/api/validation-options.md)
-- [Callback Hooks](reference/api/callback-hooks.md)
-- [Database Support](reference/database-support.md)
-
-### Resources
-
-- [Glossary](reference/glossary.md)
-- [Error Codes](reference/error-codes.md)
+- [Migration DSL Reference](reference/api/migration-dsl.md)
+- [Validation Options Reference](reference/api/validation-options.md)
+- [Callback Hooks Reference](reference/api/callback-hooks.md)
 
 ## Explanation
 
 - [Explanation Overview](explanation/README.md)
-- [Concepts](explanation/concepts/what-is-orm.md)
-  - [What is an ORM?](explanation/concepts/what-is-orm.md)
-- [Design Patterns](explanation/design-patterns/active-record.md)
-  - [Active Record Pattern](explanation/design-patterns/active-record.md)
-  - [Repository Pattern](explanation/design-patterns/repository.md)
-- [Typed Query DSL: Before and After](explanation/dsl-before-after.md)
+- [Active Record Pattern](explanation/active-record-pattern.md)
+- [Repository Pattern](explanation/repository-pattern.md)
 - [Safety Guardrails](explanation/safety-guardrails.md)
 - [How CQL Keeps Queries Fast](explanation/performance-design.md)
 
 ## Resources
 
 - [Resources Overview](resources/README.md)
-- [FAQ](resources/faq.md)
-- [Community](resources/community.md)
+- [Frequently Asked Questions](resources/faq.md)
 - [Contributing](resources/contributing.md)

@@ -49,3 +49,5 @@ it is created:
   `docs/SUMMARY.md` and linked from its section `README.md`.
 - A behavior change updates the matching docs page in the same change. Every class, method and option
   a page cites must exist in `src/`; prefer call shapes copied from `spec/`.
+- Page shape, length limits per Diátaxis type, callout syntax (GitBook `{% hint %}`) and how to verify
+  examples: `.claude/docs-style-guide.md`.

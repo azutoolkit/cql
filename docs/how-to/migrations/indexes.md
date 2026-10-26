@@ -1,222 +1,115 @@
-# Create Indexes
+---
+description: "Declare indexes with a new table, add them to existing tables in migrations, and check that queries use them."
+---
 
-This guide shows you how to create database indexes to improve query performance.
+# Create Indexes
 
 ## Declare Indexes With the Table
 
-`index: true` on a column and `index [...]` inside a `schema.table` block declare indexes that `table.create!` and `schema.build` create right after the table:
-
+{% code title="db/migrations/004_create_accounts.cr" %}
 ```crystal
-class CreateUsers < CQL::Migration(4)
+class CreateAccounts < CQL::Migration(4)
   def up
-    schema.table :users do
+    accounts.create!
+  end
+
+  def down
+    accounts.drop!
+  end
+
+  private def accounts : CQL::Table
+    schema.table :accounts do
       primary :id, Int64
       column :email, String, index: true
       column :name, String
       column :status, String
       index [:name, :status], unique: true
-      index [:status], name: "idx_users_by_status"
+      index [:status], name: "idx_accounts_by_status"
     end
-    schema.users.create!
-  end
-
-  def down
-    schema.users.drop!
   end
 end
 ```
-
-This runs `CREATE TABLE IF NOT EXISTS users (...)` followed by one statement per index:
+{% endcode %}
 
 ```sql
-CREATE INDEX IF NOT EXISTS idx_users_email ON users (email)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_name_status ON users (name, status)
-CREATE INDEX IF NOT EXISTS idx_users_by_status ON users (status)
+-- table.create! and schema.build run, after CREATE TABLE IF NOT EXISTS accounts (...):
+CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts (email)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_name_status ON accounts (name, status)
+CREATE INDEX IF NOT EXISTS idx_accounts_by_status ON accounts (status)
+-- MySQL has no IF NOT EXISTS for indexes: CREATE INDEX idx_accounts_email ON accounts (email)
 ```
 
-- Without `name:`, the index is named `idx_<table>_<columns>`. Names longer than 63 characters raise `ArgumentError`; pass a shorter `name:`.
-- Index names are shared by the whole schema on SQLite and PostgreSQL. If two tables declare the same explicit `name:`, `IF NOT EXISTS` skips the second index without an error, so keep explicit names unique.
-- `IF NOT EXISTS` makes calling `create!` again safe on SQLite, PostgreSQL and CockroachDB. MySQL has no `CREATE INDEX IF NOT EXISTS`, so there CQL emits a plain `CREATE INDEX`, and calling `create!` a second time fails with a duplicate key name error.
+- Without `name:`, an index is named after its table and columns, as `idx_accounts_name_status` above. A name longer
+  than 63 characters raises `ArgumentError`; pass a shorter `name:`.
+- `IF NOT EXISTS` makes a second `create!` safe on SQLite, PostgreSQL and CockroachDB. On MySQL it fails with a
+  duplicate key name error.
+- SQLite and PostgreSQL share index names across the whole schema, so a second table that reuses an explicit `name:`
+  silently gets no index. Keep names unique.
 
 ## Add Indexes to an Existing Table
 
-For a table that already exists, use `create_index` inside `schema.alter`, as in the migrations below. The table must be known to the schema (declared with `schema.table` or loaded from your schema file), otherwise `schema.alter` raises `CQL::Schema::Error`. Index names are always given explicitly.
-
-## Create a Simple Index
-
+{% code title="db/migrations/005_add_user_indexes.cr" %}
 ```crystal
-class AddEmailIndex < CQL::Migration(5)
+class AddUserIndexes < CQL::Migration(5)
   def up
     schema.alter :users do
-      create_index :idx_users_email, [:email]
+      create_index :idx_users_email, [:email], unique: true            # CREATE UNIQUE INDEX idx_users_email ON users (email)
+      create_index :idx_users_status_created, [:status, :created_at]   # composite: filter on status, sort by created_at
+      create_index :idx_users_deleted_at, [:deleted_at]                # SoftDeletable filters on deleted_at
+    end
+
+    schema.alter :posts do
+      create_index :idx_posts_user_id, [:user_id]                      # foreign keys: joins and preload
+      create_index :idx_posts_user_published, [:user_id, :published]
     end
   end
 
   def down
     schema.alter :users do
-      drop_index :idx_users_email
-    end
-  end
-end
-```
-
-## Create a Unique Index
-
-```crystal
-class AddUniqueEmailIndex < CQL::Migration(6)
-  def up
-    schema.alter :users do
-      create_index :idx_users_email, [:email], unique: true
-    end
-  end
-
-  def down
-    schema.alter :users do
-      drop_index :idx_users_email
-    end
-  end
-end
-```
-
-## Create a Composite Index
-
-Index multiple columns together:
-
-```crystal
-class AddUserStatusIndex < CQL::Migration(7)
-  def up
-    schema.alter :users do
-      create_index :idx_users_status_created, [:status, :created_at]
-    end
-  end
-
-  def down
-    schema.alter :users do
+      drop_index :idx_users_email          # DROP INDEX IF EXISTS idx_users_email (MySQL: DROP INDEX idx_users_email ON users)
       drop_index :idx_users_status_created
-    end
-  end
-end
-```
-
-## Index on Foreign Keys
-
-Always index foreign key columns:
-
-```crystal
-class AddPostIndexes < CQL::Migration(8)
-  def up
-    schema.alter :posts do
-      create_index :idx_posts_user_id, [:user_id]
-      create_index :idx_posts_category_id, [:category_id]
-    end
-  end
-
-  def down
-    schema.alter :posts do
-      drop_index :idx_posts_user_id
-      drop_index :idx_posts_category_id
-    end
-  end
-end
-```
-
-## Index for Frequently Filtered Columns
-
-```crystal
-class AddFilterIndexes < CQL::Migration(9)
-  def up
-    schema.alter :posts do
-      create_index :idx_posts_published, [:published]
-      create_index :idx_posts_created_at, [:created_at]
-    end
-  end
-
-  def down
-    schema.alter :posts do
-      drop_index :idx_posts_published
-      drop_index :idx_posts_created_at
-    end
-  end
-end
-```
-
-## Index for Soft Deletes
-
-```crystal
-class AddDeletedAtIndex < CQL::Migration(10)
-  def up
-    schema.alter :users do
-      create_index :idx_users_deleted_at, [:deleted_at]
-    end
-  end
-
-  def down
-    schema.alter :users do
       drop_index :idx_users_deleted_at
     end
-  end
-end
-```
 
-## Unique Composite Index
-
-Prevent duplicate combinations:
-
-```crystal
-class AddUniquePostTag < CQL::Migration(11)
-  def up
-    schema.alter :post_tags do
-      create_index :idx_post_tags_unique, [:post_id, :tag_id], unique: true
-    end
-  end
-
-  def down
-    schema.alter :post_tags do
-      drop_index :idx_post_tags_unique
+    schema.alter :posts do
+      drop_index :idx_posts_user_id
+      drop_index :idx_posts_user_published
     end
   end
 end
 ```
+{% endcode %}
 
-## Index Naming Convention
+`create_index` takes an explicit name and emits no `IF NOT EXISTS`, so running it again fails
+(`index idx_users_email already exists` on SQLite). A unique index also rejects duplicate rows:
+`UNIQUE constraint failed: users.email`. The table must be declared on the schema, or `schema.alter` raises
+`CQL::Schema::Error`.
 
-Use consistent naming:
+## Choose What to Index
 
-```
-idx_{table}_{column}          # Simple index
-idx_{table}_{col1}_{col2}     # Composite index
-idx_{table}_{column}_unique   # Unique index (optional suffix)
-```
+| Index | For |
+| :--- | :--- |
+| Foreign key columns (`user_id`) | `joins`, `preload` and `where(user_id: ...)` |
+| Columns in `where` and `order` | filters and sorts on large tables |
+| Unique index | uniqueness rules and `upsert_all(on_conflict: ...)` |
+| Composite `[a, b]` | filters on `a`, or on `a` and `b`; usually not on `b` alone |
 
-## When to Create Indexes
+Every index slows inserts and updates a little, so skip columns that queries never filter on.
 
-Create indexes for:
-- Primary keys (automatic)
-- Foreign keys
-- Columns used in WHERE clauses
-- Columns used in ORDER BY
-- Columns used in JOIN conditions
-- Columns with unique constraints
-
-## When NOT to Create Indexes
-
-Avoid unnecessary indexes on:
-- Small tables (< 1000 rows)
-- Columns with low cardinality (few unique values)
-- Tables with frequent writes (indexes slow down inserts)
-- Columns rarely used in queries
-
-## Verify Index Works
+## Check That a Query Uses the Index
 
 ```crystal
-migrator.up
+puts User.where(email: "john@example.com").query.explain
+# SEARCH users USING INDEX idx_users_email (email=?)
 
-# Index should speed up this query
-User.where(email: "john@example.com").first
+puts User.where(active: true).query.explain
+# SCAN users   (no index on active: every row is read)
 ```
 
-## Related
+## See Also
 
 - [Create a Migration](create-migration.md)
 - [Add Columns](add-columns.md)
 - [Optimize Queries](../performance/optimize-queries.md)
+- [Inspect Queries with to_sql and explain](../querying/explain-and-to-sql.md)
+- [Upsert Records](../data-operations/upsert.md)

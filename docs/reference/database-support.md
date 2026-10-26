@@ -1,111 +1,104 @@
+---
+description: "What each adapter supports and the SQL it generates, from the dialects in src/dialects/."
+---
+
 # Database Support
 
-Which CQL features work on which database. Each row is derived from the dialect classes in `src/dialects/` and the
-query builders; unsupported features either raise `CQL::DialectError` when SQL is generated or are noted below.
+In the tables, "raises" means CQL raises `CQL::DialectError` (or the subclass named) when it generates the SQL.
 
-Dialects: `Expression::SqliteDialect`, `Expression::MySqlDialect`, `Expression::PostgresDialect` and
-`Expression::CockroachDialect` (which inherits PostgreSQL's).
+## Adapters and dialects
 
-Only SQLite runs live in CQL's own specs. The other dialects are checked with generated-SQL specs; the native
-PostgreSQL driver and CockroachDB 24.3 were additionally verified against real servers (see the
-[native PostgreSQL driver guides](../how-to/postgres-native/README.md)). The MySQL geospatial form is unverified against
-a live server.
+| Adapter | Dialect | URL schemes | Driver |
+| :--- | :--- | :--- | :--- |
+| `CQL::Adapter::SQLite` | `Expression::SqliteDialect` | `sqlite3://path`, `sqlite3::memory:` | `sqlite3` shard |
+| `CQL::Adapter::Postgres` | `Expression::PostgresDialect` | `postgres://`, `postgresql://` | native `CQL::Postgres` driver (or `pg` if it registers first) |
+| `CQL::Adapter::MySql` | `Expression::MySqlDialect` | `mysql://` | `mysql` shard |
+| `CQL::Adapter::CockroachDB` | `Expression::CockroachDialect` < `PostgresDialect` | `cockroachdb://` | native driver, as `postgres://` |
 
-## Matrix
-
-Legend: yes, no (raises `CQL::DialectError` unless stated), or a note.
-
-| Feature | SQLite | PostgreSQL | MySQL | CockroachDB |
-| --- | --- | --- | --- | --- |
-| Placeholders | `?` | `$1`, `$2`, ... | `?` | `$1`, `$2`, ... |
-| Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |
-| Upsert (`on_conflict`, `upsert`) | `ON CONFLICT`, SQLite 3.24+ | `ON CONFLICT` | `ON DUPLICATE KEY UPDATE`; the conflict target is ignored, any unique key triggers it | `ON CONFLICT` |
-| `RETURNING` on insert, update, delete (`back`) | no: requesting columns raises `CQL::SQLiteUnsupportedFeatureError` | yes | no, the clause is omitted | yes |
-| `distinct_on` | no | yes | no | yes |
-| Row locking (`lock(:update \| :share, skip_locked:, nowait:)`) | no | yes | yes | yes |
-| `ilike` / `not_ilike` | emulated with `LOWER(...) LIKE LOWER(...)` | native `ILIKE` | emulated with `LOWER()` | native `ILIKE` |
-| `json_eq(path, value)` | yes (`json_extract`) | yes (`#>>`) | yes (`JSON_UNQUOTE(JSON_EXTRACT(...))`) | yes |
-| `json_contains(json)` | no | yes (`@>`) | yes (`JSON_CONTAINS`) | yes |
-| `within_distance(lng, lat, meters)` | no | yes (`ST_DWithin` on geography) | `ST_Distance_Sphere`, MySQL 8.0.13+ | yes (as PostgreSQL) |
-| CTEs (`with`, `with_recursive`) | SQLite 3.8.3+ | yes | MySQL 8.0+ | yes |
-| Window functions (`window`) | SQLite 3.25+ | yes | MySQL 8.0+ | yes |
-| `union`, `union_all` | yes | yes | yes | yes |
-| `intersect`, `except` | yes | yes | MySQL 8.0.31+ | yes |
-| Grouped set-operation operands | derived table (`SELECT * FROM (...)`) | parentheses | parentheses | parentheses |
-| `INNER`, `LEFT`, `RIGHT`, `CROSS` joins | yes | yes | yes | yes |
-| `FULL` join (`full`) | not blocked by CQL; needs a SQLite version that supports it | yes | no | yes |
-| Bare `OFFSET` (no `LIMIT`) | `LIMIT -1 OFFSET n` | `OFFSET n` | `LIMIT 18446744073709551615 OFFSET n` | `OFFSET n` |
-| `explain` | `EXPLAIN QUERY PLAN` | `EXPLAIN` | `EXPLAIN` | `EXPLAIN` |
-| `explain(analyze: true)` | no | yes | MySQL 8.0.18+ | yes |
-| `structure_dump` | returns an empty string | via `pg_dump` | yes | no |
-| `Int32` column type | `INTEGER` | `INTEGER` | `INT` | `INT4` |
-| `JSON::Any` column type | `TEXT` | `JSONB` | `JSON` | `JSONB` |
-
-## Notes by Feature
-
-### Upsert
+| Method | Returns |
+| :--- | :--- |
+| `adapter.dialect` | The shared dialect instance |
+| `adapter.postgres_compatible?` | `true` for PostgreSQL and CockroachDB |
+| `adapter.sql_type(Int64)` | The column type (see [Column types](api/migration-dsl.md#column-types)) |
+| `adapter.driver_uri(uri)` | `cockroachdb://` rewritten to `postgres://`; others unchanged |
+| `query.to_sql(for: CQL::Adapter::Postgres)` | `{sql, params}` for another adapter, without a connection |
 
 ```crystal
-AppDB.insert.into(:users).values(email: "ada@example.com", name: "Ada")
-  .on_conflict(:email).do_update(:name)
-AppDB.insert.into(:users).values(email: "ada@example.com", name: "Ada")
-  .on_conflict(:email).do_nothing
+AppDB.query.from(:users).where(name: "Ada").to_sql(for: CQL::Adapter::Postgres)
+# => {"SELECT users.id, users.name, users.email FROM users WHERE users.name = $1", ["Ada"]}
 ```
 
-Not supported together with `INSERT ... SELECT`. On MySQL the generated `ON DUPLICATE KEY UPDATE` fires for any unique
-key, not only the columns you name.
+Only SQLite runs live in CQL's specs; the other dialects are checked through generated SQL, and the native driver against real PostgreSQL and CockroachDB 24.3 servers.
 
-### Returning
+## Dialect properties
 
-`back(:id, :name)` on `Insert`, `Update` and `Delete` emits `RETURNING` where supported. MySQL drops the clause. On
-SQLite, requesting columns raises `CQL::SQLiteUnsupportedFeatureError` whatever the version, with a workaround (run a
-separate `SELECT`). `Insert#get(as:)`/`get!(as:)` run the insert and read the returned row. `Dialect#supports_returning?`
-tells whether `Model.create!` can read the new row from its INSERT: true on PostgreSQL and CockroachDB, false on SQLite
-and MySQL, which read it back with a `SELECT`. `Dialect#supports_transactional_ddl?` (used by
-`Schema#ddl_transaction`, which `alter`, `build`, `Table#create!`/`drop!`/`truncate!` and the migrator go through) tells
-whether a schema change rolls back with its transaction: true on SQLite and PostgreSQL,
-false on MySQL, which commits DDL implicitly, and CockroachDB, which does not run it atomically in an explicit transaction.
+| Property | SQLite | PostgreSQL | MySQL | CockroachDB |
+| :--- | :--- | :--- | :--- | :--- |
+| `display_name` | `SQLite` | `PostgreSQL` | `MySQL` | `CockroachDB` |
+| Placeholders | `?` | `$1`, `$2`, ... | `?` | `$1`, `$2`, ... |
+| `max_bind_params` | 999 | 32767 | 32767 | 32767 |
+| `supports_returning?` (`create!` reads the row from its INSERT) | `false` | `true` | `false` | `true` |
+| `supports_transactional_ddl?` (`ddl_transaction`, used by `alter`, `build`, `create!`/`drop!`/`truncate!` and the migrator, rolls DDL back) | `true` | `true` | `false` | `false` |
+| `current_timestamp` | `datetime('now')` | `CURRENT_TIMESTAMP` | `NOW(3)` | `CURRENT_TIMESTAMP` |
+| `structure_dump(uri)` | `""` | starts `pg_dump` but returns the pipe's description (`#<IO::FileDescriptor…>`), not the DDL | same, with `mysqldump` | raises |
+| Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |
 
-### DISTINCT ON
+## Queries
 
-PostgreSQL and CockroachDB only. Elsewhere the error suggests `ROW_NUMBER() OVER (PARTITION BY ...)` and keeping row
-number 1.
+| Feature | SQLite | PostgreSQL | MySQL | CockroachDB |
+| :--- | :--- | :--- | :--- | :--- |
+| `on_conflict(:email).do_update(:name)` | `ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name` (3.24+) | same | `ON DUPLICATE KEY UPDATE name = VALUES(name)`; any unique key fires it | same as PostgreSQL |
+| `on_conflict(:email).do_nothing` | `ON CONFLICT (email) DO NOTHING` | same | `ON DUPLICATE KEY UPDATE email = email` | same as PostgreSQL |
+| `back(:id)` on insert, update, delete | raises `SQLiteUnsupportedFeatureError` | `RETURNING users.id` | clause omitted | `RETURNING users.id` |
+| `Insert#get(as:)`, `get!(as:)` | raises | yes | raises | yes |
+| `distinct_on(:email)` | raises | `DISTINCT ON (users.email)` | raises | `DISTINCT ON (users.email)` |
+| `lock(:update)`, `lock(:share, skip_locked: true)`, `lock(:update, nowait: true)` | raises | `FOR UPDATE`, `FOR SHARE SKIP LOCKED`, `FOR UPDATE NOWAIT` | same | same |
+| `ilike` / `not_ilike` | `LOWER(col) LIKE LOWER(?)` | `ILIKE` / `NOT ILIKE` | `LOWER(col) LIKE LOWER(?)` | `ILIKE` / `NOT ILIKE` |
+| `json_eq(["a", "b"], v)` | `CAST(json_extract(col, ?) AS TEXT) = ?`, path `$.a.b`; booleans as `1` / `0` | `col #>> $1::text[] = $2`, path `{a,b}` | `JSON_UNQUOTE(JSON_EXTRACT(col, ?)) = ?`, path `$.a.b` | as PostgreSQL |
+| `json_contains(value)` | raises | `col @> $1::jsonb` | `JSON_CONTAINS(col, ?)` | as PostgreSQL |
+| `within_distance(lng, lat, meters)` | raises | `ST_DWithin(col::geography, ...)` | `ST_Distance_Sphere(col, ...) <= ?` (8.0.13+, SRID 4326, unverified live) | as PostgreSQL |
+| `with`, `with_recursive` (CTEs) | 3.8.3+ | yes | 8.0+ | yes |
+| `window(...)` | 3.25+ | yes | 8.0+ | yes |
+| `union`, `union_all` | yes | yes | yes | yes |
+| `intersect`, `except` | yes | yes | 8.0.31+ | yes |
+| Set-operation operand with its own `limit` / `order` | `SELECT * FROM (...)` | `(...)` | `(...)` | `(...)` |
+| `inner`, `left`, `right`, `cross` joins | yes | yes | yes | yes |
+| `full(...)` join | emitted; needs SQLite 3.39+ | yes | raises | yes |
+| `offset(n)` without `limit` | `LIMIT -1 OFFSET ?` | `OFFSET $1` | `LIMIT 18446744073709551615 OFFSET ?` | `OFFSET $1` |
+| `explain` | `EXPLAIN QUERY PLAN` | `EXPLAIN` | `EXPLAIN` | `EXPLAIN` |
+| `explain(analyze: true)` | raises | `EXPLAIN ANALYZE` | `EXPLAIN ANALYZE` (8.0.18+) | `EXPLAIN ANALYZE` |
 
-### Row Locking
+CTEs and window functions are on `CQL::Query` (`AppDB.query`), not on `QueryBuilder`. On MySQL, quote aliases such as `rank` or `row_number` (`quote_identifiers: true`). `lock` raises `ArgumentError` for both `skip_locked:` and `nowait:`.
 
-`query.lock(:update)` or `query.lock(:share, skip_locked: true)`; `skip_locked:` and `nowait:` are mutually exclusive
-(`ArgumentError`). SQLite raises `CQL::DialectError` ("SQLite serializes writers; use a transaction instead").
+## Schema changes
 
-### JSON and Geospatial Predicates
+| Feature | SQLite | PostgreSQL | MySQL | CockroachDB |
+| :--- | :--- | :--- | :--- | :--- |
+| `create!` | `CREATE TABLE IF NOT EXISTS` | same | same | same |
+| Declared indexes | `CREATE INDEX IF NOT EXISTS` | same | `CREATE INDEX` | same as PostgreSQL |
+| `drop!` | `DROP TABLE IF EXISTS` | same | same | same |
+| `truncate!` | `DELETE FROM` | `TRUNCATE TABLE` | `TRUNCATE TABLE` | `TRUNCATE TABLE` |
+| Auto-increment key | `INTEGER PRIMARY KEY AUTOINCREMENT` | `GENERATED ALWAYS AS IDENTITY` | `AUTO_INCREMENT` | `GENERATED ALWAYS AS IDENTITY` |
+| `Bool` default | `1` / `0` | `TRUE` / `FALSE` | `TRUE` / `FALSE` | `TRUE` / `FALSE` |
+| `check_constraint` | yes | yes | raises `MySqlUnsupportedFeatureError` | yes |
+| Unnamed `foreign_key` in a table | unnamed | unnamed | `fk_<t>_<columns>` | unnamed |
+| `add_column` | `ADD COLUMN` | `ADD COLUMN` | `ADD COLUMN` | `ADD COLUMN` |
+| `drop_column` | `DROP COLUMN` (3.35+) | yes | yes | yes |
+| `rename_column` | `RENAME COLUMN` | `RENAME COLUMN` | `CHANGE old new <type>` | `RENAME COLUMN` |
+| `change_column` | raises `SQLiteUnsupportedFeatureError` | `ALTER COLUMN ... TYPE` | `MODIFY COLUMN` | `ALTER COLUMN ... TYPE` |
+| `foreign_key` in `schema.alter` | raises `DB::Error` | `ADD CONSTRAINT` | `ADD CONSTRAINT` | `ADD CONSTRAINT` |
+| `drop_foreign_key` | raises `SQLiteUnsupportedFeatureError` | `DROP CONSTRAINT` | `DROP FOREIGN KEY` | `DROP CONSTRAINT` |
+| `drop_index` | `DROP INDEX IF EXISTS` | `DROP INDEX IF EXISTS` | `DROP INDEX ... ON <t>` | `DROP INDEX IF EXISTS` |
+| `rename_table` | `ALTER TABLE ... RENAME TO` | same | `RENAME TABLE ... TO` | same as PostgreSQL |
+| Schema change inside an open transaction | SAVEPOINT | SAVEPOINT | raises | raises |
+| Failed migration run | rolled back | rolled back | earlier statements stay | earlier statements stay |
 
-The JSON path is always bound as a parameter. On PostgreSQL and CockroachDB it is a `text[]` literal; on MySQL and
-SQLite a `$.a.b[0]` path. On SQLite, JSON booleans compare as `1` and `0`. `within_distance` expects a geography
-column on PostgreSQL and CockroachDB, and an SRID 4326 column on MySQL.
-
-### CTEs, Window Functions and Set Operations
-
-CTEs and window functions are available on `CQL::Query` (not on `QueryBuilder` or models yet). On MySQL, avoid window
-function names such as `rank` and `row_number` as aliases unless `quote_identifiers` is on. Ordering a combined
-set-operation result is not supported yet.
-
-### Joins
-
-`full(:t) { |j| ... }` on MySQL raises with the workaround of combining a `LEFT JOIN` and a `RIGHT JOIN` with `UNION`.
-
-## Which Adapter Maps to Which Dialect
-
-| Adapter | Dialect | URL schemes |
-| --- | --- | --- |
-| `CQL::Adapter::SQLite` | `Expression::SqliteDialect` | `sqlite3://` |
-| `CQL::Adapter::Postgres` | `Expression::PostgresDialect` | `postgres://`, `postgresql://` |
-| `CQL::Adapter::MySql` | `Expression::MySqlDialect` | `mysql://` |
-| `CQL::Adapter::CockroachDB` | `Expression::CockroachDialect` | `cockroachdb://` |
-
-`adapter.postgres_compatible?` is true for PostgreSQL and CockroachDB. Render SQL for another dialect without a
-connection with `query.to_sql(for: CQL::Adapter::Postgres)`.
+See the [Migration DSL](api/migration-dsl.md) for the full statements.
 
 ## See Also
 
 - [Configure Database Connection](../how-to/configuration/database-connection.md)
 - [Use CockroachDB](../how-to/configuration/cockroachdb.md)
 - [Native PostgreSQL driver guides](../how-to/postgres-native/README.md)
+- [Migration DSL](api/migration-dsl.md)
+- [Error Codes](error-codes.md)

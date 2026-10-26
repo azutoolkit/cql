@@ -112,9 +112,12 @@ module CQL::Performance
     private SUB_BUCKETS             = 1 << SUB_BUCKET_BITS
     private RANGE_BITS              = 26
     private RANGE                   = (1_i64 << RANGE_BITS).microseconds
-    private OVERFLOW_INDEX          = (RANGE_BITS - SUB_BUCKET_BITS + 1) * SUB_BUCKETS
-    private BUCKET_COUNT            = OVERFLOW_INDEX + 1
     private MICROSECONDS_PER_SECOND = 1_000_000_i64
+    private OVERFLOW_INDEX          = (RANGE_BITS - SUB_BUCKET_BITS + 1) * SUB_BUCKETS
+    # OVERFLOW_INDEX + 1 written out: Crystal 1.19 cannot size a StaticArray with a constant whose value names another
+    # constant ("undefined constant"; newer compilers can). The 2-minute sample in spec/performance/utilities_spec.cr
+    # lands in OVERFLOW_INDEX, so a count that falls behind it fails there.
+    private BUCKET_COUNT = 101
 
     @counts = StaticArray(Int64, BUCKET_COUNT).new(0_i64)
 

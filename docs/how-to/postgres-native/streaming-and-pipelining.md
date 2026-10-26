@@ -1,126 +1,127 @@
-# Stream Large Results and Pipeline Statements
+---
+description: "Stream big results a batch at a time instead of holding them in memory, and pipeline many small statements into one network round trip."
+---
 
-Ordinary queries (`all`, `to_a`, `exec_query`) read a statement's whole result into memory. Use streaming when the
-result is big, and pipelining when you have many small statements and the network round trip dominates.
+# Stream Large Results and Pipeline Statements
 
 ## Stream Rows
 
-`engine.stream` reads rows through a portal, `fetch_size` at a time, and yields a `DB::ResultSet`:
-
 ```crystal
-engine.stream(User.query.where(active: true), fetch_size: 500) do |rows|
-  rows.each { puts rows.read(String) }
+# A CQL::Query, read through a portal 500 rows per fetch; rows is a DB::ResultSet
+engine.stream(AppDB.query.from(:users).select(:id, :name).where(active: true), fetch_size: 500) do |rows|
+  rows.each { puts "#{rows.read(Int64)} #{rows.read(String)}" }
 end
-```
 
-It also takes SQL text with arguments:
+# A model query: pass its CQL::Query with .query
+engine.stream(User.query.where(active: true).query) do |rows|
+  rows.each { puts rows.read(Int64) } # the model's columns, id first; fetch_size defaults to 1000
+end
 
-```crystal
-engine.stream("SELECT id FROM events WHERE kind = $1", ["click".as(DB::Any)], fetch_size: 1000) do |rows|
+# SQL text with arguments
+engine.stream("SELECT id FROM users WHERE name = $1", ["Ada".as(DB::Any)], fetch_size: 1000) do |rows|
   rows.each { puts rows.read(Int64) }
 end
 ```
 
-The default `fetch_size` is 1000.
+{% hint style="warning" %}
+`engine.stream(User.query.where(active: true))` does not compile: **`stream`** and **`pipeline`** destructure `to_sql` into SQL and parameters, and `QueryBuilder#to_sql` returns only the SQL string. Pass `.query`.
+{% endhint %}
 
 ### Rules
 
-- The connection is busy for the whole block. Do not run other statements on it inside the block; `engine.stream`
-  takes its own pooled connection, `tx.stream` uses the transaction's.
-- Stopping early is fine. The portal is closed when the block ends, however early, and the connection goes back to the
-  pool in sync, inside a transaction too.
-- A stream read after its block raises `CQL::Postgres::StreamClosed`.
-- A stream must be read by the fiber that opened it, otherwise `CQL::Postgres::WrongFiber` is raised.
-- `COPY` cannot be streamed.
-- A value that cannot be decoded raises after its fetch, with the session kept in sync.
+```crystal
+engine.stream(AppDB.query.from(:users).select(:id), fetch_size: 100) do |rows|
+  rows.each do
+    break if rows.read(Int64) >= 1000 # stopping early closes the portal; the connection goes back in sync
+  end
+end
+# engine.stream holds its own pooled connection until the block ends. tx.stream uses the transaction's:
+# a statement on tx inside the block raises Sync::Error::Deadlock (Crystal 1.20+).
+# Read rows inside the block, on the fiber that opened the stream. Kept past its block, a stream
+# yields only rows already buffered, then raises CQL::Postgres::StreamClosed; another fiber gets WrongFiber.
+# COPY cannot be streamed and fetch_size must be positive (ArgumentError for both).
+# A value that cannot be decoded raises after its fetch, with the session kept in sync.
+```
 
-### Streaming in a Transaction
+### Stream in a Transaction
 
 ```crystal
 engine.transaction do |tx|
-  tx.stream(Order.query.where(status: "open"), fetch_size: 200) do |rows|
-    rows.each { process(rows.read(Int64)) }
+  tx.stream(AppDB.query.from(:posts).select(:id).where(user_id: 1_i64), fetch_size: 200) do |rows|
+    rows.each { puts rows.read(Int64) }
   end
 end
 ```
 
 ### Timeouts and Cancel
 
-`timeout:` bounds the whole stream. Once it passes, the next fetch raises `CQL::Postgres::QueryTimeout` and the session
-is dropped unless the server confirmed a cancel.
-
 ```crystal
-engine.stream(sql, [] of DB::Any, fetch_size: 500, timeout: 30.seconds) { |rows| ... }
+engine.stream("SELECT id FROM users", [] of DB::Any, fetch_size: 500, timeout: 30.seconds) do |rows|
+  rows.each { rows.read(Int64) }
+end
+# timeout bounds the whole stream, block time included: the next fetch after it raises
+# CQL::Postgres::QueryTimeout, and the session is dropped unless the server confirmed a cancel.
+# connection.session.cancel from another fiber ends a stream with CQL::Postgres::QueryCanceled,
+# during a fetch or at the next one (rows already buffered are delivered first).
 ```
-
-Call `connection.session.cancel` from another fiber to end a stream. If the server is busy fetching, the fetch raises
-`CQL::Postgres::QueryCanceled`; between fetches the next fetch raises it (rows already buffered are still delivered
-first).
 
 ### Lower-Level Streams
 
-`Session#stream` yields a `CQL::Postgres::RowStream`, an `Iterator` with `peak_buffered` (the most rows ever held at
-once, never more than `fetch_size`) and `rows_read`:
-
 ```crystal
 engine.with_connection do |connection|
-  connection.session.stream("SELECT id FROM events") do |rows|
-    rows.each { |row| ... }
-    puts rows.peak_buffered
+  connection.session.stream("SELECT id FROM users", fetch_size: 100) do |rows|
+    rows.each { |row| row.first } # CQL::Postgres::RowStream: an Iterator of Array(Types::Value)
+    rows.rows_read                # => 3
+    rows.peak_buffered            # => 3 (most rows held at once, never above fetch_size)
   end
 end
+# connection.stream(sql, args, fetch_size: 100) is the DB::ResultSet flavour engine.stream uses;
+# without arguments pass [] of DB::Any, since connection.stream(sql) does not compile.
 ```
 
-`Connection#stream` is the `DB::ResultSet` flavour used by `engine.stream`.
-
 ## Pipeline Statements
-
-`engine.pipeline` sends many statements in one network round trip on one connection. Each statement still reaches
-telemetry (not the performance monitor: it passes `track: false`), and failures stay isolated.
 
 ```crystal
 results = engine.pipeline([
   AppDB.query.from(:users).select(:name),
-  AppDB.query.from(:orders).select(:id),
-])
+  AppDB.query.from(:posts).select(:id),
+]) # one round trip on one connection (two for statements not prepared yet)
 
 names = results[0].as(CQL::Postgres::PipelineResult).all(as: String)
-ids   = results[1].as(CQL::Postgres::PipelineResult).all(as: Int64)
+ids = results[1].as(CQL::Postgres::PipelineResult).all(as: Int64)
+
+# {sql, params} tuples work too
+statements = (1..200).map { |n| {"SELECT $1::int + 1", [n.as(DB::Any)]} }
+sums = engine.pipeline(statements)
 ```
 
-It also takes `{sql, params}` tuples:
-
-```crystal
-statements = (1..200).map { |n| {"SELECT $1::int + 1", [n.to_i32.as(DB::Any)]} }
-results = engine.pipeline(statements)
-```
+Each statement reaches telemetry; the first one's duration covers the round trip. `pipeline` passes `track: false`, so the [performance monitor](../observability/query-profiler.md) does not see them. Large batches go out in chunks that fit the socket buffers; `COPY` cannot be pipelined.
 
 ### Handle Failures
 
-Each element is either a `PipelineResult` or a `ServerError`. One failing statement does not affect the others:
-
 ```crystal
+results = engine.pipeline([{"SELECT nope FROM users", [] of DB::Any}, {"SELECT 1::int4", [] of DB::Any}])
 results.each do |result|
   case result
-  in CQL::Postgres::PipelineResult then puts result.all(as: Int32).first
-  in CQL::Postgres::ServerError    then puts "failed: #{result.sqlstate}"
+  in CQL::Postgres::PipelineResult then puts result.all(as: Int32).first # => 1
+  in CQL::Postgres::ServerError    then puts result.sqlstate             # => 42703
   end
 end
+# One failing statement leaves the others unaffected.
+# PipelineResult: all(as: Class), all(as: {Int32, String}), get(as:), get!(as:), rows_affected
 ```
-
-`PipelineResult` offers `all(as:)` (a class or a tuple of types such as `{Int32, String}`), `get`, `get!` and
-`rows_affected`.
 
 ## Troubleshooting
 
-**The pipeline raises behind PgBouncer**: pipelining needs the statement cache. With `statement_cache_size=0` it does
-not work. See [poolers](tls-and-poolers.md#poolers).
+**`ArgumentError: pipelining needs the statement cache`**: the URL has `statement_cache_size=0`, which a transaction-mode pooler may need; see [poolers](tls-and-poolers.md#poolers).
 
-**Streaming hangs behind pgcat or pgpool-II**: in the verified setups, streaming through a portal hung on both. See
-the compatibility notes in [TLS, poolers and timeouts](tls-and-poolers.md#poolers).
+**Streaming hangs behind pgcat or pgpool-II**: streaming through a portal hung on both in the project's [measured compatibility](https://github.com/azutoolkit/cql#measured-compatibility) runs.
 
-**A stream seems slower than `to_a`**: it makes one round trip per `fetch_size` rows. Raise `fetch_size` to trade memory
-for speed. In the README's measurement (200,000 rows, two columns, PostgreSQL 16) streaming held 1000 rows at once
-instead of all 200,000, and took 125 ms against 82 ms. One machine, one run.
+**A stream is slower than `to_a`**: it costs one round trip per `fetch_size` rows. In the README's [measurement](https://github.com/azutoolkit/cql#measured-compatibility) (200,000 two-column rows, PostgreSQL 16, one run), streaming 1000 rows per fetch held 1000 rows instead of 200,000 and took 125 ms against 82 ms. Raise `fetch_size` to trade memory for speed.
 
-**`StreamClosed`**: you kept a `rows` object past its block. Read everything you need inside the block.
+## See Also
+
+- [Use AsyncEngine and Its Connection Pool](async-engine.md)
+- [Bulk Load with COPY and Send Binary Parameters](copy-and-binary-params.md)
+- [Configure TLS, Poolers, Timeouts and Transactions](tls-and-poolers.md)
+- [Optimizing Queries in CQL](../performance/optimize-queries.md)

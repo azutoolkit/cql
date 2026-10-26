@@ -1,31 +1,39 @@
+---
+description: "Configure CQL once, build the schema from that configuration, point models at the schema, then build the migrator."
+---
+
 # Configure CQL
 
-This guide shows the lifecycle CQL expects: configure once, build the schema from that configuration, point models at the schema, then build the migrator. `CQL.configure` is the entrypoint; `Schema.define` is the explicit low-level alternative (last section).
-
-```
+```text
 CQL.configure { }  ->  CQL.build_schema(:name) { }  ->  db_context models  ->  CQL.build_migrator(schema)
 ```
 
-Every setting, default and error message is in the [configuration reference](../../reference/configuration.md).
+Every setting, default and validation message is in the [configuration reference](../../reference/configuration.md).
 
 ## 1. Configure
 
-`CQL.configure` yields the shared `CQL.config`, then validates it when the block ends. The config starts from the defaults of the current `CRYSTAL_ENV` (`development` when unset), and your assignments win over them.
-
+{% code title="config/cql.cr" %}
 ```crystal
 CQL.configure do |c|
-  c.db = ENV["DATABASE_URL"]
+  c.db = ENV["DATABASE_URL"] # CQL never reads DATABASE_URL itself
   c.pool_size = 20
 end
-```
 
-`DATABASE_URL` is not read automatically, so assign it as shown. A bad value raises `ArgumentError` at the end of the block (for example `pool_size must be positive`), so a typo fails at boot rather than at the first query.
+# The block starts from the CRYSTAL_ENV defaults (development when unset); assignments win.
+# The config is validated when the block ends, so a typo fails at boot:
+#   c.pool_size = 0   -> ArgumentError: pool_size must be positive
+#   c.db = "redis://" -> ArgumentError: Unsupported database URL: redis://
+```
+{% endcode %}
+
+To add a check of your own, subclass `CQL::Configure::ConfigValidator` and register it with `CQL.config.add_validator`, as the [configuration reference](../../reference/configuration.md#access) shows.
 
 ## 2. Build the schema and keep it in a constant
 
-`CQL.build_schema` opens the connection from `config.full_db_url` (pool, SSL, database-specific settings and `adapter_options` become URL parameters; parameters already in your URL win), runs the table DSL against the new schema, and sets up caching and SQL logging when the config asks for them. Assign the result to a constant so models can reference it at compile time:
-
 ```crystal
+# Opens config.full_db_url: db plus pool, SSL, database-specific and adapter_options
+# parameters (parameters already in db win). Then sets up the cache and SQL logging
+# when the config enables them.
 AppDB = CQL.build_schema(:app) do
   table :users do
     primary :id, Int64
@@ -34,6 +42,8 @@ AppDB = CQL.build_schema(:app) do
   end
 end
 ```
+
+The first model's `db_context` builds the constant, and `CQL.build_schema` reads `CQL.config` at that moment, so `CQL.configure` must load before any model.
 
 ## 3. Point models at the schema
 
@@ -71,33 +81,40 @@ migrator.up
 
 ### `build_migrator` versus `schema.migrator`
 
-The two do not agree on where migrations are tracked or where the schema file goes, so pick one and use it everywhere.
+They track migrations in different tables and write the schema file to different places, so pick one and use it everywhere.
 
 | | `CQL.build_migrator(schema)` | `schema.migrator` |
 |---|---|---|
 | Settings from | `CQL.config` | `CQL::MigratorConfig` defaults |
 | Tracking table | `config.migrations_table` (`:schema_migrations`; `:test_migrations` in test) | `:cql_schema_migrations` |
-| Schema file | `config.schema_dir` + `config.schema_file` (default `src/schemas/app_schema.cr`; `test_schema.cr` in test) | `src/schemas/app_schema.cr` |
-| `auto_sync` | `config.auto_sync` | `true` |
+| Schema file | `config.schema_dir` + `config.schema_file` (`src/schemas/app_schema.cr`; `test_schema.cr` in test) | `src/schemas/app_schema.cr` |
+| `auto_sync` | `config.auto_sync` (off in production) | `true` |
 | `bootstrap` / `verify_schema` | honoured | not available |
 
-Consequences:
+```crystal
+CQL.build_migrator(AppDB)  # reads CQL.config
+AppDB.migrator             # ignores CQL.config; a migration applied here is invisible to build_migrator
 
-- Migrations applied through `schema.migrator` are recorded in `cql_schema_migrations`; `build_migrator` looks in `schema_migrations`. Mixing them leaves each migrator blind to what the other applied.
-- `schema.migrator` writes `src/schemas/app_schema.cr` the moment it is constructed, because its `auto_sync` is `true`. `build_migrator` writes to the path you configured (and not at all in production, where `auto_sync` is `false`).
-- With `bootstrap = true`, `build_migrator` dumps the schema file from the live database. With `verify_schema = true` (the default in development and production) it compares the file to the database, logs `Schema file is out of sync with database` on a mismatch, and rewrites the file when `auto_sync` is on.
+# Only the migrator differs; skips the bootstrap / verify_schema step
+CQL.build_migrator(AppDB, CQL.migrator_config(migrations_table: :my_migrations))
 
-To change only the migrator, pass your own config: `CQL.build_migrator(AppDB, CQL.migrator_config(migrations_table: :my_migrations))`. That skips bootstrap and verification.
+# With auto_sync on, a migrator writes the schema file when constructed and after each up/down.
+# bootstrap = true dumps the file from the live database. verify_schema = true (development and
+# production) compares it and logs "Schema file is out of sync with database"; with auto_sync on,
+# the file was already rewritten when the migrator was built, so the comparison always passes.
+```
 
-## Complete example
+<details>
+<summary>Complete example: one file for all three environments</summary>
 
-Save as one file and run it with `CRYSTAL_ENV=development`, `test` or `production` (run `shards install` first for `sqlite3`). It creates `db/` next to where you start it.
+Save as one file and run it with `CRYSTAL_ENV=development`, `test` or `production`. It creates `db/` in the working directory.
 
+{% code title="env_demo.cr" %}
 ```crystal
 require "cql"
 require "sqlite3"
 
-# ---- config/cql.cr: runs once, before anything uses CQL.config ----
+# ---- config/cql.cr: loads before anything else uses CQL.config ----
 Dir.mkdir_p("db")
 
 CQL.configure do |c|
@@ -150,43 +167,39 @@ User.new("Ada").save!
 
 puts "env=#{CQL.config.env} users=#{User.count}"
 puts "table=#{migrator.config.migration_table_name} file=#{migrator.config.schema_file_path}"
+# CRYSTAL_ENV=development -> env=development users=1 / table=schema_migrations file=db/app_schema.cr
+# CRYSTAL_ENV=test        -> env=test users=1        / table=test_migrations file=db/test_schema.cr
+# CRYSTAL_ENV=production  -> env=production users=1  / table=schema_migrations file=db/app_schema.cr
+#                            (file not written: auto_sync is off in production, so commit it)
 ```
+{% endcode %}
 
-Output per environment (the counts grow with each run because the database is a file):
+</details>
 
-| `CRYSTAL_ENV` | Database | Migration table | Schema file |
-|---------------|----------|-----------------|-------------|
-| `development` | `db/development.db` | `schema_migrations` | `db/app_schema.cr` |
-| `test` | `db/test.db` | `test_migrations` | `db/test_schema.cr` |
-| `production` | `db/production.db` or `DATABASE_URL` | `schema_migrations` | `db/app_schema.cr` (not written; `auto_sync` is off, so commit it) |
+{% hint style="warning" %}
+The test environment's default `db` is `sqlite3://:memory:`, which `CQL.build_schema` rejects with `URI::Error: Invalid URI: bad port at character 11`. Assign a file URL, as the complete example does.
+{% endhint %}
 
-What differs between them comes from the environment defaults, not from your code: development logs SQL and keeps the schema file in sync, production uses a pool of 25, `ssl.mode = "require"` and verifies the schema file, and test uses a pool of 1 (see the notes below).
+{% hint style="warning" %}
+Test pools default to one connection, and the schema dump after `migrator.up` needs two: `CQL::Migrator::Error: Schema update failed: Could not check out a connection in 10.0 seconds`. Set `c.pool_size = 2`, or pass `CQL::MigratorConfig.new(auto_sync: false)`.
+{% endhint %}
 
-Notes on the test branch:
-
-- The test environment's default `db` is `sqlite3://:memory:`, which cannot be parsed by `CQL.build_schema`. Assign a file URL as above.
-- The test pool defaults to 1. `Migrator#up` runs on it, but with `auto_sync` on the schema file dump that follows needs a second connection and raises `CQL::Migrator::Error` ("Schema update failed: Could not check out a connection"). `c.pool_size = 2` or `CQL::MigratorConfig.new(auto_sync: false)` fixes it.
-
-## Read config in an initializer
-
-Everything after `CQL.configure` reads the same object:
+## Read the config anywhere
 
 ```crystal
 CQL.config.env           # => "development"
 CQL.config.adapter       # => CQL::Adapter::SQLite
-CQL.config.full_db_url   # => "sqlite3://./db/development.db?initial_pool_size=2&..."
-CQL.config.sql_logging?  # => true when CRYSTAL_ENV=development unless CQL_NO_SQL_LOG is set; false when CRYSTAL_ENV is unset
+CQL.config.full_db_url   # => "sqlite3://./db/development.db?initial_pool_size=2&max_pool_size=5&..."
+CQL.config.sql_logging?  # => true with CRYSTAL_ENV=development (unless CQL_NO_SQL_LOG is set);
+                         #    false when CRYSTAL_ENV is unset
 ```
 
-Call `CQL.configure` again at any time to adjust the same config; each call re-validates. Do it before `CQL.build_schema`, because the schema captures `full_db_url` when it is built.
+Call `CQL.configure` again to change the same config; each call re-validates. Do it before `CQL.build_schema`, which captures `full_db_url`.
 
-## Per-environment overrides
-
-The environment defaults are applied once, when the config is first created from `CRYSTAL_ENV`. Branch on `c.env` for what you want to differ, as in the example. Do not set `c.env = "production"` to switch environments: it changes the name only and does not re-apply the production defaults. Set `CRYSTAL_ENV` instead.
-
-Unknown names (such as `staging`) get the development defaults, so state what you need explicitly:
+## Override one environment
 
 ```crystal
+# Unknown names such as staging get the development defaults, so state what differs
 CQL.configure do |c|
   if c.env == "staging"
     c.db = ENV["DATABASE_URL"]
@@ -197,14 +210,16 @@ CQL.configure do |c|
 end
 ```
 
+Assigning `c.env` does not apply another environment's defaults; see [Switch environments with `CRYSTAL_ENV`](environments.md#switch-environments-with-crystal_env-not-configenv).
+
 ## Reset configuration in specs
 
-`CQL.reset_config!` drops the shared config so the next `CQL.config` is built fresh from `CRYSTAL_ENV`. Reset around each example so one example's settings (and validators) do not leak into the next:
-
+{% code title="spec/cql_config_spec.cr" %}
 ```crystal
 require "spec"
 require "cql"
 
+# A failed CQL.configure keeps the bad value, so reset around every example
 Spec.before_each { CQL.reset_config! }
 Spec.after_each { CQL.reset_config! }
 
@@ -220,48 +235,17 @@ describe "configuration" do
     CQL.config.pool.size.should eq(7)
   end
 end
+
+# To test another environment: ENV["CRYSTAL_ENV"] = "test", then CQL.reset_config!
+# A schema built before the reset keeps its own connection.
 ```
+{% endcode %}
 
-A schema already built stays open after a reset, since it holds its own connection. To test a different `CRYSTAL_ENV`, set `ENV["CRYSTAL_ENV"]` and then call `CQL.reset_config!`.
+## Use `Schema.define` directly
 
-## Add your own validation
+`CQL::Schema.define` takes the adapter and URL itself and ignores `CQL.config`; see [Use `Schema.define` for several databases](database-connection.md#use-schemadefine-for-several-databases).
 
-```crystal
-class MaxPoolValidator < CQL::Configure::ConfigValidator
-  def validate!(config : CQL::Configure::Config) : Nil
-    raise ArgumentError.new("pool_size must be at most 50") if config.pool_size > 50
-  end
-end
-
-CQL.config.add_validator(MaxPoolValidator.new)
-```
-
-It runs at the end of every later `CQL.configure` block.
-
-## When to use `Schema.define` directly
-
-`CQL::Schema.define` takes the adapter and URL as arguments and ignores `CQL.config`. Use it when you want that explicitness:
-
-- a second database that needs its own URL, alongside the configured one
-- a one-off script or spec fixture that should not touch the shared config
-- a URL that you want to pass exactly as written, with no pool, SSL or database-specific parameters added
-
-```crystal
-ReportsDB = CQL::Schema.define(
-  :reports,
-  adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://./db/reports.db"
-) do
-  table :events do
-    primary :id, Int64
-    text :name
-  end
-end
-```
-
-Use `ReportsDB.migrator` (or a `MigratorConfig` you build yourself) for it, since `CQL.build_migrator` applies the shared config's table and schema file. See [Configure Database Connection](database-connection.md) for connection strings and [Configure Multiple Environments](environments.md) for the per-environment defaults.
-
-## Related
+## See Also
 
 - [Configuration reference](../../reference/configuration.md)
 - [Configure Database Connection](database-connection.md)

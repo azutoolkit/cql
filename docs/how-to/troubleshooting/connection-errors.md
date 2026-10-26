@@ -1,204 +1,160 @@
+---
+description: "Find the connection error CQL printed, then apply its fix."
+---
+
 # Fix Connection Errors
 
-This guide helps you diagnose and fix database connection errors.
-
-## How Errors Surface
-
-With the native PostgreSQL driver (the default for `postgres://` and `postgresql://` URLs), failures are raised as `CQL::Postgres` errors, all subclasses of `CQL::Error`; server errors are `CQL::Postgres::ServerError`, which carries `sqlstate` and a message such as `FATAL: password authentication failed for user "myuser" (SQLSTATE 28P01)`. Messages for most SQLSTATE classes use a fixed title instead of the server's wording, because the server's text can quote bound values. Connect failures at pool level are reported by crystal-db as `DB::ConnectionRefused` after `retry_attempts`. The native driver is described in the [native PostgreSQL driver guide](../postgres-native/README.md); CockroachDB URLs (`cockroachdb://`) are covered in [CockroachDB](../configuration/cockroachdb.md).
-
-| Exception | Meaning |
-|-----------|---------|
-| `DB::ConnectionRefused` | TCP/TLS failure while opening a connection (retried by the pool) |
-| `CQL::Postgres::AuthenticationError` | Client could not finish authentication (no password configured, unsupported method) |
-| `CQL::Postgres::TLSRefused` | Server refused or failed TLS while `sslmode` requires it |
-| `CQL::Postgres::ConnectionLost` | Socket failed or was already closed |
-| `CQL::Postgres::PoolTimeout` | No pooled connection became free in `checkout_timeout` (native `AsyncEngine` pool) |
-| `DB::PoolTimeout` | Same, for `CQL::Schema`'s crystal-db pool |
-| `CQL::Schema::InvalidURIError` | Malformed or unsupported URI, raised by `Schema.define` |
-
-## Common Error: Connection Refused
-
-**Error:**
-```
-Connection refused (localhost:5432)
-```
-
-**Causes:**
-- Database server not running
-- Wrong host or port
-- Firewall blocking connection
-
-**Solutions:**
-
-1. Check if database is running:
-```shell
-# PostgreSQL
-pg_isready -h localhost -p 5432
-
-# MySQL
-mysqladmin -h localhost -u root ping
-```
-
-2. Start the database:
-```shell
-# PostgreSQL (macOS with Homebrew)
-brew services start postgresql
-
-# PostgreSQL (Linux)
-sudo systemctl start postgresql
-
-# MySQL
-sudo systemctl start mysql
-```
-
-3. Verify connection string:
-```crystal
-# Check your URL format
-DATABASE_URL = "postgres://localhost:5432/myapp"  # Port is correct?
-```
-
-## Common Error: Authentication Failed
-
-**Error:**
-```
-password authentication failed for user "myuser"
-```
-
-**Solutions:**
-
-1. Verify credentials:
-```crystal
-# Check username and password
-DATABASE_URL = "postgres://username:password@localhost/myapp"
-```
-
-2. Reset password (PostgreSQL):
-```shell
-psql -U postgres
-ALTER USER myuser WITH PASSWORD 'newpassword';
-```
-
-3. Check pg_hba.conf for authentication method
-
-## Common Error: Database Does Not Exist
-
-**Error:**
-```
-database "myapp_development" does not exist
-```
-
-**Solutions:**
-
-1. Create the database:
-```shell
-# PostgreSQL
-createdb myapp_development
-
-# Or in psql
-psql -U postgres -c "CREATE DATABASE myapp_development"
-```
-
-2. For SQLite, ensure directory exists:
-```crystal
-Dir.mkdir_p("./db") unless Dir.exists?("./db")
-```
-
-## Common Error: Too Many Connections
-
-**Error:**
-```
-too many connections for role "myuser"
-```
-
-**Solutions:**
-
-1. Close unused connections
-2. Increase connection limit:
-```sql
-ALTER ROLE myuser CONNECTION LIMIT 100;
-```
-
-3. Use connection pooling and cap it below the server limit (`max_pool_size`, see [Set Up Connection Pooling](../configuration/connection-pooling.md))
-
-## Common Error: SSL Required
-
-**Error:**
-```
-SSL connection is required
-```
-
-**Solutions:**
-
-Add SSL mode to connection string:
-```crystal
-DATABASE_URL = "postgres://user:pass@host/db?sslmode=require"
-```
-
-The native driver supports `disable`, `prefer`, `require` and `verify-full`; other values raise `ArgumentError`. See [Enable SSL Connections](../configuration/ssl.md).
-
-## Common Error: Unsupported URL Option
-
-**Error:**
-```
-ArgumentError: the sslcert option is not supported by this driver
-```
-
-The native driver rejects libpq-only options (`sslcert`, `sslkey`, `target_session_attrs`, ...) instead of ignoring them, and `user`, `database`, `password` and similar cannot be set through the query string. Put credentials in the URL's userinfo.
-
-## Debugging Connection Issues
+## Know where errors come from
 
 ```crystal
 begin
-  MyDB.exec_query(&.scalar("SELECT 1"))
-  puts "Connection successful"
-rescue ex
-  puts "Connection failed"
-  puts "Error type: #{ex.class}"
-  puts "Message: #{ex.message}"
-
-  # Print sanitized connection string
-  puts "URL: #{DATABASE_URL.gsub(/:[^:@]+@/, ":****@")}"
+  db = CQL.build_schema(:app) { }
+rescue ex : DB::ConnectionRefused                # could not open a connection (TCP, DNS, SQLite file)
+rescue ex : DB::PoolTimeout                      # no pooled connection free within checkout_timeout
+rescue ex : CQL::Postgres::TLSRefused            # TLS was required and could not be had
+rescue ex : CQL::Postgres::AuthenticationError   # the driver could not finish authenticating
+rescue ex : CQL::Postgres::ServerError           # the server refused; ex.sqlstate, message ends in (SQLSTATE xxxxx)
+rescue ex : CQL::Schema::InvalidURIError         # malformed URI
+rescue ex : ArgumentError                        # invalid setting or URL option
 end
 ```
 
-## Test Connection Script
+A schema opens its first connection when it is built, so most of these raise from `CQL.build_schema` or `Schema.define`. A `cql.postgres` warning naming the cause is logged before a refused PostgreSQL connection.
+
+## Connection refused
+
+```text
+DB::ConnectionRefused: cannot connect to localhost:5432: Error connecting to 'localhost:5432': Connection refused
+```
+
+**Cause:** nothing listens on that host and port. A URL without a host (`postgres:///app`) means `PGHOST`, else `localhost`.
+
+```bash
+pg_isready -h localhost -p 5432   # is the server up?
+nc -zv db.internal 5432           # is the port reachable from here?
+```
+
+## SQLite file cannot be opened
+
+```text
+DB::ConnectionRefused:
+```
+
+**Cause:** SQLite raised while opening the file, usually because its directory does not exist. The message is empty.
 
 ```crystal
-# scripts/test_connection.cr
+Dir.mkdir_p("./db")
+```
+
+## Password authentication failed
+
+```text
+CQL::Postgres::InvalidAuthorization: FATAL: password authentication failed for user "app" (SQLSTATE 28P01)
+CQL::Postgres::AuthenticationError: the server requested a password but none was configured
+```
+
+**Cause:** wrong credentials, or no password in the URL or `PGPASSWORD`. Put credentials in the URL's userinfo and percent-encode reserved characters (`+` as `%2B`, `@` as `%40`); `?user=` and `?password=` are rejected.
+
+```crystal
+CQL.configure { |c| c.db = "postgres://app:s3cr%2Bt@db.internal/app" }
+```
+
+## Database does not exist
+
+```text
+CQL::Postgres::ServerError: FATAL: database "myapp_development" does not exist (SQLSTATE 3D000)
+```
+
+```bash
+createdb myapp_development
+```
+
+## Too many connections
+
+```text
+CQL::Postgres::ServerError: FATAL: too many connections for role "app" (SQLSTATE 53300)
+```
+
+**Cause:** every process opens up to `max_pool_size` connections. Keep processes × `pool_size` below the role's or server's limit, or raise the limit:
+
+```sql
+ALTER ROLE app CONNECTION LIMIT 100;
+```
+
+## Pool timeout
+
+```text
+DB::PoolTimeout: Could not check out a connection in 10.0 seconds
+```
+
+**Cause:** all `max_pool_size` connections are checked out, often by code that holds one connection while asking for another. See [Fix checkout timeouts](../configuration/connection-pooling.md#fix-checkout-timeouts).
+
+## Server requires TLS
+
+```text
+CQL::Postgres::InvalidAuthorization: FATAL: no pg_hba.conf entry for host "10.0.0.5", user "app", database "app", no encryption (SQLSTATE 28000)
+CQL::Postgres::TLSRefused: db.internal:5432 does not support TLS, which the sslmode requires
+```
+
+**Cause:** the first is a server that accepts only TLS and a connection without it (`sslmode=disable`); the second is the reverse. Set `sslmode` to match the server; see [Enable SSL Connections](../configuration/ssl.md).
+
+## Unsupported URL option
+
+```text
+ArgumentError: unsupported sslmode "verify-ca" (use disable, prefer, require or verify-full)
+ArgumentError: the sslcert option is not supported by this driver
+ArgumentError: the target_session_attrs option is not supported by this driver
+ArgumentError: user cannot be set through the URL query
+```
+
+**Cause:** the native PostgreSQL driver rejects libpq options it does not implement instead of ignoring them. Remove the option.
+
+## Malformed URL
+
+```text
+ArgumentError: Unsupported database URL: redis://localhost:6379         (CQL.configure)
+CQL::Schema::InvalidURIError: Unsupported database type: redis           (Schema.define)
+CQL::Schema::InvalidURIError: Missing host in CockroachDB URI            (also MySQL)
+CQL::Schema::InvalidURIError: Invalid database URI format                (no scheme, e.g. localhost/app)
+URI::Error: Invalid URI: bad port at character 11                        (sqlite3://:memory:)
+```
+
+Use one of the schemes in [Configure Database Connection](../configuration/database-connection.md) and a file URL for SQLite.
+
+## Check a connection from the command line
+
+Run `crystal run scripts/check_connection.cr -- postgres://app:secret@db.internal/app` to print the error class and
+message for a URL.
+
+<details>
+<summary>scripts/check_connection.cr</summary>
+
+{% code title="scripts/check_connection.cr" %}
+```crystal
 require "cql"
 
 url = ARGV[0]? || ENV["DATABASE_URL"]? || "postgres://localhost/myapp"
-
-puts "Testing connection to: #{url.gsub(/:[^:@]+@/, ":****@")}"
+puts "Connecting to #{url.gsub(/:[^:@\/]+@/, ":****@")}"
 
 begin
-  db = CQL::Schema.define(:test, adapter: CQL::Adapter::Postgres, uri: url) do
+  db = CQL::Schema.define(:check, adapter: CQL::Adapter::Postgres, uri: url) do
   end
   db.exec_query(&.scalar("SELECT 1"))
-  puts "Connection successful!"
+  puts "Connected"
 rescue ex
-  puts "Connection failed: #{ex.message}"
+  puts "#{ex.class}: #{ex.message}"
   exit 1
 end
 ```
+{% endcode %}
 
-Run:
-```shell
-crystal scripts/test_connection.cr
-```
+</details>
 
-## Check Network Connectivity
-
-```shell
-# Test if host is reachable
-ping database-host.example.com
-
-# Test if port is open
-nc -zv localhost 5432
-```
-
-## Related
+## See Also
 
 - [Configure Database Connection](../configuration/database-connection.md)
-- [Fix Migration Errors](migration-errors.md)
+- [Set Up Connection Pooling](../configuration/connection-pooling.md)
 - [Enable SSL Connections](../configuration/ssl.md)
+- [Use CockroachDB](../configuration/cockroachdb.md)
+- [Native PostgreSQL driver](../postgres-native/README.md)
+- [Fix Migration Errors](migration-errors.md)
