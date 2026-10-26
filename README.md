@@ -1,64 +1,90 @@
+<div align="center">
+
+<img width="1038" alt="CQL, the Crystal Query Language" src="https://github.com/user-attachments/assets/ed4e733a-3d37-4d03-a4d8-d15bfd7e6f25">
+
+# CQL
+
+**A type-safe query builder and Active Record ORM for Crystal**<br>
+SQLite · PostgreSQL · MySQL · CockroachDB
+
 [![Crystal CI](https://github.com/azutoolkit/cql/actions/workflows/crystal.yml/badge.svg)](https://github.com/azutoolkit/cql/actions/workflows/crystal.yml)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/a85e29e6b78849c28fb813397cc3eb1a)](https://app.codacy.com/gh/azutoolkit/cql/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Latest release](https://img.shields.io/github/v/release/azutoolkit/cql?sort=semver)](https://github.com/azutoolkit/cql/releases)
+[![Crystal ≥ 1.12.2](https://img.shields.io/badge/crystal-%E2%89%A5%201.12.2-000000?logo=crystal)](https://crystal-lang.org/install/)
+[![License: MIT](https://img.shields.io/github/license/azutoolkit/cql)](LICENSE)
+[![Docs on GitBook](https://img.shields.io/badge/docs-GitBook-3884FF?logo=gitbook&logoColor=white)](https://azutopia.gitbook.io/cql)
 
-# CQL (Crystal Query Language)
+[Documentation](https://azutopia.gitbook.io/cql) ·
+[Tutorials](docs/tutorials/README.md) ·
+[How-to guides](docs/how-to/README.md) ·
+[Reference](docs/reference/README.md) ·
+[Examples](examples/README.md) ·
+[Changelog](CHANGELOG.md)
 
-<img width="1038" alt="cql-banner" src="https://github.com/user-attachments/assets/ed4e733a-3d37-4d03-a4d8-d15bfd7e6f25">
+</div>
 
-CQL is a query builder and Active Record ORM for Crystal that runs on SQLite, PostgreSQL, MySQL and CockroachDB.
-Schemas, models and queries are Crystal code, so a misspelled column or a value of the wrong type fails at compile
-time, and every value reaches the database as a bound parameter. It ships its own PostgreSQL wire-protocol driver.
+> [!TIP]
+> The full guide is at **[azutopia.gitbook.io/cql](https://azutopia.gitbook.io/cql)**: tutorials, task guides, the
+> reference and the design notes. Its source is in [`docs/`](docs/README.md), but it reads best on the site.
 
-Full documentation: [azutopia.gitbook.io/cql](https://azutopia.gitbook.io/cql) (source in [`docs/`](docs/README.md)).
+## Why CQL
+
+- **Mistakes stop the build.** Schemas, models and queries are Crystal code, so a misspelled column or a value of
+  the wrong type is a compiler error instead of a runtime one.
+- **Values are always bound.** Every value reaches the database as a parameter, and names that can't be bound, such
+  as index and alias names, are validated.
+- **PostgreSQL needs no extra shard.** CQL ships its own wire-protocol driver, with a fiber-safe pool, streaming,
+  pipelining and `COPY`.
+
+Take a `users` table with a text `name` and an integer `age`. Neither of these lines compiles:
+
+```crystal
+User.where { nmae == "Ada" }  # misspelled column
+User.where { age == "forty" } # a String compared with an Int32 column
+```
+
+```text
+Error: undefined local variable or method 'nmae' for User::Columns (with ... yield) and top-level (current scope)
+Error: CQL: cannot compare a Int32 column with String using `==`; use a Int32 value or another Int32 column
+```
 
 ## Features
 
-- **Schema and migrations**: tables, columns, indexes and foreign keys in `CQL::Schema.define`; versioned
-  `CQL::Migration(N)` classes run by a migrator that applies, rolls back and redoes them and can keep a schema file in
-  sync; `CQL::SchemaDump` turns an existing database into a schema definition.
-- **Active Record models**: `CQL::ActiveRecord::Model(Int64)` (also `Int32`, `UUID` and `ULID` keys) with validations,
-  callbacks, scopes, timestamps, soft deletes, optimistic locking and opt-in dirty tracking.
-- **Associations**: `belongs_to`, `has_one`, `has_many` and `many_to_many`, with `preload` for the first three. A foreign
-  key whose type does not match the target's primary key fails at compile time.
-- **Typed queries**: `User.where { (age >= 18) & (status == "active") }` checks column names and value types at compile
-  time. Association joins, CTEs, window functions, set operations, upsert, row locking, JSON and geospatial
-  predicates, raw fragments with bound values, `explain`, and `to_sql(for: adapter)` for any dialect.
-- **Bulk work**: `insert_all`, `upsert_all` and `insert_<association>_all` send multi-row statements; `find_each`,
-  `find_in_batches` and `pluck` keep large reads small.
-- **Transactions** with nested savepoints on every adapter.
-- **Guardrails**: identifiers that cannot be bound (index, constraint and alias names) are validated, and
-  `CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec` checks model attribute types against the schema (the check runs
-  after top-level code, so a blocking server never reaches it).
-- **Caching**: memory and Redis stores, a fragment cache with tag invalidation, and a per-request query cache with
-  middleware for Kemal, Azu, Lucky, Amber, SpiderGazelle and plain `HTTP::Server`.
-- **Observability**: `CQL::Telemetry.subscribe` sees every statement; the `CQL::Performance` monitor adds a query
-  profiler, N+1 detection and text, JSON and HTML reports. Both are off until you enable them or run in development.
-- **[Native PostgreSQL driver](#native-postgresql-driver)**: protocol 3.2 with fallback to 3.0, TLS, an `AsyncEngine`
-  connection pool, streaming, pipelining, `COPY` and `LISTEN`/`NOTIFY`, without the `pg` shard.
+| Area | What you get | Guide |
+| :--- | :--- | :--- |
+| Schema and migrations | Tables, indexes and foreign keys in `CQL::Schema.define`. Versioned `CQL::Migration(N)` classes that apply, roll back and redo. `CQL::SchemaDump` reads an existing database back into a schema. | [Create a migration](docs/how-to/migrations/create-migration.md) |
+| Models | `CQL::ActiveRecord::Model(Int64)`, or `Int32`, `UUID` and `ULID` keys, with validations, callbacks, scopes, timestamps, soft deletes, optimistic locking and opt-in dirty tracking. | [Define a model](docs/how-to/models/define-model.md) |
+| Associations | `belongs_to`, `has_one`, `has_many` and `many_to_many`, with `preload` for the first three. A foreign key whose type doesn't match the target's key fails to compile. | [Has many](docs/how-to/relationships/has-many.md) |
+| Typed queries | `where { (age >= 18) & (status == "active") }`, checked at compile time. Joins, CTEs, window functions, set operations, upsert, row locking, JSON and geospatial predicates, raw fragments with bound values, `explain`, and `to_sql(for: adapter)`. | [Typed where DSL](docs/how-to/querying/typed-where-dsl.md) |
+| Bulk work | `insert_all`, `upsert_all` and `insert_<association>_all` send multi-row statements. `find_each`, `find_in_batches` and `pluck` keep large reads small. | [Optimize queries](docs/how-to/performance/optimize-queries.md) |
+| Transactions | Nested savepoints on every adapter. | [Transactions](docs/how-to/data-operations/transactions.md) |
+| Guardrails | Validated identifiers, and `CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec` to check model attribute types against the schema. | [Safety guardrails](docs/explanation/safety-guardrails.md) |
+| Caching | Memory and Redis stores, a fragment cache with tag invalidation, and a per-request query cache with middleware for Kemal, Azu, Lucky, Amber, SpiderGazelle and `HTTP::Server`. | [Query cache](docs/how-to/caching/query-cache.md) |
+| Observability | `CQL::Telemetry.subscribe` sees every statement. `CQL::Performance` adds a profiler, N+1 detection and reports. Both stay off until you enable them or run in development. | [Telemetry](docs/how-to/observability/telemetry.md) |
+| PostgreSQL driver | Protocol 3.2 with fallback to 3.0, TLS, an `AsyncEngine` pool, streaming, pipelining, `COPY` and `LISTEN`/`NOTIFY`. | [Native driver](#native-postgresql-driver) |
 
 ## Installation
 
-Add CQL and the driver for your database to `shard.yml`:
+Add CQL and your database's driver to `shard.yml`, then run `shards install`:
 
 ```yaml
 dependencies:
   cql:
     github: azutoolkit/cql
-    version: ~> 0.0.798
-  sqlite3: # SQLite
+    version: ~> 0.0.861
+  sqlite3: # for SQLite
     github: crystal-lang/crystal-sqlite3
-  mysql: # MySQL
+  mysql: # for MySQL
     github: crystal-lang/crystal-mysql
-  # PostgreSQL and CockroachDB need nothing more: CQL ships the driver.
 ```
 
-```bash
-shards install
-```
-
-CQL needs Crystal 1.12.2 or later (`shard.yml`); CI builds with Crystal 1.22.0.
+> [!NOTE]
+> PostgreSQL and CockroachDB need nothing more, because CQL ships the driver. CQL needs Crystal 1.12.2 or later; CI
+> tests Crystal 1.19.1 and 1.22.0.
 
 ## Quick Start
+
+Save this as `src/app.cr`:
 
 ```crystal
 require "cql"
@@ -106,36 +132,58 @@ ada.posts.create(title: "Notes on the Analytical Engine") # INSERT INTO posts (t
 
 # Two queries: SELECT ... FROM posts, then SELECT ... FROM users WHERE users.id IN (?)
 Post.preload(:user).all.each { |post| puts "#{post.title} by #{post.user.try(&.name)}" }
-# => Notes on the Analytical Engine by Ada
 
-puts User.where { name == "Ada" }.count # => 1   SELECT COUNT(*) FROM users WHERE users.name = ?
-puts User.new("").valid?                # => false (name is blank)
+puts User.where { name == "Ada" }.count # SELECT COUNT(*) FROM users WHERE users.name = ?
+puts User.new("").valid?                # the presence validation fails on a blank name
 ```
+
+Run it:
 
 ```bash
 crystal run src/app.cr
 ```
 
-Next: [Your First CQL App](docs/tutorials/getting-started/your-first-cql-app.md) adds migrations, updates, deletes and
-transactions.
+```text
+Notes on the Analytical Engine by Ada
+1
+false
+```
+
+Next, [Your First CQL App](docs/tutorials/getting-started/your-first-cql-app.md) adds migrations, updates, deletes
+and transactions.
+
+## How It Works
+
+```mermaid
+flowchart LR
+    models["Schema and models<br/>CQL::Schema.define"] --> build["Build<br/>QueryBuilder(T) → CQL::Query"]
+    build --> render["Render<br/>AST → Expression::Generator<br/>with the adapter's dialect"]
+    render --> execute["Execute<br/>SQL and bound values on the pool<br/>or the open transaction"]
+    execute --> db[("SQLite · PostgreSQL<br/>MySQL · CockroachDB")]
+    db --> hydrate["Hydrate<br/>DB::Serializable models"]
+```
+
+Each query method records one clause. At execution, `Query#build` turns the clauses into an AST, and the
+`Expression::Generator` visitor writes SQL in the adapter's dialect, with placeholders (`?` or `$1`) where the values
+go. [How CQL Keeps Queries Fast](docs/explanation/performance-design.md) walks through each stage and what it costs.
 
 ## Database Support
 
 | Database | Adapter | URL | Driver | How CQL checks it |
-| --- | --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- | :--- |
 | SQLite | `CQL::Adapter::SQLite` | `sqlite3://` | `sqlite3` shard | the spec suite runs live |
 | PostgreSQL | `CQL::Adapter::Postgres` | `postgres://`, `postgresql://` | built in | generated-SQL specs; driver live specs on PostgreSQL 11 to 18 |
 | MySQL | `CQL::Adapter::MySql` | `mysql://` | `mysql` shard | generated-SQL specs |
 | CockroachDB | `CQL::Adapter::CockroachDB` | `cockroachdb://` | built in | generated-SQL specs; driver live specs on CockroachDB 24.3 |
 
-Feature differences (upsert, `RETURNING`, `DISTINCT ON`, locking, JSON, minimum versions for CTEs and window
-functions) are listed in [Database Support](docs/reference/database-support.md).
+Feature differences, such as upsert, `RETURNING`, `DISTINCT ON`, locking, JSON and the minimum versions for CTEs and
+window functions, are listed in [Database Support](docs/reference/database-support.md).
 
 ## Native PostgreSQL Driver
 
-`require "cql"` registers CQL's driver with crystal-db for `postgres://` and `postgresql://` URLs, so
-`CQL::Schema` and `DB.open` use it without the `pg` shard. Coexisting with `pg` and opting in to `cockroachdb://`
-for `DB.open` are covered in the [native driver guide](docs/how-to/postgres-native/README.md).
+`require "cql"` registers CQL's driver with crystal-db for `postgres://` and `postgresql://` URLs, so `CQL::Schema`
+and `DB.open` use it without the `pg` shard. The [native driver guide](docs/how-to/postgres-native/README.md) covers
+running alongside `pg` and opting in to `cockroachdb://` for `DB.open`.
 
 `CQL::Postgres::AsyncEngine` has its own fiber-safe pool and is a `CQL::Executor`, so any statement runs on it with
 `using`:
@@ -166,7 +214,7 @@ ShopDB = CQL::Schema.new(:shop, DATABASE_URL, CQL::Adapter::Postgres, source: CQ
 ```
 
 | Guide | Covers |
-| --- | --- |
+| :--- | :--- |
 | [Native PostgreSQL Driver](docs/how-to/postgres-native/README.md) | entry points, switching from the `pg` shard |
 | [AsyncEngine and pool options](docs/how-to/postgres-native/async-engine.md) | `pool_size`, health checks, `setup:`/`reset:`, errors |
 | [A Schema on the engine's pool](docs/how-to/postgres-native/schema-on-engine.md) | `EngineSource` |
@@ -177,11 +225,17 @@ ShopDB = CQL::Schema.new(:shop, DATABASE_URL, CQL::Adapter::Postgres, source: CQ
 
 ### Measured Compatibility
 
-These results come from running the live specs and scripts against real servers on one Linux x86_64 machine. CI
-also sets `DATABASE_URL` to a `postgres` service container, so `spec/postgres/live_spec.cr` runs there on every push.
+The driver passes its live specs on PostgreSQL 11 to 18 and CockroachDB 24.3, and has been run behind PgBouncer,
+Odyssey, pgcat and pgpool-II.[^live] CI also runs `spec/postgres/live_spec.cr` against a `postgres` service container
+on every push.
+
+<details>
+<summary><b>PostgreSQL versions, CockroachDB, poolers and TLS</b></summary>
+
+<br>
 
 | PostgreSQL | Protocol used | Cancel key | SCRAM, MD5, cleartext | `live_spec.cr` |
-| --- | --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- | :--- |
 | 11.22, 12.22, 13.23, 14.24, 15.19, 16.15, 17.11 | 3.0 (server answers `NegotiateProtocolVersion`) | 4 bytes | pass | pass |
 | 18.6 | 3.2 | 32 bytes | pass | pass |
 
@@ -201,7 +255,14 @@ also sets `DATABASE_URL` to a `postgres` service container, so `spec/postgres/li
   hanging. Other TLS modes and Unix sockets were tried by hand against PostgreSQL 16; beyond that they have byte-level
   fixture and fake-server specs only.
 
-Two measurements on PostgreSQL 16 over loopback, one machine, one run each:
+</details>
+
+<details>
+<summary><b>Benchmarks: streaming and binary parameters</b></summary>
+
+<br>
+
+Two measurements on PostgreSQL 16 over loopback.[^pgbench]
 
 - `benchmarks/pg_wire_bench.cr`, 200,000 rows of two columns: streaming 1000 rows per fetch held 1000 rows at once
   (+1.7 MB peak memory) and took 125 ms because of its 200 round trips; reading the whole result held 200,000 rows
@@ -210,23 +271,24 @@ Two measurements on PostgreSQL 16 over loopback, one machine, one run each:
   5000 statements, encoding included):
 
 | Workload | Text | Binary |
-| --- | --- | --- |
+| :--- | ---: | ---: |
 | six scalars | 15,751 | 18,358 |
 | one `int8` / `timestamptz` / `numeric` | 19,958 / 18,431 / 19,176 | 19,509 / 18,717 / 19,385 |
 | seven-column insert | 12,902 | 13,654 |
 | `int8[1000]` / `text[200]` / `numeric[200]` | 1,944 / 7,224 / 5,113 | 3,009 / 8,339 / 5,877 |
 | `timestamptz[500]` | 904 | 4,929 |
 
-A single value is within run-to-run noise, so `binary_params` stays off by default. Run both scripts on your own
-server: [benchmarks/README.md](benchmarks/README.md).
+A single value is within run-to-run noise, so `binary_params` stays off by default. To run both scripts on your own
+server, see [benchmarks/README.md](benchmarks/README.md).
+
+</details>
 
 ## Performance
 
-One run of `crystal run --release benchmarks/sqlite_bench.cr` (in-memory SQLite, one fiber, a shared 4-core Linux
-VM). Bytes per operation repeat from run to run; time per operation depends on the machine.
+Model reads and writes on in-memory SQLite, from `benchmarks/sqlite_bench.cr`:[^sqlite]
 
 | Operation | Time | Allocated |
-| --- | --- | --- |
+| :--- | ---: | ---: |
 | `ArUser.find(id)` | 1.13 µs | 480 B |
 | `ArUser.last` | 3.31 µs | 3.25 kB |
 | `ArUser.query.exists?(age: 30)` | 2.78 µs | 3.1 kB |
@@ -236,26 +298,40 @@ VM). Bytes per operation repeat from run to run; time per operation depends on t
 | join with `order` and `limit`, `to_sql` | 2.28 µs | 3.73 kB |
 | 100 parents, `preload(:posts)` | 222 µs | 165 kB |
 
-What each query costs, and what is off by default: [How CQL Keeps Queries Fast](docs/explanation/performance-design.md).
+Bytes per operation repeat from run to run; time per operation depends on the machine.
+[How CQL Keeps Queries Fast](docs/explanation/performance-design.md) explains what each query costs and what is off
+by default.
 
 ## Documentation
 
-| Section | Start here | For |
-| --- | --- | --- |
-| Tutorials | [docs/tutorials/](docs/tutorials/README.md) | learning CQL step by step, from a first app to a blog |
-| How-to guides | [docs/how-to/](docs/how-to/README.md) | one task each: models, queries, migrations, caching, performance, PostgreSQL |
-| Reference | [docs/reference/](docs/reference/README.md) | every option, DSL method and error, plus the [quick reference](docs/reference/quick-reference.md) |
-| Explanation | [docs/explanation/](docs/explanation/README.md) | why CQL works the way it does: Active Record, guardrails, performance |
-| Resources | [docs/resources/](docs/resources/README.md) | FAQ, contributing |
+The guide is published at **[azutopia.gitbook.io/cql](https://azutopia.gitbook.io/cql)** and organized by what you
+need:
 
-Also: [Installation](docs/installation.md), [runnable examples](examples/README.md),
-[playground](playground/README.md), [changelog](CHANGELOG.md).
+| Section | For | Start here |
+| :--- | :--- | :--- |
+| Tutorials | learning CQL step by step, from a first app to a blog | [docs/tutorials/](docs/tutorials/README.md) |
+| How-to guides | one task each: models, queries, migrations, caching, performance, PostgreSQL | [docs/how-to/](docs/how-to/README.md) |
+| Reference | every option, DSL method and error, and a one-page cheat sheet | [docs/reference/](docs/reference/README.md) |
+| Explanation | why CQL works the way it does: Active Record, guardrails, performance | [docs/explanation/](docs/explanation/README.md) |
+| Resources | FAQ and contributing | [docs/resources/](docs/resources/README.md) |
+
+There are also [installation notes](docs/installation.md), [runnable examples](examples/README.md) and a
+[playground](playground/README.md).
+
+## Project Status
+
+> [!IMPORTANT]
+> CQL is pre-1.0 (`0.0.x`). CI tags and releases every merge to `master`, and a release can change behavior. Read
+> the [changelog](CHANGELOG.md) before you upgrade.
 
 ## Contributing
 
+Bug reports, questions and pull requests are welcome. Open an [issue](https://github.com/azutoolkit/cql/issues) to
+report a problem or discuss a change. To work on CQL itself:
+
 ```bash
 shards install --ignore-crystal-version
-crystal spec                                                    # SQLite live; PostgreSQL specs need DATABASE_URL
+crystal spec                                                    # SQLite runs live; PostgreSQL specs need DATABASE_URL
 crystal tool format --check src spec
 crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec  # lint, as CI runs it
 ```
@@ -264,9 +340,15 @@ crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec  # lint, as CI ru
 > Without a server, the PostgreSQL and Redis specs are pending. Without `mysqldump`, one spec in
 > `spec/integration/dialects/mysql_dialect_spec.cr` errors; that is the environment, not a regression.
 
-A bug fix comes with a spec that fails without it, and a behavior change updates `CHANGELOG.md` under `[Unreleased]`
-and the matching page in `docs/`. See [Contributing](docs/resources/contributing.md) for the full workflow.
+A bug fix comes with a spec that fails without it. A behavior change adds a `CHANGELOG.md` entry under
+`[Unreleased]` and updates the matching page in `docs/`. [Contributing](docs/resources/contributing.md) has the full
+workflow.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+CQL is released under the [MIT License](LICENSE).
+
+[^live]: Live specs and probe scripts run against real servers on one Linux x86_64 machine. Details are in the
+    collapsed sections below.
+[^pgbench]: One machine, one run each.
+[^sqlite]: One run of `crystal run --release benchmarks/sqlite_bench.cr`: one fiber, on a shared 4-core Linux VM.
