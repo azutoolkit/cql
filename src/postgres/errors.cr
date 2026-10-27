@@ -46,8 +46,12 @@ module CQL::Postgres
   class UnsupportedProtocol < Error
   end
 
-  # The socket failed or the connection was already closed.
+  # The socket failed during or after a request, so the statement may have run, or the connection was already closed.
   class ConnectionLost < Error
+  end
+
+  # The connection was already closed, so nothing of the request was sent: running it elsewhere is safe.
+  class ConnectionClosed < ConnectionLost
   end
 
   # A statement exceeded its time limit and was canceled on the server.

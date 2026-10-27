@@ -131,15 +131,27 @@ describe CQL::Postgres::Connection do
     db.in_transaction?.should be_false
   end
 
-  it "turns a lost connection into DB::ConnectionLost, which crystal-db's pool understands" do
+  it "raises ConnectionLost when a sent statement may have run, and DB::ConnectionLost, which crystal-db's pool retries, when a closed connection sent nothing" do
     server = FakePG.start do |client|
       client.read_startup
       client.ok_handshake
       client.expect('P')
     end
     db = open_connection(server)
-    expect_raises(DB::ConnectionLost) { db.scalar("SELECT 1") }
-    db.session.closed?.should be_true
+    expect_raises(PG::ConnectionLost) { db.scalar("SELECT 1") }
+    db.closed?.should be_true # so crystal-db's pool drops it on release
+    expect_raises(DB::ConnectionLost) { db.scalar("SELECT 1") }.cause.should be_a PG::ConnectionClosed
+  end
+
+  it "maps lost connections the same way on the calls that bypass Statement (exec_all, COPY, stream, pipeline)" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      client.expect('Q')
+    end
+    db = open_connection(server)
+    expect_raises(PG::ConnectionLost) { db.exec_all("INSERT INTO t VALUES (1)") }
+    expect_raises(DB::ConnectionLost) { db.exec_all("INSERT INTO t VALUES (1)") }.cause.should be_a PG::ConnectionClosed
   end
 
   it "raises the typed server error through the DB API" do

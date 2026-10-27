@@ -26,6 +26,15 @@ module CQL::Postgres
       super || @session.closed?
     end
 
+    # crystal-db's pool calls it as it lends the connection. One the server wrote to or hung up on while it sat
+    # idle (a FATAL on a restart or failover) is pinged; a failed ping closes it, so its next request is refused
+    # before anything is sent and crystal-db runs the statement on another connection. (Public: an override
+    # outside crystal-db's namespace cannot be called by its pool while protected.)
+    def before_checkout
+      super
+      @session.ping if !@session.closed? && @session.input_pending?
+    end
+
     # crystal-db 0.15 requires it: the name the driver is registered with.
     def driver_name : String
       DRIVER_NAME
@@ -135,9 +144,10 @@ module CQL::Postgres
       translating_lost { @session.pipeline(statements) }
     end
 
+    # As in `Statement`: only a request refused before it was sent is safe to run again.
     private def translating_lost(&)
       yield
-    rescue ex : ConnectionLost
+    rescue ex : ConnectionClosed
       raise ::DB::ConnectionLost.new(self, cause: ex)
     end
 

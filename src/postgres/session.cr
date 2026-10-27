@@ -301,7 +301,7 @@ module CQL::Postgres
     # A request without a *timeout* of its own gets the config's `query_timeout`; a ping keeps only its hard deadline.
     private def exclusive(timeout : Time::Span? = nil, default_deadline : Bool = true, &)
       @lock.synchronize do
-        raise ConnectionLost.new("the connection is closed") if @closed
+        raise ConnectionClosed.new("the connection is closed") if @closed
         @deadline_expired = false
         @requests += 1
         guarded { with_deadline(default_deadline ? timeout || @config.query_timeout : timeout) { yield } }
