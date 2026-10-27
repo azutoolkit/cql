@@ -137,8 +137,7 @@ module CQL
         unique_columns = sqlite_unique_columns(table_name)
 
         # Get columns
-        @db.query_each("PRAGMA table_info(#{table_name})") do |col_rs|
-          col_rs.read(Int32) # cid
+        @db.query_each(%(SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info(?)), table_name) do |col_rs|
           column_name = col_rs.read(String)
           column_type = col_rs.read(String)
           not_null = col_rs.read(Int32) == 1
@@ -158,15 +157,12 @@ module CQL
         end
 
         # Get foreign keys
-        @db.query_each("PRAGMA foreign_key_list(#{table_name})") do |fk_rs|
-          fk_rs.read(Int32) # id
-          fk_rs.read(Int32) # seq
+        @db.query_each(%(SELECT "table", "from", "to", on_update, on_delete FROM pragma_foreign_key_list(?)), table_name) do |fk_rs|
           referenced_table = fk_rs.read(String)
           local_column = fk_rs.read(String)
           referenced_column = fk_rs.read(String)
           on_update = fk_rs.read(String)
           on_delete = fk_rs.read(String)
-          _match = fk_rs.read(String)
 
           fk_info = ForeignKeyInfo.new(
             columns: [local_column],
@@ -300,7 +296,7 @@ module CQL
         table_info = TableInfo.new(table_name)
 
         # Get columns
-        @db.query_each("DESCRIBE #{table_name}") do |col_rs|
+        @db.query_each("DESCRIBE #{@adapter.dialect.quote_identifier(table_name)}") do |col_rs|
           column_name = col_rs.read(String)
           column_type = col_rs.read(String)
           nullable = col_rs.read(String) == "YES"
@@ -438,13 +434,13 @@ module CQL
     # Generate table definition code
     private def generate_table_definition(table : TableInfo) : String
       content = String.build do |str|
-        str << "  table :#{table.name} do\n"
+        str << "  table #{symbol(table.name)} do\n"
 
         # Primary key
         primary_columns = table.columns.select(&.primary_key?)
         if primary_columns.size == 1
           pk = primary_columns.first
-          str << "    primary :#{pk.name}, #{pk.type}\n"
+          str << "    primary #{symbol(pk.name)}, #{pk.type}\n"
         end
 
         # Check if we should use timestamps macro
@@ -459,7 +455,7 @@ module CQL
             next
           end
 
-          str << "    #{get_column_method(column.type)} :#{column.name}"
+          str << "    #{get_column_method(column.type)} #{symbol(column.name)}"
           str << ", null: true" if column.nullable?
           str << ", default: #{column.default.inspect}" if column.default
           str << ", unique: true" if column.unique?
@@ -473,9 +469,9 @@ module CQL
 
         # Foreign keys
         table.foreign_keys.each do |foreign_key|
-          str << "    foreign_key [:#{foreign_key.columns.join(", :")}], "
-          str << "references: :#{foreign_key.references_table}, "
-          str << "references_columns: [:#{foreign_key.references_columns.join(", :")}]"
+          str << "    foreign_key [#{symbols(foreign_key.columns)}], "
+          str << "references: #{symbol(foreign_key.references_table)}, "
+          str << "references_columns: [#{symbols(foreign_key.references_columns)}]"
           str << ", on_delete: :#{foreign_key.on_delete.downcase.gsub(" ", "_")}" if foreign_key.on_delete != "no_action"
           str << ", on_update: :#{foreign_key.on_update.downcase.gsub(" ", "_")}" if foreign_key.on_update != "no_action"
           str << "\n"
@@ -485,6 +481,15 @@ module CQL
       end
 
       content
+    end
+
+    # A database-supplied name as a Crystal symbol literal: quoted and escaped unless it is a plain identifier.
+    private def symbol(name : String) : String
+      Symbol.needs_quotes?(name) ? ":#{name.inspect}" : ":#{name}"
+    end
+
+    private def symbols(names : Array(String)) : String
+      names.join(", ") { |name| symbol(name) }
     end
 
     # Close the database connection

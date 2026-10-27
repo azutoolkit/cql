@@ -5,6 +5,11 @@ private def dumped_table(content : String, table : String) : String
   content[/^  table :#{table} do\n.*?^  end\n/m]
 end
 
+# *name* as a double-quoted SQL identifier.
+private def quoted_identifier(name : String) : String
+  %("#{name.gsub('"', %(""))}")
+end
+
 describe CQL::SchemaDump do
   describe "SQLite schema dumping" do
     it "can dump a SQLite database schema" do
@@ -219,6 +224,48 @@ describe CQL::SchemaDump do
       content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", \"sqlite3://./db/app.db\")) do\n")
     ensure
       dir.try { |path| FileUtils.rm_rf(path) }
+    end
+  end
+
+  describe "names read from the database" do
+    it "writes a name that is not a plain identifier as a quoted symbol literal, and a plain one bare" do
+      uri = spec_sqlite_uri("schema_dump_names_#{Random::Secure.hex(4)}.db")
+      table, column = "we ird\"\n\#{t}", "co l\"\n\#{c}"
+      DB.open(uri) do |db|
+        db.exec("CREATE TABLE #{quoted_identifier(table)} (id INTEGER PRIMARY KEY, " \
+                "#{quoted_identifier(column)} TEXT NOT NULL, email TEXT NOT NULL)")
+        db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, " \
+                "#{quoted_identifier(column)} INTEGER NOT NULL REFERENCES #{quoted_identifier(table)} (id))")
+      end
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+
+      content = dumper.generate_schema_content(:NamesDB, :names_db)
+
+      content.should contain("  table :#{table.inspect} do\n    primary :id, Int32\n    text :#{column.inspect}\n    text :email\n")
+      content.should contain("  table :users do\n    primary :id, Int32\n    integer :#{column.inspect}\n")
+      content.should contain("    foreign_key [:#{column.inspect}], references: :#{table.inspect}, references_columns: [:id]")
+    ensure
+      dumper.try(&.close)
+      uri.try { |path| File.delete?(path.lchop("sqlite3://")) }
+    end
+
+    it "inspects a table whose name would break an unquoted PRAGMA argument, and runs nothing else" do
+      uri = spec_sqlite_uri("schema_dump_decoy_#{Random::Secure.hex(4)}.db")
+      table = "x); DROP TABLE decoy; --"
+      DB.open(uri) do |db|
+        db.exec("CREATE TABLE decoy (id INTEGER PRIMARY KEY)")
+        db.exec("CREATE TABLE #{quoted_identifier(table)} (id INTEGER PRIMARY KEY, decoy_id INTEGER REFERENCES decoy (id))")
+      end
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+
+      content = dumper.generate_schema_content(:DecoyDB, :decoy_db)
+
+      content.should contain("  table :#{table.inspect} do\n    primary :id, Int32\n    integer :decoy_id, null: true\n")
+      content.should contain("    foreign_key [:decoy_id], references: :decoy, references_columns: [:id]")
+      DB.open(uri, &.query_all("SELECT name FROM sqlite_master WHERE name = 'decoy'", as: String)).should eq(["decoy"])
+    ensure
+      dumper.try(&.close)
+      uri.try { |path| File.delete?(path.lchop("sqlite3://")) }
     end
   end
 
