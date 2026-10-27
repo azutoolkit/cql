@@ -116,6 +116,8 @@ module CQL
         # - **@return** [Bool] True if deleted successfully, false otherwise
         # - **@raise** [CQL::ActiveRecord::Relations::BaseRelation::RelationError] If a
         #   `restrict_with_error` association has records; nothing is deleted then
+        # - **@raise** [CQL::OptimisticLockError] With `optimistic_locking`, if the row no longer has this
+        #   copy's version or is gone; nothing is deleted then
         #
         # **Example** Deleting a record
         #

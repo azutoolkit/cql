@@ -24,9 +24,9 @@ end
 | **`CQL::Error`** | Raised directly for model and table misuse; see the next table | free text |
 | **`CQL::RecordInvalid`** | An invalid record, always as its subclass `CQL::ActiveRecord::Validations::ValidationError` (see [Active Record errors](#active-record-errors)) | the error messages joined by `,`; `validation_errors`, `error_messages`, `error_fields` |
 | **`CQL::RecordNotSaved`** | `save!` when a callback halted the save | `"Failed to save the record"` |
-| **`CQL::OptimisticLockError`** | `update!` on a model with `optimistic_locking`, and `Update#with_optimistic_lock(...).commit`, when no row matched the version | `"Record has been modified by another process"`; `model_class`, `id`, `expected_version`, `actual_version` (CQL leaves them `nil`) |
+| **`CQL::OptimisticLockError`** | `update!` and `delete!` on a model with `optimistic_locking`, and `Update#with_optimistic_lock(...).commit`, when no row matched the version | `"Record has been modified by another process"`; `model_class`, `id`, `expected_version`, `actual_version` (`update!` leaves them `nil`; `delete!` sets `model_class` and `expected_version`) |
 | **`CQL::DialectError`** | SQL generation for a feature the adapter lacks; see [Dialect errors](#dialect-errors) | `"SQLite does not support DISTINCT ON\n\nWorkaround:\n..."`; `dialect`, `feature`, `workaround` |
-| **`CQL::SQLiteUnsupportedFeatureError`** < `DialectError` | SQLite: `back(...)` on insert, update or delete; `change_column`; `foreign_key` and `drop_foreign_key` in `schema.alter` | `"SQLite does not support ALTER COLUMN syntax"` |
+| **`CQL::SQLiteUnsupportedFeatureError`** < `DialectError` | SQLite: `back(...)` on insert, update or delete; `change_column`; `foreign_key` and `drop_foreign_key` in `schema.alter`; `add_column` with a `"CURRENT_TIMESTAMP"` default on a `Time` column | `"SQLite does not support ALTER COLUMN syntax"` |
 | **`CQL::MySqlUnsupportedFeatureError`** < `DialectError` | MySQL: a table with `check_constraint` | `"MySQL does not support CHECK constraints (...)"` |
 
 `CQL::Error` messages raised directly:
@@ -59,7 +59,7 @@ end
 | `dialect.structure_dump` | CockroachDB | `DialectError` |
 | `schema.alter`, `schema.build`, a table's `create!` / `drop!` / `truncate!`, `Migrator.new` inside an open transaction; `up`, `up_to`, `down`, `down_to`, `rollback` there only when they have a migration to run (with nothing to do they return) | MySQL, CockroachDB | `DialectError` (`"MySQL does not support schema changes inside a transaction"`), raised before any DDL runs |
 | `back(...)` on insert, update, delete | SQLite | `SQLiteUnsupportedFeatureError` |
-| `change_column`, `foreign_key`, `drop_foreign_key` in `schema.alter` | SQLite | `SQLiteUnsupportedFeatureError` |
+| `change_column`, `foreign_key`, `drop_foreign_key` in `schema.alter`; `add_column` with a `"CURRENT_TIMESTAMP"` default on a `Time` column | SQLite | `SQLiteUnsupportedFeatureError` |
 | `check_constraint` | MySQL | `MySqlUnsupportedFeatureError` |
 
 ## Active Record errors

@@ -211,10 +211,12 @@ module Expression
       true
     end
 
+    # `pg_advisory_xact_lock` on the bound key: held until the transaction ends.
     def migration_lock_sql : String?
       "SELECT pg_advisory_xact_lock(#{placeholder_format(1)})"
     end
 
+    # `SHOW transaction_isolation` reads the level in lower case ("read committed") and takes no snapshot.
     def transaction_isolation_sql : String?
       "SHOW transaction_isolation"
     end
@@ -224,6 +226,7 @@ module Expression
       level.in?("read committed", "read uncommitted")
     end
 
+    # The server's `lock_timeout` as text, such as "0" or "1min".
     def lock_timeout_sql : String?
       "SELECT current_setting('lock_timeout')"
     end

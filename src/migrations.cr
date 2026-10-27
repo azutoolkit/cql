@@ -112,7 +112,8 @@ module CQL
   # rollback, and redo migrations.
   # The `Migrator` class also provides methods to list applied and pending migrations.
   # It records applied migrations in its own table (`cql_schema_migrations` by default, see `MigratorConfig`),
-  # creating it when missing.
+  # creating it when missing. On PostgreSQL, building it and a run with migrations to apply or roll back first take
+  # an advisory lock, so migrators of one table take turns (see `MigratorConfig#lock_timeout`).
   #
   # **Example** Creating a new migrator
   # ```

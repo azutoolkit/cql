@@ -47,10 +47,10 @@ migration to run; with nothing to do they return. Listing `pending_migrations` o
 {% endtabs %}
 
 On PostgreSQL an advisory lock serialises migrators: `Migrator.new` takes it before it creates the migrations table, and
-a run before it picks its migrations. A second `up` waits for the first, then picks again under the lock, so it never
-applies a migration twice (a waiting `up(2)` applies the next two pending ones). Building a migrator waits too while
-another process runs migrations. A run with nothing to pick takes no lock and no check; listing `pending_migrations`
-takes no lock, runs no DDL and returns the snapshot of the transaction it runs in.
+a run takes it when a first pick finds migrations to apply or roll back. A second `up` waits for the first, then picks
+again under the lock, so it never applies a migration twice (a waiting `up(2)` applies the next two pending ones).
+Building a migrator waits too while another process runs migrations. A run with nothing to pick takes no lock and no
+check; listing `pending_migrations` takes no lock, runs no DDL and returns the snapshot of the transaction it runs in.
 
 The wait lasts at most `lock_timeout` (60 seconds by default), then `CQL::Migrator::Error` names the migrations table
 and nothing runs. The bound replaces the server's `lock_timeout` for this wait, even a shorter one, and a bound under

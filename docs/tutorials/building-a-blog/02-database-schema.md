@@ -213,8 +213,8 @@ AppSchema = CQL::Schema.define(
 
   table :users do
     primary :id, Int32
-    text :username
-    text :email
+    text :username, unique: true
+    text :email, unique: true
     text :first_name, null: true
     text :last_name, null: true
     boolean :active, default: "1"
@@ -229,7 +229,7 @@ end
 Your models use `AppSchema` from Part 3: it knows every table, so a program that never runs the migrations can still query them. Keep the file in version control and recompile after each migration.
 
 - SQLite integer keys come back as `Int32`; the models still declare `Model(Int64)`.
-- The dump holds columns and foreign keys only; unique constraints and indexes stay in the migrations.
+- The dump holds columns, foreign keys and one-column unique constraints (`unique: true`); other indexes stay in the migrations.
 - The file embeds the connection URL. If the URL holds a password, set `auto_sync: false` there and keep a hand-written schema (Part 5).
 {% endstep %}
 {% endstepper %}
