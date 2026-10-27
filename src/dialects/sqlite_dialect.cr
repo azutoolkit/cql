@@ -215,6 +215,11 @@ module Expression
       true
     end
 
+    # SQLite transactions are always serializable.
+    def isolation_level_sql(level : CQL::IsolationLevel) : String?
+      raise CQL::DialectError.new(display_name, "the #{level.to_sql.downcase} isolation level") unless level.serializable?
+    end
+
     def format_json_text(column : String, path_placeholder : String) : String
       "CAST(json_extract(#{column}, #{path_placeholder}) AS TEXT)"
     end

@@ -431,6 +431,18 @@ describe "CQL::Postgres against a live server" do
     engine.close
   end
 
+  it "sets the isolation level of one Schema#transaction only, through the engine and through crystal-db" do
+    require_live!
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    {PG::EngineSource.connect("#{LIVE_URL}#{separator}pool_size=1"), nil}.each do |source| # one connection: a level that outlived its transaction shows
+      schema = CQL::Schema.new(:isolation_live, source ? LIVE_URL : "#{LIVE_URL}#{separator}max_pool_size=1", CQL::Adapter::Postgres, source: source)
+      schema.transaction(isolation: :serializable, &.connection.scalar("SHOW transaction_isolation").should eq("serializable"))
+      schema.transaction(isolation: :repeatable_read, &.connection.scalar("SHOW transaction_isolation").should eq("repeatable read")) unless cockroach?
+      schema.transaction(&.connection.scalar("SHOW transaction_isolation").should eq(cockroach? ? "serializable" : "read committed"))
+      schema.close
+    end
+  end
+
   it "rolls back to a savepoint without ending the surrounding transaction" do
     require_live!
     engine = PG::AsyncEngine.connect(LIVE_URL)

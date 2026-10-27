@@ -43,6 +43,12 @@ module Expression
       nil
     end
 
+    # The transaction's first statement, which sets *level* (the counterpart of `transaction_isolation_sql`, which
+    # reads it); nil when the transaction already runs at it.
+    def isolation_level_sql(level : CQL::IsolationLevel) : String?
+      raise CQL::DialectError.new(display_name, "Schema#transaction(isolation:)")
+    end
+
     # Whether a migrator that waited for `migration_lock_sql` at *level* (as `transaction_isolation_sql` reads it)
     # sees what the holder committed.
     def migration_lock_isolation_safe?(level : String) : Bool

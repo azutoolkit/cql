@@ -369,12 +369,17 @@ module CQL
     # or the commit fails), table declarations changed by `alter` inside it are
     # restored. A savepoint that commits leaves them to the enclosing transaction.
     # A manual `tx.rollback` restores nothing, for the same reason as above.
-    def transaction(&)
+    #
+    # *isolation* runs the transaction at that level (`transaction(isolation: :serializable) { }`). A dialect
+    # that cannot honour it raises `DialectError`, and a nested call raises `ArgumentError`, before anything begins.
+    def transaction(*, isolation : IsolationLevel? = nil, &)
       parent = active_frame
+      set_isolation = isolation_statement(isolation, nested: !parent.nil?)
       observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
       rollback_hooks = RollbackHooks.new
       # Nested calls open a SAVEPOINT on the outer transaction's connection.
       (parent.try(&.transaction) || @source).transaction do |tx|
+        set_isolation.try { |sql| tx.connection.unprepared.exec(sql) } # bypasses Execution, so telemetry sees no user statement
         with_active_transaction(tx, rollback_hooks) do
           yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
         rescue ex
@@ -399,12 +404,26 @@ module CQL
       observer.try &.finish
     end
 
+    # Crystal consults `method_missing` before it casts a symbol to an enum, so `isolation: :serializable` lands here.
+    def transaction(*, isolation : Symbol, &)
+      level = IsolationLevel.parse?(isolation.to_s) || raise ArgumentError.new(
+        "unknown isolation level #{isolation.inspect}; use :read_uncommitted, :read_committed, :repeatable_read or :serializable")
+      transaction(isolation: level) { |tx| yield tx }
+    end
+
     def transaction(tx : DB::Transaction, &)
       # Not this schema's transaction to commit or roll back: rollback hooks go to the enclosing one, if any.
       rollback_hooks = active_frame.try(&.rollback_hooks) || RollbackHooks.new
       with_active_transaction(tx, rollback_hooks) do
         yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
       end
+    end
+
+    # A savepoint runs at the level of the transaction it is in.
+    private def isolation_statement(isolation : IsolationLevel?, nested : Bool) : String?
+      return unless isolation
+      raise ArgumentError.new("isolation: cannot change the level inside a transaction; set it on the outermost one") if nested
+      dialect.isolation_level_sql(isolation)
     end
 
     # Creates a new migrator for the schema.
