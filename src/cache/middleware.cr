@@ -5,16 +5,34 @@ module CQL
   module Cache
     # Middleware helpers for integrating per-request query caching with various web frameworks
     module Middleware
+      # A client-supplied request id is kept only when it matches this: 1 to 128 ASCII letters, digits, `.`, `_` or `-`.
+      VALID_REQUEST_ID = /\A[A-Za-z0-9._-]{1,128}\z/
+
+      # *request_id* when it is valid, else a random 16-character hex id; nil stays nil (the tracker then picks one).
+      def self.trusted_request_id(request_id : String?) : String?
+        return if request_id.nil?
+
+        request_id.matches?(VALID_REQUEST_ID) ? request_id : Random::Secure.hex(8)
+      end
+
       # Base middleware functionality that can be adapted for different frameworks
       module BaseMiddleware
-        # Call this at the start of each request
+        # Call this at the start of each request. Tracks only when `CQL.config.cache.on?` and
+        # `CQL.config.cache.request_cache?` (`CQL.start_request_cache`).
         def start_request_cache(request_id : String? = nil) : Nil
-          CQL::Cache::RequestQueryCacheHelper.start_request(request_id)
+          CQL.start_request_cache(Middleware.trusted_request_id(request_id))
         end
 
-        # Call this at the end of each request
+        # Call this at the end of each request (`CQL.end_request_cache`). It ends the fiber's request even when the
+        # switches are off; `with_request_cache` ends only a request it started.
         def end_request_cache : Nil
-          CQL::Cache::RequestQueryCacheHelper.end_request
+          CQL.end_request_cache
+        end
+
+        # Runs the block as one request (`CQL.with_request_cache`, with the id validated): it starts and ends a
+        # request only when the switches are on at the start.
+        def with_request_cache(request_id : String? = nil, &)
+          CQL.with_request_cache(Middleware.trusted_request_id(request_id)) { yield }
         end
 
         # Enable/disable query caching
@@ -98,13 +116,7 @@ module CQL
 
         def call(context)
           request_id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
-          CQL::Cache::Middleware::Amber.start_request_cache(request_id)
-
-          begin
-            call_next(context)
-          ensure
-            CQL::Cache::Middleware::Amber.end_request_cache
-          end
+          CQL::Cache::Middleware::Amber.with_request_cache(request_id) { call_next(context) }
         end
       end
 
@@ -132,8 +144,9 @@ module CQL
         end
       end
 
-      # Generic HTTP::Server middleware. It starts the process-wide request query tracker (`RequestQueryCacheHelper`)
-      # with the request's `X-Request-ID` (or a random id) and ends it in an `ensure`.
+      # Generic HTTP::Server middleware. It starts a request on the request query tracker (`RequestQueryCacheHelper`)
+      # for the fiber serving the request, with its `X-Request-ID` when valid (or a random id), and ends it in an
+      # `ensure`. It tracks only when `cache.on` and `cache.request_cache` are set in `CQL.configure`.
       # Usage:
       #   server = HTTP::Server.new([
       #     CQL::Cache::Middleware::HTTP.new,
@@ -148,13 +161,7 @@ module CQL
 
         def call(context : ::HTTP::Server::Context)
           request_id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
-          start_request_cache(request_id)
-
-          begin
-            call_next(context)
-          ensure
-            end_request_cache
-          end
+          with_request_cache(request_id) { call_next(context) }
         end
       end
 
@@ -232,12 +239,7 @@ module CQL
         end
 
         def self.with_request(request_id : String? = nil, &)
-          start_request(request_id)
-          begin
-            yield
-          ensure
-            end_request
-          end
+          with_request_cache(request_id) { yield }
         end
       end
     end

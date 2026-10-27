@@ -27,6 +27,13 @@ private def with_singleton_cache(&)
   end
 end
 
+# Waits up to about a second for *fibers* to run to their end, then expects them all dead.
+private def wait_until_dead(fibers : Array(Fiber)) : Nil
+  1000.times { break if fibers.all?(&.dead?); sleep 1.millisecond }
+  live = fibers.count { |fiber| !fiber.dead? }
+  fail "#{live} of #{fibers.size} fibers still alive after about a second" unless live == 0
+end
+
 describe CQL::Cache::RequestQueryCache do
   describe "opt-in tracking" do
     it "is disabled by default and tracks nothing without a request" do
@@ -189,6 +196,115 @@ describe CQL::Cache::RequestQueryCache do
       cache.enabled?.should be_false
       cache.with_cache("SELECT 1", NO_PARAMS) { }
       cache.size.should eq(0)
+    end
+  end
+
+  describe "concurrent requests" do
+    it "gives each request fiber its own id, statements and counters" do
+      cache = CQL::Cache::RequestQueryCache.new
+      started = Channel(Nil).new
+      go = Channel(Nil).new
+      seen = Channel({Int32, String?, Int64, Int64, Int32, Bool, String?}).new
+      requests = 4
+
+      requests.times do |index|
+        spawn do
+          cache.start_request("req-#{index}")
+          started.send(nil)
+          go.receive # every request has started before any runs a query
+          (index + 1).times do
+            cache.with_cache("SELECT #{index}", NO_PARAMS) { }
+            Fiber.yield # let the other requests run in between
+          end
+          stats = cache.stats
+          id, hits, misses, size = cache.current_request_id, stats["hits"].as(Int64), stats["misses"].as(Int64), cache.size
+          cache.end_request
+          seen.send({index, id, hits, misses, size, cache.enabled?, cache.current_request_id})
+        end
+      end
+      requests.times { started.receive }
+      requests.times { go.send(nil) }
+
+      results = Array.new(requests) { seen.receive }.sort_by!(&.[0])
+      results.should eq(Array.new(requests) { |index| {index, "req-#{index}", index.to_i64, 1_i64, 1, false, nil} })
+      cache.active_requests.should eq(0)
+    end
+
+    it "does not track queries from a fiber the request spawns" do
+      cache = CQL::Cache::RequestQueryCache.new
+      cache.start_request("req-parent")
+      done = Channel({Bool, String?}).new
+
+      spawn do
+        cache.with_cache("SELECT 1", NO_PARAMS) { }
+        done.send({cache.enabled?, cache.current_request_id})
+      end
+
+      done.receive.should eq({false, nil})
+      cache.size.should eq(0)
+      cache.current_request_id.should eq("req-parent")
+    ensure
+      cache.try &.end_request
+    end
+
+    it "drops the state of request fibers that died without end_request" do
+      cache = CQL::Cache::RequestQueryCache.new
+      finished = Channel(Nil).new
+      abandoned = CQL::Cache::RequestQueryCache::SWEEP_THRESHOLD # the next start_request finds this many and sweeps
+
+      fibers = Array.new(abandoned) do |index|
+        spawn do
+          cache.start_request("abandoned-#{index}")
+          finished.send(nil)
+        end
+      end
+      abandoned.times { finished.receive }
+      wait_until_dead(fibers)
+
+      cache.start_request("live")
+      cache.active_requests.should eq(1)
+      cache.end_request
+      cache.active_requests.should eq(0)
+    end
+
+    it "lowers the sweep bound again once the requests that raised it have ended" do
+      cache = CQL::Cache::RequestQueryCache.new
+      threshold = CQL::Cache::RequestQueryCache::SWEEP_THRESHOLD
+      started = Channel(Nil).new
+      release = Channel(Nil).new
+      ended = Channel(Nil).new
+
+      # `threshold` live requests: the next start_request sweeps, keeps them all and raises the bound to 2x.
+      threshold.times do |index|
+        spawn do
+          cache.start_request("held-#{index}")
+          started.send(nil)
+          release.receive
+          cache.end_request
+          ended.send(nil)
+        end
+      end
+      threshold.times { started.receive }
+      cache.start_request("raises-the-bound")
+      cache.end_request
+      threshold.times { release.send(nil) }
+      threshold.times { ended.receive }
+      cache.active_requests.should eq(0)
+
+      # `threshold` requests that die without end_request: with the bound back at `threshold`, they are swept.
+      finished = Channel(Nil).new
+      fibers = Array.new(threshold) do |index|
+        spawn do
+          cache.start_request("abandoned-#{index}")
+          finished.send(nil)
+        end
+      end
+      threshold.times { finished.receive }
+      wait_until_dead(fibers)
+
+      cache.start_request("live")
+      cache.active_requests.should eq(1)
+      cache.end_request
     end
   end
 
