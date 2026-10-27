@@ -96,6 +96,8 @@ module CQL
     # How long `Migrator.new` and a run wait for another migrator's PostgreSQL migration lock before raising; nil
     # leaves the wait to the server's own `lock_timeout` (none by default). Only that wait: migrations keep theirs.
     property lock_timeout : Time::Span?
+    # The environment variable the schema file's `uri:` line reads.
+    property schema_url_env : String
 
     def initialize(
       @schema_file_path : String = "src/schemas/app_schema.cr",
@@ -104,6 +106,7 @@ module CQL
       @migration_table_name : Symbol = :cql_schema_migrations,
       @auto_sync : Bool? = true,
       @lock_timeout : Time::Span? = 60.seconds,
+      @schema_url_env : String = "DATABASE_URL",
     )
     end
   end
@@ -201,7 +204,7 @@ module CQL
 
       begin
         SchemaDump.open(schema) do |schema_dumper|
-          schema_dumper.dump_to_file(config.schema_file_path, config.schema_name, config.schema_symbol)
+          schema_dumper.dump_to_file(config.schema_file_path, config.schema_name, config.schema_symbol, env_var: config.schema_url_env)
         end
         Log.info { "Schema file updated: #{config.schema_file_path}" }
       rescue ex : Exception
@@ -219,7 +222,7 @@ module CQL
       Log.debug { "Verifying schema consistency..." }
 
       begin
-        current_schema = SchemaDump.open(schema, &.generate_schema_content(config.schema_name, config.schema_symbol))
+        current_schema = SchemaDump.open(schema, &.generate_schema_content(config.schema_name, config.schema_symbol, config.schema_url_env))
 
         if File.exists?(config.schema_file_path)
           existing_schema = File.read(config.schema_file_path)

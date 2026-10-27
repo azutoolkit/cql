@@ -15,13 +15,13 @@ class SchemaFileMigration < CQL::BaseMigration
   end
 end
 
-private def with_schema_file_migrator(schema_file : String, &)
+private def with_schema_file_migrator(schema_file : String, **config, &)
   original = CQL::Migrator.migrations
   db_file = File.join(Dir.tempdir, "cql_migrator_schema_file_#{Process.pid}_#{Random::Secure.hex(4)}.db")
   schema = CQL::Schema.new(:migrator_schema_file, "sqlite3://#{db_file}", CQL::Adapter::SQLite)
   begin
     CQL::Migrator.migrations = [SchemaFileMigration] of CQL::BaseMigration.class
-    yield CQL::Migrator.new(schema, CQL::MigratorConfig.new(schema_file_path: schema_file, auto_sync: true))
+    yield CQL::Migrator.new(schema, CQL::MigratorConfig.new(**config.merge(schema_file_path: schema_file, auto_sync: true)))
   ensure
     CQL::Migrator.migrations = original
     schema.close
@@ -61,6 +61,16 @@ describe "CQL::Migrator schema file" do
       File.read(schema_file).should contain("table :schema_file_widgets do")
       File.read(schema_file).should contain("table :cql_schema_migrations do")
       migrator.verify_schema_consistency.should be_true
+    end
+  end
+
+  it "reads the environment variable named by schema_url_env on its uri: line" do
+    schema_file = temp_schema_file
+
+    with_schema_file_migrator(schema_file, schema_url_env: "ANALYTICS_DATABASE_URL") do |migrator|
+      migrator.up
+
+      File.read(schema_file).should contain("  uri: ENV.fetch(\"ANALYTICS_DATABASE_URL\", ")
     end
   end
 end

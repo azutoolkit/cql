@@ -26,6 +26,17 @@ module CQL
 
     DEFAULT_SCHEMA_DUMP_FILE_PATH = "./src/schemas/schema.cr"
 
+    # Query parameters the committed fallback URI keeps (compared case-insensitively): the connection, pool and
+    # pragma settings CQL and its drivers read, none of them a secret. Any other parameter may hold one.
+    FALLBACK_URI_PARAMS = Set{
+      "sslmode", "sslrootcert", "sslca", "application_name", "connect_timeout", "host", "port", "encoding",
+      "auth_methods", "statement_cache_size", "prepared_statements", "prepared_statements_cache", "pool_size",
+      "pool_min_size", "max_pool_size", "initial_pool_size", "max_idle_pool_size", "checkout_timeout",
+      "retry_attempts", "retry_delay", "query_timeout", "health_check_after", "max_queries", "max_idle_lifetime",
+      "journal_mode", "synchronous", "foreign_keys", "busy_timeout", "cache_size", "wal_autocheckpoint",
+      "min_protocol_version", "max_protocol_version", "binary_params",
+    }
+
     getter adapter : Adapter
     getter uri : String
     private getter db : DB::Database
@@ -42,8 +53,10 @@ module CQL
     # - **@param** file_path [String] Path where to save the schema file
     # - **@param** schema_name [Symbol] Name for the schema constant
     # - **@param** schema_symbol [Symbol] Symbol name for the schema
-    def dump_to_file(file_path : String = DEFAULT_SCHEMA_DUMP_FILE_PATH, schema_name : Symbol = :AppSchema, schema_symbol : Symbol = :app_schema)
-      schema_content = generate_schema_content(schema_name, schema_symbol)
+    # - **@param** env_var [String] The environment variable the file's `uri:` line reads
+    def dump_to_file(file_path : String = DEFAULT_SCHEMA_DUMP_FILE_PATH, schema_name : Symbol = :AppSchema,
+                     schema_symbol : Symbol = :app_schema, env_var : String = "DATABASE_URL")
+      schema_content = generate_schema_content(schema_name, schema_symbol, env_var)
 
       Dir.mkdir_p(File.dirname(file_path))
       File.write(file_path, schema_content)
@@ -72,15 +85,16 @@ module CQL
     # Generate the schema content as a string
     # - **@param** schema_name [Symbol] Name for the schema constant
     # - **@param** schema_symbol [Symbol] Symbol name for the schema
+    # - **@param** env_var [String] The environment variable the `uri:` line reads
     # - **@return** [String] The generated schema content
-    def generate_schema_content(schema_name : Symbol, schema_symbol : Symbol) : String
+    def generate_schema_content(schema_name : Symbol, schema_symbol : Symbol, env_var : String = "DATABASE_URL") : String
       tables = inspect_tables
 
       content = String.build do |str|
         str << "#{schema_name} = CQL::Schema.define(\n"
         str << "  :#{schema_symbol},\n"
         str << "  adapter: CQL::Adapter::#{@adapter},\n"
-        str << "  uri: #{uri_expression}) do\n"
+        str << "  uri: #{uri_expression(env_var)}) do\n"
 
         tables.each do |table|
           str << generate_table_definition(table)
@@ -92,26 +106,29 @@ module CQL
       content
     end
 
-    # The file gets committed, so it reads DATABASE_URL and falls back to the URI without credentials;
-    # a URI that does not parse gets no fallback, as its password cannot be told apart.
-    private def uri_expression : String
+    # The file gets committed, so it reads *env_var* and falls back to the URI without credentials, fragment or
+    # unknown query parameters; a URI that does not parse gets no fallback, as its password cannot be told apart.
+    private def uri_expression(env_var : String) : String
       if fallback = credential_free_uri(@uri)
-        %(ENV.fetch("DATABASE_URL", #{fallback.inspect}))
+        %(ENV.fetch(#{env_var.inspect}, #{fallback.inspect}))
       else
-        %(ENV["DATABASE_URL"])
+        %(ENV[#{env_var.inspect}])
       end
     end
 
     private def credential_free_uri(uri : String) : String?
       parsed = URI.parse(uri)
       parsed.password = nil
-      if (query = parsed.query) && (params = URI::Params.parse(query)).has_key?("password")
-        params.delete_all("password")
-        parsed.query = params.to_s.presence
-      end
+      parsed.fragment = nil
+      parsed.query = parsed.query.try { |query| allowlisted_query(query) }
       parsed.to_s
     rescue URI::Error
       nil
+    end
+
+    # Keeps each kept pair as written: re-encoding would turn `%20` into `+`, which CQL's driver reads literally.
+    private def allowlisted_query(query : String) : String?
+      query.split('&').select { |pair| FALLBACK_URI_PARAMS.includes?(URI.decode(pair.partition('=').first).downcase) }.join('&').presence
     end
 
     # Inspect all tables in the database

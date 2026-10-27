@@ -64,9 +64,11 @@ end
   `updated_at` folded into `timestamps`. Other indexes are not dumped. The migrations table is, like any other table.
 
 {% hint style="info" %}
-The `uri:` line reads `DATABASE_URL` and falls back to the dumped URI without its password (user info and a
-`password` query parameter), so the app must set `DATABASE_URL` to connect with credentials. Other query parameters
-and the user name stay in the fallback.
+The `uri:` line reads `DATABASE_URL` and falls back to the dumped URI without its password, so the app must set
+`DATABASE_URL` to connect with credentials. The fallback keeps the user name and only the known non-secret query
+parameters (`CQL::SchemaDump::FALLBACK_URI_PARAMS`: `sslmode`, pool sizes, timeouts, SQLite pragmas); it drops the
+others and the fragment. To read another variable, pass `env_var: "ANALYTICS_DATABASE_URL"` to `dump_to_file`, or
+set `schema_url_env:` on a `MigratorConfig` you build (`CQL.configure` has no setting for it).
 {% endhint %}
 
 ## Keep the File in Sync With Migrations

@@ -203,11 +203,12 @@ describe CQL::SchemaDump do
       dumper.try(&.close)
     end
 
-    it "writes the fallback as an escaped Crystal string literal" do
-      uri = spec_sqlite_uri(%(schema_dump_q"uote_#{Random::Secure.hex(4)}.db)) + "\#{x}"
+    it "writes the fallback and the variable name as escaped Crystal string literals" do
+      uri = spec_sqlite_uri(%(schema_dump_q"uote_#{Random::Secure.hex(4)}.db))
       dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
 
-      dumper.generate_schema_content(:AppDB, :app_db).should contain("ENV.fetch(\"DATABASE_URL\", #{uri.inspect})) do\n")
+      content = dumper.generate_schema_content(:AppDB, :app_db, env_var: "A\#{x}\"")
+      content.should contain("ENV.fetch(#{"A\#{x}\"".inspect}, #{uri.inspect})) do\n")
     ensure
       dumper.try(&.close)
       uri.try { |written| File.delete?(URI.parse(written).path) }
@@ -224,6 +225,48 @@ describe CQL::SchemaDump do
       content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", \"sqlite3://./db/app.db\")) do\n")
     ensure
       dir.try { |path| FileUtils.rm_rf(path) }
+    end
+
+    it "keeps only known non-secret query parameters in the fallback" do
+      base = spec_sqlite_uri("schema_dump_params_#{Random::Secure.hex(4)}.db")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, base + "?sslmode=require&sslpassword=sslpw_leak&Password=pw_leak" \
+                                                                "&api_key=key_leak&app.token=token_leak&options=opts_leak&application_name=my%20app")
+
+      content = dumper.generate_schema_content(:AppDB, :app_db)
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{(base + "?sslmode=require&application_name=my%20app").inspect})) do\n")
+      %w[sslpw_leak pw_leak key_leak token_leak opts_leak].each { |secret| content.should_not contain(secret) }
+    ensure
+      dumper.try(&.close)
+      base.try { |written| File.delete?(URI.parse(written).path) }
+    end
+
+    it "drops the URL fragment from the fallback" do
+      base = spec_sqlite_uri("schema_dump_fragment_#{Random::Secure.hex(4)}.db")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, base + "?sslmode=require#frag_leak")
+
+      content = dumper.generate_schema_content(:AppDB, :app_db)
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{(base + "?sslmode=require").inspect})) do\n")
+      content.should_not contain("frag_leak")
+    ensure
+      dumper.try(&.close)
+      base.try { |written| File.delete?(URI.parse(written).path) }
+    end
+
+    it "reads the environment variable dump_to_file is given, DATABASE_URL by default" do
+      uri = spec_sqlite_uri("schema_dump_env_#{Random::Secure.hex(4)}.db")
+      file = File.join(Dir.tempdir, "schema_dump_env_#{Random::Secure.hex(4)}.cr")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+
+      dumper.dump_to_file(file, :AppDB, :app_db, env_var: "ANALYTICS_DATABASE_URL")
+      File.read(file).should contain("  uri: ENV.fetch(\"ANALYTICS_DATABASE_URL\", #{uri.inspect})) do\n")
+      dumper.dump_to_file(file, :AppDB, :app_db)
+      File.read(file).should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{uri.inspect})) do\n")
+    ensure
+      dumper.try(&.close)
+      file.try { |path| File.delete?(path) }
+      uri.try { |written| File.delete?(URI.parse(written).path) }
     end
   end
 
