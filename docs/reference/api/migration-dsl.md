@@ -275,6 +275,7 @@ migrator.up_to(20250125001401_i64)  # apply the pending ones up to and including
 | `schema_symbol` | `Symbol` | `:app_schema` |
 | `migration_table_name` | `Symbol` | `:cql_schema_migrations` |
 | `auto_sync?` | `Bool` | `true`: rewrite the schema file after `up` / `down` |
+| `lock_timeout` | `Time::Span?` | `60.seconds`: how long `Migrator.new` and a run wait for another migrator's PostgreSQL migration lock before raising `CQL::Migrator::Error`; replaces the server's `lock_timeout` for that wait only, and under 1 ms counts as 1 ms; `nil` leaves the wait to the server's `lock_timeout`. `CQL.configure` does not set it |
 
 `CQL.build_migrator(schema)` builds the config from `CQL.configure` instead (table `:schema_migrations`); see the [Configuration Reference](../configuration.md#helpers).
 

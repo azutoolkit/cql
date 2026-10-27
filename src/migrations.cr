@@ -93,6 +93,9 @@ module CQL
     property schema_symbol : Symbol
     property migration_table_name : Symbol
     property? auto_sync : Bool = true
+    # How long `Migrator.new` and a run wait for another migrator's PostgreSQL migration lock before raising; nil
+    # leaves the wait to the server's own `lock_timeout` (none by default). Only that wait: migrations keep theirs.
+    property lock_timeout : Time::Span?
 
     def initialize(
       @schema_file_path : String = "src/schemas/app_schema.cr",
@@ -100,6 +103,7 @@ module CQL
       @schema_symbol : Symbol = :app_schema,
       @migration_table_name : Symbol = :cql_schema_migrations,
       @auto_sync : Bool? = true,
+      @lock_timeout : Time::Span? = 60.seconds,
     )
     end
   end
@@ -445,7 +449,32 @@ module CQL
     private def lock_migrations : Nil
       return unless sql = schema.dialect.migration_lock_sql
       require_read_committed!
-      schema.with_connection(&.exec(sql, migration_lock_key))
+      schema.with_connection do |connection|
+        within_lock_timeout(connection) { connection.exec(sql, migration_lock_key) }
+      end
+    end
+
+    # Bounds the lock wait alone: the migrations then run under the lock_timeout the connection had.
+    private def within_lock_timeout(connection : DB::Connection, &) : Nil
+      dialect, timeout = schema.dialect, config.lock_timeout
+      read, set = dialect.lock_timeout_sql, dialect.set_lock_timeout_sql
+      return yield unless timeout && read && set
+      previous = connection.query_one(read, as: String)
+      connection.exec(set, lock_timeout_milliseconds(timeout))
+      begin
+        yield
+      rescue error
+        raise error unless dialect.lock_timed_out?(error)
+        raise Error.new("Another migrator holds the migration lock on #{config.migration_table_name}; gave up after " \
+                        "#{timeout.total_seconds} s (MigratorConfig#lock_timeout) and ran nothing. Raise lock_timeout, " \
+                        "or set it to nil to wait until that run ends", cause: error)
+      end
+      connection.exec(set, previous)
+    end
+
+    # At least 1 ms (0 means no bound) and at most Int32::MAX ms, the largest lock_timeout PostgreSQL takes.
+    private def lock_timeout_milliseconds(timeout : Time::Span) : String
+      timeout.total_milliseconds.clamp(1.0, Int32::MAX.to_f).ceil.to_i.to_s
     end
 
     # A snapshot taken before the lock wait (REPEATABLE READ, SERIALIZABLE) misses the run it waited for.

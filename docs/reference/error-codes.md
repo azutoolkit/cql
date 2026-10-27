@@ -57,7 +57,7 @@ end
 | `full(...)` join | MySQL | `DialectError` |
 | `Insert#get` / `get!` | SQLite, MySQL | `DialectError` (`INSERT ... RETURNING`) |
 | `dialect.structure_dump` | CockroachDB | `DialectError` |
-| `schema.alter`, `schema.build`, a table's `create!` / `drop!` / `truncate!`, `Migrator.new`, `up`, `down` inside an open transaction | MySQL, CockroachDB | `DialectError` (`"MySQL does not support schema changes inside a transaction"`), raised before any DDL runs |
+| `schema.alter`, `schema.build`, a table's `create!` / `drop!` / `truncate!`, `Migrator.new` inside an open transaction; `up`, `up_to`, `down`, `down_to`, `rollback` there only when they have a migration to run (with nothing to do they return) | MySQL, CockroachDB | `DialectError` (`"MySQL does not support schema changes inside a transaction"`), raised before any DDL runs |
 | `back(...)` on insert, update, delete | SQLite | `SQLiteUnsupportedFeatureError` |
 | `change_column`, `foreign_key`, `drop_foreign_key` in `schema.alter` | SQLite | `SQLiteUnsupportedFeatureError` |
 | `check_constraint` | MySQL | `MySqlUnsupportedFeatureError` |
@@ -79,7 +79,7 @@ end
 | :--- | :--- | :--- |
 | **`CQL::Schema::Error`** | `schema.alter :name` for a table not in the schema | `"Table 'users' not found"` |
 | **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL or CockroachDB URI with an empty host and no `?host=` or `PGHOST`, a MySQL URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
-| **`CQL::Migrator::Error`** | `update_schema_file` (run by `up` and `down` with `auto_sync`, and by `bootstrap_schema`) when the dump fails; `up_to` / `down_to` with a version no migration has; `Migrator.new` when two migrations share a version, before it creates or records anything; `up` when another migrator recorded a migration's version during the run | `"Schema update failed: <cause>"`, `"No migration with version 42"`, `"Migrations A and B share version 7; renumber the one cql_schema_migrations does not list. If it already ran, first insert ..."` |
+| **`CQL::Migrator::Error`** | `update_schema_file` (run by `up` and `down` with `auto_sync`, and by `bootstrap_schema`) when the dump fails; `up_to` / `down_to` with a version no migration has; `Migrator.new` when two migrations share a version, before it creates or records anything; `up` when another migrator recorded a migration's version during the run; on PostgreSQL, `Migrator.new` or a run with migrations to run when another migrator holds the migration lock past `MigratorConfig#lock_timeout` (nothing runs) | `"Schema update failed: <cause>"`, `"No migration with version 42"`, `"Migrations A and B share version 7; renumber the one cql_schema_migrations does not list. If it already ran, first insert ..."`, `"Another migrator holds the migration lock on cql_schema_migrations; gave up after 60.0 s (MigratorConfig#lock_timeout) and ran nothing. ..."` |
 | **`CQL::SchemaDump::Error`** | `SchemaDump` for an unknown adapter or a failed connection; reaches you wrapped in `Migrator::Error` | `"Failed to connect to database: ..."` |
 | `KeyError` | `schema.tables[:name]` for an unknown table | `"Missing hash key: :name"` |
 

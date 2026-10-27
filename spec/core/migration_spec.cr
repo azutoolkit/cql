@@ -81,6 +81,7 @@ describe CQL::Migration do
       config.schema_name.should eq(:AppSchema)
       config.schema_symbol.should eq(:app_schema)
       config.auto_sync?.should be_true
+      config.lock_timeout.should eq(60.seconds)
     end
 
     it "creates with custom values" do
@@ -88,8 +89,10 @@ describe CQL::Migration do
         schema_file_path: "spec/test_schema.cr",
         schema_name: :TestSchema,
         schema_symbol: :test_schema,
-        auto_sync: false
+        auto_sync: false,
+        lock_timeout: nil
       )
+      config.lock_timeout.should be_nil
       config.schema_file_path.should eq("spec/test_schema.cr")
       config.schema_name.should eq(:TestSchema)
       config.schema_symbol.should eq(:test_schema)
