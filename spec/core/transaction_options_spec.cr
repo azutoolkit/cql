@@ -3,11 +3,11 @@ require "../spec_helper"
 # SQLite standing in for MySQL, which sets the level before BEGIN: like SET TRANSACTION there, `PRAGMA synchronous`
 # is refused inside a transaction and holds per connection.
 private class BeforeBeginSqliteDialect < Expression::SqliteDialect
-  def isolation_before_begin? : Bool
+  def transaction_modes_before_begin? : Bool
     true
   end
 
-  def isolation_level_sql(level : CQL::IsolationLevel) : String?
+  def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
     "PRAGMA synchronous = OFF"
   end
 end
@@ -58,18 +58,37 @@ describe "CQL::Schema#transaction(isolation:)" do
     CQL::Telemetry.unsubscribe_transactions("tx_options_spec")
   end
 
+  it "refuses read_only: on SQLite, which has no read-only transactions, before a transaction begins" do
+    events = [] of CQL::Telemetry::TransactionEvent
+    CQL::Telemetry.subscribe_transactions("tx_options_spec") { |event| events << event }
+    expect_raises(CQL::DialectError, /SQLite.*read.?only/i) { schema.transaction(read_only: true) { raise "the block ran" } }
+    expect_raises(CQL::DialectError, /SQLite.*read.?only/i) do
+      schema.transaction(isolation: :serializable, read_only: true) { raise "the block ran" }
+    end
+    events.should be_empty
+    CQL::Adapter::SQLite.dialect.transaction_modes_sql(CQL::IsolationLevel::Serializable, false).should be_nil
+    CQL::Adapter::SQLite.dialect.transaction_modes_sql(nil, false).should be_nil
+  ensure
+    CQL::Telemetry.unsubscribe_transactions("tx_options_spec")
+  end
+
   it "refuses isolation: on a nested transaction (a savepoint), leaving the outer one to commit" do
     schema.transaction do
       schema.exec("INSERT INTO tx_option_rows (label) VALUES ('outer')")
       expect_raises(ArgumentError) { schema.transaction(isolation: :serializable) { } }
+      expect_raises(ArgumentError, /read.?only/i) { schema.transaction(read_only: true) { } }
     end
     committed_labels.call.should eq ["outer"]
   end
 
-  it "gives PostgreSQL and CockroachDB the level as the transaction's first statement" do
+  it "gives PostgreSQL and CockroachDB the level and access mode as the transaction's first statement" do
     [CQL::Adapter::Postgres, CQL::Adapter::CockroachDB].each do |adapter|
-      adapter.dialect.isolation_level_sql(CQL::IsolationLevel::Serializable).should eq "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"
-      adapter.dialect.isolation_level_sql(CQL::IsolationLevel::ReadCommitted).should eq "SET TRANSACTION ISOLATION LEVEL READ COMMITTED"
+      dialect = adapter.dialect
+      dialect.transaction_modes_sql(CQL::IsolationLevel::Serializable, false).should eq "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"
+      dialect.transaction_modes_sql(CQL::IsolationLevel::ReadCommitted, false).should eq "SET TRANSACTION ISOLATION LEVEL READ COMMITTED"
+      dialect.transaction_modes_sql(nil, true).should eq "SET TRANSACTION READ ONLY"
+      dialect.transaction_modes_sql(CQL::IsolationLevel::Serializable, true).should eq "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY"
+      dialect.transaction_modes_sql(nil, false).should be_nil
     end
   end
 

@@ -443,6 +443,33 @@ describe "CQL::Postgres against a live server" do
     end
   end
 
+  it "makes one Schema#transaction read-only, through the engine and through crystal-db" do
+    require_live!
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    table = "cql_read_only_live_#{Process.pid}"
+    {PG::EngineSource.connect("#{LIVE_URL}#{separator}pool_size=1"), nil}.each do |source| # one connection, as above
+      schema = CQL::Schema.new(:read_only_live, source ? LIVE_URL : "#{LIVE_URL}#{separator}max_pool_size=1", CQL::Adapter::Postgres, source: source)
+      schema.transaction(read_only: true, &.connection.scalar("SHOW transaction_read_only").should eq("on"))
+      schema.transaction(isolation: :serializable, read_only: true) do |tx|
+        tx.connection.scalar("SHOW transaction_read_only").should eq("on")
+        tx.connection.scalar("SHOW transaction_isolation").should eq("serializable")
+      end
+      schema.transaction(&.connection.scalar("SHOW transaction_read_only").should eq("off"))
+      writes = {
+        ->(tx : DB::Transaction) { tx.connection.exec("CREATE TEMP TABLE read_only_live (id int)") },
+        ->(_tx : DB::Transaction) { schema.exec("CREATE TABLE #{table} (id int)") },                        # through the Schema
+        ->(_tx : DB::Transaction) { schema.transaction { schema.exec("CREATE TABLE #{table} (id int)") } }, # in a savepoint
+      }
+      writes.each do |write|
+        denied = expect_raises(Exception) { schema.transaction(read_only: true) { |tx| write.call(tx) } }
+        (denied.is_a?(PQ::PQError) ? denied.field_message(:code) : denied.as(PG::ServerError).sqlstate).should eq "25006"
+      end
+    ensure
+      schema.try &.exec("DROP TABLE IF EXISTS #{table}")
+      schema.try &.close
+    end
+  end
+
   it "rolls back to a savepoint without ending the surrounding transaction" do
     require_live!
     engine = PG::AsyncEngine.connect(LIVE_URL)

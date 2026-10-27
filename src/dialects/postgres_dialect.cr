@@ -230,8 +230,8 @@ module Expression
       "SHOW transaction_isolation"
     end
 
-    def isolation_level_sql(level : CQL::IsolationLevel) : String?
-      "SET TRANSACTION ISOLATION LEVEL #{level.to_sql}"
+    def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      set_transaction_sql(isolation, read_only)
     end
 
     # REPEATABLE READ and SERIALIZABLE take their snapshot at the lock statement, before it waits.

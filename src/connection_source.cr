@@ -20,7 +20,7 @@ module CQL
       using_connection { |connection| connection.transaction { |transaction| yield transaction } }
     end
 
-    # As `transaction`, after running *before_begin* on that connection (MySQL takes the isolation level there).
+    # As `transaction`, after running *before_begin* on that connection (MySQL takes the transaction's modes there).
     # It opens the transaction through `using_connection`: a source that overrides `transaction` overrides this too.
     # A connection whose transaction never began is closed, so what *before_begin* left reaches no later borrower.
     def transaction(before_begin : String, & : DB::Transaction -> _)

@@ -43,15 +43,17 @@ module Expression
       nil
     end
 
-    # The statement that sets the transaction's *level* (the counterpart of `transaction_isolation_sql`, which reads
-    # it); nil when the transaction already runs at it.
-    def isolation_level_sql(level : CQL::IsolationLevel) : String?
-      raise CQL::DialectError.new(display_name, "Schema#transaction(isolation:)")
+    # The statement that sets the transaction's *isolation* level (the counterpart of `transaction_isolation_sql`,
+    # which reads it) and makes it *read_only*; nil when the transaction already runs that way. An override raises
+    # `DialectError` for a mode it cannot set.
+    def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      raise CQL::DialectError.new(display_name, "Schema#transaction(isolation:)") if isolation
+      raise CQL::DialectError.new(display_name, "Schema#transaction(read_only:)") if read_only
     end
 
-    # Whether `isolation_level_sql` runs just before BEGIN on the transaction's connection instead of as its first
-    # statement: a database whose statement sets the next transaction's level refuses it inside one.
-    def isolation_before_begin? : Bool
+    # Whether `transaction_modes_sql` runs just before BEGIN on the transaction's connection instead of as its first
+    # statement: a database whose statement sets the next transaction's modes refuses it inside one.
+    def transaction_modes_before_begin? : Bool
       false
     end
 
@@ -508,6 +510,14 @@ module Expression
     def sized_type(column_type : String, size : Int32?) : String
       return column_type unless size && column_type.starts_with?("VARCHAR")
       "VARCHAR(#{size})"
+    end
+
+    # The SQL standard's `SET TRANSACTION`, for the dialects whose `transaction_modes_sql` it is.
+    protected def set_transaction_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      modes = [] of String
+      isolation.try { |level| modes << "ISOLATION LEVEL #{level.to_sql}" }
+      modes << "READ ONLY" if read_only
+      "SET TRANSACTION #{modes.join(", ")}" unless modes.empty?
     end
 
     # Generates SQL to create an index that is skipped when it already exists.

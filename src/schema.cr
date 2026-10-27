@@ -370,11 +370,13 @@ module CQL
     # restored. A savepoint that commits leaves them to the enclosing transaction.
     # A manual `tx.rollback` restores nothing, for the same reason as above.
     #
-    # *isolation* runs the transaction at that level (`transaction(isolation: :serializable) { }`). A dialect
-    # that cannot honour it raises `DialectError`, and a nested call raises `ArgumentError`, before anything begins.
-    def transaction(*, isolation : IsolationLevel? = nil, &)
+    # *isolation* runs the transaction at that level (`transaction(isolation: :serializable) { }`), and *read_only*
+    # has the database refuse its writes to permanent tables, a guard against accidental writes, not access control.
+    # A dialect that cannot honour them raises `DialectError`, and a nested call raises `ArgumentError`, before
+    # anything begins.
+    def transaction(*, isolation : IsolationLevel? = nil, read_only : Bool = false, &)
       parent = active_frame
-      before_begin, after_begin = isolation_statements(isolation, nested: !parent.nil?)
+      before_begin, after_begin = transaction_mode_statements(isolation, read_only, nested: !parent.nil?)
       observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
       rollback_hooks = RollbackHooks.new
       open_transaction(parent, before_begin) do |tx|
@@ -404,10 +406,10 @@ module CQL
     end
 
     # Crystal consults `method_missing` before it casts a symbol to an enum, so `isolation: :serializable` lands here.
-    def transaction(*, isolation : Symbol, &)
+    def transaction(*, isolation : Symbol, read_only : Bool = false, &)
       level = IsolationLevel.parse?(isolation.to_s) || raise ArgumentError.new(
         "unknown isolation level #{isolation.inspect}; use :read_uncommitted, :read_committed, :repeatable_read or :serializable")
-      transaction(isolation: level) { |tx| yield tx }
+      transaction(isolation: level, read_only: read_only) { |tx| yield tx }
     end
 
     def transaction(tx : DB::Transaction, &)
@@ -429,14 +431,20 @@ module CQL
       end
     end
 
-    # The statement setting *isolation*, as {before BEGIN, first in the transaction}, where the dialect takes it.
-    # A savepoint runs at the level of the transaction it is in.
-    private def isolation_statements(isolation : IsolationLevel?, nested : Bool) : {String?, String?}
-      return {nil, nil} unless isolation
-      raise ArgumentError.new("isolation: cannot change the level inside a transaction; set it on the outermost one") if nested
+    # The statement setting *isolation* and *read_only*, as {before BEGIN, first in the transaction}, where the
+    # dialect takes it. A savepoint runs in the modes of the transaction it is in.
+    private def transaction_mode_statements(isolation : IsolationLevel?, read_only : Bool, nested : Bool) : {String?, String?}
+      return {nil, nil} unless isolation || read_only
+      raise_nested_modes(isolation, read_only) if nested
       strategy = dialect
-      sql = strategy.isolation_level_sql(isolation)
-      strategy.isolation_before_begin? ? {sql, nil} : {nil, sql}
+      sql = strategy.transaction_modes_sql(isolation, read_only)
+      strategy.transaction_modes_before_begin? ? {sql, nil} : {nil, sql}
+    end
+
+    private def raise_nested_modes(isolation : IsolationLevel?, read_only : Bool) : NoReturn
+      given = [("isolation:" if isolation), ("read_only:" if read_only)].compact
+      raise ArgumentError.new(
+        "#{given.join(" and ")} cannot change inside a transaction; set #{given.size > 1 ? "them" : "it"} on the outermost one")
     end
 
     # Creates a new migrator for the schema.

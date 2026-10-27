@@ -57,12 +57,12 @@ module Expression
       "?"
     end
 
-    # SET TRANSACTION sets the next transaction's level; inside a transaction MySQL refuses it.
-    def isolation_level_sql(level : CQL::IsolationLevel) : String?
-      "SET TRANSACTION ISOLATION LEVEL #{level.to_sql}"
+    # SET TRANSACTION sets the next transaction's modes; inside a transaction MySQL refuses it.
+    def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      set_transaction_sql(isolation, read_only)
     end
 
-    def isolation_before_begin? : Bool
+    def transaction_modes_before_begin? : Bool
       true
     end
 
