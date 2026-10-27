@@ -6,7 +6,7 @@ module CQL::Postgres
   # Bounded set of connections shared by many fibers. `checkout` waits (up to
   # `checkout_timeout`) for a free slot; `release` returns the connection, or
   # drops it if it is closed or still inside a transaction. Idle connections
-  # that sat unused for `health_check_after` are pinged before being handed out.
+  # that sat unused for `health_check_after`, or have input waiting, are pinged before being handed out.
   class Pool
     include ::DB::ConnectionContext
 
@@ -204,12 +204,13 @@ module CQL::Postgres
       end
     end
 
-    # true or false when the connection's age settles it, nil when it needs a ping.
+    # true or false when the connection's age settles it, nil when it needs a ping: it is old, or the server
+    # wrote to it or hung up while it sat idle (a backend's FATAL on a restart or failover is read by the ping).
     private def quick_verdict(connection : Connection) : Bool?
       return false if connection.closed? || connection.session.closed?
       idle_for = Time.instant - connection.session.last_used
       return false if @options.max_idle_lifetime.try { |lifetime| idle_for >= lifetime }
-      idle_for < @options.health_check_after ? true : nil
+      idle_for < @options.health_check_after && !connection.session.input_pending? ? true : nil
     end
 
     private def reusable?(connection : Connection) : Bool

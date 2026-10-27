@@ -115,6 +115,23 @@ describe CQL::Postgres::Transport do
     error.message.to_s.should_not contain "hunter2"
   end
 
+  describe ".input_pending?" do
+    it "answers without blocking whether the peer wrote or hung up, and consumes nothing" do
+      local, peer = UNIXSocket.pair
+      local.read_timeout = 1.second # a peek that consumed the byte would leave read_byte waiting
+      PG::Transport.input_pending?(local).should be_false
+      peer.write("E".to_slice)
+      PG::Transport.input_pending?(local).should be_true
+      local.read_byte.should eq 'E'.ord # the peek left the byte in place
+      PG::Transport.input_pending?(local).should be_false
+      peer.close
+      PG::Transport.input_pending?(local).should be_true # end of stream
+      PG::Transport.input_pending?(IO::Memory.new("x")).should be_false
+    ensure
+      local.try &.close
+    end
+  end
+
   describe "network failures during TLS setup stay retryable IO errors" do
     it "when the server hangs up after the SSLRequest" do
       server = FakePG.start(&.read_startup)

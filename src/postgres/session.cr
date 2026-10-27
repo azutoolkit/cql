@@ -143,6 +143,11 @@ module CQL::Postgres
       @closed
     end
 
+    # Whether the server sent something or hung up since the last request (see `Transport.input_pending?`).
+    def input_pending? : Bool
+      Transport.input_pending?(@socket)
+    end
+
     # A value as a bind parameter for this session, in binary if its config allows.
     def encode(value) : Types::Param
       Types::ParamEncoder.encode(value, @binary_params)

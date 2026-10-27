@@ -34,6 +34,23 @@ module CQL::Postgres
       raise IO::Error.new("cannot connect to #{config.address}: #{ex.message}", cause: ex)
     end
 
+    # recv(2) flags LibC does not bind: look without consuming, never wait.
+    private MSG_PEEK     = 0x02
+    private MSG_DONTWAIT = {% if flag?(:linux) %} 0x40 {% else %} 0x80 {% end %} # 0x80 on macOS and the BSDs
+
+    # True when the kernel holds bytes, an end of stream or an error for *socket*: an idle session should have
+    # nothing to read, so the server wrote or hung up while it sat unused. Never blocks. For TLS the bytes are
+    # still encrypted, which is enough to know. Off Unix, or for a non-socket stream, the answer is false.
+    def self.input_pending?(socket : IO) : Bool
+      {% if flag?(:unix) %}
+        return false unless socket.is_a?(Socket)
+        byte = 0_u8
+        LibC.recv(socket.fd, pointerof(byte), 1, MSG_PEEK | MSG_DONTWAIT) >= 0 || Errno.value != Errno::EAGAIN
+      {% else %}
+        false
+      {% end %}
+    end
+
     # Lifts the startup time limits so queries may run as long as they need.
     def self.relax(io : IO) : Nil
       return unless io.responds_to?(:read_timeout=) && io.responds_to?(:write_timeout=)

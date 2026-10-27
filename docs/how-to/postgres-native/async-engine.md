@@ -42,7 +42,7 @@ Pool settings are URL query options:
 | `pool_size` | Maximum connections, at least 1 | 10 |
 | `pool_min_size` | Connections opened by `connect`, 0 to `pool_size` | 0 |
 | `checkout_timeout` | Seconds to wait for a free connection, then `PoolTimeout` | 5 |
-| `health_check_after` | Ping a connection idle longer than this many seconds before lending it | 30 |
+| `health_check_after` | Ping a connection idle longer than this many seconds before lending it; a younger one is pinged only if the server wrote to or closed it while idle (a failover's FATAL), which the pool checks without a round trip | 30 |
 | `max_queries` | Retire a connection after this many requests | none |
 | `max_idle_lifetime` | Retire a connection idle this many seconds | none |
 | `pool_reset` | `discard_all`: run `DISCARD ALL` on every return, for tenant isolation (see Setup and Reset Hooks); any other value raises `ArgumentError`, and `DB.open` refuses the key | none |
