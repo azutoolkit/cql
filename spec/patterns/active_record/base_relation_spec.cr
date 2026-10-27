@@ -220,3 +220,44 @@ describe CQL::ActiveRecord::Relations::BaseRelation do
     end
   end
 end
+
+SafeDbOpDB = CQL::Schema.define(:safe_db_op_db, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("safe_db_op.db")) do
+  table :sdo_owners do
+    primary :id, Int64, auto_increment: true
+    text :name
+  end
+  table :sdo_visits do
+    primary :id, Int64, auto_increment: true
+    bigint :sdo_owner_id
+    timestamp :seen_at, null: true
+  end
+end
+
+class SdoVisit
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: SafeDbOpDB, table: :sdo_visits
+  property sdo_owner_id : Int64? = nil
+  property seen_at : Time? = nil
+end
+
+class SdoOwner
+  include CQL::ActiveRecord::Model(Int64)
+  db_context schema: SafeDbOpDB, table: :sdo_owners
+  property name : String = ""
+  has_many :visits, SdoVisit
+end
+
+describe "safe_db_operation on a DB::Error" do
+  before_each { SafeDbOpDB.sdo_owners.create!; SafeDbOpDB.sdo_visits.create! }
+  after_each { SafeDbOpDB.sdo_visits.drop!; SafeDbOpDB.sdo_owners.drop! }
+
+  it "raises a RelationError without the driver's text, keeping the DB::Error as its cause" do
+    owner = SdoOwner.create!(name: "Ann")
+    # The row mapper quotes a value it cannot read (here a timestamp) in DB::MappingException's message.
+    SafeDbOpDB.exec_query(&.exec("INSERT INTO sdo_visits (sdo_owner_id, seen_at) VALUES (?, ?)", owner.id!, "marker-secret-42"))
+    error = expect_raises(CQL::ActiveRecord::Relations::BaseRelation::RelationError) { owner.visits.all }
+    error.message.to_s.should_not contain("marker-secret-42")
+    error.cause.should be_a(DB::Error)
+    error.cause.try(&.message).to_s.should contain("marker-secret-42")
+  end
+end

@@ -4,8 +4,9 @@ require "./refusal"
 
 module CQL::Postgres
   # Lets crystal-db open `postgres://` and `postgresql://` URLs with the wire
-  # driver, so `CQL::Schema` and `DB.open` use it unless another PostgreSQL
-  # driver (the `pg` shard) registered those names first. `cockroachdb://` is
+  # driver, so `CQL::Schema` and `DB.open` use it unless the `pg` shard is also
+  # linked: it registers both names unconditionally, so it takes them whatever
+  # the require order (and its statements log bound values). `cockroachdb://` is
   # opt-in (`register_cockroachdb`, or compile with
   # `-Dcql_postgres_driver_cockroachdb`) because only CockroachDB 24.3 was
   # checked against a real server.
