@@ -441,11 +441,14 @@ module CQL
       end
     end
 
+    # A version another migrator recorded during the run fails it instead of being skipped. The insert stays
+    # unguarded so a record that migrator has not committed yet still trips the unique index.
     private def record_migration(migration : BaseMigration.class)
-      # Check if the migration already exists to avoid unique constraint errors
-      unless migration_applied?(migration.version)
-        repo.create(name: migration.name, version: migration.version)
+      if migration_applied?(migration.version)
+        raise Error.new("Another migrator recorded #{migration.name} (version #{migration.version}) during this run; " \
+                        "the run is rolled back where DDL is transactional")
       end
+      repo.create(name: migration.name, version: migration.version)
     end
 
     private def remove_migration_record(migration : BaseMigration.class)

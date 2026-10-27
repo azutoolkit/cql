@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `delete!` on a model with `optimistic_locking` deletes the row only while it still holds the version the record read. Before, a stale copy deleted a row another process had just updated. A raise rolls back the deletes of its `dependent:` associations.
 - `CQL::Migrator.new` raises `CQL::Migrator::Error` naming the classes when two registered migrations share a version, before it creates, applies or records anything. Before, `up` ran both but recorded one version, so a later rollback left the schema and its records out of step.
+- `CQL::Migrator#up` raises `CQL::Migrator::Error` when another migrator recorded the version of a migration it is applying during the run, or the driver's unique violation when that migrator has not committed its record yet. On SQLite and PostgreSQL the whole run rolls back; MySQL and CockroachDB keep the statements already committed. Before, the record was skipped and the run committed, so two concurrent migrators could both apply a data migration.
 
 ## [0.0.916] - 2026-10-26
 

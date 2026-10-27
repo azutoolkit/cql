@@ -69,6 +69,18 @@ class TxMigrationDropDOnDown < TxMigration
   end
 end
 
+# Records its own version on the batch's connection, as a migrator running concurrently would.
+class TxMigrationRecordedConcurrently < TxMigration
+  def self.version : Int64
+    6_i64
+  end
+
+  def up
+    schema.exec("CREATE TABLE tx_migration_f (id INTEGER)")
+    schema.exec_query(&.exec("INSERT INTO cql_schema_migrations (name, version) VALUES (?, ?)", self.class.name, self.class.version))
+  end
+end
+
 private def tx_schema(uri : String, schema_class : CQL::Schema.class = CQL::Schema)
   schema_class.new(:migration_tx, uri, CQL::Adapter::SQLite)
 end
@@ -99,7 +111,7 @@ describe "CQL::Migrator transaction" do
 
   before_each do
     DB.open(uri) do |db|
-      %w[tx_migration_a tx_migration_b tx_migration_c tx_migration_d tx_migration_e cql_schema_migrations].each { |table| db.exec("DROP TABLE IF EXISTS #{table}") }
+      %w[tx_migration_a tx_migration_b tx_migration_c tx_migration_d tx_migration_e tx_migration_f cql_schema_migrations].each { |table| db.exec("DROP TABLE IF EXISTS #{table}") }
     end
   end
 
@@ -120,6 +132,16 @@ describe "CQL::Migrator transaction" do
     committed_tables.call.should be_empty
     committed_versions.call.should be_empty
     CQL::Migrator.migrations.should eq(registered)
+  end
+
+  it "rolls back the batch when another migrator records a migration's version during the run" do
+    with_migrator(uri, TxMigrationCreateA, TxMigrationRecordedConcurrently) do |migrator|
+      expect_raises(CQL::Migrator::Error, /Another migrator recorded/) { migrator.up }
+    end
+
+    # The concurrent record ran inside the batch's transaction, so it rolls back with it.
+    committed_tables.call.should be_empty
+    committed_versions.call.should be_empty
   end
 
   it "keeps earlier migrations applied when a later one fails without transactional DDL" do
