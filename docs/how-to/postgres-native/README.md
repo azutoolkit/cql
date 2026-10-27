@@ -68,6 +68,7 @@ crystal build -Dcql_postgres_driver_cockroachdb src/app.cr # also serve DB.open(
 "postgres:///app"                                 # host, port, user and password from PGHOST, PGPORT, PGUSER, PGPASSWORD
                                                   # (CQL::Schema needs PGHOST or ?host= for it)
 "postgres://app:p%2Bss@db/app"                    # a literal + in the user or password is %2B for DB.open and CQL::Schema
+"postgres://app:p%40ss@db/app"                    # '@', '/', '?' and '#' in a password are %40, %2F, %3F, %23 (DB.open refuses a bare '@')
 
 DB.open(DATABASE_URL) do |db|
   db.query_one("SELECT 1.50::numeric", as: CQL::Postgres::Types::DecimalText).to_s # => "1.50", exact

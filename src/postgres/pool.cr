@@ -159,7 +159,7 @@ module CQL::Postgres
       select
       when @slots.receive
       when timeout(@options.checkout_timeout)
-        raise PoolTimeout.new("no connection became free within #{@options.checkout_timeout} (pool size #{@options.max_size})")
+        raise PoolTimeout.new("no connection to #{@config.address} became free within #{@options.checkout_timeout} (pool size #{@options.max_size})")
       end
     rescue Channel::ClosedError
       raise PoolClosed.new("the pool was closed while waiting for a connection")

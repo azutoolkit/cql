@@ -106,7 +106,8 @@ module CQL::Postgres
     # A host starting with `/` (percent-encoded in the authority, or given as
     # `?host=`) is the directory of a Unix socket.
     def self.parse(url : String) : Config
-      from_uri(URI.parse(url), *userinfo(url))
+      location, user, password = split_userinfo(url)
+      from_uri(URI.parse(location), user, password)
     end
 
     # For callers that only hold a parsed URI (crystal-db's driver interface).
@@ -115,6 +116,11 @@ module CQL::Postgres
     # caller and are not read as settings; `COMPAT_IGNORED_KEYS` are always dropped.
     def self.from_uri(uri : URI, user : String? = uri.user.presence, password : String? = uri.password, ignoring : Enumerable(String) = [] of String) : Config
       raise ArgumentError.new("expected a postgres:// URL, got scheme #{uri.scheme.inspect}") unless SCHEMES.includes?(uri.scheme)
+      # URI.parse ends the user info at the first '@', leaving the rest of a password with an unencoded '@' in the host
+      # (a socket directory, which starts with '/', may hold an '@' of its own).
+      if uri.user && uri.host.try { |host| host.includes?('@') && !host.starts_with?('/') }
+        raise ArgumentError.new("the URL's host holds an '@': write an '@' in the password as %40")
+      end
       params = query_parameters(uri.query)
       ignoring.each { |key| params.delete(key) }
       COMPAT_IGNORED_KEYS.each { |key| params.delete(key) }
@@ -144,13 +150,14 @@ module CQL::Postgres
       )
     end
 
-    # URI.parse reads `+` in the user info as a space (form encoding); in a URL
-    # it is a literal plus, so the user info is split and percent-decoded here.
-    private def self.userinfo(url : String) : {String?, String?}
-      authority = url.partition("://")[2].split(/[\/?#]/, 2).first
-      return {nil, nil} unless at = authority.rindex('@')
-      user, separator, password = authority[0, at].partition(':')
-      {URI.decode(user).presence, separator.empty? ? nil : URI.decode(password)}
+    # URI.parse reads `+` in the user info as a space (form encoding) and ends it at the first '@'; in a URL `+` is a
+    # literal plus, and an unencoded '@' of a password must not reach the host. So the user info ends at the
+    # authority's last '@' and is percent-decoded here; the URL comes back without it.
+    private def self.split_userinfo(url : String) : {String, String?, String?}
+      scheme, separator, rest = url.partition("://")
+      return {url, nil, nil} unless scheme.matches?(/\A[a-z][a-z0-9+.\-]*\z/i) && (at = rest[/\A[^\/?#]*/].rindex('@'))
+      user, colon, password = rest[0, at].partition(':')
+      {"#{scheme}#{separator}#{rest[at + 1..]}", URI.decode(user).presence, colon.empty? ? nil : URI.decode(password)}
     end
 
     private def self.query_parameters(query : String?) : Hash(String, String)
@@ -199,9 +206,10 @@ module CQL::Postgres
       end
     end
 
-    # Where the connection goes, for error messages.
+    # Where the connection goes, for error messages; an IPv6 host is bracketed so its port reads apart from it.
     def address : String
-      unix_socket? ? socket_path : "#{host}:#{port}"
+      return socket_path if unix_socket?
+      host.includes?(':') ? "[#{host}]:#{port}" : "#{host}:#{port}"
     end
 
     def unix_socket? : Bool
