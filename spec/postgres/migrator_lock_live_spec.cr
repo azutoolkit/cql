@@ -79,4 +79,18 @@ describe "CQL::Migrator's migration lock on PostgreSQL" do
       recorded_versions(schemas[0]).size.should eq(2)
     end
   end
+
+  it "rolls back one migration for two concurrent rollbacks, and the waiter raises instead of taking the older one" do
+    require_postgres!
+    with_lock_spec_migrations do |schemas, config|
+      CQL::Migrator.new(schemas[0], config).up
+      migrators = schemas.map { |schema| CQL::Migrator.new(schema, config) } # built first: building waits on the lock
+
+      errors = race(migrators, &.rollback(1))
+
+      errors.map(&.class).should eq([CQL::Migrator::Error])
+      recorded_versions(schemas[0]).should eq([LockSpecCreateCounter.version])
+      schemas[0].exec_query(&.scalar("SELECT n FROM #{COUNTER}")).should eq(0)
+    end
+  end
 end

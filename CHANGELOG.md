@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- On PostgreSQL, `CQL::Migrator.new` and its `up` and `up_to` take a transaction-scoped advisory lock keyed by the migrations table before they create it or pick their migrations, so a concurrent `up` waits and then finds nothing pending; a run with nothing to pick takes no lock. Building a migrator waits too while another process runs migrations, and the wait has no timeout, so a stalled holder makes the others wait. Dialects opt in through `migration_lock_sql`.
+- On PostgreSQL, `CQL::Migrator.new` and its `up`, `up_to`, `down`, `down_to`, `rollback` and `redo` take a transaction-scoped advisory lock keyed by the migrations table before they create it or pick their migrations, so a concurrent `up` waits and then finds nothing pending; a run with nothing to pick takes no lock. Building a migrator waits too while another process runs migrations, and the wait has no timeout, so a stalled holder makes the others wait. A `down`, `down_to` or `rollback` that waited raises `CQL::Migrator::Error` and rolls back nothing when the run it waited for changed the applied migrations. `redo` locks its rollback and its `up` separately, so two `redo`s can interleave: run those from one process. Dialects opt in through `migration_lock_sql`.
 
 ### Fixed
 

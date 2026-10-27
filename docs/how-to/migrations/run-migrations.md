@@ -45,11 +45,13 @@ Each statement commits on its own, so a failure leaves the run's earlier migrati
 {% endtab %}
 {% endtabs %}
 
-On PostgreSQL building a migrator and every `up` take an advisory lock before they create the migrations table or pick
+On PostgreSQL building a migrator and every run take an advisory lock before they create the migrations table or pick
 their migrations, so a second `up` waits for the first, with no timeout, and then finds nothing pending. Building a
 migrator waits too while another process runs migrations; a run with nothing to pick takes no lock.
 
-Run `down`, `down_to`, `rollback` and `redo` from one process. On SQLite their writes serialise. MySQL and CockroachDB take no migration lock, so two migrators
+A `down`, `down_to` or `rollback` that waited raises `CQL::Migrator::Error` and rolls back nothing when the run it waited
+for changed the applied migrations. `redo` locks its rollback and its `up` separately, so two `redo`s can interleave: run
+those from one process. On SQLite their writes serialise. MySQL and CockroachDB take no migration lock, so two migrators
 can both apply a migration before either records it: run migrations from one process.
 
 {% hint style="warning" %}

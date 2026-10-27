@@ -408,7 +408,8 @@ module CQL
 
     private def migrate_down(&pick : -> Array(BaseMigration.class)) : Nil
       newest_first = pick.call.reverse
-      schema.ddl_transaction do
+      with_migration_lock(newest_first) do
+        require_unchanged!(newest_first, pick.call.reverse)
         newest_first.each do |migration|
           migration.new(schema).down
           remove_migration_record(migration)
@@ -426,6 +427,13 @@ module CQL
         lock_migrations
         yield
       end
+    end
+
+    # A waiter must not roll back what it did not choose, such as the next-older migration after the holder's rollback.
+    private def require_unchanged!(picked : Array(BaseMigration.class), locked : Array(BaseMigration.class)) : Nil
+      return if picked == locked
+      raise Error.new("Another migrator changed the applied migrations while this one waited for the migration " \
+                      "lock; nothing was rolled back")
     end
 
     # Held until the batch transaction ends. Keyed by the records table, so migrators of other tables do not wait.
