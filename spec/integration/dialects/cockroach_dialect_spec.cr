@@ -32,6 +32,13 @@ describe "CockroachDB adapter" do
     CQL::Adapter::MySql.dialect.supports_transactional_ddl?.should be_false
   end
 
+  it "serialises migrators with a transaction-scoped advisory lock on PostgreSQL only" do
+    CQL::Adapter::Postgres.dialect.migration_lock_sql.to_s.should contain("pg_advisory_xact_lock")
+    cockroach.dialect.migration_lock_sql.should be_nil
+    CQL::Adapter::SQLite.dialect.migration_lock_sql.should be_nil
+    CQL::Adapter::MySql.dialect.migration_lock_sql.should be_nil
+  end
+
   it "allows 32767 bound parameters, the most every driver accepts" do
     cockroach.dialect.max_bind_params.should eq(32767)
   end

@@ -45,9 +45,12 @@ Each statement commits on its own, so a failure leaves the run's earlier migrati
 {% endtab %}
 {% endtabs %}
 
-Run migrations from one process. When another migrator records a version this run is applying, `up` raises
-`CQL::Migrator::Error`, or the driver's unique violation if that record is not committed yet; on SQLite and PostgreSQL
-the whole run rolls back.
+On PostgreSQL building a migrator and every `up` take an advisory lock before they create the migrations table or pick
+their migrations, so a second `up` waits for the first, with no timeout, and then finds nothing pending. Building a
+migrator waits too while another process runs migrations; a run with nothing to pick takes no lock.
+
+Run `down`, `down_to`, `rollback` and `redo` from one process. On SQLite their writes serialise. MySQL and CockroachDB take no migration lock, so two migrators
+can both apply a migration before either records it: run migrations from one process.
 
 {% hint style="warning" %}
 On PostgreSQL a run holds its DDL locks until the final commit, and `CREATE INDEX CONCURRENTLY` fails inside a migration. Use `up(steps)` or `up_to` to keep runs short.

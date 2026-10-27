@@ -33,6 +33,11 @@ module Expression
       false
     end
 
+    # The statement that holds migrators off until the transaction ends, binding the lock key; nil takes no lock.
+    def migration_lock_sql : String?
+      nil
+    end
+
     # Dumps only the DB structure (no data) to a string
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String

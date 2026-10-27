@@ -211,6 +211,10 @@ module Expression
       true
     end
 
+    def migration_lock_sql : String?
+      "SELECT pg_advisory_xact_lock(#{placeholder_format(1)})"
+    end
+
     def format_returning(columns : Array(String)) : String
       return "" if columns.empty?
       " RETURNING #{columns.join(", ")}"

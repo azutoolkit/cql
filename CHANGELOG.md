@@ -13,11 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A relation `delete_all` and `dependent: :destroy` delete such records one by one through `delete!`, so one stale record now raises and rolls back the whole batch.
 - An app with two migrations sharing a version now fails at `CQL::Migrator.new` with `CQL::Migrator::Error`; it used to apply both and record one. Renumber the one the migrations table (`cql_schema_migrations.name`) does not list: renumbering the recorded one makes `up` run it again. If that one already ran too (an `up` that applied both), first insert a row into that table with its full class name (`Klass.name`, namespace included) and the new version, or `up` runs it again.
 
+### Added
+
+- On PostgreSQL, `CQL::Migrator.new` and its `up` and `up_to` take a transaction-scoped advisory lock keyed by the migrations table before they create it or pick their migrations, so a concurrent `up` waits and then finds nothing pending; a run with nothing to pick takes no lock. Building a migrator waits too while another process runs migrations, and the wait has no timeout, so a stalled holder makes the others wait. Dialects opt in through `migration_lock_sql`.
+
 ### Fixed
 
 - `delete!` on a model with `optimistic_locking` deletes the row only while it still holds the version the record read. Before, a stale copy deleted a row another process had just updated. A raise rolls back the deletes of its `dependent:` associations.
 - `CQL::Migrator.new` raises `CQL::Migrator::Error` naming the classes when two registered migrations share a version, before it creates, applies or records anything. Before, `up` ran both but recorded one version, so a later rollback left the schema and its records out of step.
-- `CQL::Migrator#up` raises `CQL::Migrator::Error` when another migrator recorded the version of a migration it is applying during the run, or the driver's unique violation when that migrator has not committed its record yet. On SQLite and PostgreSQL the whole run rolls back; MySQL and CockroachDB keep the statements already committed. Before, the record was skipped and the run committed, so two concurrent migrators could both apply a data migration.
+- `CQL::Migrator#up` raises `CQL::Migrator::Error` when another migrator recorded the version of a migration it is applying during the run; on SQLite and PostgreSQL the whole run rolls back. Before, the record was skipped and the run committed. MySQL and CockroachDB take no migration lock, so two migrators can both apply a migration before either records it: run migrations from one process.
 
 ## [0.0.916] - 2026-10-26
 

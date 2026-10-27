@@ -1,3 +1,4 @@
+require "digest/crc32"
 require "./schema_dump"
 
 module CQL
@@ -128,7 +129,7 @@ module CQL
 
     def initialize(@schema : Schema, @config = MigratorConfig.new)
       reject_duplicate_versions!
-      schema.ddl_transaction { ensure_schema_migrations_table }
+      schema.ddl_transaction { lock_migrations; ensure_schema_migrations_table }
       @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
 
@@ -139,7 +140,7 @@ module CQL
     # migrator.up
     # ```
     def up(steps : Int32 = Migrator.migrations.size)
-      migrate_up(pending_migrations.first(steps))
+      migrate_up { pending_migrations.first(steps) }
     end
 
     # Rolls back the newest applied migrations, highest version first.
@@ -149,7 +150,7 @@ module CQL
     # migrator.down
     # ```
     def down(steps : Int32 = Migrator.migrations.size)
-      migrate_down(applied_migration_classes.last(steps))
+      migrate_down { applied_migration_classes.last(steps) }
     end
 
     # Rolls back the newest applied migrations.
@@ -260,7 +261,7 @@ module CQL
     # ```
     def down_to(version : Int64)
       require_registered!(version)
-      migrate_down(applied_migration_classes.select { |migration| migration.version > version })
+      migrate_down { applied_migration_classes.select { |migration| migration.version > version } }
     end
 
     # Applies every pending migration up to and including *version*.
@@ -272,7 +273,7 @@ module CQL
     # ```
     def up_to(version : Int64)
       require_registered!(version)
-      migrate_up(pending_migrations.select { |migration| migration.version <= version })
+      migrate_up { pending_migrations.select { |migration| migration.version <= version } }
     end
 
     # Prints the given migrations as rolled back.
@@ -392,9 +393,10 @@ module CQL
       raise Error.new("No migration with version #{version}")
     end
 
-    private def migrate_up(migrations : Array(BaseMigration.class)) : Nil
-      schema.ddl_transaction do
-        migrations.each do |migration|
+    private def migrate_up(&pick : -> Array(BaseMigration.class)) : Nil
+      with_migration_lock(pick.call) do
+        # Re-picked under the lock: a waiter finds nothing pending once the holder has applied it.
+        pick.call.each do |migration|
           migration.new(schema).up
           record_migration(migration)
         end
@@ -404,8 +406,8 @@ module CQL
       print_applied_migrations
     end
 
-    private def migrate_down(migrations : Array(BaseMigration.class)) : Nil
-      newest_first = migrations.reverse
+    private def migrate_down(&pick : -> Array(BaseMigration.class)) : Nil
+      newest_first = pick.call.reverse
       schema.ddl_transaction do
         newest_first.each do |migration|
           migration.new(schema).down
@@ -415,6 +417,27 @@ module CQL
 
       update_schema_file if config.auto_sync?
       print_rolled_back_migrations(newest_first)
+    end
+
+    # Picked before the lock, so a run with nothing to pick takes no lock (building the migrator still does).
+    private def with_migration_lock(picked : Array(BaseMigration.class), &) : Nil
+      return if picked.empty?
+      schema.ddl_transaction do
+        lock_migrations
+        yield
+      end
+    end
+
+    # Held until the batch transaction ends. Keyed by the records table, so migrators of other tables do not wait.
+    private def lock_migrations : Nil
+      return unless sql = schema.dialect.migration_lock_sql
+      schema.with_connection(&.exec(sql, migration_lock_key))
+    end
+
+    # A CQL salt ("CQLM") in the high 32 bits keeps the key clear of the small integers apps use for their locks.
+    private def migration_lock_key : Int64
+      table = config.migration_table_name.to_s.downcase.rpartition('.').last
+      (0x43514C4D_i64 << 32) | Digest::CRC32.checksum(table).to_i64
     end
 
     private def ensure_schema_migrations_table
@@ -441,8 +464,9 @@ module CQL
       end
     end
 
-    # A version another migrator recorded during the run fails it instead of being skipped. The insert stays
-    # unguarded so a record that migrator has not committed yet still trips the unique index.
+    # A version another migrator recorded during the run fails it instead of being skipped. Nothing guarantees a unique
+    # index on the version (a table from a dumped schema may lack one), so only the migration lock rules out a record
+    # that migrator has not committed yet.
     private def record_migration(migration : BaseMigration.class)
       if migration_applied?(migration.version)
         raise Error.new("Another migrator recorded #{migration.name} (version #{migration.version}) during this run; " \
