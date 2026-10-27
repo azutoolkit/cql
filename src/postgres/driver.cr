@@ -49,6 +49,13 @@ module CQL::Postgres
       false
     end
 
+    # Why `query_timeout` goes unread when crystal-db opens *scheme* (another driver, such as the pg
+    # shard's, took it), or nil. It names no URL: a URL holds the password.
+    def self.unread_query_timeout(scheme : String) : String?
+      return unless registered?(scheme) && (driver = ::DB.driver_class(scheme)) != self
+      "query_timeout is ignored by schemas opened through crystal-db: #{driver} handles #{scheme}://, and only CQL's native PostgreSQL driver reads it"
+    end
+
     def connection_builder(uri : URI) : ::DB::ConnectionBuilder
       params = HTTP::Params.parse(uri.query || "")
       raise ArgumentError.new("pool_reset needs the engine's pool, as crystal-db's cannot reset a returned connection: use CQL::Postgres::EngineSource or AsyncEngine") if params.has_key?("pool_reset")

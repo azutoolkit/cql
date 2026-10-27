@@ -216,8 +216,17 @@ module CQL
       if source && (declared = source.adapter) && declared != @adapter
         raise ArgumentError.new("the connection source speaks #{declared}, the schema uses #{@adapter} (build the engine with adapter: to match)")
       end
-      @source = source || DatabaseSource.new(DB.open(@adapter.driver_uri(@uri)))
+      @source = source || DatabaseSource.new(open_database)
       @uri = source.database_uri(@uri) if source # `uri` names the same server; the source's own options stay out of it
+    end
+
+    private def open_database : DB::Database
+      url = URI.parse(@adapter.driver_uri(@uri))
+      if @adapter.postgres_compatible? && url.query_params.has_key?("query_timeout") &&
+         (reason = CQL::Postgres::Driver.unread_query_timeout(url.scheme.to_s))
+        CQL.config.effective_logger.warn { reason }
+      end
+      DB.open(url)
     end
 
     def dialect

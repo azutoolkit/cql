@@ -357,12 +357,17 @@ module CQL::Postgres
       state.compare_and_set(Deadline::Running, Deadline::Done)[1]
     end
 
+    # Unbounded requests skip `watched`, whose closure would cost an allocation each.
+    private def with_deadline(timeout : Time::Span?, &)
+      return yield unless timeout
+      watched(timeout) { yield }
+    end
+
     # Cancels the statement when *timeout* passes. A cancel racing with a
     # statement that just finished could hit the next one, so unless the server
     # confirmed the cancel the session is dropped instead of reused. The
     # watchdog and the request fiber settle who got there first atomically.
-    private def with_deadline(timeout : Time::Span?, &)
-      return yield unless timeout
+    private def watched(timeout : Time::Span, &)
       state = Atomic(Deadline).new(Deadline::Running)
       finished = Channel(Nil).new
       cancel_sent = Channel(Nil).new(1)

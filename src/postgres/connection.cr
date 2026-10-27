@@ -68,6 +68,16 @@ module CQL::Postgres
       @session.in_transaction?
     end
 
+    # A ROLLBACK on a dropped session cannot reach the server, which discards the transaction once it notices
+    # the closed socket; it would only replace the error that dropped it (a QueryTimeout, say) with a lost connection.
+    def perform_rollback_transaction
+      super unless @session.closed?
+    end
+
+    def perform_rollback_savepoint(name)
+      super unless @session.closed?
+    end
+
     def on_notice(&handler : Hash(Char, String) ->) : Nil
       @session.on_notice = handler
     end

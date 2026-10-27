@@ -146,7 +146,7 @@ describe "CQL.configure" do
         CQL.config.pool.query_timeout = 1.second
         Log.capture("*", level: :warn) do |logs|
           CQL.configure(&.db=("postgres://u@localhost/app"))
-          logs.check(:warn, %r{pool.query_timeout is ignored because PG::Driver handles postgres://})
+          logs.check(:warn, %r{pool\.query_timeout is ignored by schemas opened through crystal-db\b.*PG::Driver handles postgres://})
         end
       end
     end

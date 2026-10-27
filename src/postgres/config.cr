@@ -180,7 +180,9 @@ module CQL::Postgres
 
     # Like `seconds`, but zero is refused: unlike `connect_timeout`, it does not mean "no deadline".
     private def self.positive_seconds(text : String?, name : String) : Time::Span?
-      text.try { |value| value.to_f?.try { |number| number.seconds if number.finite? && 0 < number <= 31_536_000 } || raise ArgumentError.new("#{name} must be a positive number of seconds up to a year, got #{value.inspect}") }
+      return unless text
+      span = text.to_f?.try { |number| number.seconds if number.finite? && number <= 31_536_000 }
+      span.try(&.positive?) ? span : raise ArgumentError.new("#{name} must be a positive number of seconds up to a year, got #{text.inspect}")
     end
 
     private def self.timeout(text : String?) : Time::Span?

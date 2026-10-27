@@ -238,9 +238,8 @@ module CQL
       # The pg shard, when linked, takes postgres:// and ignores query_timeout: statements would run unbounded.
       private def warn_unread_query_timeout : Nil
         return unless pool.query_timeout && adapter.postgres_compatible?
-        scheme = URI.parse(adapter.driver_uri(db)).scheme.to_s
-        return unless CQL::Postgres::Driver.registered?(scheme) && (driver = ::DB.driver_class(scheme)) != CQL::Postgres::Driver
-        effective_logger.warn { "pool.query_timeout is ignored because #{driver} handles #{scheme}://, and only CQL's native PostgreSQL driver reads query_timeout" }
+        reason = CQL::Postgres::Driver.unread_query_timeout(URI.parse(adapter.driver_uri(db)).scheme.to_s)
+        effective_logger.warn { "pool.#{reason}" } if reason
       end
 
       # Create migrator configuration
