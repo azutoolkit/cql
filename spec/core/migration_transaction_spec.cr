@@ -194,20 +194,18 @@ describe "CQL::Migrator transaction" do
     end
   end
 
-  it "refuses to list pending migrations inside a caller's transaction without transactional DDL" do
+  it "lists pending migrations inside a caller's transaction without transactional DDL, running no DDL" do
     statements = [] of String
     with_migrator(uri, TxMigrationCreateA, schema_class: NonTransactionalDdlSchema) do |migrator|
       CQL::Telemetry.subscribe("migration_tx_spec") { |event| statements << event.sql }
       begin
-        expect_raises(CQL::DialectError, "MySQL") { migrator.schema.transaction { migrator.pending_migrations } }
+        migrator.schema.transaction { migrator.pending_migrations }.should eq([TxMigrationCreateA] of CQL::BaseMigration.class)
       ensure
         CQL::Telemetry.unsubscribe("migration_tx_spec")
       end
-
-      migrator.pending_migrations.should eq([TxMigrationCreateA] of CQL::BaseMigration.class)
     end
 
-    # `pending_migrations` creates the migrations table if it is missing, which MySQL would commit with the caller's work.
+    # Building the migrator created the table; listing only reads, so MySQL commits nothing with the caller's work.
     statements.select(&.includes?("CREATE")).should be_empty
   end
 

@@ -108,7 +108,7 @@ end
 CQL::Telemetry.unsubscribe_transactions("tx")
 ```
 
-`Schema#transaction` publishes `Begin` before it checks out a connection. An exception ends in `Rollback` and is re-raised, `DB::Rollback` is still swallowed, and a failing `COMMIT` is reported as `Rollback`. `Schema#transaction(tx)` publishes nothing, and a transaction that began before the first subscriber registered publishes nothing. Where DDL is transactional (SQLite, PostgreSQL), `alter`, `build`, `Table#create!`/`drop!`/`truncate!`, `Migrator.new`, `up`, `down` and `pending_migrations` (once per migration it checks) run inside `Schema#transaction` and publish these events (`nested` when a transaction is already open).
+`Schema#transaction` publishes `Begin` before it checks out a connection. An exception ends in `Rollback` and is re-raised, `DB::Rollback` is still swallowed, and a failing `COMMIT` is reported as `Rollback`. `Schema#transaction(tx)` publishes nothing, and a transaction that began before the first subscriber registered publishes nothing. Where DDL is transactional (SQLite, PostgreSQL), `alter`, `build`, `Table#create!`/`drop!`/`truncate!`, `Migrator.new`, `up` and `down` run inside `Schema#transaction` and publish these events (`nested` when a transaction is already open).
 
 {% hint style="warning" %}
 Calling `tx.rollback` yourself and returning normally still reports `Commit`. An async transaction subscriber shares the query queue and its bound, so handle an end event whose `Begin` was dropped.

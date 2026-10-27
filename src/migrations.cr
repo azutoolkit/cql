@@ -305,15 +305,15 @@ module CQL
       print_table(pending_migrations.map { |migration| build_migration_record(migration) }, "⏱".colorize.yellow.to_s)
     end
 
-    # Returns the pending migrations. It creates the migrations table if it is missing, so where DDL is not
-    # transactional (MySQL, CockroachDB) it raises `CQL::DialectError` inside an open transaction.
+    # Returns the pending migrations, read with one query of the migrations table that `Migrator.new` ensured.
     # - **@return** [Array(BaseMigration.class)]
     # **Example** Listing pending migrations
     # ```
     # migrator.pending_migrations
     # ```
     def pending_migrations : Array(BaseMigration.class)
-      sorted_migrations.reject { |migration| migration_applied?(migration.version) }
+      applied = applied_versions
+      sorted_migrations.reject { |migration| applied.includes?(migration.version) }
     end
 
     # Returns the applied migrations.
@@ -372,7 +372,12 @@ module CQL
     end
 
     private def applied_migration_classes : Array(BaseMigration.class)
-      sorted_migrations.select { |migration| migration_applied?(migration.version) }
+      applied = applied_versions
+      sorted_migrations.select { |migration| applied.includes?(migration.version) }
+    end
+
+    private def applied_versions : Set(Int64)
+      repo.query.select(:version).all(Int64).to_set
     end
 
     # The records table keys on the version alone, so a shared version would apply both and record one.
@@ -460,7 +465,6 @@ module CQL
     end
 
     private def ensure_schema_migrations_table
-      # Table doesn't exist, create it
       schema.table @config.migration_table_name do
         primary :id, Int32
         column :name, String
@@ -472,22 +476,11 @@ module CQL
       schema.tables[@config.migration_table_name].create!
     end
 
-    private def migration_applied?(version)
-      # Ensure the schema_migrations table exists before checking
-      ensure_schema_migrations_table
-
-      begin
-        repo.exists?(version: version)
-      rescue DB::NoResultsError | CQL::Schema::ConnectionError
-        false
-      end
-    end
-
     # A version another migrator recorded during the run fails it instead of being skipped. Nothing guarantees a unique
     # index on the version (a table from a dumped schema may lack one), so only the migration lock rules out a record
     # that migrator has not committed yet.
     private def record_migration(migration : BaseMigration.class)
-      if migration_applied?(migration.version)
+      if repo.exists?(version: migration.version)
         raise Error.new("Another migrator recorded #{migration.name} (version #{migration.version}) during this run; " \
                         "the run is rolled back where DDL is transactional")
       end

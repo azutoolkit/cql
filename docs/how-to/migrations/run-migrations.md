@@ -40,8 +40,8 @@ everything the run did.
 {% endtab %}
 
 {% tab title="MySQL and CockroachDB" %}
-Each statement commits on its own, so a failure leaves the run's earlier migrations applied. Building a migrator, calling
-`up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`.
+Each statement commits on its own, so a failure leaves the run's earlier migrations applied. Building a migrator or calling
+`up` inside an open transaction raises `CQL::DialectError`; listing `pending_migrations` only reads.
 {% endtab %}
 {% endtabs %}
 
