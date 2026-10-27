@@ -73,6 +73,8 @@ CQL::Telemetry.with_context("req-123") do
 end
 ```
 
+`capture_params` also decides whether the native PostgreSQL driver's `db` Debug log (`Executing query`) lists the bound values; off, it logs only `args_count`. The SQLite, MySQL and `pg` shard drivers keep crystal-db's own Debug log, which lists them: bind `db` at Info or above in production.
+
 The context is per fiber and is the same one `CQL::Performance.with_context` sets. It also appears in SQL log lines whatever `capture_params` says, so use a request id, not personal data. `event.error.message` may hold data too: redact it before shipping it.
 
 ## Trace Statements

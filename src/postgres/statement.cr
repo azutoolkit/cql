@@ -19,6 +19,12 @@ module CQL::Postgres
       ::DB::ExecResult.new(rows_affected: rows_affected, last_insert_id: 0_i64)
     end
 
+    # crystal-db logs every bound value at Debug; values are personal data, so only the count unless opted in.
+    protected def emit_log(args : Enumerable)
+      return super if CQL::Telemetry.capture_params
+      ::DB::Log.debug &.emit("Executing query", query: command, args_count: args.size)
+    end
+
     private def run(args : Enumerable) : Result
       session = connection.as(Connection).session
       params = [] of Types::Param
