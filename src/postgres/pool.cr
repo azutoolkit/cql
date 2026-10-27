@@ -3,8 +3,9 @@ require "./connection"
 require "./connection_reset"
 
 module CQL::Postgres
-  # Bounded set of connections shared by many fibers. `checkout` waits (up to
-  # `checkout_timeout`) for a free slot; `release` returns the connection, or
+  # Bounded set of connections shared by many fibers. `checkout` times its wait
+  # for a free slot, its health checks and each read of a connect from one
+  # `checkout_timeout`; `release` returns the connection, or
   # drops it if it is closed or still inside a transaction. Idle connections
   # that sat unused for `health_check_after`, or have input waiting, are pinged before being handed out.
   class Pool
@@ -99,10 +100,11 @@ module CQL::Postgres
 
     def checkout : Connection
       raise PoolClosed.new("the pool is closed") if @closed
+      deadline = Time.instant + @options.checkout_timeout if @options.checkout_timeout.positive? # zero: no wait for a slot, no deadline
       wait_for_slot
       begin
         raise PoolClosed.new("the pool was closed while waiting for a connection") if @closed
-        connection = healthy_idle(Time.instant) || open
+        connection = healthy_idle(deadline) || open(deadline)
         connection.context = self
         connection.auto_release = false
         @lock.synchronize { @in_use << connection }
@@ -171,8 +173,8 @@ module CQL::Postgres
     rescue Channel::ClosedError
     end
 
-    private def open : Connection
-      connection = Connection.open(@config)
+    private def open(deadline : Time::Instant? = nil) : Connection
+      connection = Connection.open(@config, deadline: deadline)
       begin
         @options.setup.try(&.call(connection))
         connection
@@ -186,22 +188,29 @@ module CQL::Postgres
       @lock.synchronize { @idle.size }
     end
 
-    # Health checks share one budget of `checkout_timeout`, so a batch of
-    # connections on a dropped network path cannot hold a checkout for
-    # one timeout each: after the first ping, a connection that finds the
-    # budget spent is discarded unpinged.
-    private def healthy_idle(started : Time::Instant) : Connection?
+    # Health checks share at most half of the checkout's time left, so a replacement can still connect, and a
+    # batch of connections on a dropped network path cannot hold a checkout for one timeout each: after the first
+    # ping, a connection that finds that share spent is discarded unpinged.
+    private def healthy_idle(deadline : Time::Instant?) : Connection?
+      checks_due = deadline.try { |due| Time.instant + (due - Time.instant) / 2 }
       pinged = false
       while connection = @lock.synchronize { @idle.pop? }
         verdict = quick_verdict(connection)
         if verdict.nil?
-          budget = @options.checkout_timeout - (Time.instant - started)
-          verdict = !(pinged && budget < MIN_PING_BUDGET) && connection.ping(Math.min(Math.max(budget, MIN_PING_BUDGET), CQL::Postgres::Session::PING_TIMEOUT))
+          wait = ping_wait(checks_due, pinged)
+          verdict = wait ? connection.ping(wait) : false
           pinged = true
         end
         return connection if verdict
         connection.close
       end
+    end
+
+    # nil (drop the connection unpinged) once no time is left, or less than MIN_PING_BUDGET after the first ping.
+    private def ping_wait(due : Time::Instant?, pinged : Bool) : Time::Span?
+      left = due.try { |instant| instant - Time.instant }
+      return if left.nil? || left <= Time::Span.zero || (pinged && left < MIN_PING_BUDGET)
+      Math.min(Math.max(left, MIN_PING_BUDGET), CQL::Postgres::Session::PING_TIMEOUT)
     end
 
     # true or false when the connection's age settles it, nil when it needs a ping: it is old, or the server

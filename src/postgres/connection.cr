@@ -12,8 +12,9 @@ module CQL::Postgres
 
     # crystal-db's own per-connection statement-wrapper cache is off: the
     # session already keeps a bounded cache of prepared statements.
-    def self.open(config : Config, options : ::DB::Connection::Options = ::DB::Connection::Options.new(prepared_statements_cache: false)) : Connection
-      new(CQL::Postgres::Session.connect(config), options)
+    def self.open(config : Config, options : ::DB::Connection::Options = ::DB::Connection::Options.new(prepared_statements_cache: false),
+                  *, deadline : Time::Instant? = nil) : Connection
+      new(CQL::Postgres::Session.connect(config, deadline), options)
     end
 
     def initialize(@session : CQL::Postgres::Session, options : ::DB::Connection::Options = ::DB::Connection::Options.new(prepared_statements_cache: false))

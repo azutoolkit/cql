@@ -41,6 +41,10 @@ describe CQL::Postgres::Pool do
     {a, b}.each(&.release)
   end
 
+  it "still connects with a zero checkout_timeout, which only stops it waiting for a slot" do
+    pool_for(idle_server, "&checkout_timeout=0").with_connection(&.closed?).should be_false
+  end
+
   it "hands a connection to a waiting fiber as soon as one is released" do
     server = idle_server
     pool = pool_for(server, "&pool_size=1&checkout_timeout=2")

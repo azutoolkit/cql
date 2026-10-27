@@ -6,8 +6,8 @@ require "./wire/frontend"
 module CQL::Postgres
   # Opens the byte stream to the server: TCP or Unix socket, optionally
   # upgraded to TLS through the protocol's SSLRequest. Each blocking step of
-  # connecting and starting up is bounded by `connect_timeout`; call `relax`
-  # once the session is up.
+  # connecting and starting up is bounded by `connect_timeout`, or by the time
+  # left before a deadline when one is given; call `relax` once the session is up.
   module Transport
     # The byte stream to talk over, and the socket under it. Closing the socket
     # ends the connection at once; closing a TLS stream first sends close_notify,
@@ -18,10 +18,10 @@ module CQL::Postgres
       open_stream(config).io
     end
 
-    def self.open_stream(config : Config) : Stream
-      socket = open(config)
+    def self.open_stream(config : Config, deadline : Time::Instant? = nil) : Stream
+      socket = open(config, deadline.try { |due| time_left(due) })
       begin
-        Stream.new(socket.is_a?(TCPSocket) ? negotiate_tls(socket, config) : socket, socket)
+        Stream.new(socket.is_a?(TCPSocket) ? negotiate_tls(socket, config, deadline) : socket, socket)
       rescue ex
         socket.close
         raise ex
@@ -49,6 +49,18 @@ module CQL::Postgres
       {% else %}
         false
       {% end %}
+    end
+
+    # Bounds the next step of connecting by `connect_timeout`, or by the time left before *deadline* when that is sooner.
+    def self.limit(io : IO, config : Config, deadline : Time::Instant?) : Nil
+      return unless deadline && io.responds_to?(:read_timeout=) && io.responds_to?(:write_timeout=)
+      io.read_timeout = io.write_timeout = [config.connect_timeout, time_left(deadline)].compact.min
+    end
+
+    private def self.time_left(deadline : Time::Instant) : Time::Span
+      left = deadline - Time.instant
+      raise IO::TimeoutError.new("the time to connect ran out") unless left.positive?
+      left
     end
 
     # Lifts the startup time limits so queries may run as long as they need.
@@ -95,12 +107,13 @@ module CQL::Postgres
       socket
     end
 
-    private def self.negotiate_tls(socket : TCPSocket, config : Config) : IO
+    private def self.negotiate_tls(socket : TCPSocket, config : Config, deadline : Time::Instant?) : IO
       return socket if config.ssl_mode.disable?
+      limit(socket, config, deadline)
       Wire::Frontend.ssl_request(socket)
       case answer = read_unbuffered_byte(socket)
       when nil     then raise IO::Error.new("the server closed the connection after the SSLRequest")
-      when 'S'.ord then tls(socket, config)
+      when 'S'.ord then tls(socket, config, deadline)
       when 'N'.ord then config.ssl_mode.prefer? ? socket : raise TLSRefused.new("#{config.address} does not support TLS, which the sslmode requires")
       else              raise TLSRefused.new("#{config.address} answered the SSLRequest with #{answer.chr.inspect}, not S or N")
       end
@@ -115,7 +128,8 @@ module CQL::Postgres
       byte.try(&.to_i)
     end
 
-    private def self.tls(socket : TCPSocket, config : Config) : IO
+    private def self.tls(socket : TCPSocket, config : Config, deadline : Time::Instant?) : IO
+      limit(socket, config, deadline)
       context = OpenSSL::SSL::Context::Client.new
       if config.ssl_mode.verify_full?
         config.ssl_root_cert.try { |path| context.ca_certificates = path }

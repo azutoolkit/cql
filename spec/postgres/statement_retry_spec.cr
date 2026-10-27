@@ -1,19 +1,8 @@
 require "../spec_helper"
 require "../support/fake_pg_server"
-require "../../src/postgres"
+require "../support/native_database"
 
 private alias PG = CQL::Postgres
-
-# The pool `DB.open` builds, on this driver whatever claims postgres:// in the spec binary (the pg shard can).
-private def open_native(url : String, & : DB::Database ->) : Nil
-  uri = URI.parse(url)
-  driver, params = PG::Driver.new, HTTP::Params.parse(uri.query || "")
-  builder = driver.connection_builder(uri)
-  database = DB::Database.new(driver.connection_options(params), driver.pool_options(params)) { builder.build }
-  yield database
-ensure
-  database.try &.close
-end
 
 # Reads one INSERT as crystal-db sends it: Parse/Describe/Sync then Bind/Execute/Sync, or one simple Query.
 private def read_insert(client : FakePG::Client, prepared : Bool) : Nil

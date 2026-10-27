@@ -41,7 +41,7 @@ Pool settings are URL query options:
 | --- | --- | --- |
 | `pool_size` | Maximum connections, at least 1 | 10 |
 | `pool_min_size` | Connections opened by `connect`, 0 to `pool_size` | 0 |
-| `checkout_timeout` | Seconds to wait for a free connection, then `PoolTimeout` | 5 |
+| `checkout_timeout` | Seconds for a checkout: waiting for a free connection (then `PoolTimeout`), health checks (at most half of the time left) and connecting, where each read waits at most the time left (then `IO::TimeoutError`, even before `connect_timeout`); 0 does not wait for a slot and connects within `connect_timeout` | 5 |
 | `health_check_after` | Ping a connection idle longer than this many seconds before lending it; a younger one is pinged only if the server wrote to or closed it while idle (a failover's FATAL), which the pool checks without a round trip | 30 |
 | `max_queries` | Retire a connection after this many requests | none |
 | `max_idle_lifetime` | Retire a connection idle this many seconds | none |
@@ -57,7 +57,7 @@ engine.pool.stats.to_s # => "0 in use, 2 idle, 20 max"
 # Pings and resets count as requests. pool_size=abc raises ArgumentError.
 #
 # Connection options:
-#   connect_timeout=10        seconds for each connecting step; 0 waits forever
+#   connect_timeout=10        seconds for each connecting step (in a checkout, at most the time left); 0 waits forever
 #   query_timeout=30          seconds each call may run, COMMIT and DDL included (unset: no limit): a whole pipeline,
 #                             script, or stream or COPY with its block. Past it CQL::Postgres::QueryTimeout after a cancel
 #                             (silent server: plus the 5 s cancel grace, connection dropped); a timed-out COMMIT's outcome is unknown

@@ -76,14 +76,14 @@ module CQL::Postgres
 
     # Connects, asking for the newest protocol the config allows. A server that
     # rejects that version outright (before PostgreSQL 9.3.21, or some poolers)
-    # gets one more try with 3.0 when the config allows it.
-    def self.connect(config : Config) : Session
+    # gets one more try with 3.0 when the config allows it. Both tries end by *deadline*, when one is given.
+    def self.connect(config : Config, deadline : Time::Instant? = nil) : Session
       requested = config.max_protocol_version
-      attempt(config, requested)
+      attempt(config, requested, deadline)
     rescue ex : ServerError | UnrecognizedStartupReply
       raise ex unless rejected_version?(ex) && requested.try { |version| version > ProtocolVersion::V3_0 } && config.min_protocol_version <= ProtocolVersion::V3_0
       Log.info { "#{fallback_reason(ex, requested)}; reconnecting with 3.0 (set max_protocol_version=3.0 to skip the first attempt)" }
-      attempt(config, ProtocolVersion::V3_0)
+      attempt(config, ProtocolVersion::V3_0, deadline)
     end
 
     private def self.fallback_reason(error : Error, requested : ProtocolVersion?) : String
@@ -101,10 +101,10 @@ module CQL::Postgres
       end
     end
 
-    private def self.attempt(config : Config, version : ProtocolVersion) : Session
-      stream = Transport.open_stream(config)
+    private def self.attempt(config : Config, version : ProtocolVersion, deadline : Time::Instant?) : Session
+      stream = Transport.open_stream(config, deadline)
       begin
-        outcome = Handshake.new(config, stream.io, version).run
+        outcome = Handshake.new(config, stream.io, version, deadline).run
         Transport.relax(stream.io)
         new(config, stream.io, outcome, stream.socket)
       rescue ex
