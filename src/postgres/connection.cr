@@ -1,4 +1,5 @@
 require "db"
+require "../checkout_budget"
 require "./session"
 require "./statement"
 
@@ -7,8 +8,12 @@ module CQL::Postgres
   # yields, so every CQL statement type runs on it unchanged.
   class Connection < ::DB::Connection
     DRIVER_NAME = "postgres"
+    # crystal-db's, for a connection that no `Driver::Builder` made.
+    DEFAULT_CHECKOUT_TIMEOUT = ::DB::Pool::Options.new.checkout_timeout.seconds
 
     getter session : CQL::Postgres::Session
+    # What a crystal-db checkout may spend checking and connecting (the URL's, via `Driver::Builder`); zero: no deadline.
+    property checkout_timeout : Time::Span = DEFAULT_CHECKOUT_TIMEOUT
 
     # crystal-db's own per-connection statement-wrapper cache is off: the
     # session already keeps a bounded cache of prepared statements.
@@ -28,12 +33,15 @@ module CQL::Postgres
     end
 
     # crystal-db's pool calls it as it lends the connection. One the server wrote to or hung up on while it sat
-    # idle (a FATAL on a restart or failover) is pinged; a failed ping closes it, so its next request is refused
+    # idle (a FATAL on a restart or failover) is pinged within the checkout's `CQL::CheckoutBudget`, and closed
+    # unpinged once its health checks' share is spent; a failed ping closes it, so its next request is refused
     # before anything is sent and crystal-db runs the statement on another connection. (Public: an override
     # outside crystal-db's namespace cannot be called by its pool while protected.)
     def before_checkout
       super
-      @session.ping if !@session.closed? && @session.input_pending?
+      return if @session.closed? || !@session.input_pending?
+      wait = CheckoutBudget.check_wait(checkout_timeout, CQL::Postgres::Session::PING_TIMEOUT)
+      wait ? @session.ping(wait) : @session.close
     end
 
     # crystal-db 0.15 requires it: the name the driver is registered with.

@@ -18,13 +18,17 @@ module CQL::Postgres
     DB_OWNED_KEYS    = {"initial_pool_size", "max_pool_size", "max_idle_pool_size", "checkout_timeout", "retry_attempts", "retry_delay", "prepared_statements", "prepared_statements_cache"}
 
     class Builder < ::DB::ConnectionBuilder
-      def initialize(@config : Config, @options : ::DB::Connection::Options)
+      def initialize(@config : Config, @options : ::DB::Connection::Options, @checkout_timeout : Time::Span = Connection::DEFAULT_CHECKOUT_TIMEOUT)
       end
 
-      # Transport failures become `DB::ConnectionRefused`, which crystal-db's
-      # pool retries (`retry_attempts`, `retry_delay`); server errors do not.
+      # Connects by the checkout's deadline (`CQL::CheckoutBudget`; zero *checkout_timeout*: within
+      # `connect_timeout` alone). Transport failures, a spent deadline included, become `DB::ConnectionRefused`,
+      # which crystal-db's pool retries (`retry_attempts`, `retry_delay`); server errors do not.
       def build : ::DB::Connection
-        Refusal.translate { Connection.open(@config, @options) }
+        deadline = CheckoutBudget.claim(@checkout_timeout)
+        connection = Refusal.translate { Connection.open(@config, @options, deadline: deadline) }
+        connection.checkout_timeout = @checkout_timeout
+        connection
       end
     end
 
@@ -60,7 +64,8 @@ module CQL::Postgres
       params = HTTP::Params.parse(uri.query || "")
       raise ArgumentError.new("pool_reset needs the engine's pool, as crystal-db's cannot reset a returned connection: use CQL::Postgres::EngineSource or AsyncEngine") if params.has_key?("pool_reset")
       options = connection_options(params).copy_with(prepared_statements_cache: false)
-      Builder.new(Config.from_uri(uri, ignoring: DB_OWNED_KEYS), options)
+      checkout_timeout = Config.seconds(params["checkout_timeout"]?, "checkout_timeout") || Connection::DEFAULT_CHECKOUT_TIMEOUT
+      Builder.new(Config.from_uri(uri, ignoring: DB_OWNED_KEYS), options, checkout_timeout)
     end
   end
 end

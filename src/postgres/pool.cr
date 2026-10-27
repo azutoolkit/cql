@@ -54,9 +54,6 @@ module CQL::Postgres
       end
     end
 
-    # A health check with less time left than this is not worth a round trip.
-    MIN_PING_BUDGET = 50.milliseconds
-
     getter config : Config
     getter options : Options
 
@@ -188,29 +185,19 @@ module CQL::Postgres
       @lock.synchronize { @idle.size }
     end
 
-    # Health checks share at most half of the checkout's time left, so a replacement can still connect, and a
-    # batch of connections on a dropped network path cannot hold a checkout for one timeout each: after the first
-    # ping, a connection that finds that share spent is discarded unpinged.
+    # Health checks share the half of the time left that a `CQL::CheckoutBudget` gives them: a connection that
+    # finds it spent is discarded unpinged.
     private def healthy_idle(deadline : Time::Instant?) : Connection?
-      checks_due = deadline.try { |due| Time.instant + (due - Time.instant) / 2 }
-      pinged = false
+      checks = CQL::CheckoutBudget.new(deadline)
       while connection = @lock.synchronize { @idle.pop? }
         verdict = quick_verdict(connection)
         if verdict.nil?
-          wait = ping_wait(checks_due, pinged)
+          wait = checks.check_wait(CQL::Postgres::Session::PING_TIMEOUT)
           verdict = wait ? connection.ping(wait) : false
-          pinged = true
         end
         return connection if verdict
         connection.close
       end
-    end
-
-    # nil (drop the connection unpinged) once no time is left, or less than MIN_PING_BUDGET after the first ping.
-    private def ping_wait(due : Time::Instant?, pinged : Bool) : Time::Span?
-      left = due.try { |instant| instant - Time.instant }
-      return if left.nil? || left <= Time::Span.zero || (pinged && left < MIN_PING_BUDGET)
-      Math.min(Math.max(left, MIN_PING_BUDGET), CQL::Postgres::Session::PING_TIMEOUT)
     end
 
     # true or false when the connection's age settles it, nil when it needs a ping: it is old, or the server

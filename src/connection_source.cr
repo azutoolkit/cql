@@ -1,4 +1,5 @@
 require "db"
+require "./checkout_budget"
 require "./pool_stats"
 
 module CQL
@@ -36,10 +37,10 @@ module CQL
     def initialize(@db : DB::Database)
     end
 
-    # Skips connections found closed at checkout (bounded, see `checkout_open`). Nothing is retried once the block
-    # started: a statement whose reply was lost may have run.
+    # Skips connections found closed at checkout (bounded, see `checkout_open`), all within one `CheckoutBudget`.
+    # Nothing is retried once the block started: a statement whose reply was lost may have run.
     def using_connection(& : DB::Connection -> _)
-      connection = checkout_open
+      connection = CheckoutBudget.within { checkout_open }
       begin
         yield connection
       ensure

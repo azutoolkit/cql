@@ -60,6 +60,7 @@ describe CQL::Postgres::Driver do
 
   it "refuses pool_reset, since crystal-db's pool cannot reset a connection, and points to EngineSource" do
     expect_raises(ArgumentError, /EngineSource/) { build_through_driver("postgres://localhost:1/db?pool_reset=discard_all") }
+    expect_raises(ArgumentError, /checkout_timeout/) { build_through_driver("postgres://localhost:1/db?checkout_timeout=inf") }
   end
 
   it "reports a refused or unreachable server as DB::ConnectionRefused, which crystal-db retries, but not a server error" do
