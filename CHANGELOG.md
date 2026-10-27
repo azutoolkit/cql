@@ -7,13 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Upgrade notes
+### Deprecated
 
-- `CQL::Cache::Middleware::Azu.setup!(app)` with an `Azu::App` never compiled (`Azu::App` has no `use`); it now fails with a message that names the replacement: `app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))`. A pipeline with `use`, such as `Azu::HandlerPipeline`, still works as before.
+- `CQL::Cache::Middleware::Azu.setup!(app)`: it calls `app.use`, which `Azu::App` does not have. Mount the generic handler instead: `app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)`. `Azu::HandlerPipeline#use` still accepts the handler.
+- `CQL::Cache::Middleware::Azu::Handler`, now a subclass of `CQL::Cache::Middleware::HTTP` with the same behaviour: use `CQL::Cache::Middleware::HTTP`.
+- `CQL::Cache::Middleware::Azu::Controller`: it registers `before_action`/`after_action`, which Azu endpoints do not have.
 
 ### Fixed
 
-- `CQL::Cache::Middleware::Azu.setup!` works with an `Azu::App`: given the app's `Array(HTTP::Handler)` it appends `CQL::Cache::Middleware::Azu::Handler` (once) and returns the array for `Azu::App#start` or `#server`. Before, it always called `use`, which `Azu::App` does not have (only `Azu::HandlerPipeline` does), so the documented `setup!(app)` did not compile. The Azu docs and the framework-integration example now show `Azu::App` and its handler array instead of `Azu::Server`, `Azu::Application`, `use` on the app and `app.before`/`app.after`, none of which Azu has.
+- Docs and the framework-integration example: the Azu snippets used `Azu::Server`, `Azu::Application`, `Azu::Controller`, `use` on the app and `app.before`/`app.after`, none of which Azu has; they now mount `CQL::Cache::Middleware::HTTP` in the `Azu::App` handler array. They no longer describe the per-request query cache as a cache that speeds requests up: it is a process-wide repeated-query diagnostic that stores and serves no rows, and its middleware does not read `config.cache.on?` or `config.cache.request_cache?`.
 
 ## [0.0.916] - 2026-10-26
 

@@ -22,6 +22,8 @@ Every select a query runs (`all`, `get`, `each`, `find` and the like) passes thr
 
 Each integration starts a request with the `X-Request-ID` header (or a random id) and ends it when the response is done.
 
+The tracker is a repeated-query (N+1) diagnostic, not a result cache: it stores and serves no rows, so it makes no request faster. It is one per process, so concurrent requests share its statements and counters (see the warning below). The middleware calls `RequestQueryCacheHelper` directly and does not look at `config.cache.on?` or `config.cache.request_cache?`; only `CQL.start_request_cache`, `CQL.end_request_cache` and `CQL.with_request_cache` check those.
+
 {% tabs %}
 {% tab title="HTTP::Server" %}
 ```crystal
@@ -40,19 +42,17 @@ after_all { |env| CQL::Cache::Middleware::Kemal.after_request(env) }
 
 {% tab title="Azu" %}
 ```crystal
-# Azu apps take their handlers as an array: setup! appends the cache handler (after RequestId, whose id it reuses)
+# An Azu::App takes its handlers as an array; put the handler after Azu::Handler::RequestId, whose id it reuses
 app = Azu::App.default
-app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))
-
-# The same, by hand
-app.start(app.default_handlers + [CQL::Cache::Middleware::Azu::Handler.new] of HTTP::Handler)
+app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)
 ```
 
-`setup!` takes the handler array, not the app: `Azu::App` has no `use`, so `setup!(app)` fails to compile with that
-hint. With an `Azu::HandlerPipeline`, `setup!(pipeline)` still calls `use`, the same as
-`pipeline.use(CQL::Cache::Middleware::Azu::Handler.new)`. Azu's own CQL bridge (`require "azu/cql"`,
-`Azu::CQL::Middleware`) tags queries with the request and can wrap it in a transaction; it does not track repeated
-queries, so the two handlers can sit in the same array.
+`Azu::App` has no `use`, so the deprecated `CQL::Cache::Middleware::Azu.setup!(app)` does not compile with it;
+`Azu::HandlerPipeline#use` still accepts the handler (`pipeline.use(CQL::Cache::Middleware::HTTP.new)`).
+`CQL::Cache::Middleware::Azu::Handler` is deprecated: a subclass of `CQL::Cache::Middleware::HTTP` that adds nothing;
+`CQL::Cache::Middleware::Azu::Controller` is deprecated: it registers `before_action`/`after_action`, which Azu
+endpoints do not have. The Azu-aware piece is Azu's own bridge, `require "azu/cql"`: its `Azu::CQL::Middleware`
+tags each statement with the request for Azu's dashboard and can run the request in a transaction.
 {% endtab %}
 
 {% tab title="Lucky" %}
@@ -86,7 +86,7 @@ CQL::Cache::Middleware::Manual.with_request { handle(request) }  # or Manual.sta
 {% endtab %}
 {% endtabs %}
 
-The Lucky, Amber and SpiderGazelle modules rely on those frameworks' macros and are not exercised by CQL's specs. `CQL::Cache::Middleware::Azu::Controller` registers `before_action`/`after_action`, which Azu endpoints do not have: use the handler.
+The Lucky, Amber and SpiderGazelle modules rely on those frameworks' macros and are not exercised by CQL's specs.
 
 ## Call the Helper Directly
 

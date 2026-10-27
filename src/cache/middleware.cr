@@ -132,38 +132,48 @@ module CQL
         end
       end
 
-      # Azu framework middleware. An Azu app takes its handlers as an array (`Azu::App#start`, `#server`), so the
-      # cache is a handler in that array. Put it after `Azu::Handler::RequestId`, whose `X-Request-ID` it reuses:
+      # Generic HTTP::Server middleware. It starts the process-wide request query tracker (`RequestQueryCacheHelper`)
+      # with the request's `X-Request-ID` (or a random id) and ends it in an `ensure`.
+      # Usage:
+      #   server = HTTP::Server.new([
+      #     CQL::Cache::Middleware::HTTP.new,
+      #     # ... other handlers
+      #   ])
       #
-      #   app = Azu::App.default # or Azu::App.new
-      #   app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))
-      #   # the same as: app.start(app.default_handlers + [CQL::Cache::Middleware::Azu::Handler.new] of HTTP::Handler)
+      # In an Azu app, after `Azu::Handler::RequestId` (whose id it then reuses):
+      #   app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)
+      class HTTP
+        include ::HTTP::Handler
+        include BaseMiddleware
+
+        def call(context : ::HTTP::Server::Context)
+          request_id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
+          start_request_cache(request_id)
+
+          begin
+            call_next(context)
+          ensure
+            end_request_cache
+          end
+        end
+      end
+
+      # Azu framework middleware (deprecated). An `Azu::App` takes its handlers as an array and has no `use`, and Azu
+      # endpoints have no `before_action`/`after_action`: mount `CQL::Cache::Middleware::HTTP` instead (see above).
+      # Azu's own `require "azu/cql"` bridge (`Azu::CQL::Middleware`) is the Azu-aware piece: request tagging,
+      # telemetry and per-request transactions.
       #
-      # Azu's own bridge (`require "azu/cql"`) mounts `Azu::CQL::Middleware` (request tagging, per-request
-      # transactions) the same way; the two are independent and can both be in the array.
-      #
-      # `Controller` relies on `before_action`/`after_action` macros, which Azu endpoints do not have.
+      # `before_request(ctx)` / `after_request(ctx)` can still be called from a handler of your own.
       module Azu
         extend BaseMiddleware
 
-        # HTTP Handler implementation for Azu
-        class Handler
-          include ::HTTP::Handler
-          include BaseMiddleware
-
-          def call(context : ::HTTP::Server::Context)
-            request_id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
-            start_request_cache(request_id)
-
-            begin
-              call_next(context)
-            ensure
-              end_request_cache
-            end
-          end
+        # The same handler as `CQL::Cache::Middleware::HTTP`, under its old name.
+        @[Deprecated("Use CQL::Cache::Middleware::HTTP")]
+        class Handler < CQL::Cache::Middleware::HTTP
         end
 
-        # Controller mixin for Azu controllers
+        # Controller mixin for frameworks with `before_action`/`after_action`; Azu endpoints have neither.
+        @[Deprecated("Azu endpoints have no before_action/after_action: mount CQL::Cache::Middleware::HTTP in the app's handlers")]
         module Controller
           extend BaseMiddleware
 
@@ -193,43 +203,13 @@ module CQL
           end_request_cache
         end
 
-        # Appends a `Handler` to *handlers*, unless one is there, and returns the array: pass it to
-        # `Azu::App#start` or `Azu::App#server`. Type the array `of HTTP::Handler`, as `default_handlers` is: an array of
-        # one handler class (`[Azu::Handler::Rescuer.new]`) fails to compile at `<<`.
-        def self.setup!(handlers : Array(::HTTP::Handler)) : Array(::HTTP::Handler)
-          handlers.any?(Handler) ? handlers : handlers << Handler.new
-        end
-
-        # For anything with a `use(handler)`, such as `Azu::HandlerPipeline`: returns `pipeline.use(Handler.new)`.
-        # `Azu::App` has no `use`, so passing the app fails to compile and names the array overload.
-        def self.setup!(pipeline : T) forall T
-          {% if T.has_method?(:use) || T.ancestors.any?(&.has_method?(:use)) %}
-            pipeline.use(Handler.new)
-          {% else %}
-            {% raise "CQL::Cache::Middleware::Azu.setup! takes the app's Array(HTTP::Handler) or a pipeline with `use` (Azu::HandlerPipeline), not #{T}: app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))" %}
-          {% end %}
-        end
-      end
-
-      # Generic HTTP::Server middleware
-      # Usage:
-      #   server = HTTP::Server.new([
-      #     CQL::Cache::Middleware::HTTP.new,
-      #     # ... other handlers
-      #   ])
-      class HTTP
-        include ::HTTP::Handler
-        include BaseMiddleware
-
-        def call(context : ::HTTP::Server::Context)
-          request_id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
-          start_request_cache(request_id)
-
-          begin
-            call_next(context)
-          ensure
-            end_request_cache
-          end
+        # Convenience method to set up automatic middleware
+        # Usage: CQL::Cache::Middleware::Azu.setup!(app)
+        @[Deprecated("Azu::App has no `use`: app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler). Azu::HandlerPipeline#use still accepts the handler.")]
+        def self.setup!(app)
+          # This would integrate with Azu's middleware system
+          # The exact implementation depends on Azu's API
+          app.use(Handler.new)
         end
       end
 

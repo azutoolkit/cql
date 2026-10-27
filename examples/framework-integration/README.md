@@ -14,20 +14,20 @@ through five steps:
 | Step | What runs |
 | --- | --- |
 | 1. HTTP handler | three mock requests, each wrapped in `CQL::Cache::Middleware::Azu.before_request(context)` and `after_request`, with three queries (two identical) and the hit and miss counts |
-| 2. Controller | a mock controller action wrapped in `RequestQueryCacheHelper.start_request` / `end_request`, starting and ending the request itself, the way a controller-style class of another framework would with `include CQL::Cache::Middleware::Azu::Controller` |
-| 3. Manual hooks | prints where `before_request` and `after_request` go in an Azu app (nothing runs) |
-| 4. Performance | 50 identical queries with `RequestQueryCacheHelper.enabled = false`, then 50 inside one cached request |
+| 2. Controller | a mock controller action wrapped in `RequestQueryCacheHelper.start_request` / `end_request` (Azu endpoints have no `before_action`, so the deprecated `Azu::Controller` mixin does not apply) |
+| 3. Manual hooks | prints an `HTTP::Handler` of your own that calls `before_request` and `after_request` (nothing runs) |
+| 4. Tracking overhead | 50 identical queries with `RequestQueryCacheHelper.enabled = false`, then 50 inside one tracked request; every query runs both times |
 | 5. Application pattern | prints a sample Azu app (nothing runs), then the cache statistics for the whole run |
 
 The middleware lives in `src/cache/middleware.cr` and is loaded by `require "cql"`:
 
 | Entry point | Use |
 | --- | --- |
-| `CQL::Cache::Middleware::Azu::Handler.new` | an `HTTP::Handler`; one cache per request, keyed by `X-Request-ID` or a random id |
-| `CQL::Cache::Middleware::Azu.setup!(handlers)` | appends a `Handler` to an `Array(HTTP::Handler)` (once) and returns it: `app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))`; with an `Azu::HandlerPipeline` it calls `pipeline.use(Handler.new)` |
-| `include CQL::Cache::Middleware::Azu::Controller` | registers `before_action :start_azu_query_cache` and `after_action :end_azu_query_cache`; Azu endpoints have no such macros |
+| `CQL::Cache::Middleware::HTTP.new` | an `HTTP::Handler` for any `HTTP::Server` or Azu app: starts the process-wide tracker with `X-Request-ID` (or a random id) and ends it in an `ensure`; in Azu, `app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)` |
+| `CQL::Cache::Middleware::Azu::Handler.new` | deprecated: a subclass of `HTTP` that adds nothing |
+| `CQL::Cache::Middleware::Azu.setup!(app)` | deprecated: calls `app.use(Handler.new)`; `Azu::App` has no `use` (`Azu::HandlerPipeline#use` does) |
+| `include CQL::Cache::Middleware::Azu::Controller` | deprecated: registers `before_action`/`after_action`, which Azu endpoints do not have |
 | `CQL::Cache::Middleware::Azu.before_request(ctx)` / `.after_request(ctx)` | manual hooks |
-| `CQL::Cache::Middleware::HTTP.new` | the same handler for any `HTTP::Server` |
 | `CQL::Cache::Middleware::Kemal`, `Lucky`, `Amber`, `SpiderGazelle`, `Manual` | hooks for other frameworks and for code without one |
 
 ```crystal
@@ -35,9 +35,14 @@ require "cql"
 require "http/server"
 
 server = HTTP::Server.new([CQL::Cache::Middleware::HTTP.new]) do |context|
-  context.response.print User.count # a repeated identical query in this request is served from the cache
+  context.response.print User.count # a repeated identical query in this request runs again and counts as a hit
 end
 ```
+
+The tracker stores and serves no rows: it counts repeated statements (an N+1 diagnostic) and makes no request
+faster. It is one per process, so concurrent requests share its statements and counters, and the middleware does not
+look at `config.cache.on?` or `config.cache.request_cache?`. Azu's own bridge, `require "azu/cql"`
+(`Azu::CQL::Middleware`), is the Azu-aware piece: request tagging, telemetry and per-request transactions.
 
 The Azu-side snippets the demo prints are not compiled here: Azu is not a dependency of this repository. They use
 `Azu::App` and its handler array.
