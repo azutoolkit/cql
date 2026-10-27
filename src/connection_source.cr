@@ -36,12 +36,19 @@ module CQL
     def initialize(@db : DB::Database)
     end
 
+    # Skips connections found closed at checkout (bounded, see `checkout_open`). Nothing is retried once the block
+    # started: a statement whose reply was lost may have run.
     def using_connection(& : DB::Connection -> _)
-      @db.using_connection { |connection| yield connection }
+      connection = checkout_open
+      begin
+        yield connection
+      ensure
+        connection.release
+      end
     end
 
     def transaction(& : DB::Transaction -> _)
-      @db.transaction { |transaction| yield transaction }
+      using_connection { |connection| connection.transaction { |transaction| yield transaction } }
     end
 
     def pool_stats : PoolStats
@@ -50,6 +57,20 @@ module CQL
 
     def close : Nil
       @db.close
+    end
+
+    # A driver may find at checkout that the server ended an idle connection (`Postgres::Connection#before_checkout`
+    # closes it). Releasing a closed connection drops it from the pool; every other idle one may be dead too (a
+    # server restart), so the bound is those plus one new connection. The last one is lent whatever its state.
+    private def checkout_open : DB::Connection
+      connection = @db.checkout
+      return connection unless connection.closed?
+      (@db.pool.stats.idle_connections + 1).times do
+        connection.release
+        connection = @db.checkout
+        break unless connection.closed?
+      end
+      connection
     end
   end
 end

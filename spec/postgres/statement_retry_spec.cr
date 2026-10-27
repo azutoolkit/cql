@@ -92,3 +92,102 @@ describe CQL::Postgres::Statement do
     end
   end
 end
+
+# Answers each simple query a connection sends and logs it (pings aside), until the client leaves.
+private def log_queries(client : FakePG::Client, log : Array(String)) : Nil
+  client.idle { |sql| log << sql unless sql.empty? }
+end
+
+private def terminate(client : FakePG::Client) : Nil
+  client.error("57P01", "terminating connection due to administrator command", {'S' => "FATAL", 'V' => "FATAL"})
+end
+
+# The pool's first connection, opened up front, is ended by the server while it sits idle; the others log what they run.
+private def server_ending_idle(log : Array(String), fatal : Bool) : FakePG
+  connections = 0
+  FakePG.start do |client|
+    client.read_startup
+    client.ok_handshake
+    next log_queries(client, log) if (connections += 1) > 1
+    terminate(client) if fatal
+  end
+end
+
+# CQL's own statements check out through `DatabaseSource#using_connection`, not crystal-db's retrying `Database#exec`.
+private def on_schema(server : FakePG, pool = "", &) : Nil
+  open_native(server.url(query: "sslmode=disable&retry_attempts=3&retry_delay=0&prepared_statements=false#{pool}")) do |db|
+    yield CQL::Schema.new(:statement_retry, server.url, CQL::Adapter::Postgres, source: CQL::DatabaseSource.new(db))
+  end
+end
+
+describe CQL::DatabaseSource do
+  {false, true}.each do |fatal|
+    ended = fatal ? "after a FATAL" : "with a FIN"
+    it "runs a schema statement once on another connection when the server ended the idle one #{ended}" do
+      log = [] of String
+      server = server_ending_idle(log, fatal)
+      on_schema(server) do |schema|
+        server.await # its socket is closed
+        schema.exec("INSERT INTO t VALUES (1)")
+      end
+      log.should eq ["INSERT INTO t VALUES (1)"]
+    end
+
+    it "runs a schema transaction once on another connection when the server ended the idle one #{ended}" do
+      log = [] of String
+      server = server_ending_idle(log, fatal)
+      on_schema(server) do |schema|
+        server.await
+        schema.transaction { schema.exec("INSERT INTO t VALUES (1)") }
+      end
+      log.should eq ["BEGIN", "INSERT INTO t VALUES (1)", "COMMIT"]
+    end
+  end
+
+  it "stops after the idle connections and one new one when the server ends every connection it opens" do
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      terminate(client)
+    end
+    on_schema(server, "&initial_pool_size=3&max_idle_pool_size=3") do |schema|
+      3.times { server.await }
+      expect_raises(DB::ConnectionLost) { schema.exec("INSERT INTO t VALUES (1)") }
+      server.accepted.should eq 4
+      stats = schema.pool_stats
+      {stats.open, stats.idle, stats.in_flight}.should eq({0, 0, 0})
+    end
+  end
+
+  it "raises through the schema instead of running an INSERT again when its reply is cut" do
+    log = [] of String
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      log << String.new(client.expect('Q')).chomp('\0') # the server ran it; a proxy drops the answer
+    end
+    on_schema(server) do |schema|
+      expect_raises(PG::ConnectionLost) { schema.exec("INSERT INTO t VALUES (1)") }
+    end
+    log.should eq ["INSERT INTO t VALUES (1)"]
+  end
+
+  it "never runs a block's earlier statements again when a later one finds the connection closed" do
+    log = [] of String
+    server = FakePG.start do |client|
+      client.read_startup
+      client.ok_handshake
+      log_queries(client, log)
+    end
+    on_schema(server) do |schema|
+      expect_raises(DB::ConnectionLost) do
+        schema.with_connection do |connection|
+          connection.exec("INSERT INTO t VALUES (1)")
+          connection.as(PG::Connection).session.hard_close # dropped after the INSERT ran (a timeout the block rescued, say)
+          connection.exec("INSERT INTO t VALUES (2)")
+        end
+      end
+    end
+    log.should eq ["INSERT INTO t VALUES (1)"]
+  end
+end
