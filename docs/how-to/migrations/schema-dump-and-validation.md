@@ -31,7 +31,7 @@ text = CQL::SchemaDump.open(AppDB, &.generate_schema_content(:AppSchema, :app_sc
 MyApp = CQL::Schema.define(
   :myapp,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://db/myapp.db") do
+  uri: ENV.fetch("DATABASE_URL", "sqlite3://db/myapp.db")) do
   table :users do
     primary :id, Int32
     text :name
@@ -63,8 +63,10 @@ end
   or CockroachDB; the primary key's, partial, expression and multi-column ones do not, nor a unique `created_at` or
   `updated_at` folded into `timestamps`. Other indexes are not dumped. The migrations table is, like any other table.
 
-{% hint style="danger" %}
-The URI, password included, is written into the file. Dump with a URI without credentials, or edit the `uri:` line before committing.
+{% hint style="info" %}
+The `uri:` line reads `DATABASE_URL` and falls back to the dumped URI without its password (user info and a
+`password` query parameter), so the app must set `DATABASE_URL` to connect with credentials. Other query parameters
+and the user name stay in the fallback.
 {% endhint %}
 
 ## Keep the File in Sync With Migrations

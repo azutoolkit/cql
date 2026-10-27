@@ -179,6 +179,49 @@ describe CQL::SchemaDump do
     end
   end
 
+  describe "the uri: line" do
+    it "reads DATABASE_URL and falls back to the URI without its password" do
+      require_postgres!
+      uri = URI.parse(postgres_database_url)
+      uri.query = "sslmode=disable&password=qp_leak"
+      dumper = CQL::SchemaDump.new(CQL::Adapter::Postgres, uri.to_s)
+      secret = uri.password
+      uri.password = nil
+      uri.query = "sslmode=disable"
+
+      content = dumper.generate_schema_content(:AppDB, :app_db)
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{uri.to_s.inspect})) do\n")
+      content.should_not contain("qp_leak")
+      secret.try { |password| content.should_not contain(":#{password}@") }
+    ensure
+      dumper.try(&.close)
+    end
+
+    it "writes the fallback as an escaped Crystal string literal" do
+      uri = spec_sqlite_uri(%(schema_dump_q"uote_#{Random::Secure.hex(4)}.db)) + "\#{x}"
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+
+      dumper.generate_schema_content(:AppDB, :app_db).should contain("ENV.fetch(\"DATABASE_URL\", #{uri.inspect})) do\n")
+    ensure
+      dumper.try(&.close)
+      uri.try { |written| File.delete?(URI.parse(written).path) }
+    end
+
+    it "keeps a SQLite URI without credentials as the fallback" do
+      dir = File.join(Dir.tempdir, "schema_dump_uri_#{Random::Secure.hex(4)}")
+      Dir.mkdir_p(File.join(dir, "db"))
+      content = Dir.cd(dir) do
+        dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://./db/app.db")
+        dumper.generate_schema_content(:AppDB, :app_db).tap { dumper.close }
+      end
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", \"sqlite3://./db/app.db\")) do\n")
+    ensure
+      dir.try { |path| FileUtils.rm_rf(path) }
+    end
+  end
+
   describe "error handling" do
     it "raises error for invalid database connection" do
       expect_raises(CQL::SchemaDump::Error, "Failed to connect to database") do

@@ -80,7 +80,7 @@ module CQL
         str << "#{schema_name} = CQL::Schema.define(\n"
         str << "  :#{schema_symbol},\n"
         str << "  adapter: CQL::Adapter::#{@adapter},\n"
-        str << "  uri: \"#{@uri}\") do\n"
+        str << "  uri: #{uri_expression}) do\n"
 
         tables.each do |table|
           str << generate_table_definition(table)
@@ -90,6 +90,28 @@ module CQL
       end
 
       content
+    end
+
+    # The file gets committed, so it reads DATABASE_URL and falls back to the URI without credentials;
+    # a URI that does not parse gets no fallback, as its password cannot be told apart.
+    private def uri_expression : String
+      if fallback = credential_free_uri(@uri)
+        %(ENV.fetch("DATABASE_URL", #{fallback.inspect}))
+      else
+        %(ENV["DATABASE_URL"])
+      end
+    end
+
+    private def credential_free_uri(uri : String) : String?
+      parsed = URI.parse(uri)
+      parsed.password = nil
+      if (query = parsed.query) && (params = URI::Params.parse(query)).has_key?("password")
+        params.delete_all("password")
+        parsed.query = params.to_s.presence
+      end
+      parsed.to_s
+    rescue URI::Error
+      nil
     end
 
     # Inspect all tables in the database
