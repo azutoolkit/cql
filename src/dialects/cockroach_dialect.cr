@@ -8,6 +8,11 @@ module Expression
       "CockroachDB"
     end
 
+    # Every letter is lowercased, and the Turkish dotted and dotless capital and small i fold to `i`.
+    def fold_unquoted_name(name : String) : String
+      name.gsub({'İ' => 'i', 'ı' => 'i'}).downcase.unicode_normalize(:nfc)
+    end
+
     # Schema changes in an explicit transaction are not atomic (recent versions also commit the
     # transaction first, through `autocommit_before_ddl`).
     def supports_transactional_ddl? : Bool

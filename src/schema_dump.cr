@@ -31,6 +31,10 @@ module CQL
     NAME_PATTERN = /\A[\p{L}_][\p{L}\p{N}_]*\z/
     # Hangul fillers are letters that render as nothing, so `a\u3164` would read as `a` in the schema file.
     INVISIBLE_LETTERS = {'\u115F', '\u1160', '\u3164', '\uFFA0'}
+    # Unquoted, these build a different table without an error: SQLite reads `constraint TEXT` as a table
+    # constraint, PostgreSQL reads `like VARCHAR` as a LIKE clause. Other keywords build or fail loudly. Both are
+    # refused on every dialect, simpler than a per-dialect list.
+    MISREAD_NAMES = {"constraint", "like"}
 
     # Query parameters the committed fallback URI keeps (compared case-insensitively): the connection, pool and
     # pragma settings CQL and its drivers read, none of them a secret. Any other parameter may hold one.
@@ -514,9 +518,22 @@ module CQL
     end
 
     private def check_name(table : String, kind : String, name : String) : Nil
-      return if plain_name?(name)
-      raise Error.new("Cannot dump table #{table.dump}: #{kind} #{name.dump} is not a plain identifier; CQL's DDL " \
-                      "does not quote names, so building a schema from it would run SQL in the name. Rename it first")
+      unless plain_name?(name)
+        refuse_name(table, kind, name, "is not a plain identifier; CQL's DDL does not quote names, so building a " \
+                                       "schema from it would run SQL in the name")
+      end
+      folded = @adapter.dialect.fold_unquoted_name(name)
+      if MISREAD_NAMES.includes?(folded.downcase)
+        refuse_name(table, kind, name, "is a keyword CQL's unquoted DDL reads as SQL, so the schema would build differently")
+      end
+      unless folded == name
+        refuse_name(table, kind, name, "is folded to #{folded.dump} by the database in CQL's unquoted DDL, so it would " \
+                                       "name another table or column")
+      end
+    end
+
+    private def refuse_name(table : String, kind : String, name : String, reason : String) : NoReturn
+      raise Error.new("Cannot dump table #{table.dump}: #{kind} #{name.dump} #{reason}. Rename it first")
     end
 
     # Valid UTF-8 in NFC (a decomposed name reads as its composed form), letters, digits and underscores, no filler.

@@ -49,6 +49,11 @@ module Expression
       true
     end
 
+    # The name an unquoted *name* refers to in DDL: unchanged unless the database folds unquoted names.
+    def fold_unquoted_name(name : String) : String
+      name
+    end
+
     # Reads the bound on lock waits, to restore once `migration_lock_sql` holds the lock; nil bounds no lock wait.
     def lock_timeout_sql : String?
       nil

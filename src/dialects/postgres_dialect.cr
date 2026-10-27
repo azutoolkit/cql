@@ -3,6 +3,11 @@ require "./dialect"
 module Expression
   # PostgreSQL specific dialect implementation - optimized for performance
   class PostgresDialect < BaseDialect
+    # A-Z only in a multibyte (UTF-8) database; a single-byte encoding also folds other letters, not handled here.
+    def fold_unquoted_name(name : String) : String
+      name.downcase(Unicode::CaseOptions::ASCII)
+    end
+
     # Cache for frequently used PostgreSQL-specific strings
     @@cached_strings = {
       "postgres_drop_index_prefix"  => "DROP INDEX IF EXISTS ",

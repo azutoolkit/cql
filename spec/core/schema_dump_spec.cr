@@ -21,6 +21,19 @@ ensure
   uri.try { |path| File.delete?(path.lchop("sqlite3://")) }
 end
 
+# Yields a dumper over the shared PostgreSQL database once *table* exists with *column*; drops the table afterwards.
+private def with_postgres_dump(table : String, column : String, &)
+  require_postgres!
+  DB.open(postgres_database_url, &.exec("CREATE TABLE #{quoted_identifier(table)} (id SERIAL PRIMARY KEY, #{quoted_identifier(column)} TEXT)"))
+  begin
+    dumper = CQL::SchemaDump.new(CQL::Adapter::Postgres, postgres_database_url)
+    yield dumper
+  ensure
+    dumper.try(&.close)
+    DB.open(postgres_database_url, &.exec("DROP TABLE IF EXISTS #{quoted_identifier(table)}"))
+  end
+end
+
 describe CQL::SchemaDump do
   describe "SQLite schema dumping" do
     it "can dump a SQLite database schema" do
@@ -393,6 +406,62 @@ describe CQL::SchemaDump do
       with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier("\u1100\u1161")} TEXT)") do |dumper|
         expect_raises(CQL::SchemaDump::Error, "notes") { dumper.generate_schema_content(:NotesDB, :notes_db) }
       end
+    end
+  end
+
+  describe "names the unquoted DDL reads as other SQL or folds into another name" do
+    it "refuses a SQLite column named constraint in any case, which the DDL reads as a table constraint" do
+      {"constraint", "CONSTRAINT", "Constraint"}.each do |column|
+        with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier(column)} TEXT)") do |dumper|
+          error = expect_raises(CQL::SchemaDump::Error, column.dump) { dumper.generate_schema_content(:NotesDB, :notes_db) }
+          error.message.to_s.should contain(%("notes"))
+        end
+      end
+      with_sqlite_dump("CREATE TABLE Notes (id INTEGER PRIMARY KEY, Title TEXT)") do |dumper|
+        dumper.generate_schema_content(:NotesDB, :notes_db).should contain("text :Title") # SQLite keeps the case
+      end
+    end
+
+    it "refuses a PostgreSQL column named like, read as a LIKE clause, and a name with an uppercase letter, folded" do
+      suffix = Random::Secure.hex(4)
+      {"likes_#{suffix}" => {"like", "like"}, "Users_#{suffix}" => {"note", "Users_#{suffix}"},
+       "emails_#{suffix}" => {"Email", "Email"}}.each do |table, (column, refused)|
+        with_postgres_dump(table, column) do |dumper|
+          error = expect_raises(CQL::SchemaDump::Error, refused.dump) { dumper.generate_schema_content(:NamesDB, :names_db) }
+          error.message.to_s.should contain(table.dump)
+        end
+      end
+    end
+
+    it "folds an unquoted name as each database does" do
+      CQL::Adapter::SQLite.dialect.fold_unquoted_name("Users").should eq("Users")
+      CQL::Adapter::Postgres.dialect.fold_unquoted_name("Émail_Users").should eq("Émail_users") # A-Z only in UTF-8
+      CQL::Adapter::CockroachDB.dialect.fold_unquoted_name("Émail_Users").should eq("émail_users")
+      CQL::Adapter::CockroachDB.dialect.fold_unquoted_name("lıke").should eq("like") # dotless i folds to i
+      CQL::Adapter::CockroachDB.dialect.fold_unquoted_name("LİKE").should eq("like")
+    end
+
+    it "dumps a lowercase PostgreSQL table and keyword column" do
+      table = "schema_dump_keys_#{Random::Secure.hex(4)}"
+      with_postgres_dump(table, "key") do |dumper|
+        dumped_table(dumper.generate_schema_content(:KeysDB, :keys_db), table).should contain("    text :key, null: true\n")
+      end
+    end
+
+    it "dumps keyword columns SQLite builds unquoted, and the dumped DSL builds a table that has them" do
+      schema = spec_sqlite_schema("schema_dump_keywords_#{Random::Secure.hex(4)}.db")
+      schema.table :keywords do
+        primary :id, Int32
+        text :key
+        text :first
+      end
+      schema.build
+
+      DB.open(schema.uri, &.query_all("SELECT name FROM pragma_table_info('keywords')", as: String)).should eq(%w[id key first])
+      dumped_table(CQL::SchemaDump.open(schema, &.generate_schema_content(:KeywordDB, :keyword_db)), "keywords")
+        .should eq("  table :keywords do\n    primary :id, Int32\n    text :key\n    text :first\n  end\n")
+    ensure
+      schema.try { |opened| opened.close; File.delete?(opened.uri.lchop("sqlite3://")) }
     end
   end
 

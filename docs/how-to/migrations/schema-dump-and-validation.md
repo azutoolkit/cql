@@ -64,8 +64,11 @@ end
   CQL's DDL does not quote names, so a schema built from it would run SQL in the name. Rename it first. A name
   that is not valid UTF-8 or not in NFC, or holds an invisible Hangul filler (U+115F, U+1160, U+3164, U+FFA0), is
   refused the same way, and a foreign key's columns, referenced table and referenced columns must be ASCII, as its
-  DDL requires. Most reserved words (`order`, `select`, `user` on PostgreSQL) pass the check and fail when the schema
-  is built, for the same reason: rename those too.
+  DDL requires. The names `constraint` and `like` (any case), which unquoted DDL reads as SQL and builds a
+  different table from, and a name the database folds in unquoted DDL (an A-Z letter on PostgreSQL in a UTF-8
+  database; any uppercase letter, `ı` or `İ` on CockroachDB), are refused too. Other reserved words (`order`,
+  `select`, `user` on PostgreSQL) pass the check and fail when the schema is built, for the same reason: rename those
+  too.
 - A one-column `UNIQUE` constraint or unique index becomes `unique: true` on SQLite and PostgreSQL, not yet on MySQL
   or CockroachDB; the primary key's, partial, expression and multi-column ones do not, nor a unique `created_at` or
   `updated_at` folded into `timestamps`. Other indexes are not dumped. The migrations table is, like any other table.
