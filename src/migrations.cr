@@ -127,6 +127,7 @@ module CQL
     getter repo : Repository(MigrationRecord, Int32)
 
     def initialize(@schema : Schema, @config = MigratorConfig.new)
+      reject_duplicate_versions!
       schema.ddl_transaction { ensure_schema_migrations_table }
       @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
@@ -365,11 +366,25 @@ module CQL
     end
 
     private def sorted_migrations
+      reject_duplicate_versions!
       Migrator.migrations.sort_by(&.version)
     end
 
     private def applied_migration_classes : Array(BaseMigration.class)
       sorted_migrations.select { |migration| migration_applied?(migration.version) }
+    end
+
+    # The records table keys on the version alone, so a shared version would apply both and record one.
+    # Checked again before every run, as the registry is a mutable class property.
+    private def reject_duplicate_versions! : Nil
+      Migrator.migrations.group_by(&.version).each do |version, migrations|
+        next if migrations.size == 1
+        names = migrations.map(&.name).join(" and ")
+        table = config.migration_table_name
+        raise Error.new("Migrations #{names} share version #{version}; renumber the one #{table} does not list. " \
+                        "If it already ran, first insert a #{table} row with its full class name and new version, " \
+                        "or `up` runs it again")
+      end
     end
 
     private def require_registered!(version : Int64) : Nil

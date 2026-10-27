@@ -79,7 +79,7 @@ end
 | :--- | :--- | :--- |
 | **`CQL::Schema::Error`** | `schema.alter :name` for a table not in the schema | `"Table 'users' not found"` |
 | **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL or CockroachDB URI with an empty host and no `?host=` or `PGHOST`, a MySQL URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
-| **`CQL::Migrator::Error`** | `update_schema_file` (run by `up` and `down` with `auto_sync`, and by `bootstrap_schema`) when the dump fails; `up_to` / `down_to` with a version no migration has | `"Schema update failed: <cause>"`, `"No migration with version 42"` |
+| **`CQL::Migrator::Error`** | `update_schema_file` (run by `up` and `down` with `auto_sync`, and by `bootstrap_schema`) when the dump fails; `up_to` / `down_to` with a version no migration has; `Migrator.new` when two migrations share a version, before it creates or records anything | `"Schema update failed: <cause>"`, `"No migration with version 42"`, `"Migrations A and B share version 7; renumber the one cql_schema_migrations does not list. If it already ran, first insert ..."` |
 | **`CQL::SchemaDump::Error`** | `SchemaDump` for an unknown adapter or a failed connection; reaches you wrapped in `Migrator::Error` | `"Failed to connect to database: ..."` |
 | `KeyError` | `schema.tables[:name]` for an unknown table | `"Missing hash key: :name"` |
 

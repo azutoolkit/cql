@@ -11,10 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `delete!` on a model with `optimistic_locking` now raises `CQL::OptimisticLockError` when its version is stale or the row is already gone; it used to delete the changed row, or return `false`.
 - A relation `delete_all` and `dependent: :destroy` delete such records one by one through `delete!`, so one stale record now raises and rolls back the whole batch.
+- An app with two migrations sharing a version now fails at `CQL::Migrator.new` with `CQL::Migrator::Error`; it used to apply both and record one. Renumber the one the migrations table (`cql_schema_migrations.name`) does not list: renumbering the recorded one makes `up` run it again. If that one already ran too (an `up` that applied both), first insert a row into that table with its full class name (`Klass.name`, namespace included) and the new version, or `up` runs it again.
 
 ### Fixed
 
 - `delete!` on a model with `optimistic_locking` deletes the row only while it still holds the version the record read. Before, a stale copy deleted a row another process had just updated. A raise rolls back the deletes of its `dependent:` associations.
+- `CQL::Migrator.new` raises `CQL::Migrator::Error` naming the classes when two registered migrations share a version, before it creates, applies or records anything. Before, `up` ran both but recorded one version, so a later rollback left the schema and its records out of step.
 
 ## [0.0.916] - 2026-10-26
 
