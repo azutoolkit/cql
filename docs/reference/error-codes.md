@@ -72,6 +72,7 @@ end
 | **`...::AssociationNotFound`** < `RelationError` | `first` / `last` on an empty `has_many` collection; updating a missing `has_one` / `belongs_to` target | `"No records found in collection"`, `"No profile to update"` |
 | **`...::InvalidAssociation`** < `RelationError` | Reading a `belongs_to ..., optional: false` whose key is `nil` or `0`; clearing a non-optional `belongs_to` | `"Required association user foreign key is nil or 0"` |
 | **`...::UnsavedRecord`** < `RelationError` | Association operations on an unsaved owner | `"Cannot operate on unsaved record"` |
+| **`CQL::ActiveRecord::Scopes::ScopeError`** < `ArgumentError` | An error other than `ArgumentError` raised while a scope's body runs (an `ArgumentError` passes through as it is) | `"Error in scope 'recent' (DB::Error)"`, with the original error as `cause`; as with `RelationError`, the cause's message can quote row values |
 
 ## Schema and migration errors
 
@@ -79,9 +80,19 @@ end
 | :--- | :--- | :--- |
 | **`CQL::Schema::Error`** | `schema.alter :name` for a table not in the schema | `"Table 'users' not found"` |
 | **`CQL::Schema::InvalidURIError`** < `Schema::Error` | `Schema.define` / `Schema.new`: unparseable URI, no path, a PostgreSQL or CockroachDB URI with an empty host and no `?host=` or `PGHOST`, a MySQL URI with an empty host, an unknown scheme | `"Invalid URI format"`, `"Missing host in MySQL URI"`, `"Unsupported database type: oracle"` |
-| **`CQL::Migrator::Error`** | `update_schema_file` (run by `up` and `down` with `auto_sync`, and by `bootstrap_schema`) when the dump fails; `up_to` / `down_to` with a version no migration has; `Migrator.new` when two migrations share a version, before it creates or records anything; `up` when another migrator recorded a migration's version during the run; on PostgreSQL, `Migrator.new` or a run with migrations to run when another migrator holds the migration lock past `MigratorConfig#lock_timeout` (nothing runs) | `"Schema update failed: <cause>"`, `"No migration with version 42"`, `"Migrations A and B share version 7; renumber the one cql_schema_migrations does not list. If it already ran, first insert ..."`, `"Another migrator holds the migration lock on cql_schema_migrations; gave up after 60.0 s (MigratorConfig#lock_timeout) and ran nothing. ..."` |
-| **`CQL::SchemaDump::Error`** | `SchemaDump` for an unknown adapter or a failed connection; reaches you wrapped in `Migrator::Error` | `"Failed to connect to database: ..."` |
+| **`CQL::Migrator::Error`** | `update_schema_file` and `bootstrap_schema` (also run by `CQL.build_migrator`, `CQL.bootstrap_schema` and `CQL.verify_schema(auto_fix: true)`) when the dump or the write fails; after `up` / `down` with `auto_sync` the same failure only logs a warning and keeps the old file; `up_to` / `down_to` with a version no migration has; `Migrator.new` when two migrations share a version, before it creates or records anything; `up` when another migrator recorded a migration's version during the run; on PostgreSQL, `Migrator.new` or a run with migrations to run when another migrator holds the migration lock past `MigratorConfig#lock_timeout` (nothing runs) | `"Schema update failed: <cause>"`, `"No migration with version 42"`, `"Migrations A and B share version 7; renumber the one cql_schema_migrations does not list. If it already ran, first insert ..."`, `"Another migrator holds the migration lock on cql_schema_migrations; gave up after 60.0 s (MigratorConfig#lock_timeout) and ran nothing. ..."` |
+| **`CQL::SchemaDump::Error`** | `SchemaDump` for an unknown adapter or a failed connection; `generate_schema_content` and `dump_to_file` (before writing anything) for a name a schema built from the dump would not reproduce, listed below. Through a migrator it reaches you wrapped in `Migrator::Error` | `"Failed to connect to database: ..."`, `"Cannot dump table ..."` |
 | `KeyError` | `schema.tables[:name]` for an unknown table | `"Missing hash key: :name"` |
+
+`CQL::SchemaDump::Error` refuses these names, as CQL's DDL writes names unquoted. `<kind>` is `name` (the table's), `column`, `foreign key column`, `referenced table` or `referenced column`, and the name is printed escaped (`String#dump`), so an invisible character shows.
+
+| Message ends with | Name refused | Example |
+| :--- | :--- | :--- |
+| `is not a plain identifier; CQL's DDL does not quote names, so building a schema from it would run SQL in the name. Rename it first` | Anything but letters of any script, digits and `_` (or starting with a digit); not valid UTF-8; not in NFC; holding a Hangul filler (U+115F, U+1160, U+3164, U+FFA0) | `Cannot dump table "notes": column "a\u3164" is not a plain identifier; ...` |
+| `is a keyword CQL's unquoted DDL reads as SQL, so the schema would build differently. Rename it first` | `constraint` and `like`, in any case | `Cannot dump table "notes": column "constraint" is a keyword ...` |
+| `is folded to "<folded>" by the database in CQL's unquoted DDL, so it would name another table or column. Rename it first` | A name the dialect's `fold_unquoted_name` changes: an A-Z letter on PostgreSQL; any uppercase letter, `ı` or `İ` on CockroachDB | `Cannot dump table "Users": name "Users" is folded to "users" ...` |
+| `is not an ASCII identifier, which CQL's foreign key DDL requires, so the dumped schema would not build. Rename it first` | A foreign key column, referenced table or referenced column outside `CQL::Identifier::PATTERN` | `Cannot dump table "posts": foreign key column "caf\u00E9_id" is not an ASCII identifier, ...` |
+| `is not one of cascade, restrict, set_null, set_default, no_action` | An `on_delete` / `on_update` rule CQL does not model | `Cannot dump table "posts": foreign key rule "weird" is not one of ...` |
 
 A failing statement inside `up` or `down` raises the driver's own exception. On SQLite and PostgreSQL the whole `up` / `down` run rolls back; on MySQL and CockroachDB each statement commits on its own. There is no `IrreversibleMigration` class: raise any exception from `down`.
 
@@ -154,9 +165,11 @@ There is no `ConfigurationError`, `TableNotFound` or `ColumnNotFound` class. The
 | `find_each` / `find_in_batches` / `insert_all` with `batch_size <= 0` | `"batch_size must be positive, got 0"` |
 | `preload` after a partial `select` | `"preload is not supported after a partial select"` |
 | `preload` with a name the model declares no association by | `"User has no association :postz. Associations: profile, posts"` |
-| A scope called with the wrong arguments or returning a non-query | `"Scope 'active' expects no arguments ..."` |
+| A scope called with the wrong arguments or returning a non-query | `"Scope 'active' expects no arguments ..."`; a scope body that raises another error gives a `ScopeError` (see [Active Record errors](#active-record-errors)) |
+| `contains`, `starts_with` or `ends_with` with a NUL in the text, when the condition is built | `"LIKE text must not contain NUL: SQLite would end the pattern there"` |
 | `CQL::Schema.new(..., source:)` with a source bound to another adapter | `"the connection source speaks ..."` |
 | Native PostgreSQL driver: unsupported `sslmode`, libpq-only options, `sslrootcert` without `verify-full`, non-numeric pool options | `"the sslcert option is not supported by this driver"` |
+| Native PostgreSQL driver: a `pool_reset` other than `discard_all`; `pool_reset` on a URL opened through crystal-db (`DB.open`, a `CQL::Schema` without a source) | ``"pool_reset must be discard_all, got "reset_all""``, `"pool_reset needs the engine's pool, as crystal-db's cannot reset a returned connection: use CQL::Postgres::EngineSource or AsyncEngine"` |
 
 ## Compile-time errors
 

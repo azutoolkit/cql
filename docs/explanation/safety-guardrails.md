@@ -101,12 +101,31 @@ An unknown column or a wrongly typed value in a typed `where { }` or `order_by`,
 
 The compiler does not compare a model with its schema definition. With `CQL_VALIDATE_SCHEMA_MAPPINGS=1`, each model's getter types are compared with its schema's column types, and a mismatch raises a `CQL schema mapping error`. The check is emitted at the end of the program, after all other top-level code, so an application that starts a blocking server never reaches it; run it from a program that only requires the models, such as a CI step. It is opt-in because models may legitimately omit columns or hold `nil` before an id is assigned. See [Dump and Validate Your Schema](../how-to/migrations/schema-dump-and-validation.md).
 
-## Bound Values Stay Out of Logs and Errors
+## Personal Data Stays Out of CQL's Logs and Errors
 
-- The native PostgreSQL driver keeps passwords and bound values out of the messages it builds; a server error shows the server's own wording only for error classes known to be value-free.
-- `CQL::Telemetry.capture_params` is off by default, so `event.params` is `nil` unless you opt in. See [Telemetry](../how-to/observability/telemetry.md).
-- The [SQL log](../how-to/observability/query-profiler.md#log-sql) leaves bound values out of its lines unless `logging.include_params` is on (then `logging.max_param_length` truncates each value). A failed statement's error line, and the error the profiler stores and exports, hold only the error's class and driver code (`SQLite3::Exception (code 19)`, `CQL::Postgres::UniqueViolation (SQLSTATE 23505)`), since a driver message can echo a value unquoted (`Key (email)=(alice@x.io)`, a trigger's `RAISE` text); `include_params` on keeps the full message.
-- The profiler keeps the parameters of recorded queries in memory, but the metrics JSON (`CQL::Performance.metrics.to_json`) includes them only when `logging.include_params` is on.
+Bound values are often personal data. What CQL logs, records or raises leaves them out unless you opt in:
+
+| Where | By default | With values when |
+| :--- | :--- | :--- |
+| Telemetry events | `event.params` is `nil` | `CQL::Telemetry.capture_params` is on |
+| The native PostgreSQL driver's `db` Debug log | the query and `args_count` | `capture_params` is on |
+| The [SQL log](../how-to/observability/query-profiler.md#log-sql), the profiler's reports and `CQL::Performance.metrics.to_json` | no values (the profiler keeps them in memory); a failed statement as its class and driver code, `SQLite3::Exception (code 19)` | `logging.include_params` is on: values cut to `max_param_length`, the driver's full message |
+| A failed insert | not logged | never |
+| `RelationError` and `ScopeError` messages | the wrapped error's class | never (the wrapped error is the `cause`) |
+| Native PostgreSQL driver error messages | no credentials or values; the server's wording only for value-free SQLSTATE classes | never |
+
+Drivers echo values unquoted too (a trigger's `RAISE` text, `Key (email)=(alice@x.io)`), hence class and code. A literal in the SQL text is not bound, so every log keeps it.
+
+### What Can Still Carry Values
+
+- **Cause chains.** A wrapped error keeps its message, and `Log.error(exception: ex)` or an unhandled exception prints it after `Caused by:`.
+- **Driver exceptions.** A rejected statement raises the driver's own exception, also telemetry's `event.error`: `SQLite3::Exception`, `PQ::PQError`, MySQL's `Duplicate entry 'alice@example.com'`. Redact its message before you log it. The native driver's `ServerError#server_message` and `#detail` keep the server's wording.
+- **crystal-db's Debug log.** The SQLite, MySQL and `pg` shard drivers list bound values when `db` logs at Debug, and a linked `pg` shard takes `postgres://` whatever the require order. Bind `db` at Info or above in production.
+- **The opt-ins.** `capture_params` and `include_params` put values back in events and logs; keep them for development. See [Telemetry](../how-to/observability/telemetry.md#capture-parameters-and-tag-events).
+
+### Pooled Sessions Outlive Their Tenant
+
+A pooled connection keeps what its last borrower set: `set_config` values that row-level security reads, `SET ROLE`, `search_path`, temporary tables, advisory locks. On the native engine (`AsyncEngine`, `EngineSource`), `pool_reset=discard_all` in the URL runs `DISCARD ALL` on every return, at a round trip and fresh prepares per borrow; crystal-db's pool cannot reset and refuses the key. See [Setup and Reset Hooks](../how-to/postgres-native/async-engine.md#setup-and-reset-hooks).
 
 ## What CQL Does Not Do
 

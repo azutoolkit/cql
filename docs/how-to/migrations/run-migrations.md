@@ -21,8 +21,8 @@ config.migration_table_name    # => :cql_schema_migrations, created by AppDB.mig
 ```
 
 With `auto_sync: true`, every `up` and `down` rewrites the schema file from the live database, creating missing
-directories; building the migrator writes nothing. Pass `auto_sync: false` in production and in tests so the file is
-left alone.
+directories; if that write fails, the run logs a warning and keeps the old file. Building the migrator writes nothing.
+Pass `auto_sync: false` in production and in tests so the file is left alone.
 
 ## Apply Pending Migrations
 

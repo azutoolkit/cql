@@ -54,6 +54,7 @@ Only SQLite runs live in CQL's specs; the other dialects are checked through gen
 | `distinct_on(:email)` | raises | `DISTINCT ON (users.email)` | raises | `DISTINCT ON (users.email)` |
 | `lock(:update)`, `lock(:share, skip_locked: true)`, `lock(:update, nowait: true)` | raises | `FOR UPDATE`, `FOR SHARE SKIP LOCKED`, `FOR UPDATE NOWAIT` | same | same |
 | `ilike` / `not_ilike` | `LOWER(col) LIKE LOWER(?)` | `ILIKE` / `NOT ILIKE` | `LOWER(col) LIKE LOWER(?)` | `ILIKE` / `NOT ILIKE` |
+| `contains` / `starts_with` / `ends_with` | `col LIKE ? ESCAPE '!'`, the bound text's `%`, `_` and `!` escaped with `!`; ignores ASCII case | `col LIKE $1 ESCAPE '!'`; case-sensitive | `col LIKE ? ESCAPE '!'`; case follows the collation (the default ignores it) | as PostgreSQL |
 | `json_eq(["a", "b"], v)` | `CAST(json_extract(col, ?) AS TEXT) = ?`, path `$.a.b`; booleans as `1` / `0` | `col #>> $1::text[] = $2`, path `{a,b}` | `JSON_UNQUOTE(JSON_EXTRACT(col, ?)) = ?`, path `$.a.b` | as PostgreSQL |
 | `json_contains(value)` | raises | `col @> $1::jsonb` | `JSON_CONTAINS(col, ?)` | as PostgreSQL |
 | `within_distance(lng, lat, meters)` | raises | `ST_DWithin(col::geography, ...)` | `ST_Distance_Sphere(col, ...) <= ?` (8.0.13+, SRID 4326, unverified live) | as PostgreSQL |
