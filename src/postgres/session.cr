@@ -236,7 +236,7 @@ module CQL::Postgres
     def ping(timeout : Time::Span = PING_TIMEOUT) : Bool
       return false if cancels_pending? # a late cancel could hit whatever runs next: not a connection to trust
       answered = false
-      exclusive { answered = with_hard_deadline(timeout) { run_simple("") } }
+      exclusive(default_deadline: false) { answered = with_hard_deadline(timeout) { run_simple("") } }
       answered && !@closed
     rescue Error
       false
@@ -293,12 +293,13 @@ module CQL::Postgres
     rescue IO::Error | OpenSSL::Error
     end
 
-    private def exclusive(timeout : Time::Span? = nil, &)
+    # A request without a *timeout* of its own gets the config's `query_timeout`; a ping keeps only its hard deadline.
+    private def exclusive(timeout : Time::Span? = nil, default_deadline : Bool = true, &)
       @lock.synchronize do
         raise ConnectionLost.new("the connection is closed") if @closed
         @deadline_expired = false
         @requests += 1
-        guarded { with_deadline(timeout) { yield } }
+        guarded { with_deadline(default_deadline ? timeout || @config.query_timeout : timeout) { yield } }
       ensure
         settle_cancels
         @last_used = Time.instant

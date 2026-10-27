@@ -28,11 +28,11 @@ module CQL::Configure
       uri = URI.parse(@database_url)
       params = HTTP::Params.new
 
+      adapter = detect_adapter(@database_url)
       # Apply connection pool configuration
-      @pool_config.try(&.apply_to_params(params))
+      @pool_config.try(&.apply_to_params(params, adapter))
 
       # Apply SSL configuration
-      adapter = detect_adapter(@database_url)
       @ssl_config.try(&.apply_to_params(params, adapter))
 
       # Apply database-specific configuration

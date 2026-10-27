@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 require "../../src/postgres"
 
 private def with_crystal_env(env : String, &)
@@ -123,6 +124,30 @@ describe "CQL.configure" do
         CQL.configure(&.pool_size=(1))
         CQL.config.pool.initial_size.should eq(1)
         CQL.config.pool.max_idle_size.should eq(1)
+      end
+    end
+  end
+
+  describe "pool.query_timeout" do
+    it "is unset by default and reaches the URL as query_timeout only when set" do
+      CQL.configure(&.db=("postgres://u@localhost/app"))
+      CQL.config.pool.query_timeout.should be_nil
+      CQL.config.full_db_url.should_not contain("query_timeout")
+      CQL.config.pool.query_timeout = 1.5.seconds
+      CQL.config.full_db_url.should contain("query_timeout=1.5")
+      CQL.config.db = "cockroachdb://u@localhost/app"
+      CQL.config.full_db_url.should contain("query_timeout=1.5")
+      expect_raises(ArgumentError, /query_timeout needs PostgreSQL/) { CQL.configure(&.db=("sqlite3://./app.db")) }
+      expect_raises(ArgumentError, "query_timeout must be positive") { CQL.configure(&.pool.query_timeout=(-1.seconds)) }
+    end
+
+    it "logs a warning when another driver (the pg shard, linked in the specs) takes postgres://, as it ignores the key" do
+      with_crystal_env("development") do
+        CQL.config.pool.query_timeout = 1.second
+        Log.capture("*", level: :warn) do |logs|
+          CQL.configure(&.db=("postgres://u@localhost/app"))
+          logs.check(:warn, %r{pool.query_timeout is ignored because PG::Driver handles postgres://})
+        end
       end
     end
   end

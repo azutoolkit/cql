@@ -58,6 +58,9 @@ engine.pool.stats.to_s # => "0 in use, 2 idle, 20 max"
 #
 # Connection options:
 #   connect_timeout=10        seconds for each connecting step; 0 waits forever
+#   query_timeout=30          seconds each call may run, COMMIT and DDL included (unset: no limit): a whole pipeline,
+#                             script, or stream or COPY with its block. Past it CQL::Postgres::QueryTimeout after a cancel
+#                             (silent server: plus the 5 s cancel grace, connection dropped); a timed-out COMMIT's outcome is unknown
 #   application_name=cql
 #   statement_cache_size=256  prepared statements kept per connection; 0 turns the cache off
 #   binary_params=false       send parameters in binary; see the COPY and binary parameters guide

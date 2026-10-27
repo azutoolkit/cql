@@ -228,10 +228,19 @@ module CQL
 
       def validate! : Nil
         @validators.each(&.validate!(self))
-        pool.validate!
+        pool.validate!(adapter)
+        warn_unread_query_timeout
         ssl.validate!
         db_config.validate!
         cache.validate!
+      end
+
+      # The pg shard, when linked, takes postgres:// and ignores query_timeout: statements would run unbounded.
+      private def warn_unread_query_timeout : Nil
+        return unless pool.query_timeout && adapter.postgres_compatible?
+        scheme = URI.parse(adapter.driver_uri(db)).scheme.to_s
+        return unless CQL::Postgres::Driver.registered?(scheme) && (driver = ::DB.driver_class(scheme)) != CQL::Postgres::Driver
+        effective_logger.warn { "pool.query_timeout is ignored because #{driver} handles #{scheme}://, and only CQL's native PostgreSQL driver reads query_timeout" }
       end
 
       # Create migrator configuration

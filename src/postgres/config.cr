@@ -58,6 +58,8 @@ module CQL::Postgres
     # How long each step of connecting and starting up may block (TCP connect,
     # TLS, every server reply), not a total deadline; nil waits indefinitely.
     getter connect_timeout : Time::Span?
+    # The deadline of every statement that passes no `timeout:` of its own; nil (the default) waits indefinitely.
+    getter query_timeout : Time::Span?
     getter application_name : String
     getter statement_cache_size : Int32
     getter startup_options : Hash(String, String)
@@ -93,7 +95,8 @@ module CQL::Postgres
     def initialize(@host = "localhost", @port = 5432, @user = "postgres", @password = nil, database : String? = nil,
                    @ssl_mode = SSLMode::Prefer, @ssl_root_cert = nil, @connect_timeout = DEFAULT_CONNECT_WAIT.seconds,
                    @application_name = "cql", @statement_cache_size = 256,
-                   @startup_options = {} of String => String, @driver_options = {} of String => String, @cockroachdb = false)
+                   @startup_options = {} of String => String, @driver_options = {} of String => String, @cockroachdb = false,
+                   @query_timeout = nil)
       check_binary_params
       raise ArgumentError.new("min_protocol_version #{min_protocol_version} is newer than max_protocol_version #{max_protocol_version}") if min_protocol_version > max_protocol_version
       @database = database || @user
@@ -132,6 +135,7 @@ module CQL::Postgres
         ssl_mode: ssl_mode,
         ssl_root_cert: ssl_root_cert,
         connect_timeout: timeout(pop(params, "connect_timeout")),
+        query_timeout: positive_seconds(pop(params, "query_timeout"), "query_timeout"),
         application_name: pop(params, "application_name") || "cql",
         statement_cache_size: number(pop(params, "statement_cache_size"), "statement_cache_size") || 256,
         startup_options: startup_options(params),
@@ -172,6 +176,11 @@ module CQL::Postgres
     # A whole number that may not fit in 32 bits, or nil when absent.
     def self.whole(text : String?, name : String) : Int64?
       text.try { |value| value.to_i64? || raise ArgumentError.new("#{name} must be a whole number, got #{value.inspect}") }
+    end
+
+    # Like `seconds`, but zero is refused: unlike `connect_timeout`, it does not mean "no deadline".
+    private def self.positive_seconds(text : String?, name : String) : Time::Span?
+      text.try { |value| value.to_f?.try { |number| number.seconds if number.finite? && 0 < number <= 31_536_000 } || raise ArgumentError.new("#{name} must be a positive number of seconds up to a year, got #{value.inspect}") }
     end
 
     private def self.timeout(text : String?) : Time::Span?

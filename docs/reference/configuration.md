@@ -111,6 +111,7 @@ end
 | `initial_size` | `Int32` | `1` | `initial_pool_size` | `initial_pool_size must be positive` |
 | `max_idle_size` | `Int32` | `1` | `max_idle_pool_size` | `max_idle_pool_size must be positive` |
 | `checkout_timeout` | `Time::Span` | `10.seconds` | `checkout_timeout` (seconds) | none |
+| `query_timeout` | `Time::Span?` | `nil` | `query_timeout` (seconds; PostgreSQL and CockroachDB, native driver only) | `query_timeout must be positive`, `query_timeout needs PostgreSQL or CockroachDB ...` |
 | `max_retry_attempts` | `Int32` | `3` | `retry_attempts` | `max_retry_attempts must be positive` |
 | `retry_delay` | `Time::Span` | `1.second` | `retry_delay` (seconds) | none |
 | `use_prepared_statements?` | `Bool` | `true` | `prepared_statements` | none |
@@ -241,7 +242,6 @@ These settings are accepted, and `timezone` is validated, but nothing in `src/` 
 | Block | Settings (default) |
 | :--- | :--- |
 | top level | `timezone` (`:utc`), `auto_load` (`true`; `false` in test and production), `sql_logging_async` (`false`; SQL logging is always synchronous) |
-| `pool` | `query_timeout` (`30.seconds`; never emitted as a URL parameter) |
 | `cache` | `memory` (`true`), `memory_stats` (`true`), `auto_clear` (`true`), `fragments` (`false`), `logging` (`false`; `true` in development), `log_level` (`Debug`; `Info` in production), `auto_cleanup` (`true`), `cleanup_interval` (`5.minutes`), `batch_ops` (`true`), `middleware` (`false`), `request_id_header` (`"X-Request-ID"`) |
 
 `cache_stats` echoes `memory`, `request_cache` and `fragments`.
