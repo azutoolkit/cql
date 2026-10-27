@@ -31,12 +31,16 @@ module Expression
       run_dump("pg_dump", args, env: dump_env(uri))
     end
 
-    # The password and the `sslmode` query parameter of *uri*, as pg_dump reads them from its
-    # environment. Other query parameters are ignored.
+    private DUMP_SSL_VARIABLES = {"sslmode" => "PGSSLMODE", "sslrootcert" => "PGSSLROOTCERT", "sslcert" => "PGSSLCERT", "sslkey" => "PGSSLKEY"}
+
+    # The password and the TLS query parameters of *uri* (`sslmode`, `sslrootcert`, `sslcert`, `sslkey`), as pg_dump
+    # reads them from its environment. A parameter *uri* does not name is not passed, so pg_dump inherits it from this
+    # process's environment. Other query parameters are ignored.
     private def dump_env(uri : URI) : Hash(String, String)
       env = {} of String => String
       uri.password.try { |password| env["PGPASSWORD"] = password }
-      uri.query_params["sslmode"]?.try { |mode| env["PGSSLMODE"] = mode }
+      params = uri.query_params
+      DUMP_SSL_VARIABLES.each { |key, variable| params[key]?.try { |value| env[variable] = value } }
       env
     end
 

@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 require "../support/fake_pg_server"
 require "../../src/postgres"
 
@@ -22,6 +23,14 @@ private def certificate_demanding_server(context : OpenSSL::SSL::Context::Server
     client.read_startup
     client.upgrade_to_tls(context)
   rescue OpenSSL::SSL::Error | IO::Error
+  end
+end
+
+# An empty file standing in for a client key: parsing checks only that sslcert and sslkey are readable files.
+private def key_file(mode : Int32) : String
+  File.tempname("cql-client", ".key").tap do |path|
+    File.write(path, "")
+    File.chmod(path, mode)
   end
 end
 
@@ -254,6 +263,7 @@ describe CQL::Postgres::Transport do
       File.write(garbage, "-----BEGIN PRIVATE KEY-----\nTOPSECRETKEYMATERIAL\n-----END PRIVATE KEY-----\n")
       Process.run("openssl", ["pkey", "-in", key, "-aes256", "-passout", "pass:pw", "-out", encrypted]).success?.should be_true
       File.write(padded, "preamble\n" * 8_000 + File.read(encrypted)) # OpenSSL skips any text before a PEM block, so no prefix scan finds it
+      {garbage, encrypted, padded}.each { |path| File.chmod(path, 0o600) }
       {garbage => /sslkey/, encrypted => /sslkey.*sslpassword/, padded => /sslkey.*sslpassword/}.each do |bad_key, message|
         url = certificate_demanding_server(context).url(query: mutual_tls_query(bad_key, certificate))
         error = expect_raises(PG::TLSRefused, message) { PG::Session.connect(PG::Config.parse(url)) }
@@ -269,6 +279,39 @@ describe CQL::Postgres::Transport do
       expect_raises(ArgumentError, /sslkey/) { PG::Config.parse("#{base}&sslcert=#{certificate}") }
       expect_raises(ArgumentError, /sslcert/) { PG::Config.parse("#{base}&sslkey=#{key}") }
       PG::Config.parse("#{base}&sslcert=#{certificate}&sslkey=#{key}").startup_options.should be_empty
+    end
+
+    # libpq refuses such a key; CQL warns instead, as secret mounts (Kubernetes) are often root-owned 0644.
+    it "warns once per path at parse when sslkey is open to group or others, naming sslkey, the path and the mode" do
+      keys = {0o600, 0o640, 0o644}.map { |mode| key_file(mode) }
+      private_key, group_readable, world_readable = keys
+      parse = ->(key : String) { PG::Config.parse("postgres://h/db?sslmode=require&sslcert=#{__FILE__}&sslkey=#{key}") }
+      Log.capture("cql.postgres", level: :warn) do |logs|
+        parse.call(private_key)
+        parse.call(group_readable) if File.info(group_readable).owner_id == "0" # libpq accepts 0640 when root owns the key
+        logs.empty
+        2.times { parse.call(world_readable) }
+        logs.next(:warn, /sslkey.*#{Regex.escape(world_readable)}.*0644/).empty
+        if LibC.getuid == 0
+          File.chown(group_readable, 65534) # not root-owned: libpq's stricter rule refuses 0640 too
+          parse.call(group_readable)
+          logs.next(:warn, /sslkey.*#{Regex.escape(group_readable)}.*0640/).empty
+        end
+      end
+    ensure
+      keys.try &.each { |path| File.delete(path) }
+    end
+
+    # The certificate is a Crystal source file here: nothing may load it while TLS is off.
+    it "are neither loaded nor make the client ask for TLS when sslmode=disable" do
+      key = key_file(0o600)
+      server = FakePG.start do |peer|
+        peer.read_startup
+        peer.ok_handshake
+      end
+      PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&sslcert=#{__FILE__}&sslkey=#{key}"))).close
+    ensure
+      key.try { |path| File.delete(path) }
     end
   end
 end

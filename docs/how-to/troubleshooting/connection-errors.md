@@ -98,6 +98,8 @@ CQL::Postgres::TLSRefused: db.internal:5432 does not support TLS, which the sslm
 
 **Cause:** the first is a server that accepts only TLS and a connection without it (`sslmode=disable`); the second is the reverse. Set `sslmode` to match the server; see [Enable SSL Connections](../configuration/ssl.md).
 
+A `TLSRefused` ending in `certificate required` means the server wants a client certificate: set `sslcert` and `sslkey`. One reading `is encrypted; sslpassword is not supported` needs the key decrypted: `openssl pkey -in enc.key -out key.pem`.
+
 ## Unsupported URL option
 
 ```text

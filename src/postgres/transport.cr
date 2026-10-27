@@ -3,6 +3,7 @@ require "openssl"
 require "./config"
 require "./wire/frontend"
 
+# Crystal 1.22's stdlib does not bind this (needed for the empty pass phrase in `tls`); delete once a later one does.
 lib LibSSL
   fun ssl_ctx_set_default_passwd_cb_userdata = SSL_CTX_set_default_passwd_cb_userdata(ctx : SSLContext, u : Void*) : Void
 end

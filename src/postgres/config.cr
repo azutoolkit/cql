@@ -98,6 +98,23 @@ module CQL::Postgres
       {"sslcert" => certificate, "sslkey" => key}.each do |option, path|
         raise ArgumentError.new("#{option} #{path} is not a readable file") unless File.file?(path) && File::Info.readable?(path)
       end
+      warn_if_key_exposed(key)
+    end
+
+    @@exposed_keys_warned = Set(String).new
+    @@exposed_keys_lock = CQL::Compat::Mutex.new
+
+    # libpq refuses a key open to group or others (a root-owned key may be group-readable); CQL warns instead, once
+    # per path, as secret mounts (Kubernetes) are often root-owned 0644. A key that vanished since it was checked
+    # is left to the TLS handshake to report: a warning never fails a connect.
+    private def warn_if_key_exposed(path : String) : Nil
+      {% if flag?(:unix) %}
+        info = File.info?(path) || return
+        mode = info.permissions.value
+        return if mode & (info.owner_id == "0" ? 0o037 : 0o077) == 0
+        return unless @@exposed_keys_lock.synchronize { @@exposed_keys_warned.add?(path) }
+        Session::Log.warn { "sslkey #{path} has mode #{"%04o" % mode}, open to group or others: libpq would refuse it (chmod 600)" }
+      {% end %}
     end
 
     def max_protocol_version : ProtocolVersion

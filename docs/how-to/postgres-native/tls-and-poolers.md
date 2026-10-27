@@ -34,6 +34,13 @@ engine = CQL::Postgres::AsyncEngine.connect("postgres://app:secret@db.internal/a
 ```crystal
 # PEM files read by every new connection; an encrypted key raises CQL::Postgres::TLSRefused (no sslpassword)
 "postgres://app@db.internal/app?sslmode=verify-full&sslcert=/etc/app/client.pem&sslkey=/etc/app/client.key"
+
+# Presented only when TLS is negotiated: sslmode=disable, or prefer against a server without TLS, never sends them.
+# Rotate by replacing each file atomically (write a new one, then rename): a half-written file fails the
+# connect as TLSRefused, which is not retried.
+# A key open to group or others (chmod 600; root-owned may be 0640) logs a warning once per path: libpq refuses it.
+# When the pg shard serves postgres:// (require "pg" anywhere), an encrypted key still prompts for a pass phrase:
+# the shard loads it without this guard.
 ```
 
 ## Protocol Versions
