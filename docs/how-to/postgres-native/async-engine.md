@@ -41,7 +41,7 @@ Pool settings are URL query options:
 | --- | --- | --- |
 | `pool_size` | Maximum connections, at least 1 | 10 |
 | `pool_min_size` | Connections opened by `connect`, 0 to `pool_size` | 0 |
-| `checkout_timeout` | Seconds for a checkout: waiting for a free connection (then `PoolTimeout`), health checks (at most half of the time left) and connecting, where each read waits at most the time left (then `IO::TimeoutError`, even before `connect_timeout`); 0 does not wait for a slot and connects within `connect_timeout` | 5 |
+| `checkout_timeout` | Seconds for a checkout: waiting for a free connection (then `PoolTimeout`), health checks (at most half of the time left) and connecting, where the connect, from the TCP connection on, waits at most the time left (then `IO::TimeoutError`, even before `connect_timeout`; resolving the host is not bounded); 0 does not wait for a slot and connects within `connect_timeout` | 5 |
 | `health_check_after` | Ping a connection idle longer than this many seconds before lending it; a younger one is pinged only if the server wrote to or closed it while idle (a failover's FATAL), which the pool checks without a round trip | 30 |
 | `max_queries` | Retire a connection after this many requests | none |
 | `max_idle_lifetime` | Retire a connection idle this many seconds | none |

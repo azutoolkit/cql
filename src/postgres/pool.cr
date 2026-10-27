@@ -4,7 +4,7 @@ require "./connection_reset"
 
 module CQL::Postgres
   # Bounded set of connections shared by many fibers. `checkout` times its wait
-  # for a free slot, its health checks and each read of a connect from one
+  # for a free slot, its health checks and its connect from one
   # `checkout_timeout`; `release` returns the connection, or
   # drops it if it is closed or still inside a transaction. Idle connections
   # that sat unused for `health_check_after`, or have input waiting, are pinged before being handed out.

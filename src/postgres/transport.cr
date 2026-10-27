@@ -7,7 +7,8 @@ module CQL::Postgres
   # Opens the byte stream to the server: TCP or Unix socket, optionally
   # upgraded to TLS through the protocol's SSLRequest. Each blocking step of
   # connecting and starting up is bounded by `connect_timeout`, or by the time
-  # left before a deadline when one is given; call `relax` once the session is up.
+  # left before a deadline when one is given, which then also ends the whole
+  # connect once the socket exists (`watch`); call `relax` once the session is up.
   module Transport
     # The byte stream to talk over, and the socket under it. Closing the socket
     # ends the connection at once; closing a TLS stream first sends close_notify,
@@ -15,17 +16,48 @@ module CQL::Postgres
     record Stream, io : IO, socket : IO
 
     def self.connect(config : Config) : IO
-      open_stream(config).io
+      open_stream(config, &.io)
     end
 
-    def self.open_stream(config : Config, deadline : Time::Instant? = nil) : Stream
-      socket = open(config, deadline.try { |due| time_left(due) })
+    # Yields the stream (to start a session on it) and closes its socket if the block raises. With a *deadline*,
+    # opening the stream and the block end by it: see `watch`.
+    def self.open_stream(config : Config, deadline : Time::Instant? = nil, & : Stream -> T) : T forall T
+      socket = naming_server(config) { open(config, deadline.try { |due| time_left(due) }) }
       begin
-        Stream.new(socket.is_a?(TCPSocket) ? negotiate_tls(socket, config, deadline) : socket, socket)
+        watch(socket, deadline, config) do
+          io = naming_server(config) { socket.is_a?(TCPSocket) ? negotiate_tls(socket, config, deadline) : socket }
+          yield Stream.new(io, socket)
+        end
       rescue ex
         socket.close
         raise ex
       end
+    end
+
+    # A slow peer can answer each read in time and still stretch a connect, so a watchdog closes *socket* (never a
+    # TLS stream over it, whose close can block) if the block still runs at *deadline*. Whatever the block then makes
+    # of the closed socket (an EOF, a failed TLS handshake, an unrecognized startup reply), the connect ran out of
+    # time. The watchdog and the block settle atomically who came first, so a socket the block finished with stays open.
+    private def self.watch(socket : IO, deadline : Time::Instant?, config : Config, &)
+      return yield unless deadline
+      settled = Atomic(Bool).new(false)
+      finished = Channel(Nil).new
+      spawn do
+        select
+        when finished.receive?
+        when timeout(deadline - Time.instant) then socket.close unless settled.swap(true)
+        end
+      end
+      begin
+        yield
+      ensure
+        finished.close
+        raise IO::TimeoutError.new("cannot connect to #{config.address}: #{RAN_OUT}") if settled.swap(true)
+      end
+    end
+
+    private def self.naming_server(config : Config, &)
+      yield
     rescue ex : TLSRefused
       raise ex
     rescue ex : IO::TimeoutError
@@ -57,9 +89,11 @@ module CQL::Postgres
       io.read_timeout = io.write_timeout = [config.connect_timeout, time_left(deadline)].compact.min
     end
 
+    private RAN_OUT = "the time to connect ran out"
+
     private def self.time_left(deadline : Time::Instant) : Time::Span
       left = deadline - Time.instant
-      raise IO::TimeoutError.new("the time to connect ran out") unless left.positive?
+      raise IO::TimeoutError.new(RAN_OUT) unless left.positive?
       left
     end
 

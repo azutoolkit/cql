@@ -102,14 +102,10 @@ module CQL::Postgres
     end
 
     private def self.attempt(config : Config, version : ProtocolVersion, deadline : Time::Instant?) : Session
-      stream = Transport.open_stream(config, deadline)
-      begin
+      Transport.open_stream(config, deadline) do |stream|
         outcome = Handshake.new(config, stream.io, version, deadline).run
         Transport.relax(stream.io)
         new(config, stream.io, outcome, stream.socket)
-      rescue ex
-        stream.socket.close
-        raise ex
       end
     end
 
