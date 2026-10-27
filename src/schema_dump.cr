@@ -112,6 +112,7 @@ module CQL
       table_names = @db.query_all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", as: String)
       table_names.map do |table_name|
         table_info = TableInfo.new(table_name)
+        unique_columns = sqlite_unique_columns(table_name)
 
         # Get columns
         @db.query_each("PRAGMA table_info(#{table_name})") do |col_rs|
@@ -128,7 +129,8 @@ module CQL
             type: crystal_type,
             nullable: !not_null,
             default: default_value,
-            primary_key: is_primary
+            primary_key: is_primary,
+            unique: unique_columns.includes?(column_name)
           )
           table_info.columns << column_info
         end
@@ -179,6 +181,7 @@ module CQL
           AND tc.table_name = $1
           AND tc.constraint_type = 'PRIMARY KEY'
           SQL
+        unique_columns = postgres_unique_columns(table_name)
 
         # Get columns
         @db.query_each(<<-SQL, table_name) do |col_rs|
@@ -198,7 +201,8 @@ module CQL
             type: crystal_type,
             nullable: nullable,
             default: default_value,
-            primary_key: primary_keys.includes?(column_name)
+            primary_key: primary_keys.includes?(column_name),
+            unique: unique_columns.includes?(column_name)
           )
           table_info.columns << column_info
         end
@@ -243,6 +247,28 @@ module CQL
 
         table_info
       end
+    end
+
+    # Columns of *table_name* that a one-column, non-partial unique index (or UNIQUE constraint) covers,
+    # the primary key's excluded: the dump writes those `unique: true`.
+    private def sqlite_unique_columns(table_name : String) : Array(String)
+      @db.query_all(<<-SQL, table_name, as: String)
+        SELECT info.name FROM pragma_index_list(?) AS list JOIN pragma_index_info(list.name) AS info
+        WHERE list."unique" AND list.origin <> 'pk' AND NOT list.partial AND info.name IS NOT NULL
+        AND (SELECT COUNT(*) FROM pragma_index_info(list.name)) = 1
+        SQL
+    end
+
+    # :ditto:
+    private def postgres_unique_columns(table_name : String) : Array(String)
+      @db.query_all(<<-SQL, table_name, as: String)
+        SELECT a.attname FROM pg_index i
+        JOIN pg_class c ON c.oid = i.indrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+        WHERE n.nspname = 'public' AND c.relname = $1
+        AND i.indisunique AND i.indisvalid AND NOT i.indisprimary AND i.indnatts = 1 AND i.indpred IS NULL
+        SQL
     end
 
     # MySQL table inspection. Each query finishes before the next starts, so one connection is enough.
@@ -414,6 +440,7 @@ module CQL
           str << "    #{get_column_method(column.type)} :#{column.name}"
           str << ", null: true" if column.nullable?
           str << ", default: #{column.default.inspect}" if column.default
+          str << ", unique: true" if column.unique?
           str << "\n"
         end
 
@@ -467,8 +494,10 @@ module CQL
       property? nullable : Bool
       property default : String?
       property? primary_key : Bool
+      property? unique : Bool
 
-      def initialize(@name : String, @type : String, @nullable : Bool = false, @default : String? = nil, @primary_key : Bool = false)
+      def initialize(@name : String, @type : String, @nullable : Bool = false, @default : String? = nil,
+                     @primary_key : Bool = false, @unique : Bool = false)
       end
     end
 

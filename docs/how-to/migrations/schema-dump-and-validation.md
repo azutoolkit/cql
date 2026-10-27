@@ -59,7 +59,9 @@ end
   `Int32`, including keys declared `Int64`; edit those lines for `Model(Int64)` models.
 - `created_at` plus `updated_at` become `timestamps`. Defaults are copied as the database reports them, as strings.
 - Foreign keys are written one column each. PostgreSQL and MySQL omit `no_action` rules; SQLite writes them.
-- Indexes are not dumped. The migrations table is, like any other table.
+- A one-column `UNIQUE` constraint or unique index becomes `unique: true` on SQLite and PostgreSQL, not yet on MySQL
+  or CockroachDB; the primary key's, partial, expression and multi-column ones do not, nor a unique `created_at` or
+  `updated_at` folded into `timestamps`. Other indexes are not dumped. The migrations table is, like any other table.
 
 {% hint style="danger" %}
 The URI, password included, is written into the file. Dump with a URI without credentials, or edit the `uri:` line before committing.
