@@ -72,15 +72,9 @@ puts ""
 puts "# In your Azu application setup:"
 puts "require \"cql/cache/middleware\""
 puts ""
-puts "# Option A: Using the Handler directly"
-puts "server = HTTP::Server.new(["
-puts "  CQL::Cache::Middleware::Azu::Handler.new,"
-puts "  YourAzuApp.new"
-puts "])"
-puts ""
-puts "# Option B: Using the convenience setup method"
-puts "app = YourAzuApp.new"
-puts "CQL::Cache::Middleware::Azu.setup!(app)"
+puts "# An Azu::App takes its handlers as an array: add the handler after Azu's defaults (RequestId first)"
+puts "app = Azu::App.default"
+puts "app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)"
 puts ""
 
 # Simulate the handler behavior
@@ -102,11 +96,11 @@ puts ""
   result1 = users_query.all(as: {id: Int64, name: String, email: String, role: String})
   puts "Result: #{result1}"
 
-  puts "Query 2: Same query - should hit cache"
+  puts "Query 2: Same query - runs again, counted as a hit"
   result2 = users_query.all(as: {id: Int64, name: String, email: String, role: String})
-  puts "Cache hit: #{result1 == result2}"
+  puts "Same rows: #{result1 == result2}"
 
-  puts "Query 3: Different query - database hit"
+  puts "Query 3: Different query - counted as a miss"
   articles_query = schema.query.from(:articles).where(published: true)
   result3 = articles_query.all(as: {id: Int64, title: String, content: String, author_id: Int64, published: Bool})
   puts "Articles: #{result3.size} published articles"
@@ -123,18 +117,9 @@ end
 # Example 2: Controller Integration
 puts "=== Example 2: Controller Integration ==="
 puts ""
-puts "# In your Azu controllers:"
-puts "class ApplicationController < Azu::Controller"
-puts "  include CQL::Cache::Middleware::Azu::Controller"
-puts "end"
-puts ""
-puts "class UsersController < ApplicationController"
-puts "  def index"
-puts "    # These queries will be automatically cached per request"
-puts "    @users = User.where(active: true).all"
-puts "    @user_count = User.count # Will hit cache if same query"
-puts "  end"
-puts "end"
+puts "# Azu endpoints have no before_action/after_action, which the deprecated"
+puts "# CQL::Cache::Middleware::Azu::Controller needs: mount the handler (Example 1),"
+puts "# or start and end the request yourself, as this mock controller does."
 puts ""
 
 # Simulate controller behavior
@@ -142,7 +127,7 @@ puts "Simulating Controller behavior:"
 puts ""
 
 class MockAzuController
-  # Note: In a real Azu controller, you would include CQL::Cache::Middleware::Azu::Controller
+  # Note: In a controller-style class of another framework, you would include CQL::Cache::Middleware::Azu::Controller
   # include CQL::Cache::Middleware::Azu::Controller
   # We skip the include here to avoid dependency on Azu framework methods
 
@@ -151,16 +136,16 @@ class MockAzuController
   end
 
   def index(schema)
-    # Manually start the query cache (in real Azu controller, this would be automatic)
+    # Manually start the query cache (a controller-style class would do this for you)
     CQL::Cache::RequestQueryCacheHelper.start_request("controller-demo")
 
     puts "Loading users in controller action..."
     users = schema.query.from(:users).all(as: {id: Int64, name: String, email: String, role: String})
     puts "Users loaded: #{users.size}"
 
-    puts "Loading users again - should hit cache..."
+    puts "Loading users again - runs again, counted as a hit..."
     users_cached = schema.query.from(:users).all(as: {id: Int64, name: String, email: String, role: String})
-    puts "Cache working: #{users == users_cached}"
+    puts "Same rows: #{users == users_cached}"
 
     stats = CQL::Cache::RequestQueryCacheHelper.stats
     puts "Controller cache stats: #{stats["hits"]} hits, #{stats["misses"]} misses"
@@ -176,27 +161,27 @@ puts ""
 # Example 3: Manual Hook Integration
 puts "=== Example 3: Manual Hook Integration ==="
 puts ""
-puts "# In your Azu application:"
-puts "app = Azu::Application.new"
+puts "# Azu has no before/after hooks: call them from a handler of your own in the app's handler array"
+puts "class QueryCacheHooks"
+puts "  include HTTP::Handler"
 puts ""
-puts "# Add hooks to your Azu app"
-puts "app.before do |context|"
-puts "  CQL::Cache::Middleware::Azu.before_request(context)"
-puts "end"
-puts ""
-puts "app.after do |context|"
-puts "  CQL::Cache::Middleware::Azu.after_request(context)"
+puts "  def call(context)"
+puts "    CQL::Cache::Middleware::Azu.before_request(context)"
+puts "    call_next(context)"
+puts "  ensure"
+puts "    CQL::Cache::Middleware::Azu.after_request(context)"
+puts "  end"
 puts "end"
 puts ""
 
-# Example 4: Performance Benefits
-puts "=== Example 4: Performance Benefits ==="
+# Example 4: Tracking overhead
+puts "=== Example 4: Tracking overhead ==="
 puts ""
 
 # Disable cache for baseline
 CQL::Cache::RequestQueryCacheHelper.enabled = false
 
-puts "Measuring performance without cache..."
+puts "Measuring performance without tracking..."
 start_time = Time.monotonic
 50.times do
   schema.query.from(:users).all(as: {id: Int64, name: String, email: String, role: String})
@@ -207,7 +192,7 @@ no_cache_time = Time.monotonic - start_time
 CQL::Cache::RequestQueryCacheHelper.enabled = true
 CQL::Cache::RequestQueryCacheHelper.start_request("perf-test")
 
-puts "Measuring performance with cache..."
+puts "Measuring performance with tracking..."
 start_time = Time.monotonic
 50.times do
   schema.query.from(:users).all(as: {id: Int64, name: String, email: String, role: String})
@@ -219,10 +204,10 @@ CQL::Cache::RequestQueryCacheHelper.end_request
 speedup = no_cache_time / with_cache_time
 
 puts ""
-puts "Performance Results (50 identical complex queries):"
-puts "Without cache: #{no_cache_time.total_milliseconds.round(2)}ms"
-puts "With cache: #{with_cache_time.total_milliseconds.round(2)}ms"
-puts "Speedup: #{speedup.round(2)}x faster"
+puts "Timing (50 identical queries; every one runs both times, so any difference is noise or tracking overhead):"
+puts "Without tracking: #{no_cache_time.total_milliseconds.round(2)}ms"
+puts "With tracking: #{with_cache_time.total_milliseconds.round(2)}ms"
+puts "Ratio: #{speedup.round(2)}"
 puts ""
 
 # Example 5: Real-world Azu Application Pattern
@@ -233,56 +218,18 @@ puts "require \"azu\""
 puts "require \"cql\""
 puts "require \"cql/cache/middleware\""
 puts ""
-puts "# Your Azu application"
-puts "class BlogApp < Azu::Application"
-puts "  # Enable per-request query caching"
-puts "  use CQL::Cache::Middleware::Azu::Handler.new"
+puts "require \"./endpoints/*\" # your Azu::Endpoint types: a query repeated within one request is counted as a hit"
 puts ""
-puts "  get \"/articles\" do |ctx|"
-puts "    # First query - hits database"
-puts "    articles = Article.published.preload(:author)"
-puts "    "
-puts "    # If this same query runs again in the same request"
-puts "    # (e.g., in a partial or helper), it hits the cache"
-puts "    popular_articles = Article.published.preload(:author)"
-puts "    "
-puts "    render_template \"articles/index.html\", {"
-puts "      articles: articles,"
-puts "      popular: popular_articles"
-puts "    }"
-puts "  end"
-puts ""
-puts "  get \"/dashboard\" do |ctx|"
-puts "    # Multiple related queries that might be repeated"
-puts "    user_count = User.count                    # Database hit"
-puts "    article_count = Article.count              # Database hit"
-puts "    published_count = Article.published.count # Database hit"
-puts "    "
-puts "    # If any of these queries run again, they hit the cache"
-puts "    stats = {"
-puts "      users: User.count,                       # Cache hit"
-puts "      articles: Article.count,                 # Cache hit"
-puts "      published: Article.published.count       # Cache hit"
-puts "    }"
-puts "    "
-puts "    render_json stats"
-puts "  end"
-puts "end"
-puts ""
-puts "# Start the server"
-puts "BlogApp.run(port: 3000)"
+puts "app = Azu::App.default"
+puts "app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)"
 puts "```"
 puts ""
 
-puts "=== Integration Benefits for Azu Applications ==="
-puts "✓ Zero configuration - just add the middleware"
-puts "✓ Automatic query deduplication within requests"
-puts "✓ Works with any CQL query (selects, counts, joins, etc.)"
-puts "✓ Thread-safe for concurrent Azu request handling"
-puts "✓ Cache isolation between requests"
-puts "✓ Detailed performance statistics"
-puts "✓ Multiple integration options to fit your Azu app structure"
-puts "✓ Significant performance improvements (2-10x faster)"
+puts "=== What the tracker does ==="
+puts "- Counts repeated identical statements within a request (an N+1 diagnostic)"
+puts "- Works with any CQL select (all, get, find, counts, joins)"
+puts "- Stores and serves no rows: every query still runs, so it makes nothing faster"
+puts "- One tracker per process: concurrent requests share its statements and counters"
 puts ""
 
 puts "=== Cache Statistics Summary ==="

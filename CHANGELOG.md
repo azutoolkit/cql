@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deprecated
+
+- `CQL::Cache::Middleware::Azu.setup!(app)`: it calls `app.use`, which `Azu::App` does not have. Mount the generic handler instead: `app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)`. `Azu::HandlerPipeline#use` still accepts the handler.
+- `CQL::Cache::Middleware::Azu::Handler`, now a subclass of `CQL::Cache::Middleware::HTTP` with the same behaviour: use `CQL::Cache::Middleware::HTTP`.
+- `CQL::Cache::Middleware::Azu::Controller`: it registers `before_action`/`after_action`, which Azu endpoints do not have.
+
+### Fixed
+
+- Docs and the framework-integration example: the Azu snippets used `Azu::Server`, `Azu::Application`, `Azu::Controller`, `use` on the app and `app.before`/`app.after`, none of which Azu has; they now mount `CQL::Cache::Middleware::HTTP` in the `Azu::App` handler array. They no longer describe the per-request query cache as a cache that speeds requests up: it is a process-wide repeated-query diagnostic that stores and serves no rows, and its middleware does not read `config.cache.on?` or `config.cache.request_cache?`.
+
 ## [0.0.916] - 2026-10-26
 
 ### Upgrade notes
