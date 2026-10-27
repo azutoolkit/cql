@@ -1,5 +1,33 @@
 require "../spec_helper"
 
+# SQLite standing in for MySQL, which sets the level before BEGIN: like SET TRANSACTION there, `PRAGMA synchronous`
+# is refused inside a transaction and holds per connection.
+private class BeforeBeginSqliteDialect < Expression::SqliteDialect
+  def isolation_before_begin? : Bool
+    true
+  end
+
+  def isolation_level_sql(level : CQL::IsolationLevel) : String?
+    "PRAGMA synchronous = OFF"
+  end
+end
+
+private class BeforeBeginSqliteSchema < CQL::Schema
+  def dialect
+    BeforeBeginSqliteDialect.new
+  end
+end
+
+# A source of the application's own, overriding `transaction`.
+private class CountingSource < CQL::DatabaseSource
+  getter transactions = 0
+
+  def transaction(& : DB::Transaction -> _)
+    @transactions += 1
+    super { |transaction| yield transaction }
+  end
+end
+
 describe "CQL::Schema#transaction(isolation:)" do
   schema = CQL::Schema.define(:tx_options, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("transaction_options.db")) do
     table :tx_option_rows do
@@ -45,8 +73,39 @@ describe "CQL::Schema#transaction(isolation:)" do
     end
   end
 
+  it "runs a before-BEGIN dialect's statement on the transaction's connection before BEGIN, and commits the work" do
+    # Two idle connections: a statement run on a checkout of its own would leave the transaction's connection at 2 (FULL).
+    before_begin = BeforeBeginSqliteSchema.new(:tx_before_begin, "#{schema.uri}?initial_pool_size=2&max_idle_pool_size=2", CQL::Adapter::SQLite)
+    before_begin.transaction(isolation: :serializable) do |tx|
+      before_begin.exec("INSERT INTO tx_option_rows (label) VALUES ('B')")
+      tx.connection.scalar("PRAGMA synchronous").should eq 0
+    end
+    committed_labels.call.should eq ["B"]
+  ensure
+    before_begin.try &.close
+  end
+
   it "refuses a misspelled level, naming the valid ones" do
     expect_raises(ArgumentError, /:serialisable.*:read_uncommitted.*:serializable/) { schema.transaction(isolation: :serialisable) { } }
+  end
+
+  it "opens a transaction without isolation: through a custom source's own transaction" do
+    source = CountingSource.new(DB.open(schema.uri))
+    counted = CQL::Schema.new(:tx_options_counted, schema.uri, CQL::Adapter::SQLite, source: source)
+    counted.transaction { counted.exec("INSERT INTO tx_option_rows (label) VALUES ('counted')") }
+    source.transactions.should eq 1
+    committed_labels.call.should eq ["counted"]
+  ensure
+    counted.try &.close
+  end
+
+  it "closes a connection whose BEGIN failed after the before-BEGIN statement, so no borrower inherits what it left" do
+    source = CQL::DatabaseSource.new(DB.open("#{schema.uri}?max_pool_size=1"))
+    source.using_connection(&.begin_transaction) # left open, so crystal-db refuses the next BEGIN on this connection
+    expect_raises(DB::Error, /existing transaction/) { source.transaction("SELECT 1") { raise "the block ran" } }
+    source.transaction(&.connection.scalar("SELECT 1")).should eq 1
+  ensure
+    source.try &.close
   end
 
   it "keeps CQL::Postgres::IsolationLevel as an alias of CQL::IsolationLevel" do

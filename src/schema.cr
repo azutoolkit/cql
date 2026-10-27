@@ -374,12 +374,11 @@ module CQL
     # that cannot honour it raises `DialectError`, and a nested call raises `ArgumentError`, before anything begins.
     def transaction(*, isolation : IsolationLevel? = nil, &)
       parent = active_frame
-      set_isolation = isolation_statement(isolation, nested: !parent.nil?)
+      before_begin, after_begin = isolation_statements(isolation, nested: !parent.nil?)
       observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
       rollback_hooks = RollbackHooks.new
-      # Nested calls open a SAVEPOINT on the outer transaction's connection.
-      (parent.try(&.transaction) || @source).transaction do |tx|
-        set_isolation.try { |sql| tx.connection.unprepared.exec(sql) } # bypasses Execution, so telemetry sees no user statement
+      open_transaction(parent, before_begin) do |tx|
+        after_begin.try { |sql| tx.connection.unprepared.exec(sql) } # bypasses Execution, so telemetry sees no user statement
         with_active_transaction(tx, rollback_hooks) do
           yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
         rescue ex
@@ -419,11 +418,25 @@ module CQL
       end
     end
 
+    # Nested calls open a SAVEPOINT on the outer transaction's connection.
+    private def open_transaction(parent : TransactionFrame?, before_begin : String?, &)
+      if parent
+        parent.transaction.transaction { |tx| yield tx }
+      elsif before_begin
+        @source.transaction(before_begin) { |tx| yield tx }
+      else
+        @source.transaction { |tx| yield tx }
+      end
+    end
+
+    # The statement setting *isolation*, as {before BEGIN, first in the transaction}, where the dialect takes it.
     # A savepoint runs at the level of the transaction it is in.
-    private def isolation_statement(isolation : IsolationLevel?, nested : Bool) : String?
-      return unless isolation
+    private def isolation_statements(isolation : IsolationLevel?, nested : Bool) : {String?, String?}
+      return {nil, nil} unless isolation
       raise ArgumentError.new("isolation: cannot change the level inside a transaction; set it on the outermost one") if nested
-      dialect.isolation_level_sql(isolation)
+      strategy = dialect
+      sql = strategy.isolation_level_sql(isolation)
+      strategy.isolation_before_begin? ? {sql, nil} : {nil, sql}
     end
 
     # Creates a new migrator for the schema.

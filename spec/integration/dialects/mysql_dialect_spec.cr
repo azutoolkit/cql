@@ -167,6 +167,21 @@ module Expression
       end
     end
 
+    describe "#isolation_level_sql" do
+      it "sets the next transaction's level, which MySQL accepts only before BEGIN" do
+        dialect = CQL::Adapter::MySql.dialect
+        dialect.isolation_level_sql(CQL::IsolationLevel::RepeatableRead).should eq("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        dialect.isolation_level_sql(CQL::IsolationLevel::ReadUncommitted).should eq("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+        dialect.isolation_before_begin?.should be_true
+      end
+
+      it "is set inside the transaction on every other dialect" do
+        [CQL::Adapter::Postgres, CQL::Adapter::CockroachDB, CQL::Adapter::SQLite].each do |adapter|
+          adapter.dialect.isolation_before_begin?.should be_false
+        end
+      end
+    end
+
     describe "#format_returning" do
       it "does not support RETURNING clause" do
         dialect = MySqlDialect.new

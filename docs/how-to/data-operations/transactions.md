@@ -112,17 +112,18 @@ part-way is not undone, in the database or in `AppDB`'s declaration.
 
 ```crystal
 AppDB.transaction(isolation: :serializable) do
-  # SET TRANSACTION ISOLATION LEVEL SERIALIZABLE ran first, on PostgreSQL and CockroachDB
+  # SET TRANSACTION ISOLATION LEVEL SERIALIZABLE ran first on PostgreSQL and CockroachDB, before BEGIN on MySQL
   User.create!(name: "John", email: "john@example.com")
 end
 ```
 
 `isolation:` takes `:read_uncommitted`, `:read_committed`, `:repeatable_read` or `:serializable`. PostgreSQL runs
 `:read_uncommitted` as read committed and the other levels as asked; CockroachDB may run a level weaker than
-serializable as serializable. SQLite transactions are always serializable, so it takes `:serializable` only. Another
-level on SQLite, any level on MySQL (not supported yet), and `isolation:` inside an `AppDB.transaction` on the same
-fiber (a savepoint keeps its transaction's level) raise before the transaction begins: `CQL::DialectError`, or
-`ArgumentError` for the nested call. `Model.transaction` takes no options; the native PostgreSQL engine's
+serializable as serializable. MySQL refuses `SET TRANSACTION` inside a transaction, so CQL runs it just before
+BEGIN, on the transaction's connection. SQLite transactions are always serializable, so it takes `:serializable` only.
+Another level on SQLite, and `isolation:` inside an `AppDB.transaction` on the same fiber (a savepoint keeps its
+transaction's level), raise before the transaction begins: `CQL::DialectError`, or `ArgumentError` for the nested
+call. `Model.transaction` takes no options; the native PostgreSQL engine's
 `transaction` also takes `read_only:`, `deferrable:` and `synchronous_commit:`, as
 [Transactions: Isolation and Savepoints](../postgres-native/tls-and-poolers.md#transactions-isolation-and-savepoints) shows.
 

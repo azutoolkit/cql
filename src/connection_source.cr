@@ -16,7 +16,29 @@ module CQL
     # Runs the block in a transaction on one connection: committed when the
     # block returns, rolled back when it raises. `DB::Rollback` rolls back
     # quietly and makes this return nil.
-    abstract def transaction(& : DB::Transaction -> _)
+    def transaction(& : DB::Transaction -> _)
+      using_connection { |connection| connection.transaction { |transaction| yield transaction } }
+    end
+
+    # As `transaction`, after running *before_begin* on that connection (MySQL takes the isolation level there).
+    # It opens the transaction through `using_connection`: a source that overrides `transaction` overrides this too.
+    # A connection whose transaction never began is closed, so what *before_begin* left reaches no later borrower.
+    def transaction(before_begin : String, & : DB::Transaction -> _)
+      using_connection do |connection|
+        begun = false
+        begin
+          # `exec`, not `unprepared`: crystal-sqlite3 has no unprepared statements, and MySQL can prepare SET.
+          connection.exec(before_begin)
+          connection.transaction do |transaction|
+            begun = true
+            yield transaction
+          end
+        rescue ex
+          connection.close unless begun
+          raise ex
+        end
+      end
+    end
 
     abstract def pool_stats : PoolStats
 
@@ -46,10 +68,6 @@ module CQL
       ensure
         connection.release
       end
-    end
-
-    def transaction(& : DB::Transaction -> _)
-      using_connection { |connection| connection.transaction { |transaction| yield transaction } }
     end
 
     def pool_stats : PoolStats

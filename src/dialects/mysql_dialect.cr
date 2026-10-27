@@ -57,6 +57,15 @@ module Expression
       "?"
     end
 
+    # SET TRANSACTION sets the next transaction's level; inside a transaction MySQL refuses it.
+    def isolation_level_sql(level : CQL::IsolationLevel) : String?
+      "SET TRANSACTION ISOLATION LEVEL #{level.to_sql}"
+    end
+
+    def isolation_before_begin? : Bool
+      true
+    end
+
     # The password goes in an option file that only its owner can read and that exists only while
     # mysqldump runs, never on the command line, which other users of the machine can see.
     def structure_dump(uri : URI) : String
