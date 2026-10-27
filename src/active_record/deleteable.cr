@@ -130,7 +130,7 @@ module CQL
           # Run before destroy callbacks
           return false unless run_callbacks(:before_destroy)
 
-          success = delete_with_dependents { {{@type.id}}.delete!(id!).rows_affected > 0 }
+          success = delete_with_dependents { delete_row! }
 
           # Run after destroy callbacks and clear the ID if successful
           if success
@@ -140,6 +140,12 @@ module CQL
           end
 
           success
+        end
+
+        # Deletes this record's row and reports whether there was one; `optimistic_locking`
+        # overrides it to delete only the version this copy read.
+        private def delete_row! : Bool
+          {{@type.id}}.delete!(id!).rows_affected > 0
         end
       end
     end

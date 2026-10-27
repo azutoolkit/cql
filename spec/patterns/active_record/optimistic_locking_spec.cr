@@ -29,6 +29,17 @@ OPTIMISTIC_LOCKING_TEST_SCHEMA = CQL::Schema.define(
     lock_version :version
     timestamp :deleted_at, null: true
   end
+
+  table :parted_products do
+    primary :id, Int32, auto_increment: true
+    varchar :name
+    lock_version :version
+  end
+
+  table :product_parts do
+    primary :id, Int32, auto_increment: true
+    integer :parted_product_id
+  end
 end
 
 # Define our test class using Active Record
@@ -94,6 +105,26 @@ class SoftLockedProduct
   def initialize(@name = "", @version = 1)
   end
 
+  optimistic_locking version_column: :version
+end
+
+class ProductPart
+  include CQL::ActiveRecord::Model(Int32)
+  db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :product_parts
+
+  property parted_product_id : Int32 = 0
+end
+
+# Optimistic locking together with a `dependent:` association
+class PartedProduct
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::OptimisticLocking
+  db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :parted_products
+
+  property name : String = ""
+  property version : Int32 = 1
+
+  has_many :parts, ProductPart, foreign_key: :parted_product_id, dependent: :delete_all
   optimistic_locking version_column: :version
 end
 
@@ -213,6 +244,48 @@ module CQL::ActiveRecord::OptimisticLockingSpec
       custom_product.update!
 
       custom_product.version.should eq(2)
+    end
+
+    context "when deleting" do
+      it "raises on a stale copy and keeps the row the other copy saved" do
+        copy_a = Product.create!(name: "Original")
+        copy_b = Product.find!(copy_a.id!)
+        copy_a.name = "Changed by A"
+        copy_a.update!
+
+        expect_raises(CQL::OptimisticLockError) { copy_b.delete! }
+
+        Product.find!(copy_a.id!).name.should eq("Changed by A")
+        copy_b.destroyed?.should be_false
+        copy_b.id.should eq(copy_a.id)
+      end
+
+      it "deletes a current record and returns true" do
+        product = Product.create!(name: "Current")
+        product_id = product.id!
+
+        product.delete!.should be_true
+        Product.find?(product_id).should be_nil
+      end
+
+      it "raises when another process already deleted the row" do
+        product = Product.create!(name: "Gone")
+        Product.delete!(product.id!)
+
+        expect_raises(CQL::OptimisticLockError) { product.delete! }
+      end
+
+      it "keeps the dependent rows when a stale delete raises" do
+        copy_a = PartedProduct.create!(name: "Original")
+        ProductPart.create!(parted_product_id: copy_a.id!)
+        copy_b = PartedProduct.find!(copy_a.id!)
+        copy_a.name = "Changed by A"
+        copy_a.update!
+
+        expect_raises(CQL::OptimisticLockError) { copy_b.delete! }
+
+        ProductPart.where(parted_product_id: copy_a.id!).count.should eq(1)
+      end
     end
 
     context "with an Int64 primary key" do

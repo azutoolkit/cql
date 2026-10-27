@@ -88,6 +88,16 @@ module CQL
         def update!
           {{@type.id}}.update_with_lock!(self)
         end
+
+        # Deletes the row only while it still holds the version this copy read, so a row another
+        # process changed or already deleted raises instead of being deleted or reported as false.
+        private def delete_row! : Bool
+          expected = self.{{version_column.id}}
+          raise CQL::Error.new("Version value missing for optimistic locking") if expected.nil?
+          return true if {{@type.id}}.delete_of(id!).where({{version_column.id}}: expected).commit.rows_affected > 0
+          # The id stays out of the error: its message ends up in logs, and a key can be a natural one
+          raise CQL::OptimisticLockError.new(model_class: self.class.name, expected_version: expected)
+        end
       end
     end
   end

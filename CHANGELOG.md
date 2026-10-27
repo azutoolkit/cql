@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- `delete!` on a model with `optimistic_locking` now raises `CQL::OptimisticLockError` when its version is stale or the row is already gone; it used to delete the changed row, or return `false`.
+- A relation `delete_all` and `dependent: :destroy` delete such records one by one through `delete!`, so one stale record now raises and rolls back the whole batch.
+
+### Fixed
+
+- `delete!` on a model with `optimistic_locking` deletes the row only while it still holds the version the record read. Before, a stale copy deleted a row another process had just updated. A raise rolls back the deletes of its `dependent:` associations.
+
 ## [0.0.916] - 2026-10-26
 
 ### Upgrade notes
