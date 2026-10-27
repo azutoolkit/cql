@@ -39,7 +39,7 @@ CQL.configure { |config| config.ssl.mode = "verify-ca" } # same for "allow"
 # ❌ ArgumentError: sslrootcert needs sslmode=verify-full; other modes do not verify the server
 CQL.configure { |config| config.ssl.mode = "require"; config.ssl.ca_path = "/certs/ca.crt" }
 
-# ❌ ArgumentError: the sslcert option is not supported by this driver (no client certificates)
+# ❌ ArgumentError: sslcert and sslkey must be set together
 CQL.configure { |config| config.ssl.cert_path = "/certs/client.crt" }
 
 # ✅

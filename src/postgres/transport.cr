@@ -3,6 +3,10 @@ require "openssl"
 require "./config"
 require "./wire/frontend"
 
+lib LibSSL
+  fun ssl_ctx_set_default_passwd_cb_userdata = SSL_CTX_set_default_passwd_cb_userdata(ctx : SSLContext, u : Void*) : Void
+end
+
 module CQL::Postgres
   # Opens the byte stream to the server: TCP or Unix socket, optionally
   # upgraded to TLS through the protocol's SSLRequest. Each blocking step of
@@ -27,6 +31,10 @@ module CQL::Postgres
         watch(socket, deadline, config) do
           io = naming_server(config) { socket.is_a?(TCPSocket) ? negotiate_tls(socket, config, deadline) : socket }
           yield Stream.new(io, socket)
+        rescue ex : OpenSSL::SSL::Error
+          # TLS 1.3 ends the client's handshake before the server checks its certificate: a refusal comes on a read.
+          # Only protocol-level SSL errors reach here; network failures arrive as IO::Error.
+          raise tls_failure(ex, config)
         end
       rescue ex
         socket.close
@@ -170,11 +178,27 @@ module CQL::Postgres
       else
         context.verify_mode = OpenSSL::SSL::VerifyMode::NONE
       end
+      # An empty pass phrase: OpenSSL fails an encrypted file as a bad decrypt instead of asking the terminal or stdin.
+      LibSSL.ssl_ctx_set_default_passwd_cb_userdata(context, "".to_unsafe.as(Void*))
+      config.ssl_cert.try { |path| load_pem(config, "sslcert", path) { context.certificate_chain = path } }
+      config.ssl_key.try { |path| load_pem(config, "sslkey", path) { context.private_key = path } }
       OpenSSL::SSL::Socket::Client.new(socket, context: context, sync_close: true, hostname: config.host)
     rescue ex : OpenSSL::Error
-      # A peer that hangs up mid-handshake is a network event a retry can fix; a refusal or a bad certificate is not.
-      raise IO::Error.new("the server closed the connection during the TLS handshake", cause: ex) if ex.message.try(&.matches?(/unexpected eof/i))
-      raise TLSRefused.new("TLS to #{config.address} failed: #{ex.message}", cause: ex)
+      raise tls_failure(ex, config)
+    end
+
+    # A peer that hangs up mid-handshake is a network event a retry can fix; a refusal or a bad certificate is not.
+    private def self.tls_failure(ex : OpenSSL::Error, config : Config) : Exception
+      return IO::Error.new("the server closed the connection during the TLS handshake", cause: ex) if ex.message.try(&.matches?(/unexpected eof/i))
+      TLSRefused.new("TLS to #{config.address} failed: #{ex.message}", cause: ex)
+    end
+
+    # Read on every connect, so a replaced file is picked up. OpenSSL's error text names a reason, never file content.
+    private def self.load_pem(config : Config, option : String, path : String, &) : Nil
+      yield
+    rescue ex : OpenSSL::Error
+      problem = ex.message.try(&.includes?("bad decrypt")) ? "is encrypted; sslpassword is not supported" : "could not be loaded: #{ex.message}"
+      raise TLSRefused.new("TLS to #{config.address} failed: #{option} #{path} #{problem}", cause: ex)
     end
   end
 end

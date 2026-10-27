@@ -23,10 +23,17 @@ engine = CQL::Postgres::AsyncEngine.connect("postgres://app:secret@db.internal/a
 # Unix socket: host names the socket directory
 "postgres://app@/app?host=/var/run/postgresql"
 
-# ArgumentError: sslmode=allow or verify-ca, sslcert, sslkey, and sslrootcert without verify-full
+# ArgumentError: sslmode=allow or verify-ca, sslrootcert without verify-full, sslcert without sslkey, sslpassword
 
 # TLS required but not had (server declines, handshake fails, bad certificate): CQL::Postgres::TLSRefused.
 # It is not an IO::Error, so crystal-db's pool does not retry it; a hang-up mid-handshake is retried.
+```
+
+### Client certificates
+
+```crystal
+# PEM files read by every new connection; an encrypted key raises CQL::Postgres::TLSRefused (no sslpassword)
+"postgres://app@db.internal/app?sslmode=verify-full&sslcert=/etc/app/client.pem&sslkey=/etc/app/client.key"
 ```
 
 ## Protocol Versions

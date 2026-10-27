@@ -102,7 +102,7 @@ CQL::Postgres::TLSRefused: db.internal:5432 does not support TLS, which the sslm
 
 ```text
 ArgumentError: unsupported sslmode "verify-ca" (use disable, prefer, require or verify-full)
-ArgumentError: the sslcert option is not supported by this driver
+ArgumentError: the sslpassword option is not supported by this driver
 ArgumentError: the target_session_attrs option is not supported by this driver
 ArgumentError: user cannot be set through the URL query
 ```

@@ -40,7 +40,7 @@ module CQL::Postgres
     POOL_OPTION_KEYS     = {"pool_size", "pool_min_size", "checkout_timeout", "health_check_after", "max_queries", "max_idle_lifetime", "pool_reset"}
     DRIVER_OPTION_KEYS   = POOL_OPTION_KEYS + {"min_protocol_version", "max_protocol_version", "binary_params"}
     RESERVED_PARAMETERS  = {"user", "database", "dbname", "password", "hostaddr", "client_encoding", "replication"}
-    UNSUPPORTED_LIBPQ    = {"sslcert", "sslkey", "sslcrl", "sslcompression", "sslsni", "sslpassword", "channel_binding", "require_auth", "target_session_attrs", "passfile", "service", "gssencmode", "krbsrvname"}
+    UNSUPPORTED_LIBPQ    = {"sslcrl", "sslcompression", "sslsni", "sslpassword", "channel_binding", "require_auth", "target_session_attrs", "passfile", "service", "gssencmode", "krbsrvname"}
     DEFAULT_CONNECT_WAIT = 10.0
 
     # Accepted for configuration written for the `pg` shard or crystal-db's pool (`CQL.configure` emits both):
@@ -55,6 +55,9 @@ module CQL::Postgres
     getter database : String
     getter ssl_mode : SSLMode
     getter ssl_root_cert : String?
+    # The client certificate (chain) and its unencrypted key, PEM files presented when the server asks; both or neither.
+    getter ssl_cert : String?
+    getter ssl_key : String?
     # How long each step of connecting and starting up may block (TCP connect,
     # TLS, every server reply), not a total deadline; nil waits indefinitely.
     getter connect_timeout : Time::Span?
@@ -88,6 +91,15 @@ module CQL::Postgres
       binary_params?
     end
 
+    private def check_client_certificate : Nil
+      certificate, key = ssl_cert, ssl_key
+      return unless certificate || key
+      raise ArgumentError.new("sslcert and sslkey must be set together") unless certificate && key
+      {"sslcert" => certificate, "sslkey" => key}.each do |option, path|
+        raise ArgumentError.new("#{option} #{path} is not a readable file") unless File.file?(path) && File::Info.readable?(path)
+      end
+    end
+
     def max_protocol_version : ProtocolVersion
       ProtocolVersion.parse(driver_options["max_protocol_version"]? || "latest")
     end
@@ -96,8 +108,9 @@ module CQL::Postgres
                    @ssl_mode = SSLMode::Prefer, @ssl_root_cert = nil, @connect_timeout = DEFAULT_CONNECT_WAIT.seconds,
                    @application_name = "cql", @statement_cache_size = 256,
                    @startup_options = {} of String => String, @driver_options = {} of String => String, @cockroachdb = false,
-                   @query_timeout = nil)
+                   @query_timeout = nil, @ssl_cert = nil, @ssl_key = nil)
       check_binary_params
+      check_client_certificate
       raise ArgumentError.new("min_protocol_version #{min_protocol_version} is newer than max_protocol_version #{max_protocol_version}") if min_protocol_version > max_protocol_version
       @database = database || @user
     end
@@ -140,6 +153,8 @@ module CQL::Postgres
         database: uri.path.lstrip('/').presence.try { |name| URI.decode(name) },
         ssl_mode: ssl_mode,
         ssl_root_cert: ssl_root_cert,
+        ssl_cert: pop(params, "sslcert").presence,
+        ssl_key: pop(params, "sslkey").presence,
         connect_timeout: timeout(pop(params, "connect_timeout")),
         query_timeout: positive_seconds(pop(params, "query_timeout"), "query_timeout"),
         application_name: pop(params, "application_name") || "cql",

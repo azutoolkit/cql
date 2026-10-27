@@ -141,7 +141,7 @@ end
 `mode` must be one of `disable allow prefer require verify-ca verify-full`, else `ssl_mode must be one of: disable, allow, prefer, require, verify-ca, verify-full`.
 
 {% hint style="warning" %}
-The native PostgreSQL driver rejects `sslcert` and `sslkey` (`ArgumentError: the sslcert option is not supported by this driver`) and accepts `sslrootcert` only with `sslmode=verify-full`. See [Enable SSL Connections](../how-to/configuration/ssl.md).
+The native PostgreSQL driver takes `sslcert` and `sslkey` only together (PEM files, the key unencrypted: `sslpassword` is not supported) and accepts `sslrootcert` only with `sslmode=verify-full`. See [Enable SSL Connections](../how-to/configuration/ssl.md).
 {% endhint %}
 
 ## Database-specific settings

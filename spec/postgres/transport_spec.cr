@@ -12,6 +12,19 @@ private def decline_tls_then_start_up(client : FakePG::Client) : Nil
   client.ok_handshake
 end
 
+private def mutual_tls_query(key : String, certificate : String) : String
+  "sslmode=verify-full&sslrootcert=#{TlsFixture.paths.not_nil![1]}&sslcert=#{certificate}&sslkey=#{key}"
+end
+
+# A server whose handshake fails, as the client presents no certificate it accepts.
+private def certificate_demanding_server(context : OpenSSL::SSL::Context::Server) : FakePG
+  FakePG.start do |client|
+    client.read_startup
+    client.upgrade_to_tls(context)
+  rescue OpenSSL::SSL::Error | IO::Error
+  end
+end
+
 describe CQL::Postgres::Transport do
   it "falls back to plain text when sslmode=prefer and the server declines TLS" do
     server = FakePG.start { |client| decline_tls_then_start_up(client) }
@@ -204,6 +217,58 @@ describe CQL::Postgres::Transport do
       end
       (Time.instant - started).should be < 5.seconds
       session.closed?.should be_true
+    end
+  end
+
+  describe "client certificates (sslcert and sslkey)" do
+    it "presents them to a server that demands one" do
+      context, client = TlsFixture.client_certificate_required_context, TlsFixture.client_paths
+      pending! "needs the openssl command line tool for a certificate" unless context && client
+      seen = Channel(String?).new(1)
+      server = FakePG.start do |peer|
+        peer.read_startup
+        seen.send peer.upgrade_to_tls(context).peer_certificate.try(&.subject.to_a.to_h["CN"]?)
+        peer.read_startup
+        peer.ok_handshake
+      end
+      config = PG::Config.parse(server.url(query: mutual_tls_query(*client)))
+      io = PG::Transport.connect(config)
+      PG::Handshake.new(config, io).run.process_id.should eq 4242
+      io.close
+      seen.receive.should eq "cql-client"
+    end
+
+    # TLS 1.3 ends the client's handshake before the server checks for a certificate, so the refusal arrives later.
+    it "fails as TLSRefused without one" do
+      context = TlsFixture.client_certificate_required_context
+      pending! "needs the openssl command line tool for a certificate" unless context
+      config = PG::Config.parse(certificate_demanding_server(context).url(query: "sslmode=verify-full&sslrootcert=#{TlsFixture.paths.not_nil![1]}"))
+      expect_raises(PG::TLSRefused, /TLS to 127.0.0.1.* failed/) { PG::Session.connect(config) }
+    end
+
+    it "fails as TLSRefused naming sslkey, never its content, when the key does not load; sslpassword is not supported" do
+      context, client = TlsFixture.client_certificate_required_context, TlsFixture.client_paths
+      pending! "needs the openssl command line tool for a certificate" unless context && client
+      key, certificate = client
+      garbage, encrypted, padded = {"garbage", "encrypted", "padded"}.map { |name| File.join(File.dirname(key), "#{name}.key") }
+      File.write(garbage, "-----BEGIN PRIVATE KEY-----\nTOPSECRETKEYMATERIAL\n-----END PRIVATE KEY-----\n")
+      Process.run("openssl", ["pkey", "-in", key, "-aes256", "-passout", "pass:pw", "-out", encrypted]).success?.should be_true
+      File.write(padded, "preamble\n" * 8_000 + File.read(encrypted)) # OpenSSL skips any text before a PEM block, so no prefix scan finds it
+      {garbage => /sslkey/, encrypted => /sslkey.*sslpassword/, padded => /sslkey.*sslpassword/}.each do |bad_key, message|
+        url = certificate_demanding_server(context).url(query: mutual_tls_query(bad_key, certificate))
+        error = expect_raises(PG::TLSRefused, message) { PG::Session.connect(PG::Config.parse(url)) }
+        error.message.to_s.should_not contain "TOPSECRET"
+      end
+    end
+
+    it "checks at parse that both are given and readable, naming the key and the path" do
+      key, certificate = TlsFixture.client_paths || pending!("needs the openssl command line tool for a certificate")
+      base = "postgres://h/db?sslmode=require"
+      expect_raises(ArgumentError, %r{sslcert.*/nonexistent/client.pem}) { PG::Config.parse("#{base}&sslcert=/nonexistent/client.pem&sslkey=#{key}") }
+      expect_raises(ArgumentError, %r{sslkey.*/nonexistent/client.key}) { PG::Config.parse("#{base}&sslcert=#{certificate}&sslkey=/nonexistent/client.key") }
+      expect_raises(ArgumentError, /sslkey/) { PG::Config.parse("#{base}&sslcert=#{certificate}") }
+      expect_raises(ArgumentError, /sslcert/) { PG::Config.parse("#{base}&sslkey=#{key}") }
+      PG::Config.parse("#{base}&sslcert=#{certificate}&sslkey=#{key}").startup_options.should be_empty
     end
   end
 end

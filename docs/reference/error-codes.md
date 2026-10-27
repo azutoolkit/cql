@@ -169,7 +169,7 @@ There is no `ConfigurationError`, `TableNotFound` or `ColumnNotFound` class. The
 | A scope called with the wrong arguments or returning a non-query | `"Scope 'active' expects no arguments ..."`; a scope body that raises another error gives a `ScopeError` (see [Active Record errors](#active-record-errors)) |
 | `contains`, `starts_with` or `ends_with` with a NUL in the text, when the condition is built | `"LIKE text must not contain NUL: SQLite would end the pattern there"` |
 | `CQL::Schema.new(..., source:)` with a source bound to another adapter | `"the connection source speaks ..."` |
-| Native PostgreSQL driver: unsupported `sslmode`, libpq-only options, `sslrootcert` without `verify-full`, non-numeric pool options | `"the sslcert option is not supported by this driver"` |
+| Native PostgreSQL driver: unsupported `sslmode`, libpq-only options, `sslrootcert` without `verify-full`, `sslcert` without `sslkey` or an unreadable one, non-numeric pool options | `"the sslpassword option is not supported by this driver"`, `"sslkey /certs/client.key is not a readable file"` |
 | Native PostgreSQL driver: a `pool_reset` other than `discard_all`; `pool_reset` on a URL opened through crystal-db (`DB.open`, a `CQL::Schema` without a source) | ``"pool_reset must be discard_all, got "reset_all""``, `"pool_reset needs the engine's pool, as crystal-db's cannot reset a returned connection: use CQL::Postgres::EngineSource or AsyncEngine"` |
 
 ## Compile-time errors

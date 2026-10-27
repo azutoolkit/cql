@@ -20,10 +20,10 @@ class FakePG
     end
 
     # Answers an SSLRequest with S and speaks TLS from here on.
-    def upgrade_to_tls(context : OpenSSL::SSL::Context::Server) : Nil
+    def upgrade_to_tls(context : OpenSSL::SSL::Context::Server) : OpenSSL::SSL::Socket::Server
       @io.write("S".to_slice)
       @io.flush
-      @stream = OpenSSL::SSL::Socket::Server.new(@io, context, sync_close: false)
+      OpenSSL::SSL::Socket::Server.new(@io, context, sync_close: false).tap { |tls| @stream = tls }
     end
 
     def read_startup : Hash(String, String)
@@ -373,6 +373,27 @@ module TlsFixture
         context.private_key = key
         context.certificate_chain = certificate
       end
+    end
+  end
+
+  # Like `server_context`, but the handshake fails unless the client presents a certificate the fixture signed.
+  def self.client_certificate_required_context : OpenSSL::SSL::Context::Server?
+    server_context.try do |context|
+      context.ca_certificates = paths.not_nil![1]
+      context.verify_mode = OpenSSL::SSL::VerifyMode::PEER | OpenSSL::SSL::VerifyMode::FAIL_IF_NO_PEER_CERT
+      context
+    end
+  end
+
+  # {key, certificate} of a client, CN=cql-client, signed by the self-signed fixture certificate acting as the CA.
+  def self.client_paths : {String, String}?
+    paths.try do |(ca_key, ca)|
+      key, request, certificate = {"client.key", "client.csr", "client.pem"}.map { |name| File.join(File.dirname(ca), name) }
+      return {key, certificate} if File.exists?(certificate)
+      {["req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=cql-client", "-keyout", key, "-out", request],
+       ["x509", "-req", "-in", request, "-CA", ca, "-CAkey", ca_key, "-set_serial", "2", "-days", "1", "-out", certificate]}.all? do |args|
+        Process.run("openssl", args, output: Process::Redirect::Close, error: Process::Redirect::Close).success?
+      end ? {key, certificate} : nil
     end
   end
 end
