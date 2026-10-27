@@ -183,13 +183,17 @@ Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. 
 | :--- | :--- | :--- |
 | **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | The same column definition as `CREATE TABLE`: `default` emits `DEFAULT`, which fills existing rows, and `size` follows [Column options](#column-options). `index: true` then runs `CREATE INDEX idx_<t>_<column>`. On SQLite, a `"CURRENT_TIMESTAMP"` default on a `Time` column raises `CQL::SQLiteUnsupportedFeatureError` (SQLite takes it only on an empty table): add the column without a default and backfill it with `exec`, or rebuild the table. |
 | **`drop_column(name)`** | | Emits `DROP COLUMN` whether or not the schema declares the column; the name must be an identifier |
-| **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column |
-| **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
+| **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column. MySQL's `CHANGE` restates the column's `DEFAULT`, `NOT NULL` and a primary key's `AUTO_INCREMENT`, never `UNIQUE` or `PRIMARY KEY` (its indexes stay) |
+| **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite. The declaration keeps the column's `null`, `default`, `unique` and `index`, and a primary key stays the primary key; its `size` starts over and its `as:` alias is dropped. A column the schema does not declare is declared nullable. MySQL's `MODIFY COLUMN` restates what `CHANGE` does |
 | **`rename_table(new_name)`** | | Statements before it in the block use the old name, statements after it the new one |
 | **`create_index(name : Symbol, columns : Array(Symbol), unique: false)`** | | No `IF NOT EXISTS` |
 | **`drop_index(name : Symbol)`** | | |
 | **`foreign_key(columns or column, references:, references_columns: nil, name : Symbol? = nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` defaults to the referenced table's primary key, name `fk_<t>_<columns>` | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
 | **`drop_foreign_key(name : Symbol)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
+
+{% hint style="warning" %}
+MySQL's `CHANGE` and `MODIFY COLUMN` still reset what CQL does not model: `COMMENT`, character set and collation, `ON UPDATE CURRENT_TIMESTAMP` and generated columns. The restated `NOT NULL` fails over existing `NULL` rows in strict mode and turns them into the type's zero value otherwise, so backfill them first; the declared `default` must be valid for the new type.
+{% endhint %}
 
 ```crystal
 # PostgreSQL. On SQLite, change_column, foreign_key and drop_foreign_key raise.
@@ -221,8 +225,8 @@ end
 | `add_column :level, Int32, default: 1, null: false, index: true` | `... ADD COLUMN level INTEGER DEFAULT 1 NOT NULL`, then `CREATE INDEX idx_users_level ON users (level)` | `... level INTEGER DEFAULT 1 NOT NULL` (`INT4` on CockroachDB), same index | `... level INT DEFAULT 1 NOT NULL`, same index |
 | `add_column :code, String, size: 12` | `... ADD COLUMN code TEXT` | `... code VARCHAR(12)` | `... code VARCHAR(12)` |
 | `drop_column :bio` | `... DROP COLUMN bio` (SQLite 3.35+) | `... DROP COLUMN bio` | `... DROP COLUMN bio` |
-| `rename_column :nick, :handle` | `... RENAME COLUMN nick TO handle` | same | `... CHANGE nick handle VARCHAR(255)` (`VARCHAR(n)` for a sized column) |
-| `change_column :score, Int64` | raises | `... ALTER COLUMN score TYPE BIGINT` | `... MODIFY COLUMN score BIGINT` |
+| `rename_column :nick, :handle` | `... RENAME COLUMN nick TO handle` | same | `... CHANGE nick handle VARCHAR(255) NOT NULL` (`VARCHAR(n)` for a sized column, `DEFAULT` when declared, `AUTO_INCREMENT` on such a key) |
+| `change_column :score, Int64` | raises | `... ALTER COLUMN score TYPE BIGINT` | `... MODIFY COLUMN score BIGINT NOT NULL` (`DEFAULT` when declared, `AUTO_INCREMENT` on such a key) |
 | `create_index :idx_users_phone, [:phone], unique: true` | `CREATE UNIQUE INDEX idx_users_phone ON users (phone)` | same | same |
 | `drop_index :idx_users_phone` | `DROP INDEX IF EXISTS idx_users_phone` | same | `DROP INDEX idx_users_phone ON users` |
 | `foreign_key [:team_id], references: :teams` | raises | `... ADD CONSTRAINT fk_users_team_id FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE NO ACTION ON UPDATE NO ACTION` | same |

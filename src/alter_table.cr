@@ -118,11 +118,24 @@ module CQL
     # end
     # ```
     def change_column(name : Symbol, type : T.class) forall T
-      new_column = Column(T).new(name)
+      new_column = redeclared(name, type)
       new_column.table = @table
       alter Expression::ChangeColumn.new(new_column.dup, type)
       @table.columns[name] = new_column
       @table.columns_changed!
+    end
+
+    # *name* declared as *type*, keeping its null, default, unique, index and version number, and a primary key a
+    # primary key. Its size starts over, as `change_column` takes no `size:`, and its select alias (`as:`) is dropped.
+    # A column the schema does not declare is nullable: nothing says otherwise.
+    private def redeclared(name : Symbol, type : T.class) : Column(T) forall T
+      declared = @table.columns[name]?
+      return Column(T).new(name, null: true) unless declared
+      if declared.is_a?(PrimaryKey)
+        return PrimaryKey(T).new(name, auto_increment: declared.auto_increment?, default: declared.default)
+      end
+      Column(T).new(name, null: declared.null?, default: declared.default, unique: declared.unique?,
+        index: declared.index?, version_number: declared.version_number?)
     end
 
     # Renames the table.

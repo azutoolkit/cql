@@ -111,6 +111,11 @@ module Expression
       "#{@@cached_strings["mysql_modify_prefix"]}#{column_name} #{column_type}"
     end
 
+    # CHANGE and MODIFY COLUMN drop the DEFAULT, NOT NULL and AUTO_INCREMENT they do not restate; they keep indexes.
+    def column_redefinition(type : String, definition : String, auto_increment : Bool) : String
+      auto_increment ? "#{definition}#{@@cached_strings["mysql_auto_increment"]}" : definition
+    end
+
     def drop_index(index_name : String, table_name : String) : String
       "#{@@cached_strings["mysql_drop_index_prefix"]}#{index_name}#{@@cached_strings["mysql_on_suffix"]}#{table_name}"
     end

@@ -259,7 +259,7 @@ describe "CQL::AlterTable" do
       end
 
       alter_sql(accounts, CQL::Adapter::MySql) { rename_column :code, :short_code }
-        .should eq("ALTER TABLE accounts CHANGE code short_code VARCHAR(12);\n")
+        .should eq("ALTER TABLE accounts CHANGE code short_code VARCHAR(12) NOT NULL;\n")
     end
   end
 
@@ -325,6 +325,75 @@ describe "CQL::AlterTable" do
         end
 
         query_all_strings(schema, "SELECT name FROM pragma_table_info('widgets')").should eq(["id", "name", "code"])
+      end
+    end
+
+    it "restates NOT NULL and DEFAULT, never UNIQUE, in MySQL's CHANGE" do
+      users = mysql_widgets.schema.table(:users) do
+        primary :id, Int32
+        column :name, String, default: "anon", unique: true
+      end
+
+      alter_sql(users, CQL::Adapter::MySql) { rename_column :name, :full_name }
+        .should eq("ALTER TABLE users CHANGE name full_name VARCHAR(255) DEFAULT 'anon' NOT NULL;\n")
+    end
+
+    it "restates a primary key's AUTO_INCREMENT in MySQL's CHANGE, never PRIMARY KEY" do
+      alter_sql(mysql_widgets, CQL::Adapter::MySql) { rename_column :id, :widget_id }
+        .should eq("ALTER TABLE widgets CHANGE id widget_id INT NOT NULL AUTO_INCREMENT;\n")
+    end
+  end
+
+  describe "#change_column" do
+    it "restates NOT NULL and DEFAULT, never UNIQUE, in MySQL's MODIFY COLUMN" do
+      users = mysql_widgets.schema.table(:users) do
+        primary :id, Int32
+        integer :age, default: 0, unique: true
+      end
+
+      alter_sql(users, CQL::Adapter::MySql) { change_column :age, Int64 }
+        .should eq("ALTER TABLE users MODIFY COLUMN age BIGINT DEFAULT 0 NOT NULL;\n")
+    end
+
+    it "keeps the column's null and default in the declaration" do
+      people = postgres_widgets.schema.table(:people) do
+        primary :id, Int32
+        integer :age, null: true, default: 0
+      end
+
+      alter_sql(people, CQL::Adapter::Postgres) { change_column :age, Int64 }
+
+      people.columns[:age].null?.should be_true
+      people.columns[:age].default.should eq(0)
+    end
+
+    it "keeps a primary key the table's primary key, restating AUTO_INCREMENT, never PRIMARY KEY, on MySQL" do
+      widgets = mysql_widgets
+      alter_sql(widgets, CQL::Adapter::MySql) { change_column :id, Int64 }
+        .should eq("ALTER TABLE widgets MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT;\n")
+      widgets.primary_key.should be(widgets.columns[:id])
+    end
+
+    it "leaves a column the schema does not declare nullable on MySQL" do
+      alter_sql(mysql_widgets, CQL::Adapter::MySql) { change_column :missing, Int32 }
+        .should eq("ALTER TABLE widgets MODIFY COLUMN missing INT;\n")
+    end
+
+    it "changes only the type on PostgreSQL, though the declaration keeps DEFAULT and NOT NULL" do
+      people = postgres_widgets.schema.table(:people) do
+        primary :id, Int32
+        integer :age, default: 0
+      end
+
+      alter_sql(people, CQL::Adapter::Postgres) do
+        change_column :age, Int64
+        rename_column :age, :years
+      end.should eq("ALTER TABLE people ALTER COLUMN age TYPE BIGINT;\nALTER TABLE people RENAME COLUMN age TO years;\n")
+    end
+
+    it "rejects a column name that is not an identifier" do
+      expect_raises(ArgumentError, /Invalid column name/) do
+        alter_sql(postgres_widgets, CQL::Adapter::Postgres) { change_column :"name; DROP TABLE widgets", Int32 }
       end
     end
   end

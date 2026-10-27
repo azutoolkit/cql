@@ -646,11 +646,11 @@ module Expression
     end
 
     # A column as declared in CREATE TABLE and ALTER TABLE ... ADD COLUMN: name, type, default and constraints.
-    private def column_definition(column : CQL::BaseColumn) : String
+    private def column_definition(column : CQL::BaseColumn, unique : Bool = column.unique?) : String
       default = current_time_default?(column) ? @dialect.current_timestamp : column.default
       # created_at/updated_at of any type keep taking the dialect's own current-time call, as they always did
       timestamp_column = time_column?(column) || column.name.in?(:created_at, :updated_at)
-      @dialect.define_column(column.name.to_s, column.type, default, column.null?, column.unique?, timestamp_column)
+      @dialect.define_column(column.name.to_s, column.type, default, column.null?, unique, timestamp_column)
     end
 
     # The portable spelling "CURRENT_TIMESTAMP" (any case) on a Time column is the database's current time.
@@ -677,7 +677,7 @@ module Expression
         node.table_name,
         CQL::Identifier.validate!(node.old_name.to_s, "column name"),
         CQL::Identifier.validate!(node.new_name.to_s, "column name"),
-        node.column.type,
+        redefined_column_type(node.column),
       )
     end
 
@@ -688,9 +688,19 @@ module Expression
     def visit(node : ChangeColumn) : String
       @dialect.modify_column(
         node.table_name,
-        node.column.name.to_s,
-        node.column.type,
+        CQL::Identifier.validate!(node.column.name.to_s, "column name"),
+        redefined_column_type(node.column),
       )
+    end
+
+    # What a column rename or type change hands the dialect after the column name. The definition leaves UNIQUE
+    # out: restating it adds a second unique index.
+    private def redefined_column_type(column : CQL::BaseColumn) : String
+      name = "#{column.name} "
+      definition = column_definition(column, unique: false)
+      raise CQL::Error.new("Column definition #{definition} does not start with #{name}") unless definition.starts_with?(name)
+      auto_increment = column.is_a?(CQL::PrimaryKey) && column.auto_increment?
+      @dialect.column_redefinition(column.type, definition.lchop(name), auto_increment)
     end
 
     def visit(node : AddForeignKey) : String

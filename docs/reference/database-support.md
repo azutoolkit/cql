@@ -84,8 +84,8 @@ CTEs and window functions are on `CQL::Query` (`AppDB.query`), not on `QueryBuil
 | Unnamed `foreign_key` in a table | unnamed | unnamed | `fk_<t>_<columns>` | unnamed |
 | `add_column` | `ADD COLUMN`, with `DEFAULT`; `index: true` adds `CREATE INDEX` | same | same | same |
 | `drop_column` | `DROP COLUMN` (3.35+) | yes | yes | yes |
-| `rename_column` | `RENAME COLUMN` | `RENAME COLUMN` | `CHANGE old new <type>` | `RENAME COLUMN` |
-| `change_column` | raises `SQLiteUnsupportedFeatureError` | `ALTER COLUMN ... TYPE` | `MODIFY COLUMN` | `ALTER COLUMN ... TYPE` |
+| `rename_column` | `RENAME COLUMN` | `RENAME COLUMN` | `CHANGE old new <type> [DEFAULT ...] [NOT NULL] [AUTO_INCREMENT]` | `RENAME COLUMN` |
+| `change_column` | raises `SQLiteUnsupportedFeatureError` | `ALTER COLUMN ... TYPE` | `MODIFY COLUMN <name> <type> [DEFAULT ...] [NOT NULL] [AUTO_INCREMENT]` | `ALTER COLUMN ... TYPE` |
 | `foreign_key` in `schema.alter` | raises `SQLiteUnsupportedFeatureError` | `ADD CONSTRAINT` | `ADD CONSTRAINT` | `ADD CONSTRAINT` |
 | `drop_foreign_key` | raises `SQLiteUnsupportedFeatureError` | `DROP CONSTRAINT` | `DROP FOREIGN KEY` | `DROP CONSTRAINT` |
 | `drop_index` | `DROP INDEX IF EXISTS` | `DROP INDEX IF EXISTS` | `DROP INDEX ... ON <t>` | `DROP INDEX IF EXISTS` |

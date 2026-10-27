@@ -461,6 +461,12 @@ module Expression
       "ADD COLUMN #{column_definition}#{" PRIMARY KEY" if primary_key}"
     end
 
+    # What `rename_column` and `modify_column` take after the column name: its *type*, as they change only that.
+    # A dialect whose statement replaces the whole column takes its *definition* (type, DEFAULT, NOT NULL) instead.
+    def column_redefinition(type : String, definition : String, auto_increment : Bool) : String
+      type
+    end
+
     # The SQL type of a column declared with *size*: VARCHAR takes it as its length, other types ignore it.
     def sized_type(column_type : String, size : Int32?) : String
       return column_type unless size && column_type.starts_with?("VARCHAR")
