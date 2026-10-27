@@ -211,7 +211,7 @@ Add to `src/crud.cr`:
 ```crystal
 def search_posts(term : String)
   Post.where(published: true)
-    .where { title.like("%#{term}%") | content.like("%#{term}%") }
+    .where { title.contains(term) | content.contains(term) }
     .order(views_count: :desc)
     .all
 end
@@ -224,7 +224,7 @@ puts "Search 'crystal': #{search_posts("Crystal").map(&.title)}"
 Search 'crystal': ["Crystal Macros", "Getting Started with Crystal"]
 ```
 
-The pattern is bound as a parameter, so user input is safe to pass.
+The term is bound as a parameter, so user input is safe to pass, and `contains` escapes its `%` and `_` so they match literally. Case sensitivity follows the database's LIKE (SQLite and MySQL's default collations ignore case), and a term containing a NUL raises `ArgumentError`.
 {% endstep %}
 
 {% step %}

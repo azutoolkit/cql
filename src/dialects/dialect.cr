@@ -447,6 +447,11 @@ module Expression
       "#{column} NOT LIKE #{placeholder}"
     end
 
+    # The clause after a LIKE whose pattern escapes its wildcards with *escape*.
+    def format_like_escape(escape : Char) : String
+      " ESCAPE '#{escape}'"
+    end
+
     def format_is_null(column : String) : String
       "#{column} IS NULL"
     end

@@ -21,6 +21,7 @@ module Expression
     abstract def visit(node : Between) : String
     abstract def visit(node : Like) : String
     abstract def visit(node : NotLike) : String
+    abstract def visit(node : EscapedLike) : String
     abstract def visit(node : InCondition) : String
     abstract def visit(node : OrderBy) : String
     abstract def visit(node : GroupBy) : String

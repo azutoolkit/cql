@@ -391,6 +391,10 @@ module Expression
       node.insensitive? ? @dialect.format_not_ilike(column, bind(node.value)) : @dialect.format_not_like(column, bind(node.value))
     end
 
+    def visit(node : EscapedLike) : String
+      @dialect.format_like(node.column.accept(self), bind(node.pattern)) + @dialect.format_like_escape(EscapedLike::ESCAPE)
+    end
+
     # An empty list matches no row; `IN ()` is a syntax error on PostgreSQL and MySQL.
     private def write(node : InCondition, io : IO) : Nil
       return io << "1 = 0" if node.values.empty?

@@ -33,8 +33,9 @@ User.query.where { score.not_null }            # ... WHERE users.score IS NOT NU
 # in, not_in (an Array), between: every column
 User.query.where { age.in([1, 2, 3]) & age.between(1, 9) }
 User.query.where { id.in([] of Int64) }  # ... WHERE 1 = 0: an empty list matches no row (not_in: every row)
-# like, not_like, ilike, not_ilike: String columns
+# like, not_like, ilike, not_ilike, contains, starts_with, ends_with: String columns
 User.query.where { name.like("A%") }           # ... WHERE users.name LIKE ?
+User.query.where { name.contains("50%") }      # ... WHERE users.name LIKE ? ESCAPE '!': see Filter with Where Clauses
 # json_eq, json_contains: JSON::Any columns; see Query JSON and Geospatial Columns
 
 User.query.where { id == 7 }                   # an integer literal fits an Int64 column

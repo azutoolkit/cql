@@ -50,7 +50,15 @@ User.where { name.ilike("%ADA%") }.all         # case-insensitive:
 # SQLite, MySQL: LOWER(users.name) LIKE LOWER(?)   PostgreSQL, CockroachDB: users.name ILIKE $1
 User.where { name.not_ilike("%ADA%") }.all     # NOT LIKE on SQLite and MySQL, NOT ILIKE on PostgreSQL
 User.where_like(:name, "%ada%").all            # LIKE without a block
+
+User.where { name.contains("50%_off") }.all    # ... WHERE users.name LIKE ? ESCAPE '!'   params: ["%50!%!_off%"]
+User.where { name.starts_with("Ada") }.all     # params: ["Ada%"]
+User.where { email.ends_with("@example.com") }.all
 ```
+
+{% hint style="warning" %}
+`like` treats `%` and `_` in its pattern as wildcards, so pass search text a user typed to `contains`, `starts_with` or `ends_with`, which match them literally and raise `ArgumentError` on a NUL in the text. Case sensitivity follows the database's LIKE: SQLite and MySQL's default collations ignore case.
+{% endhint %}
 
 ## Add a SQL Fragment
 
