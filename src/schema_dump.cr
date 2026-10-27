@@ -130,8 +130,14 @@ module CQL
     end
 
     # Keeps each kept pair as written: re-encoding would turn `%20` into `+`, which CQL's driver reads literally.
+    # Splits on `;` too, as Crystal's query parsers do, so `a=1;password=x` is two pairs, not one kept one.
     private def allowlisted_query(query : String) : String?
-      query.split('&').select { |pair| FALLBACK_URI_PARAMS.includes?(URI.decode(pair.partition('=').first).downcase) }.join('&').presence
+      query.split(/[&;]/).select { |pair| fallback_param?(URI.decode(pair.partition('=').first)) }.join('&').presence
+    end
+
+    # ASCII-only folding: `downcase` would fold the Kelvin sign in `health_chec\u212A_after` to an allowlisted key.
+    private def fallback_param?(key : String) : Bool
+      FALLBACK_URI_PARAMS.includes?(key.downcase(Unicode::CaseOptions::ASCII))
     end
 
     # Inspect all tables in the database

@@ -264,6 +264,20 @@ describe CQL::SchemaDump do
       base.try { |written| File.delete?(URI.parse(written).path) }
     end
 
+    it "splits the fallback query on ; as well as &, and matches only ASCII parameter names" do
+      base = spec_sqlite_uri("schema_dump_separators_#{Random::Secure.hex(4)}.db")
+      query = "?sslmode=require;password=pw_leak&application_name=app;api_key=key_leak&health_chec\u212A_after=k_leak"
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, base + query)
+
+      content = dumper.generate_schema_content(:AppDB, :app_db)
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{(base + "?sslmode=require&application_name=app").inspect})) do\n")
+      %w[pw_leak key_leak k_leak].each { |secret| content.should_not contain(secret) }
+    ensure
+      dumper.try(&.close)
+      base.try { |written| File.delete?(URI.parse(written).path) }
+    end
+
     it "drops the URL fragment from the fallback" do
       base = spec_sqlite_uri("schema_dump_fragment_#{Random::Secure.hex(4)}.db")
       dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, base + "?sslmode=require#frag_leak")
