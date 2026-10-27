@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.921] - 2026-10-27
+
 ### Deprecated
 
 - `CQL::Cache::Middleware::Azu.setup!(app)`: it calls `app.use`, which `Azu::App` does not have. Mount the generic handler instead: `app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)`. `Azu::HandlerPipeline#use` still accepts the handler.
