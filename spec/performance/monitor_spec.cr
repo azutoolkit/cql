@@ -1165,7 +1165,7 @@ describe "CQL::Performance::Monitor SQL logging of bound values" do
         monitor.track(sql, [secret] of DB::Any) { raise RuntimeError.new("boom") }
       end
 
-      message = logs.check(:error, /Query failed: boom/).entry.message
+      message = logs.check(:error, /\AQuery failed: RuntimeError\nSQL: /).entry.message
       message.should_not contain(secret)
       message.should_not contain("Params:")
     end
@@ -1183,10 +1183,10 @@ describe "CQL::Performance::Monitor SQL logging of bound values" do
       message
     end
 
-    it "is redacted in the failed statement's log line when include_params is off" do
+    it "is replaced by the error's class in the failed statement's log line when include_params is off" do
       message = failure.call(build_monitor.call(false))
 
-      message.should contain("Duplicate entry '?'")
+      message.should start_with("Query failed: Exception\nSQL: ")
       message.should_not contain(secret)
     end
 
@@ -1256,10 +1256,10 @@ describe "CQL::Performance::Monitor metrics export of bound values" do
       monitor.metrics.to_json
     end
 
-    it "is redacted in the metrics JSON when include_params is off" do
+    it "is replaced by the error's class in the metrics JSON when include_params is off" do
       json = export_failure.call(false)
 
-      JSON.parse(json)["top_queries"]["slowest_queries"][0]["error"].should eq("Duplicate entry '?'")
+      JSON.parse(json)["top_queries"]["slowest_queries"][0]["error"].should eq("Exception")
       json.should_not contain(secret)
     end
 

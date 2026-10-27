@@ -105,7 +105,7 @@ The compiler does not compare a model with its schema definition. With `CQL_VALI
 
 - The native PostgreSQL driver keeps passwords and bound values out of the messages it builds; a server error shows the server's own wording only for error classes known to be value-free.
 - `CQL::Telemetry.capture_params` is off by default, so `event.params` is `nil` unless you opt in. See [Telemetry](../how-to/observability/telemetry.md).
-- The [SQL log](../how-to/observability/query-profiler.md#log-sql) leaves bound values out of its lines unless `logging.include_params` is on (then `logging.max_param_length` truncates each value). The error line of a failed statement also drops everything from the first to the last quote of the driver's message; unquoted text, such as an encoding error or `RAISE EXCEPTION` output, is kept.
+- The [SQL log](../how-to/observability/query-profiler.md#log-sql) leaves bound values out of its lines unless `logging.include_params` is on (then `logging.max_param_length` truncates each value). A failed statement's error line, and the error the profiler stores and exports, hold only the error's class and driver code (`SQLite3::Exception (code 19)`, `CQL::Postgres::UniqueViolation (SQLSTATE 23505)`), since a driver message can echo a value unquoted (`Key (email)=(alice@x.io)`, a trigger's `RAISE` text); `include_params` on keeps the full message.
 - The profiler keeps the parameters of recorded queries in memory, but the metrics JSON (`CQL::Performance.metrics.to_json`) includes them only when `logging.include_params` is on.
 
 ## What CQL Does Not Do
