@@ -49,6 +49,21 @@ module Expression
       true
     end
 
+    # Reads the bound on lock waits, to restore once `migration_lock_sql` holds the lock; nil bounds no lock wait.
+    def lock_timeout_sql : String?
+      nil
+    end
+
+    # Sets the bound on lock waits until the transaction ends, binding whole milliseconds or what `lock_timeout_sql` read.
+    def set_lock_timeout_sql : String?
+      nil
+    end
+
+    # Whether *error* is a lock wait that outlasted the bound `set_lock_timeout_sql` set.
+    def lock_timed_out?(error : Exception) : Bool
+      false
+    end
+
     # Dumps only the DB structure (no data) to a string
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String

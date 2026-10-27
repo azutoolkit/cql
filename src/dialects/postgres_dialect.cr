@@ -224,6 +224,23 @@ module Expression
       level.in?("read committed", "read uncommitted")
     end
 
+    def lock_timeout_sql : String?
+      "SELECT current_setting('lock_timeout')"
+    end
+
+    # `true`: SET LOCAL, so the bound ends with the transaction.
+    def set_lock_timeout_sql : String?
+      "SELECT set_config('lock_timeout', #{placeholder_format(1)}, true)"
+    end
+
+    # SQLSTATE 55P03 (lock_not_available), from CQL's own driver or, when the app loads it, the `pg` shard.
+    def lock_timed_out?(error : Exception) : Bool
+      {% if @top_level.has_constant?(:PQ) %}
+        return error.field_message(:code) == "55P03" if error.is_a?(PQ::PQError)
+      {% end %}
+      error.is_a?(CQL::Postgres::ServerError) && error.sqlstate == "55P03"
+    end
+
     def format_returning(columns : Array(String)) : String
       return "" if columns.empty?
       " RETURNING #{columns.join(", ")}"

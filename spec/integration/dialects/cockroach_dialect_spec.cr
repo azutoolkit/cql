@@ -50,6 +50,18 @@ describe "CockroachDB adapter" do
     end
   end
 
+  it "bounds the PostgreSQL migration lock wait with a transaction-local lock_timeout, failing with SQLSTATE 55P03" do
+    postgres = CQL::Adapter::Postgres.dialect
+    postgres.lock_timeout_sql.should eq("SELECT current_setting('lock_timeout')")
+    postgres.set_lock_timeout_sql.should eq("SELECT set_config('lock_timeout', $1, true)")
+    server_error = ->(code : String) { CQL::Postgres::ServerError.from({'S' => "ERROR", 'C' => code, 'M' => "boom"}) }
+    postgres.lock_timed_out?(server_error.call("55P03")).should be_true
+    {server_error.call("57014"), Exception.new("55P03")}.each { |error| postgres.lock_timed_out?(error).should be_false }
+    {CQL::Adapter::SQLite, CQL::Adapter::MySql}.each do |adapter|
+      {adapter.dialect.lock_timeout_sql, adapter.dialect.set_lock_timeout_sql}.should eq({nil, nil})
+    end
+  end
+
   it "allows 32767 bound parameters, the most every driver accepts" do
     cockroach.dialect.max_bind_params.should eq(32767)
   end
