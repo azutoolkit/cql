@@ -50,6 +50,7 @@ module CQL::Postgres
 
     def connection_builder(uri : URI) : ::DB::ConnectionBuilder
       params = HTTP::Params.parse(uri.query || "")
+      raise ArgumentError.new("pool_reset needs the engine's pool, as crystal-db's cannot reset a returned connection: use CQL::Postgres::EngineSource or AsyncEngine") if params.has_key?("pool_reset")
       options = connection_options(params).copy_with(prepared_statements_cache: false)
       Builder.new(Config.from_uri(uri, ignoring: DB_OWNED_KEYS), options)
     end

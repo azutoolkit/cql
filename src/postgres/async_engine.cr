@@ -30,14 +30,15 @@ module CQL::Postgres
 
     # *setup* runs once on every new pooled connection (e.g. `SET search_path`);
     # *reset* is a statement run each time a connection returns to the pool
-    # (e.g. `DISCARD ALL`). Pool sizing and lifetimes come from the URL:
-    # `pool_size`, `pool_min_size`, `max_queries`, `max_idle_lifetime`.
+    # (e.g. `DISCARD ALL`), in place of the URL's `pool_reset` (an empty one keeps it). Pool sizing and
+    # lifetimes come from the URL: `pool_size`, `pool_min_size`, `max_queries`, `max_idle_lifetime`.
     # The adapter defaults from the URL: `cockroachdb://` is CockroachDB, anything else PostgreSQL.
     def self.connect(url : String, adapter : CQL::Adapter? = nil,
                      setup : Proc(Connection, Nil)? = nil, reset : String? = nil) : AsyncEngine
       config = Config.parse(url)
       adapter ||= config.cockroachdb? ? CQL::Adapter::CockroachDB : CQL::Adapter::Postgres
-      options = Pool::Options.from(config).copy_with(setup: setup, reset_sql: reset)
+      from_url = Pool::Options.from(config)
+      options = from_url.copy_with(setup: setup, reset_sql: reset.presence || from_url.reset_sql)
       new(Pool.new(config, options).warm_up, adapter)
     end
 

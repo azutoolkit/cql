@@ -45,6 +45,7 @@ Pool settings are URL query options:
 | `health_check_after` | Ping a connection idle longer than this many seconds before lending it | 30 |
 | `max_queries` | Retire a connection after this many requests | none |
 | `max_idle_lifetime` | Retire a connection idle this many seconds | none |
+| `pool_reset` | `discard_all`: run `DISCARD ALL` on every return, for tenant isolation (see Setup and Reset Hooks); any other value raises `ArgumentError`, and `DB.open` refuses the key | none |
 
 ```crystal
 engine = CQL::Postgres::AsyncEngine.connect(
@@ -77,6 +78,12 @@ engine = CQL::Postgres::AsyncEngine.connect(
 )
 # On return, a transaction the borrower left open is rolled back, then reset runs, the statement
 # cache is cleared and setup runs again. If any step fails, the connection is dropped, not reused.
+#
+# pool_reset=discard_all in the URL is the tenant-isolation setting. DISCARD ALL clears session parameters
+# (set_config included), SET ROLE and SET SESSION AUTHORIZATION, search_path, temp tables, LISTEN channels,
+# session advisory locks, prepared statements and cursors. It costs one round trip per return, and since the
+# statement cache is dropped, each borrow prepares its statements again. Verified on PostgreSQL only; CockroachDB
+# is untested. reset: takes its place; an empty reset: keeps it.
 ```
 
 ## Borrow One Connection

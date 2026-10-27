@@ -33,8 +33,17 @@ module CQL::Postgres
           checkout_timeout: Config.seconds(driver["checkout_timeout"]?, "checkout_timeout") || defaults.checkout_timeout,
           health_check_after: Config.seconds(driver["health_check_after"]?, "health_check_after") || defaults.health_check_after,
           max_queries: Config.whole(driver["max_queries"]?, "max_queries"),
-          max_idle_lifetime: Config.seconds(driver["max_idle_lifetime"]?, "max_idle_lifetime")
+          max_idle_lifetime: Config.seconds(driver["max_idle_lifetime"]?, "max_idle_lifetime"),
+          reset_sql: reset_statement(driver["pool_reset"]?)
         )
+      end
+
+      # Only DISCARD ALL keeps tenants apart: RESET ALL leaves the role, temp tables, LISTENs, advisory
+      # locks and prepared statements (which the reset's cache flush would then leak) to the next borrower.
+      private def self.reset_statement(value : String?) : String?
+        return unless value
+        raise ArgumentError.new("pool_reset must be discard_all, got #{value.inspect}") unless value == "discard_all"
+        "DISCARD ALL"
       end
     end
 
