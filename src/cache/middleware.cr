@@ -132,22 +132,17 @@ module CQL
         end
       end
 
-      # Azu framework middleware
-      # Usage Option 1 - As HTTP Handler:
-      #   Azu::Server.new([
-      #     CQL::Cache::Middleware::Azu::Handler.new,
-      #     # ... other handlers
-      #   ])
+      # Azu framework middleware. An Azu app takes its handlers as an array (`Azu::App#start`, `#server`), so the
+      # cache is a handler in that array. Put it after `Azu::Handler::RequestId`, whose `X-Request-ID` it reuses:
       #
-      # Usage Option 2 - In Controllers:
-      #   class ApplicationController < Azu::Controller
-      #     include CQL::Cache::Middleware::Azu::Controller
-      #   end
+      #   app = Azu::App.default # or Azu::App.new
+      #   app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))
+      #   # the same as: app.start(app.default_handlers + [CQL::Cache::Middleware::Azu::Handler.new] of HTTP::Handler)
       #
-      # Usage Option 3 - Manual hooks:
-      #   # In your Azu application setup
-      #   app.before { |ctx| CQL::Cache::Middleware::Azu.before_request(ctx) }
-      #   app.after { |ctx| CQL::Cache::Middleware::Azu.after_request(ctx) }
+      # Azu's own bridge (`require "azu/cql"`) mounts `Azu::CQL::Middleware` (request tagging, per-request
+      # transactions) the same way; the two are independent and can both be in the array.
+      #
+      # `Controller` relies on `before_action`/`after_action` macros, which Azu endpoints do not have.
       module Azu
         extend BaseMiddleware
 
@@ -198,12 +193,21 @@ module CQL
           end_request_cache
         end
 
-        # Convenience method to set up automatic middleware
-        # Usage: CQL::Cache::Middleware::Azu.setup!(app)
-        def self.setup!(app)
-          # This would integrate with Azu's middleware system
-          # The exact implementation depends on Azu's API
-          app.use(Handler.new)
+        # Appends a `Handler` to *handlers*, unless one is there, and returns the array: pass it to
+        # `Azu::App#start` or `Azu::App#server`. Type the array `of HTTP::Handler`, as `default_handlers` is: an array of
+        # one handler class (`[Azu::Handler::Rescuer.new]`) fails to compile at `<<`.
+        def self.setup!(handlers : Array(::HTTP::Handler)) : Array(::HTTP::Handler)
+          handlers.any?(Handler) ? handlers : handlers << Handler.new
+        end
+
+        # For anything with a `use(handler)`, such as `Azu::HandlerPipeline`: returns `pipeline.use(Handler.new)`.
+        # `Azu::App` has no `use`, so passing the app fails to compile and names the array overload.
+        def self.setup!(pipeline : T) forall T
+          {% if T.has_method?(:use) || T.ancestors.any?(&.has_method?(:use)) %}
+            pipeline.use(Handler.new)
+          {% else %}
+            {% raise "CQL::Cache::Middleware::Azu.setup! takes the app's Array(HTTP::Handler) or a pipeline with `use` (Azu::HandlerPipeline), not #{T}: app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))" %}
+          {% end %}
         end
       end
 

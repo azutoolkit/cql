@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- `CQL::Cache::Middleware::Azu.setup!(app)` with an `Azu::App` never compiled (`Azu::App` has no `use`); it now fails with a message that names the replacement: `app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))`. A pipeline with `use`, such as `Azu::HandlerPipeline`, still works as before.
+
+### Fixed
+
+- `CQL::Cache::Middleware::Azu.setup!` works with an `Azu::App`: given the app's `Array(HTTP::Handler)` it appends `CQL::Cache::Middleware::Azu::Handler` (once) and returns the array for `Azu::App#start` or `#server`. Before, it always called `use`, which `Azu::App` does not have (only `Azu::HandlerPipeline` does), so the documented `setup!(app)` did not compile. The Azu docs and the framework-integration example now show `Azu::App` and its handler array instead of `Azu::Server`, `Azu::Application`, `use` on the app and `app.before`/`app.after`, none of which Azu has.
+
 ## [0.0.916] - 2026-10-26
 
 ### Upgrade notes

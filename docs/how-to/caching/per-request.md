@@ -40,10 +40,19 @@ after_all { |env| CQL::Cache::Middleware::Kemal.after_request(env) }
 
 {% tab title="Azu" %}
 ```crystal
-# Add CQL::Cache::Middleware::Azu::Handler.new to the handler chain,
-# or call CQL::Cache::Middleware::Azu.before_request(context) and .after_request(context)
-# Controllers: include CQL::Cache::Middleware::Azu::Controller
+# Azu apps take their handlers as an array: setup! appends the cache handler (after RequestId, whose id it reuses)
+app = Azu::App.default
+app.start(CQL::Cache::Middleware::Azu.setup!(app.default_handlers))
+
+# The same, by hand
+app.start(app.default_handlers + [CQL::Cache::Middleware::Azu::Handler.new] of HTTP::Handler)
 ```
+
+`setup!` takes the handler array, not the app: `Azu::App` has no `use`, so `setup!(app)` fails to compile with that
+hint. With an `Azu::HandlerPipeline`, `setup!(pipeline)` still calls `use`, the same as
+`pipeline.use(CQL::Cache::Middleware::Azu::Handler.new)`. Azu's own CQL bridge (`require "azu/cql"`,
+`Azu::CQL::Middleware`) tags queries with the request and can wrap it in a transaction; it does not track repeated
+queries, so the two handlers can sit in the same array.
 {% endtab %}
 
 {% tab title="Lucky" %}
@@ -77,7 +86,7 @@ CQL::Cache::Middleware::Manual.with_request { handle(request) }  # or Manual.sta
 {% endtab %}
 {% endtabs %}
 
-The Lucky, Amber, SpiderGazelle and Azu controller modules rely on those frameworks' macros and are not exercised by CQL's specs.
+The Lucky, Amber and SpiderGazelle modules rely on those frameworks' macros and are not exercised by CQL's specs. `CQL::Cache::Middleware::Azu::Controller` registers `before_action`/`after_action`, which Azu endpoints do not have: use the handler.
 
 ## Call the Helper Directly
 
