@@ -150,7 +150,7 @@ module Expression
       timestamp_column : Bool,
     ) : String
       # For timestamp columns, use the database function directly (without quoting)
-      if timestamp_column && default_value.is_a?(String) && default_value.matches?(/\ANOW\(\d?\)\z/)
+      if timestamp_column && default_value.is_a?(String) && default_value.matches?(/\ANOW\([0-6]?\)\z/)
         build_sql(128) do |str|
           str << column_name << " " << column_type
           str << " DEFAULT " << default_value

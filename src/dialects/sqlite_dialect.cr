@@ -122,10 +122,17 @@ module Expression
       end
     end
 
-    def add_column(column_definition : String, primary_key : Bool) : String
+    def add_column(column_definition : String, primary_key : Bool, current_time_default : Bool = false) : String
       # SQLite doesn't support adding a PRIMARY KEY constraint to an existing table
       if primary_key
         raise CQL::SQLiteUnsupportedFeatureError.new("adding a PRIMARY KEY constraint to an existing table")
+      end
+      # SQLite accepts it only while the table is empty; refusing always keeps a migration from passing in development
+      # and failing on a production table that has rows
+      if current_time_default
+        raise CQL::SQLiteUnsupportedFeatureError.new("adding a column whose default is the current time",
+          "Add the column without a default and backfill it with exec (UPDATE ... SET <column> = datetime('now')), " \
+          "or rebuild the table with the column declared.")
       end
 
       "#{@@cached_strings["sqlite_add_column_prefix"]}#{column_definition}"

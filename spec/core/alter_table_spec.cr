@@ -200,6 +200,21 @@ describe "CQL::AlterTable" do
       end
     end
 
+    it "raises CQL::SQLiteUnsupportedFeatureError for a current-time default on SQLite, which cannot fill rows with it" do
+      with_widgets do |schema|
+        expect_raises(CQL::SQLiteUnsupportedFeatureError, "adding a column whose default is the current time") do
+          schema.alter(:widgets) { add_column :seen_at, Time, default: "CURRENT_TIMESTAMP" }
+        end
+      end
+    end
+
+    it "adds a current-time default as the database's expression on PostgreSQL and MySQL" do
+      alter_sql(postgres_widgets, CQL::Adapter::Postgres) { add_column :seen_at, Time, default: "CURRENT_TIMESTAMP" }
+        .should eq("ALTER TABLE widgets ADD COLUMN seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;\n")
+      alter_sql(mysql_widgets, CQL::Adapter::MySql) { add_column :seen_at, Time, default: "CURRENT_TIMESTAMP" }
+        .should eq("ALTER TABLE widgets ADD COLUMN seen_at DATETIME(3) DEFAULT NOW(3);\n")
+    end
+
     it "keeps each statement whole, whatever its default holds" do
       table = mysql_widgets
       alter = CQL::AlterTable.new(table, table.schema)

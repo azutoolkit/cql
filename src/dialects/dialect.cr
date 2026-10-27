@@ -456,7 +456,8 @@ module Expression
     end
 
     # Generates the ALTER TABLE action that adds a column, from its `define_column` definition.
-    def add_column(column_definition : String, primary_key : Bool) : String
+    # *current_time_default* tells a dialect that cannot fill existing rows with the current time to refuse.
+    def add_column(column_definition : String, primary_key : Bool, current_time_default : Bool = false) : String
       "ADD COLUMN #{column_definition}#{" PRIMARY KEY" if primary_key}"
     end
 

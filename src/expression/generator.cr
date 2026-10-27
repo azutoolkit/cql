@@ -33,12 +33,6 @@ module Expression
       table.table_name.to_s == alias_name ? ident(table) : ident(alias_name)
     end
 
-    # Helper method to check if a column is an auto-timestamp column
-    private def is_auto_timestamp_column?(column : CQL::BaseColumn) : Bool
-      column_name = column.name.to_s
-      %w[created_at updated_at].includes?(column_name)
-    end
-
     # Visits only append to the parameters; `reset` (called by every `to_sql`)
     # is the one place they are cleared, so subqueries keep the outer values.
     def reset
@@ -647,12 +641,27 @@ module Expression
     end
 
     def visit(node : AddColumn) : String
-      @dialect.add_column(column_definition(node.column), node.column.is_a?(CQL::PrimaryKey))
+      column = node.column
+      @dialect.add_column(column_definition(column), column.is_a?(CQL::PrimaryKey), current_time_default?(column))
     end
 
     # A column as declared in CREATE TABLE and ALTER TABLE ... ADD COLUMN: name, type, default and constraints.
     private def column_definition(column : CQL::BaseColumn) : String
-      @dialect.define_column(column.name.to_s, column.type, column.default, column.null?, column.unique?, is_auto_timestamp_column?(column))
+      default = current_time_default?(column) ? @dialect.current_timestamp : column.default
+      # created_at/updated_at of any type keep taking the dialect's own current-time call, as they always did
+      timestamp_column = time_column?(column) || column.name.in?(:created_at, :updated_at)
+      @dialect.define_column(column.name.to_s, column.type, default, column.null?, column.unique?, timestamp_column)
+    end
+
+    # The portable spelling "CURRENT_TIMESTAMP" (any case) on a Time column is the database's current time.
+    private def current_time_default?(column : CQL::BaseColumn) : Bool
+      default = column.default
+      time_column?(column) && default.is_a?(String) && default.compare("CURRENT_TIMESTAMP", case_insensitive: true).zero?
+    end
+
+    # `CQL::Date` is `Time`, so a date column is told apart by its class; it keeps its defaults quoted.
+    private def time_column?(column : CQL::BaseColumn) : Bool
+      column.is_a?(CQL::Column(Time)) && !column.is_a?(CQL::DateColumn)
     end
 
     def visit(node : DropColumn) : String

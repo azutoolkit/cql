@@ -100,7 +100,7 @@ end
 | Option | Type | Default | SQL |
 | :--- | :--- | :--- | :--- |
 | `null` | `Bool` | `false` | `false` adds `NOT NULL` |
-| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings single-quoted with `'` doubled (on MySQL also `\` doubled and NUL as `\0`), `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere. On `created_at` and `updated_at`, a whole current-time call (`datetime('now')` on SQLite, `NOW(3)` on MySQL, `CURRENT_TIMESTAMP` on PostgreSQL) is written unquoted, and any other string is quoted |
+| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings single-quoted with `'` doubled (on MySQL also `\` doubled and NUL as `\0`), `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere. On a `Time` column (not `date`), `"CURRENT_TIMESTAMP"` (any case) is the database's current time on every database. A whole current-time call in the dialect's spelling (`datetime('now')` on SQLite, `NOW(3)` on MySQL, `CURRENT_TIMESTAMP` on PostgreSQL) is written unquoted on a `Time` column or on a `created_at`/`updated_at` column of any type; any other string is quoted |
 | `unique` | `Bool` | `false` | `UNIQUE`; with `index: true` the index is unique too |
 | `index` | `Bool` | `false` | Declares `idx_<t>_<column>` (e.g. `idx_posts_slug`), created by `create!` after the table |
 | `as` | `String?` | `nil` | Alias used when the column is selected |
@@ -181,7 +181,7 @@ Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. 
 
 | Method | Defaults | Notes |
 | :--- | :--- | :--- |
-| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | The same column definition as `CREATE TABLE`: `default` emits `DEFAULT`, which fills existing rows, and `size` follows [Column options](#column-options). `index: true` then runs `CREATE INDEX idx_<t>_<column>`. |
+| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | The same column definition as `CREATE TABLE`: `default` emits `DEFAULT`, which fills existing rows, and `size` follows [Column options](#column-options). `index: true` then runs `CREATE INDEX idx_<t>_<column>`. On SQLite, a `"CURRENT_TIMESTAMP"` default on a `Time` column raises `CQL::SQLiteUnsupportedFeatureError` (SQLite takes it only on an empty table): add the column without a default and backfill it with `exec`, or rebuild the table. |
 | **`drop_column(name)`** | | Emits `DROP COLUMN` whether or not the schema declares the column; the name must be an identifier |
 | **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column |
 | **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
