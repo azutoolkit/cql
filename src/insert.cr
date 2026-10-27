@@ -37,8 +37,6 @@ module CQL
   class Insert
     include Pinnable
 
-    Log = CQL.config.logger
-
     @table : Table? = nil
     @columns : Set(Expression::Column) = Set(Expression::Column).new
     @values : Array(Array(DB::Any)) = Array(Array(DB::Any)).new
@@ -86,9 +84,6 @@ module CQL
       require_returning!
       query, params = to_sql
       CQL::Execution.run(executor, query, params, :insert) { |connection| connection.query_one?(query, args: params, as: kind) }
-    rescue ex
-      Log.error { "Insert failed: #{ex.message}" }
-      raise ex
     end
 
     def get!(as kind)
@@ -140,9 +135,6 @@ module CQL
       query, params = to_sql
 
       CQL::Execution.run(executor, query, params, :insert) { |connection| connection.exec(query, args: params) }
-    rescue ex
-      Log.error { "Insert failed: #{ex.message}" }
-      raise ex
     end
 
     # Set the table to insert into
