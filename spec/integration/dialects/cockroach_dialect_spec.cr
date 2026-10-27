@@ -39,6 +39,17 @@ describe "CockroachDB adapter" do
     CQL::Adapter::MySql.dialect.migration_lock_sql.should be_nil
   end
 
+  it "lets PostgreSQL migrators wait for the lock at READ COMMITTED only, as their snapshot follows the wait" do
+    postgres = CQL::Adapter::Postgres.dialect
+    postgres.transaction_isolation_sql.should eq("SHOW transaction_isolation")
+    {"read committed", "read uncommitted"}.each { |level| postgres.migration_lock_isolation_safe?(level).should be_true }
+    {"repeatable read", "serializable"}.each { |level| postgres.migration_lock_isolation_safe?(level).should be_false }
+    {CQL::Adapter::SQLite, CQL::Adapter::MySql}.each do |adapter|
+      adapter.dialect.transaction_isolation_sql.should be_nil
+      adapter.dialect.migration_lock_isolation_safe?("serializable").should be_true
+    end
+  end
+
   it "allows 32767 bound parameters, the most every driver accepts" do
     cockroach.dialect.max_bind_params.should eq(32767)
   end

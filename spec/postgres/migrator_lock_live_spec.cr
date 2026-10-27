@@ -93,4 +93,21 @@ describe "CQL::Migrator's migration lock on PostgreSQL" do
       schemas[0].exec_query(&.scalar("SELECT n FROM #{COUNTER}")).should eq(0)
     end
   end
+
+  it "refuses a REPEATABLE READ or SERIALIZABLE transaction, whose snapshot predates the lock wait" do
+    require_postgres!
+    with_lock_spec_migrations do |(schema, _), config|
+      migrator = CQL::Migrator.new(schema, config)
+      {"REPEATABLE READ", "SERIALIZABLE"}.each do |level|
+        expect_raises(CQL::Migrator::Error, /READ COMMITTED, not #{level}/) do
+          schema.transaction do
+            schema.exec("SET TRANSACTION ISOLATION LEVEL #{level}")
+            migrator.up
+          end
+        end
+      end
+      recorded_versions(schema).should be_empty
+      schema.exec_query(&.scalar("SELECT to_regclass('#{COUNTER}') IS NULL")).should be_true
+    end
+  end
 end

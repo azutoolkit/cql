@@ -439,7 +439,18 @@ module CQL
     # Held until the batch transaction ends. Keyed by the records table, so migrators of other tables do not wait.
     private def lock_migrations : Nil
       return unless sql = schema.dialect.migration_lock_sql
+      require_read_committed!
       schema.with_connection(&.exec(sql, migration_lock_key))
+    end
+
+    # A snapshot taken before the lock wait (REPEATABLE READ, SERIALIZABLE) misses the run it waited for.
+    private def require_read_committed! : Nil
+      return unless sql = schema.dialect.transaction_isolation_sql
+      level = schema.with_connection(&.query_one(sql, as: String))
+      return if schema.dialect.migration_lock_isolation_safe?(level)
+      raise Error.new("Migrations take an advisory lock and must run at READ COMMITTED, not #{level.upcase}: run " \
+                      "them outside a REPEATABLE READ or SERIALIZABLE transaction and with " \
+                      "default_transaction_isolation at READ COMMITTED")
     end
 
     # A CQL salt ("CQLM") in the high 32 bits keeps the key clear of the small integers apps use for their locks.

@@ -38,6 +38,17 @@ module Expression
       nil
     end
 
+    # Reads the isolation level without taking a snapshot, before `migration_lock_sql` waits; nil reads none.
+    def transaction_isolation_sql : String?
+      nil
+    end
+
+    # Whether a migrator that waited for `migration_lock_sql` at *level* (as `transaction_isolation_sql` reads it)
+    # sees what the holder committed.
+    def migration_lock_isolation_safe?(level : String) : Bool
+      true
+    end
+
     # Dumps only the DB structure (no data) to a string
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String

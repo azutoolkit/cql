@@ -215,6 +215,15 @@ module Expression
       "SELECT pg_advisory_xact_lock(#{placeholder_format(1)})"
     end
 
+    def transaction_isolation_sql : String?
+      "SHOW transaction_isolation"
+    end
+
+    # REPEATABLE READ and SERIALIZABLE take their snapshot at the lock statement, before it waits.
+    def migration_lock_isolation_safe?(level : String) : Bool
+      level.in?("read committed", "read uncommitted")
+    end
+
     def format_returning(columns : Array(String)) : String
       return "" if columns.empty?
       " RETURNING #{columns.join(", ")}"

@@ -47,7 +47,10 @@ Each statement commits on its own, so a failure leaves the run's earlier migrati
 
 On PostgreSQL building a migrator and every run take an advisory lock before they create the migrations table or pick
 their migrations, so a second `up` waits for the first, with no timeout, and then finds nothing pending. Building a
-migrator waits too while another process runs migrations; a run with nothing to pick takes no lock.
+migrator waits too while another process runs migrations; a run with nothing to pick takes no lock and no check.
+Run migrations at READ COMMITTED: inside a REPEATABLE READ or SERIALIZABLE transaction, or under such a
+`default_transaction_isolation`, building a migrator and a run that has migrations to apply or roll back raise
+`CQL::Migrator::Error`.
 
 A `down`, `down_to` or `rollback` that waited raises `CQL::Migrator::Error` and rolls back nothing when the run it waited
 for changed the applied migrations. `redo` locks its rollback and its `up` separately, so two `redo`s can interleave: run
