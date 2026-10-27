@@ -29,6 +29,8 @@ module CQL
     FOREIGN_KEY_RULES = {"cascade", "restrict", "set_null", "set_default", "no_action"}
     # Letters of any script, digits and underscores: what the databases accept unquoted and Crystal as a bare symbol.
     NAME_PATTERN = /\A[\p{L}_][\p{L}\p{N}_]*\z/
+    # Hangul fillers are letters that render as nothing, so `a\u3164` would read as `a` in the schema file.
+    INVISIBLE_LETTERS = {'\u115F', '\u1160', '\u3164', '\uFFA0'}
 
     # Query parameters the committed fallback URI keeps (compared case-insensitively): the connection, pool and
     # pragma settings CQL and its drivers read, none of them a secret. Any other parameter may hold one.
@@ -504,17 +506,30 @@ module CQL
       check_name(table.name, "name", table.name)
       table.columns.each { |column| check_name(table.name, "column", column.name) }
       table.foreign_keys.each do |key|
-        key.columns.each { |name| check_name(table.name, "column", name) }
-        check_name(table.name, "referenced table", key.references_table)
-        key.references_columns.each { |name| check_name(table.name, "referenced column", name) }
+        key.columns.each { |name| check_foreign_key_name(table.name, "foreign key column", name) }
+        check_foreign_key_name(table.name, "referenced table", key.references_table)
+        key.references_columns.each { |name| check_foreign_key_name(table.name, "referenced column", name) }
         {key.on_delete, key.on_update}.each { |rule| check_rule(table.name, rule) }
       end
     end
 
     private def check_name(table : String, kind : String, name : String) : Nil
-      return if NAME_PATTERN.matches?(name)
-      raise Error.new("Cannot dump table #{table.inspect}: #{kind} #{name.inspect} is not a plain identifier; CQL's DDL " \
+      return if plain_name?(name)
+      raise Error.new("Cannot dump table #{table.dump}: #{kind} #{name.dump} is not a plain identifier; CQL's DDL " \
                       "does not quote names, so building a schema from it would run SQL in the name. Rename it first")
+    end
+
+    # Valid UTF-8 in NFC (a decomposed name reads as its composed form), letters, digits and underscores, no filler.
+    private def plain_name?(name : String) : Bool
+      name.valid_encoding? && NAME_PATTERN.matches?(name) && name.unicode_normalized?(:nfc) &&
+        name.each_char.none?(&.in?(INVISIBLE_LETTERS))
+    end
+
+    # The foreign key DDL validates its names with CQL::Identifier, which takes ASCII letters, digits and underscores only.
+    private def check_foreign_key_name(table : String, kind : String, name : String) : Nil
+      return if name.valid_encoding? && CQL::Identifier.valid?(name)
+      raise Error.new("Cannot dump table #{table.dump}: #{kind} #{name.dump} is not an ASCII identifier, which " \
+                      "CQL's foreign key DDL requires, so the dumped schema would not build. Rename it first")
     end
 
     private def check_rule(table : String, rule : String) : Nil

@@ -360,6 +360,42 @@ describe CQL::SchemaDump do
     end
   end
 
+  describe "names the dumped schema could not build, or that read as another name" do
+    it "refuses a foreign key name that CQL::Identifier rejects, as the foreign key DDL validates it with it" do
+      {"ü_id"      => "%s INTEGER REFERENCES parents (id)",
+       "könig"     => "parent_id INTEGER REFERENCES %s (id)",
+       "schlüssel" => "parent_id INTEGER REFERENCES parents (%s)"}.each do |name, column|
+        with_sqlite_dump("CREATE TABLE children (id INTEGER PRIMARY KEY, #{column % name})") do |dumper|
+          error = expect_raises(CQL::SchemaDump::Error, name.dump) { dumper.generate_schema_content(:ChildrenDB, :children_db) }
+
+          error.message.to_s.should contain("children")
+        end
+      end
+    end
+
+    it "refuses a name that is not valid UTF-8 with an Error naming its table, not the regex's ArgumentError" do
+      column = String.new(Bytes[0x61, 0xFF, 0x62])
+      with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier(column)} TEXT)") do |dumper|
+        expect_raises(CQL::SchemaDump::Error, "notes") { dumper.generate_schema_content(:NotesDB, :notes_db) }
+      end
+    end
+
+    it "refuses a column name holding an invisible Hangul filler, which reads as the name without it" do
+      {'ㅤ', 'ﾠ', 'ᅟ', 'ᅠ'}.each do |filler|
+        with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier("a#{filler}")} TEXT)") do |dumper|
+          error = expect_raises(CQL::SchemaDump::Error, "notes") { dumper.generate_schema_content(:NotesDB, :notes_db) }
+          error.message.to_s.should contain("a\\u#{filler.ord.to_s(16).upcase}") # escaped, so the message shows it
+        end
+      end
+    end
+
+    it "refuses a name that is not in NFC, which reads as its composed form" do
+      with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier("\u1100\u1161")} TEXT)") do |dumper|
+        expect_raises(CQL::SchemaDump::Error, "notes") { dumper.generate_schema_content(:NotesDB, :notes_db) }
+      end
+    end
+  end
+
   describe "error handling" do
     it "raises error for invalid database connection" do
       expect_raises(CQL::SchemaDump::Error, "Failed to connect to database") do
