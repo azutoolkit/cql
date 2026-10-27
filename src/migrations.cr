@@ -203,9 +203,7 @@ module CQL
       Log.debug { "Updating schema file: #{config.schema_file_path}" }
 
       begin
-        SchemaDump.open(schema) do |schema_dumper|
-          schema_dumper.dump_to_file(config.schema_file_path, config.schema_name, config.schema_symbol, env_var: config.schema_url_env)
-        end
+        write_schema_file
         Log.info { "Schema file updated: #{config.schema_file_path}" }
       rescue ex : Exception
         Log.error { "Failed to update schema file: #{ex.message}" }
@@ -415,7 +413,7 @@ module CQL
         end
       end
 
-      update_schema_file if config.auto_sync?
+      sync_schema_file if config.auto_sync?
       print_applied_migrations
     end
 
@@ -429,8 +427,21 @@ module CQL
         end
       end
 
-      update_schema_file if config.auto_sync?
+      sync_schema_file if config.auto_sync?
       print_rolled_back_migrations(newest_first)
+    end
+
+    # The migrations have committed by now, so a failed dump keeps the old file instead of failing the run.
+    private def sync_schema_file : Nil
+      write_schema_file
+    rescue ex : Exception
+      Log.warn { "Schema file #{config.schema_file_path} not updated after migrating: #{ex.message}" }
+    end
+
+    private def write_schema_file : Nil
+      SchemaDump.open(schema) do |schema_dumper|
+        schema_dumper.dump_to_file(config.schema_file_path, config.schema_name, config.schema_symbol, env_var: config.schema_url_env)
+      end
     end
 
     # Picked before the lock, so a run with nothing to pick takes no lock (building the migrator still does).

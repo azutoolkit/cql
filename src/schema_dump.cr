@@ -26,6 +26,10 @@ module CQL
 
     DEFAULT_SCHEMA_DUMP_FILE_PATH = "./src/schemas/schema.cr"
 
+    FOREIGN_KEY_RULES = {"cascade", "restrict", "set_null", "set_default", "no_action"}
+    # Letters of any script, digits and underscores: what the databases accept unquoted and Crystal as a bare symbol.
+    NAME_PATTERN = /\A[\p{L}_][\p{L}\p{N}_]*\z/
+
     # Query parameters the committed fallback URI keeps (compared case-insensitively): the connection, pool and
     # pragma settings CQL and its drivers read, none of them a secret. Any other parameter may hold one.
     FALLBACK_URI_PARAMS = Set{
@@ -89,8 +93,9 @@ module CQL
     # - **@return** [String] The generated schema content
     def generate_schema_content(schema_name : Symbol, schema_symbol : Symbol, env_var : String = "DATABASE_URL") : String
       tables = inspect_tables
+      tables.each { |table| check_names(table) }
 
-      content = String.build do |str|
+      String.build do |str|
         str << "#{schema_name} = CQL::Schema.define(\n"
         str << "  :#{schema_symbol},\n"
         str << "  adapter: CQL::Adapter::#{@adapter},\n"
@@ -102,8 +107,6 @@ module CQL
 
         str << "end\n"
       end
-
-      content
     end
 
     # The file gets committed, so it reads *env_var* and falls back to the URI without credentials, fragment or
@@ -185,8 +188,8 @@ module CQL
             columns: [local_column],
             references_table: referenced_table,
             references_columns: [referenced_column],
-            on_delete: on_delete.downcase,
-            on_update: on_update.downcase
+            on_delete: on_delete.downcase.gsub(" ", "_"),
+            on_update: on_update.downcase.gsub(" ", "_")
           )
           table_info.foreign_keys << fk_info
         end
@@ -450,24 +453,20 @@ module CQL
 
     # Generate table definition code
     private def generate_table_definition(table : TableInfo) : String
-      content = String.build do |str|
+      String.build do |str|
         str << "  table #{symbol(table.name)} do\n"
 
-        # Primary key
         primary_columns = table.columns.select(&.primary_key?)
         if primary_columns.size == 1
           pk = primary_columns.first
           str << "    primary #{symbol(pk.name)}, #{pk.type}\n"
         end
 
-        # Check if we should use timestamps macro
         has_created_at = table.columns.any? { |column| column.name == "created_at" }
         has_updated_at = table.columns.any? { |column| column.name == "updated_at" }
         use_timestamps_macro = has_created_at && has_updated_at
 
-        # Regular columns (excluding timestamp columns if using timestamps macro)
         table.columns.reject(&.primary_key?).each do |column|
-          # Skip timestamp columns if we're using the timestamps macro
           if use_timestamps_macro && (column.name == "created_at" || column.name == "updated_at")
             next
           end
@@ -479,30 +478,52 @@ module CQL
           str << "\n"
         end
 
-        # Add timestamps macro if both created_at and updated_at exist
-        if use_timestamps_macro
-          str << "    timestamps\n"
-        end
+        str << "    timestamps\n" if use_timestamps_macro
 
-        # Foreign keys
         table.foreign_keys.each do |foreign_key|
           str << "    foreign_key [#{symbols(foreign_key.columns)}], "
           str << "references: #{symbol(foreign_key.references_table)}, "
           str << "references_columns: [#{symbols(foreign_key.references_columns)}]"
-          str << ", on_delete: :#{foreign_key.on_delete.downcase.gsub(" ", "_")}" if foreign_key.on_delete != "no_action"
-          str << ", on_update: :#{foreign_key.on_update.downcase.gsub(" ", "_")}" if foreign_key.on_update != "no_action"
+          str << rule_option("on_delete", foreign_key.on_delete)
+          str << rule_option("on_update", foreign_key.on_update)
           str << "\n"
         end
 
         str << "  end\n\n"
       end
-
-      content
     end
 
-    # A database-supplied name as a Crystal symbol literal: quoted and escaped unless it is a plain identifier.
+    # CQL's DDL writes names unquoted, so a schema built from a dump holding any other name would run the SQL in it.
+    private def check_names(table : TableInfo) : Nil
+      check_name(table.name, "name", table.name)
+      table.columns.each { |column| check_name(table.name, "column", column.name) }
+      table.foreign_keys.each do |key|
+        key.columns.each { |name| check_name(table.name, "column", name) }
+        check_name(table.name, "referenced table", key.references_table)
+        key.references_columns.each { |name| check_name(table.name, "referenced column", name) }
+        {key.on_delete, key.on_update}.each { |rule| check_rule(table.name, rule) }
+      end
+    end
+
+    private def check_name(table : String, kind : String, name : String) : Nil
+      return if NAME_PATTERN.matches?(name)
+      raise Error.new("Cannot dump table #{table.inspect}: #{kind} #{name.inspect} is not a plain identifier; CQL's DDL " \
+                      "does not quote names, so building a schema from it would run SQL in the name. Rename it first")
+    end
+
+    private def check_rule(table : String, rule : String) : Nil
+      return if FOREIGN_KEY_RULES.includes?(rule)
+      raise Error.new("Cannot dump table #{table.inspect}: foreign key rule #{rule.inspect} is not one of #{FOREIGN_KEY_RULES.join(", ")}")
+    end
+
+    # A rule `check_names` accepted, left out for CQL's default no_action.
+    private def rule_option(option : String, rule : String) : String
+      rule == "no_action" ? "" : ", #{option}: :#{rule}"
+    end
+
+    # Only a `NAME_PATTERN` name gets here (`check_names`), which Crystal reads as a bare symbol.
     private def symbol(name : String) : String
-      Symbol.needs_quotes?(name) ? ":#{name.inspect}" : ":#{name}"
+      ":#{name}"
     end
 
     private def symbols(names : Array(String)) : String

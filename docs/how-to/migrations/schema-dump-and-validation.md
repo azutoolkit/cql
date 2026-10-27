@@ -47,7 +47,7 @@ MyApp = CQL::Schema.define(
     integer :views, default: "0"
     bigint :user_id
     timestamps
-    foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade, on_update: :no_action
+    foreign_key [:user_id], references: :users, references_columns: [:id], on_delete: :cascade
   end
 
 end
@@ -58,7 +58,10 @@ end
 - A one-column primary key gets `primary`; a composite key gets none. SQLite reports every `INTEGER PRIMARY KEY` as
   `Int32`, including keys declared `Int64`; edit those lines for `Model(Int64)` models.
 - `created_at` plus `updated_at` become `timestamps`. Defaults are copied as the database reports them, as strings.
-- Foreign keys are written one column each. PostgreSQL and MySQL omit `no_action` rules; SQLite writes them.
+- Foreign keys are written one column each, without their `no_action` rules.
+- A table, column or foreign-key name that is not a plain identifier (letters of any script, digits and underscores,
+  not starting with a digit: no spaces or punctuation) raises `CQL::SchemaDump::Error` before anything is written:
+  CQL's DDL does not quote names, so a schema built from it would run SQL in the name. Rename it first.
 - A one-column `UNIQUE` constraint or unique index becomes `unique: true` on SQLite and PostgreSQL, not yet on MySQL
   or CockroachDB; the primary key's, partial, expression and multi-column ones do not, nor a unique `created_at` or
   `updated_at` folded into `timestamps`. Other indexes are not dumped. The migrations table is, like any other table.
@@ -81,8 +84,8 @@ config = CQL::MigratorConfig.new(
   auto_sync: true
 )
 migrator = AppDB.migrator(config)  # writes nothing yet
-migrator.up                        # writes the file after every up and down
-migrator.update_schema_file        # on demand; bootstrap_schema does the same
+migrator.up                        # writes the file after every up and down; a failed write warns, keeps the old file
+migrator.update_schema_file        # on demand, raises CQL::Migrator::Error; bootstrap_schema does the same
 ```
 
 ## Check the File for Drift

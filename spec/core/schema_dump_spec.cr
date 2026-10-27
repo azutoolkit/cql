@@ -10,6 +10,17 @@ private def quoted_identifier(name : String) : String
   %("#{name.gsub('"', %(""))}")
 end
 
+# Yields a dumper over a fresh SQLite database built by *ddl*, and its URI; deletes the database afterwards.
+private def with_sqlite_dump(*ddl : String, &)
+  uri = spec_sqlite_uri("schema_dump_#{Random::Secure.hex(4)}.db")
+  DB.open(uri) { |db| ddl.each { |sql| db.exec(sql) } }
+  dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+  yield dumper, uri
+ensure
+  dumper.try(&.close)
+  uri.try { |path| File.delete?(path.lchop("sqlite3://")) }
+end
+
 describe CQL::SchemaDump do
   describe "SQLite schema dumping" do
     it "can dump a SQLite database schema" do
@@ -64,6 +75,18 @@ describe CQL::SchemaDump do
       schema_content.should contain("references:")
 
       dumper.close
+    end
+
+    it "omits the foreign key rules SQLite reports as NO ACTION, and writes the others as CQL's symbols" do
+      with_sqlite_dump("CREATE TABLE parents (id INTEGER PRIMARY KEY)",
+        "CREATE TABLE children (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parents (id), " \
+        "owner_id INTEGER REFERENCES parents (id) ON DELETE CASCADE ON UPDATE SET NULL)") do |dumper|
+        table = dumped_table(dumper.generate_schema_content(:RulesDB, :rules_db), "children")
+
+        table.should contain("    foreign_key [:parent_id], references: :parents, references_columns: [:id]\n")
+        table.should contain("    foreign_key [:owner_id], references: :parents, references_columns: [:id], " \
+                             "on_delete: :cascade, on_update: :set_null\n")
+      end
     end
   end
 
@@ -271,44 +294,55 @@ describe CQL::SchemaDump do
   end
 
   describe "names read from the database" do
-    it "writes a name that is not a plain identifier as a quoted symbol literal, and a plain one bare" do
-      uri = spec_sqlite_uri("schema_dump_names_#{Random::Secure.hex(4)}.db")
-      table, column = "we ird\"\n\#{t}", "co l\"\n\#{c}"
-      DB.open(uri) do |db|
-        db.exec("CREATE TABLE #{quoted_identifier(table)} (id INTEGER PRIMARY KEY, " \
-                "#{quoted_identifier(column)} TEXT NOT NULL, email TEXT NOT NULL)")
-        db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, " \
-                "#{quoted_identifier(column)} INTEGER NOT NULL REFERENCES #{quoted_identifier(table)} (id))")
+    it "refuses a table name that is not a plain identifier before writing anything, and runs nothing else" do
+      table = "x); DROP TABLE decoy; --"
+      file = File.join(Dir.tempdir, "schema_dump_decoy_#{Random::Secure.hex(4)}.cr")
+      with_sqlite_dump("CREATE TABLE decoy (id INTEGER PRIMARY KEY)",
+        "CREATE TABLE #{quoted_identifier(table)} (id INTEGER PRIMARY KEY, decoy_id INTEGER REFERENCES decoy (id))") do |dumper, uri|
+        expect_raises(CQL::SchemaDump::Error, table.inspect) { dumper.dump_to_file(file, :DecoyDB, :decoy_db) }
+
+        File.exists?(file).should be_false
+        DB.open(uri, &.query_all("SELECT name FROM sqlite_master WHERE name = 'decoy'", as: String)).should eq(["decoy"])
       end
-      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
-
-      content = dumper.generate_schema_content(:NamesDB, :names_db)
-
-      content.should contain("  table :#{table.inspect} do\n    primary :id, Int32\n    text :#{column.inspect}\n    text :email\n")
-      content.should contain("  table :users do\n    primary :id, Int32\n    integer :#{column.inspect}\n")
-      content.should contain("    foreign_key [:#{column.inspect}], references: :#{table.inspect}, references_columns: [:id]")
     ensure
-      dumper.try(&.close)
-      uri.try { |path| File.delete?(path.lchop("sqlite3://")) }
+      file.try { |path| File.delete?(path) }
     end
 
-    it "inspects a table whose name would break an unquoted PRAGMA argument, and runs nothing else" do
-      uri = spec_sqlite_uri("schema_dump_decoy_#{Random::Secure.hex(4)}.db")
-      table = "x); DROP TABLE decoy; --"
-      DB.open(uri) do |db|
-        db.exec("CREATE TABLE decoy (id INTEGER PRIMARY KEY)")
-        db.exec("CREATE TABLE #{quoted_identifier(table)} (id INTEGER PRIMARY KEY, decoy_id INTEGER REFERENCES decoy (id))")
+    it "refuses a column name that is not a plain identifier, naming the column and its table" do
+      column = "note TEXT, injected TEXT)--"
+      with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier(column)} TEXT)") do |dumper|
+        error = expect_raises(CQL::SchemaDump::Error, column.inspect) { dumper.generate_schema_content(:NotesDB, :notes_db) }
+
+        error.message.to_s.should contain("notes")
       end
-      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+    end
 
-      content = dumper.generate_schema_content(:DecoyDB, :decoy_db)
+    it "refuses a foreign key whose column, referenced table or referenced column is not a plain identifier" do
+      {"my col"            => "%s INTEGER REFERENCES parents (id)",
+       "parents (id)); --" => "parent_id INTEGER REFERENCES %s (id)",
+       "their col"         => "parent_id INTEGER REFERENCES parents (%s)"}.each do |name, column|
+        with_sqlite_dump("CREATE TABLE children (id INTEGER PRIMARY KEY, #{column % quoted_identifier(name)})") do |dumper|
+          expect_raises(CQL::SchemaDump::Error, name.inspect) { dumper.generate_schema_content(:ChildrenDB, :children_db) }
+        end
+      end
+    end
 
-      content.should contain("  table :#{table.inspect} do\n    primary :id, Int32\n    integer :decoy_id, null: true\n")
-      content.should contain("    foreign_key [:decoy_id], references: :decoy, references_columns: [:id]")
-      DB.open(uri, &.query_all("SELECT name FROM sqlite_master WHERE name = 'decoy'", as: String)).should eq(["decoy"])
+    it "writes table and column names in letters of any script as symbols" do
+      with_sqlite_dump("CREATE TABLE café (id INTEGER PRIMARY KEY, naïve TEXT NOT NULL)") do |dumper|
+        dumper.generate_schema_content(:CafeDB, :cafe_db).should contain("  table :café do\n    primary :id, Int32\n    text :naïve\n")
+      end
+    end
+
+    it "refuses a PostgreSQL table name that is not a plain identifier" do
+      require_postgres!
+      table = "t(id int);DROP TABLE decoy;--#{Random::Secure.hex(4)}"
+      DB.open(postgres_database_url, &.exec("CREATE TABLE #{quoted_identifier(table)} (id SERIAL PRIMARY KEY)"))
+      dumper = CQL::SchemaDump.new(CQL::Adapter::Postgres, postgres_database_url)
+
+      expect_raises(CQL::SchemaDump::Error, table.inspect) { dumper.generate_schema_content(:NamesDB, :names_db) }
     ensure
       dumper.try(&.close)
-      uri.try { |path| File.delete?(path.lchop("sqlite3://")) }
+      table.try { |name| DB.open(postgres_database_url, &.exec("DROP TABLE IF EXISTS #{quoted_identifier(name)}")) }
     end
   end
 

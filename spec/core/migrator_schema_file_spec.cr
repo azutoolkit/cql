@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 
 # Not a `CQL::Migration(V)` subclass: those register themselves in the global `CQL::Migrator.migrations`.
 class SchemaFileMigration < CQL::BaseMigration
@@ -61,6 +62,22 @@ describe "CQL::Migrator schema file" do
       File.read(schema_file).should contain("table :schema_file_widgets do")
       File.read(schema_file).should contain("table :cql_schema_migrations do")
       migrator.verify_schema_consistency.should be_true
+    end
+  end
+
+  it "keeps the file and logs a warning when the dump fails after up applied the migrations" do
+    schema_file = temp_schema_file
+    File.write(schema_file, "# kept\n")
+
+    with_schema_file_migrator(schema_file) do |migrator|
+      migrator.schema.exec(%(CREATE TABLE "my-table" (id INTEGER PRIMARY KEY)))
+
+      Log.capture("*", level: :warn) do |logs|
+        migrator.up
+        logs.check(:warn, /not updated after migrating: .*"my-table"/)
+      end
+      migrator.applied_migrations.map(&.version).should eq([1_i64])
+      File.read(schema_file).should eq("# kept\n")
     end
   end
 
