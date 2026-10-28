@@ -78,6 +78,7 @@ module CQL
     class TransactionObserver
       @started : Time::Instant = Time.instant
       @error : Exception? = nil
+      @finished = false
 
       getter id : Int64
 
@@ -89,7 +90,10 @@ module CQL
         @error ||= error
       end
 
+      # Publishes once: a `return` out of a savepoint whose enclosing COMMIT then fails unwinds through it twice.
       def finish : Nil
+        return if @finished
+        @finished = true
         state = @error ? TransactionState::Rollback : TransactionState::Commit
         Telemetry.emit_transaction(TransactionEvent.new(state, @id, Time.instant - @started, @nested, @error, @adapter))
       end

@@ -154,14 +154,28 @@ module CQL
         (@fiber_transactions[fiber] ||= [] of TransactionFrame).push(TransactionFrame.new(tx, rollback_hooks))
         @fibers_in_transaction.set(@fiber_transactions.size)
       end
+      popped = false
       begin
         yield
       ensure
-        @fiber_mutex.synchronize do
-          stack = @fiber_transactions[fiber]
-          stack.pop
-          @fiber_transactions.delete(fiber) if stack.empty?
-          @fibers_in_transaction.set(@fiber_transactions.size)
+        # Pops once: crystal-db's COMMIT runs while a `return` or `break` unwinds the block, and its error runs this again.
+        @fiber_mutex.synchronize { pop_frame(fiber) } unless popped
+        popped = true # ameba:disable Lint/UselessAssign (read by this ensure's second run)
+      end
+    end
+
+    private def pop_frame(fiber : Fiber) : Nil
+      stack = @fiber_transactions[fiber]
+      stack.pop
+      @fiber_transactions.delete(fiber) if stack.empty?
+      @fibers_in_transaction.set(@fiber_transactions.size)
+    end
+
+    # The fiber's open transactions on *connection*: a savepoint begun on it now is nested in each of them.
+    private def open_transactions_on(connection : DB::Connection) : Array(DB::Transaction)
+      @fiber_mutex.synchronize do
+        @fiber_transactions[Fiber.current].compact_map do |frame|
+          frame.transaction if frame.transaction.connection.same?(connection) && !frame.transaction.closed?
         end
       end
     end
@@ -366,8 +380,9 @@ module CQL
     # reports Commit, since CQL cannot see it.
     #
     # Its rollback hooks (`on_rollback`; `alter` restores the table declarations it changed) run when the block raises,
-    # `DB::Rollback` included, or COMMIT fails with an error `Dialect#commit_refused?` accepts; not when the block ended
-    # the transaction itself (`tx.commit`, `tx.rollback`), nor after a COMMIT whose outcome is unknown (a lost reply).
+    # `DB::Rollback` included, or COMMIT fails with an error `Dialect#commit_refused?` accepts (also while a `return` or
+    # `break` leaves the block); not when the block ended the transaction, or one it is nested in, itself (`tx.commit`,
+    # `tx.rollback`), nor after a COMMIT whose outcome is unknown (a lost reply).
     # A savepoint that commits leaves them to the enclosing transaction.
     #
     # *isolation* runs the transaction at that level (`transaction(isolation: :serializable) { }`), and *read_only*
@@ -379,17 +394,21 @@ module CQL
       before_begin, after_begin = transaction_mode_statements(isolation, read_only, nested: !parent.nil?)
       observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
       rollback_hooks = RollbackHooks.new
-      block_finished = false
+      enclosing = parent.try { |frame| open_transactions_on(frame.transaction.connection) }
+      left = raised = false
       open_transaction(parent, before_begin) do |tx|
         after_begin.try { |sql| tx.connection.unprepared.exec(sql) } # bypasses Execution, so telemetry sees no user statement
         with_active_transaction(tx, rollback_hooks) do
-          result = yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
-          block_finished = true
-          result
+          yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
         rescue ex
-          rollback_hooks.run unless tx.closed? # ended by the block, its work was kept: the `ensure` hands the hooks on
+          # Once the block left (`return`, `break`), crystal-db commits while it unwinds, and COMMIT's error lands here.
+          raised = true unless left
           observer.try &.failed(ex)
           raise ex
+        ensure
+          # The block ended this transaction, or one it is nested in, itself (`commit`, `rollback`): its work was kept.
+          rollback_hooks.hand_to(parent.try(&.rollback_hooks)) if !left && ended?(tx, enclosing)
+          left = true
         end
       end
     rescue ex : DB::Rollback
@@ -398,14 +417,20 @@ module CQL
       # We log it for debugging, but don't convert to ConnectionError.
       Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
     rescue ex
-      # Past the block, COMMIT (or a savepoint's RELEASE) failed: undo only what the database surely did not keep.
-      rollback_hooks.try &.run if block_finished && dialect.commit_refused?(ex)
+      # Not the block's error: COMMIT (or a savepoint's RELEASE) failed. Undo only what the database surely did not keep.
+      rollback_hooks.try &.run if !raised && dialect.commit_refused?(ex)
       observer.try &.failed(ex)
       raise ex
     ensure
+      rollback_hooks.try &.run if raised
       # Hooks still pending belong to work that was kept (committed, or left by a `return` from the block).
       rollback_hooks.try &.hand_to(parent.try(&.rollback_hooks))
       observer.try &.finish
+    end
+
+    # Whether *tx*, or one of the *enclosing* transactions open when it began, was ended (`commit`, `rollback`).
+    private def ended?(tx : DB::Transaction, enclosing : Array(DB::Transaction)?) : Bool
+      tx.closed? || !!enclosing.try(&.any?(&.closed?))
     end
 
     # Crystal consults `method_missing` before it casts a symbol to an enum, so `isolation: :serializable` lands here.

@@ -4,9 +4,34 @@ require "../spec_helper"
 private class FailingCommitSource < CQL::DatabaseSource
   property error : Exception = RuntimeError.new("no COMMIT failure set")
 
+  # crystal-db's own `transaction` runs the COMMIT, so it fails where a real one does: also while a `return` unwinds.
   def transaction(& : DB::Transaction -> _)
-    super { |tx| yield tx }
-    raise error
+    using_connection { |connection| FailingCommit.new(connection, error).transaction { |tx| yield tx } }
+  end
+end
+
+private record FailingCommit, connection : DB::Connection, error : Exception do
+  include DB::BeginTransaction
+
+  def begin_transaction : DB::Transaction
+    FailingCommitTransaction.new(connection, error)
+  end
+end
+
+private class FailingCommitTransaction < DB::TopLevelTransaction
+  def initialize(connection : DB::Connection, @error : Exception)
+    super(connection)
+  end
+
+  def commit
+    connection.perform_commit_transaction
+    @commit_failed = true
+    raise @error
+  end
+
+  # The ROLLBACK crystal-db sends after a failed COMMIT: a warning on PostgreSQL, skipped on a dropped session.
+  def rollback
+    @commit_failed ? close : super
   end
 end
 
@@ -61,6 +86,34 @@ describe "CQL::Schema#on_rollback" do
       expect_raises(Exception) { failing.transaction { failing.on_rollback { ran << label } } }.should be error
     end
     ran.should eq [:refused, :aborted]
+  end
+
+  it "after a return or break out of the block or a savepoint in it, runs the hooks only for a refused COMMIT and raises it" do
+    [{CQL::Postgres::ConnectionLost.new("reply lost"), [] of Symbol}, {refused, [:inner, :outer, :returned, :broke]}].each do |(error, expected)|
+      ran.clear
+      source.error = error
+      nested = -> { failing.transaction { failing.on_rollback { ran << :outer }; failing.transaction { failing.on_rollback { ran << :inner }; return } } }
+      expect_raises(Exception) { nested.call }.should be error # and leaves no frame: the next ones are top-level
+      expect_raises(Exception) { -> { failing.transaction { failing.on_rollback { ran << :returned }; return } }.call }.should be error
+      expect_raises(Exception) { failing.transaction { failing.on_rollback { ran << :broke }; break } }.should be error
+      ran.should eq expected
+    end
+  end
+
+  it "publishes one end event per transaction after a return out of a savepoint whose enclosing COMMIT failed" do
+    ends = [] of Int64
+    CQL::Telemetry.subscribe_transactions("rollback_hooks_spec") { |event| ends << event.id unless event.state.begin? }
+    source.error = refused
+    expect_raises(Exception) { -> { failing.transaction { failing.transaction { return } } }.call }
+    ends.size.should eq 2
+    ends.uniq.size.should eq 2
+  ensure
+    CQL::Telemetry.unsubscribe_transactions("rollback_hooks_spec")
+  end
+
+  it "skips a savepoint's hooks when its block committed the enclosing transaction before raising" do
+    expect_raises(Exception) { schema.transaction { |outer| schema.transaction { schema.on_rollback { ran << :inner }; outer.commit; raise "after" } } }
+    ran.should be_empty
   end
 
   it "calls a COMMIT failure refused on PostgreSQL and CockroachDB only for a server answer or a request never sent" do
