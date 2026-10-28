@@ -225,6 +225,15 @@ module Expression
       "SELECT pg_advisory_xact_lock(#{placeholder_format(1)})"
     end
 
+    # Session advisory locks: kept after a COMMIT, until unlocked or the session ends.
+    def migration_try_session_lock_sql : String?
+      "SELECT pg_try_advisory_lock(#{placeholder_format(1)})"
+    end
+
+    def migration_session_unlock_sql : String?
+      "SELECT pg_advisory_unlock(#{placeholder_format(1)})"
+    end
+
     # `SHOW transaction_isolation` reads the level in lower case ("read committed") and takes no snapshot.
     def transaction_isolation_sql : String?
       "SHOW transaction_isolation"

@@ -1,0 +1,13 @@
+# Orchestrator's draft (to be critiqued/refined by Architect)
+Ordering principle: confirmed defects by production impact (wrong data > PII/security > hangs > missing capability > DX), then docs. Speculative items deferred.
+
+M1 Data integrity (wrong data, silently): P3#1 stale delete! with lock; P5#1 migration advisory lock; P5#5 duplicate migration versions; P5#2 MySQL CHANGE/MODIFY drops NOT NULL/DEFAULT; P5#4 CURRENT_TIMESTAMP default quoted; P5#7 MySQL text->VARCHAR(255); P1#3 property without column silently not saved; P3#8 lock built at commit by mutation.
+M2 Security & PII: P4#1 insert error logs raw driver msg; P4#2 native Statement emit_log logs args; P5#6 schema file writes URI with password, unescaped in Crystal string literal; P3#4 pool_reset URL key (session state leak, RLS tenancy); P4#8 LIKE escape helper + tutorial fix.
+M3 Engine resilience: P3#2 query_timeout on normal path; P3#3 dead idle conn detection on lend + 57P0x/08xxx -> ConnectionLost; P3#5 checkout_timeout caps connect + address in message; P3#9 TLS client certs (sslcert/sslkey).
+M4 Transactions: P3#7 Schema#transaction(isolation:, read_only:) per dialect; retry helper for 40001/40P01 at outermost level; P3#6 OptimisticLockError context.
+M5 Migrations: P5#8 disable_ddl_transaction!; P5#9 IrreversibleMigration; P5#6 auto_sync write failure after commit.
+M6 Compile-time safety: P1#10 has_one FK checks; P1#11 db_context unknown table; P1#12 unsupported column type (Int16); P1#13 unsupported assoc options errors; P1#14 boot-time CQL.validate_schema_mappings!.
+M7 Observability: P4#5 Log.for("cql") single source; P4#6 structured log fields; P4#7 engine.transaction tx events, copy_out query event, table on QueryEvent, engine pool waiters/timeouts; P4#4 N+1 per-context window + call site.
+M8 Fuzz + docs: property specs for Identifier, literal escaping, raw tokenizer (+ fix P4#9 tokenizer miscounts); docs: production checklist, AR/Eloquent migration guide, pooler cross-link in connection-pooling.md.
+Deferred candidates: polymorphic associations, has_many through:, circuit breaker, row-decoding allocation redesign, JSON/geo operator expansion, CTE on DML/MATERIALIZED, live-DB schema drift check, MT cache stats atomics, sslmode=allow/verify-ca, connect retry/backoff.
+Constraints: one git branch for all work (claude/sharp-galileo-ygjvv3) per harness; CQL CLAUDE.md requires code-reviewer agent on staged diff before each src/spec commit; CHANGELOG [Unreleased] for behaviour changes; docs updated with behaviour; regression spec for each fix; releases cut automatically on master, (MAJOR) in a commit message picks the bump.

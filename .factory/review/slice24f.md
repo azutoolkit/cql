@@ -1,0 +1,8 @@
+# Review brief: slice 24f (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (M4, user decision Q10 part 2, UPGRADE): `update!` on a saved record (`record.update!`, `save!` of an existing record, `Model.update!(record)`, and `Model.update!(id, attrs)`) raises `CQL::RecordNotFound` when the UPDATE matched no row (the row was deleted, or its insert rolled back), instead of returning as if it had written; before, the write was silently lost. The message names the model, never the id (a key can be a natural one or PII; see `OptimisticLockError`). MySQL reports changed, not matched, rows unless the client sets CLIENT_FOUND_ROWS (crystal-mysql does not), so an UPDATE writing identical values reports 0: a dialect flag (`update_counts_matched_rows?`, false for MySQL) makes a 0 there check the row exists before raising. Optimistic locking keeps raising `OptimisticLockError` as before.
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.

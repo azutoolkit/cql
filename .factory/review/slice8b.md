@@ -1,0 +1,10 @@
+# Review brief: slice 8b (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (PII): `safe_db_operation` (src/active_record/relations/base_relation.cr), which wraps association operations, re-raised a `DB::Error` as `RelationError.new("Database operation failed: #{ex.message}")`: the message copied text that can quote row values (a `DB::MappingException` quotes the column value it could not read) and the original error was dropped. Now the message names only the error class and `cause:` keeps the original; the (currently unraised) `CQL::Schema::ConnectionError` branch gets the same rule. Also folded in, from the security review of slice 11: the src/postgres/driver.cr comment now says the `pg` shard takes postgres:// whenever it is linked (it registers unconditionally; CQL's driver registers only when the name is free), and docs/how-to/observability/telemetry.md says capture_params on also lists values in the native driver's `db` Debug log. Implemented by the orchestrator.
+Known and out of scope (deferred): driver SQL errors (SQLite3::Exception, PQ::PQError) are not DB::Error, so they pass through association operations raw.
+Tests written first: spec/patterns/active_record/base_relation_spec.cr, "safe_db_operation on a DB::Error" (live SQLite; failed before: message contained the marker, cause nil).
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal; never git stash or touch the index/working tree. Temp files go in /tmp/claude-0/-home-user/448c1c81-04f8-5b52-9464-8cafcf121072/scratchpad (only delete files you created).

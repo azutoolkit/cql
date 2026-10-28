@@ -1,0 +1,9 @@
+# Review brief: slice 20 (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (M4 transactions): `CQL::Schema#transaction(isolation:)` sets the isolation level on PostgreSQL, CockroachDB and SQLite. Before, only the native engine's `CQL::Postgres::AsyncEngine#transaction(isolation:)` could; `Schema#transaction` took no options. New top-level enum `CQL::IsolationLevel`; `CQL::Postgres::IsolationLevel` stays as an alias. A dialect hook gives the statement run first inside the transaction (`SET TRANSACTION ISOLATION LEVEL ...`), nil when none is needed (SQLite, always serializable), and raises `CQL::DialectError` for a level the database cannot honour (SQLite: anything but serializable), before any connection is taken. Inside an outer transaction `isolation:` raises ArgumentError (a SAVEPOINT cannot change the level). MySQL needs the SET before BEGIN: slice 21, not this one. User decisions: Q4 (SQLite read_only raises DialectError, slice 22) and Q5 (retrying_transaction, slice 24) do not apply here.
+Tests written first: spec/core/transaction_options_spec.cr (SQLite live + PG/CockroachDB dialect SQL), spec/postgres/live_spec.cr (SHOW transaction_isolation on a live server).
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.

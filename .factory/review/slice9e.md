@@ -1,0 +1,9 @@
+# Review brief: slice 9e (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (security: a dumped schema that builds silently wrong; blockers of the 9d security review, pre-existing since 9c). `CQL::SchemaDump#check_name` (src/schema_dump.cr) now also refuses (a) the names `constraint` and `like` in any case (`MISREAD_NAMES`): a live review showed SQLite reads an unquoted `constraint TEXT` column as a table constraint (the column vanishes) and PostgreSQL reads `like VARCHAR` as a LIKE clause, while every other SQLite (147) and PG (471) keyword builds correctly or fails loudly; (b) on dialects whose new hook `folds_unquoted_names?` is true (PostgresDialect, so CockroachDB too), a name with an ASCII uppercase letter, since unquoted DDL folds it and `Users`/`users` collapse into one table. Messages share `refuse_name`. Implemented by the orchestrator.
+Tests written first: spec/core/schema_dump_spec.cr, describe "names the unquoted DDL reads as other SQL or folds into another name" (live SQLite + live PG, pending without DATABASE_URL; a SQLite build round trip for accepted keywords; SQLite keeps mixed case).
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal; never git stash or touch the index/working tree. Temp files and tables: scratchpad / uniquely named and dropped; run `git status --short` before replying.

@@ -380,8 +380,8 @@ module CQL
       pending = pending_migrations
       todo = planned.select { |migration| pending.includes?(migration) }
       return todo if pending.first(todo.size) == todo
-      raise Error.new("Another migrator rolled back #{(pending - todo).first.name} while this one waited for the " \
-                      "migration lock; #{todo.first.name} and newer were not applied")
+      raise Error.new("Another migrator rolled back #{(pending - todo).first.name} during this run; " \
+                      "#{todo.first.name} and newer were not recorded as applied")
     end
 
     private def apply(migration : BaseMigration.class) : Nil
@@ -389,12 +389,13 @@ module CQL
       record_migration(migration)
     end
 
-    # Outside the lock and any transaction of its own (`disable_ddl_transaction!`); recorded under the lock, unless a
-    # migrator that ran it at the same time recorded it first.
+    # Outside the batch lock and any transaction, taking turns (`MigrationLock#hold_alone`); recorded under the batch lock.
     private def apply_alone(migration : BaseMigration.class) : Nil
-      return if oldest_pending([migration] of BaseMigration.class).empty?
-      migration.new(schema).up
-      with_migration_lock([migration]) { record_migration(migration) if oldest_pending([migration] of BaseMigration.class).any? }
+      @lock.hold_alone do
+        next if oldest_pending([migration] of BaseMigration.class).empty?
+        migration.new(schema).up
+        with_migration_lock([migration]) { record_migration(migration) if oldest_pending([migration] of BaseMigration.class).any? }
+      end
     end
 
     private def migrate_down(&pick : -> Array(BaseMigration.class)) : Nil

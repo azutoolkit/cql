@@ -1,0 +1,8 @@
+# Review brief: slice 24d1b (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (M4, from the security review of 24d1 = 80f1d05; must land before slice 24d2, which resets inserted records through these hooks): three paths where `Schema#transaction`'s rollback hooks still ran although the work committed, or where the real error was lost. (1) `return`/`break` out of a transaction block: Crystal inlines the block, so crystal-db's COMMIT (in its ensure) runs during unwinding inside the block-level `rescue`; a COMMIT failure with an unknown outcome there ran the hooks without asking `commit_refused?`. (2) On that path the pre-existing `with_active_transaction` ensure popped the fiber's frame twice: `KeyError: Missing hash key: Fiber` replaced the COMMIT error, and nested, it popped the parent's frame. (3) A nested block that committed the ENCLOSING transaction (`outer.commit`) then raised: the savepoint's hooks ran although everything committed.
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.

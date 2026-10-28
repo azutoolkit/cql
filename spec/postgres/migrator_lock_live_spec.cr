@@ -56,12 +56,16 @@ class LockSpecReadLockTimeout < CQL::Migration(20990301000003)
   end
 end
 
-# PostgreSQL refuses CREATE INDEX CONCURRENTLY inside a transaction.
+# PostgreSQL refuses CREATE INDEX CONCURRENTLY inside a transaction. Pauses first, so two runs started together overlap.
 class LockSpecConcurrentIndex < CQL::Migration(20990301000004)
   disable_ddl_transaction!
+  class_property runs = 0
 
   def up
-    schema.exec("CREATE INDEX CONCURRENTLY IF NOT EXISTS #{COUNTER}_n ON #{COUNTER} (n)")
+    self.class.runs += 1
+    schema.exec("SELECT pg_sleep(0.3)")
+    schema.exec("DROP INDEX CONCURRENTLY IF EXISTS #{COUNTER}_n")
+    schema.exec("CREATE INDEX CONCURRENTLY #{COUNTER}_n ON #{COUNTER} (n)")
   end
 
   def down
@@ -182,6 +186,53 @@ describe "CQL::Migrator's migration lock on PostgreSQL" do
     end
   end
 
+  it "makes two migrators take turns on a migration with disable_ddl_transaction!: one runs it, the other skips it" do
+    require_postgres!
+    with_lock_spec_migrations do |schemas, config|
+      CQL::Migrator.migrations << LockSpecConcurrentIndex
+      CQL::Migrator.new(schemas[0], config).up_to(LockSpecIncrementCounter.version)
+      LockSpecConcurrentIndex.runs = 0
+      race(schemas.map { |schema| CQL::Migrator.new(schema, config) }, &.up).map(&.message).should be_empty
+      LockSpecConcurrentIndex.runs.should eq(1)
+      recorded_versions(schemas[0]).should eq([LockSpecCreateCounter, LockSpecIncrementCounter, LockSpecConcurrentIndex].map(&.version))
+    end
+  end
+
+  it "gives up waiting for its turn at a migration with disable_ddl_transaction! after lock_timeout, running nothing" do
+    require_postgres!
+    with_lock_spec_migrations do |schemas, config|
+      CQL::Migrator.migrations << LockSpecConcurrentIndex
+      CQL::Migrator.new(schemas[0], config).up_to(LockSpecIncrementCounter.version)
+      turn = (0x43514C41_i64 << 32) | Digest::CRC32.checksum(MIGRATION_TABLE.to_s).to_i64 # MigrationLock's ALONE_SALT key
+      impatient = CQL::MigratorConfig.new(auto_sync: false, migration_table_name: MIGRATION_TABLE, lock_timeout: 0.3.seconds)
+      LockSpecConcurrentIndex.runs = 0
+      schemas[1].with_connection do |holder|
+        holder.exec("SELECT pg_advisory_lock($1)", turn)
+        expect_raises(CQL::Migrator::Error, /lock_timeout/) { CQL::Migrator.new(schemas[0], impatient).up }
+        holder.exec("SELECT pg_advisory_unlock($1)", turn)
+      end
+      LockSpecConcurrentIndex.runs.should eq(0)
+    end
+  end
+
+  it "does not record a migration with disable_ddl_transaction! on top of an older one rolled back while it ran" do
+    require_postgres!
+    with_lock_spec_migrations do |schemas, config|
+      CQL::Migrator.migrations << LockSpecConcurrentIndex
+      CQL::Migrator.new(schemas[0], config).up_to(LockSpecIncrementCounter.version)
+      roller, upper = schemas.map { |schema| CQL::Migrator.new(schema, config) }
+      errors = race({roller, upper}) do |migrator|
+        next migrator.rollback if migrator.same?(roller)
+        sleep 0.2.seconds # plans while the rollback holds the lock inside its 0.5 s down
+        migrator.up
+      end
+
+      errors.map(&.message.to_s).should eq(["Another migrator rolled back LockSpecIncrementCounter during this run; " \
+                                            "LockSpecConcurrentIndex and newer were not recorded as applied"])
+      recorded_versions(schemas[0]).should eq([LockSpecCreateCounter.version])
+    end
+  end
+
   it "stops an up that waited while another migrator rolled back an older migration, instead of passing over it" do
     require_postgres!
     with_lock_spec_migrations do |schemas, config|
@@ -194,8 +245,8 @@ describe "CQL::Migrator's migration lock on PostgreSQL" do
         migrator.up
       end
 
-      errors.map(&.message.to_s).should eq(["Another migrator rolled back LockSpecIncrementCounter while this one " \
-                                            "waited for the migration lock; LockSpecReadLockTimeout and newer were not applied"])
+      errors.map(&.message.to_s).should eq(["Another migrator rolled back LockSpecIncrementCounter during this run; " \
+                                            "LockSpecReadLockTimeout and newer were not recorded as applied"])
       recorded_versions(schemas[0]).should eq([LockSpecCreateCounter.version])
     end
   end

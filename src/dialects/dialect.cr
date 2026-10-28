@@ -43,6 +43,15 @@ module Expression
       nil
     end
 
+    # Tries the session lock migrators take turns on for a `disable_ddl_transaction!` migration (key bound; Bool); nil: none.
+    def migration_try_session_lock_sql : String?
+      nil
+    end
+
+    def migration_session_unlock_sql : String?
+      nil
+    end
+
     # Reads the isolation level without taking a snapshot, before `migration_lock_sql` waits; nil reads none.
     def transaction_isolation_sql : String?
       nil

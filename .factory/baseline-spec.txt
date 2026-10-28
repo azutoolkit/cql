@@ -1,0 +1,44 @@
+2026-10-26T23:22:52.416938Z  DEBUG - CQL::Development: Creating table cql_schema_migrations
+2026-10-26T23:22:52.416971Z  DEBUG - CQL::Development: Creating table cql_schema_migrations
+2026-10-26T23:22:52.417206Z  DEBUG - CQL::Development: Creating table cql_schema_migrations
+2026-10-26T23:22:52.417438Z  DEBUG - CQL::Development: Creating table cql_schema_migrations
+.2026-10-26T23:22:52.419557Z  DEBUG - CQL::Development: Creating table cql_schema_migrations
+.......................2026-10-26T23:22:52.422960Z  DEBUG - CQL::Development: Creating table users
+.2026-10-26T23:22:52.423293Z  DEBUG - CQL::Development: Creating table users
+.2026-10-26T23:22:52.423558Z  DEBUG - CQL::Development: Creating table users
+.2026-10-26T23:22:52.423811Z  DEBUG - CQL::Development: Creating table users
+.2026-10-26T23:22:52.424053Z  DEBUG - CQL::Development: Creating table users
+.2026-10-26T23:22:52.424329Z  DEBUG - CQL::Development: Creating table users
+.2026-10-26T23:22:52.424630Z  DEBUG - CQL::Development: Creating table users
+.2026-10-26T23:22:52.424991Z  DEBUG - CQL::Development: Creating table users
+.....2026-10-26T23:22:52.425849Z  DEBUG - CQL::Development: Creating table users
+.2026-10-26T23:22:52.426199Z  DEBUG - CQL::Development: Creating table users
+
+
+Pending:
+  CQL::ActiveRecord::Queryable::QueryBuilder(T) #having adds having conditions
+  CQL::ActiveRecord::Queryable::QueryBuilder(T) #join executes inner join with block conditions
+  CQL::ActiveRecord::Queryable::QueryBuilder(T) #left executes left join with block conditions
+  CQL::ActiveRecord::Queryable::QueryBuilder(T) #right executes right join with block conditions
+  PgBouncer transaction pooling without prepared-statement support ends up on protocol 3.0 (1.22 rejects the 3.2 startup, newer versions negotiate down)
+  PgBouncer transaction pooling without prepared-statement support makes clients that share a server connection collide on cached statement names (SQLSTATE 42P05)
+  PgBouncer transaction pooling without prepared-statement support works with statement_cache_size=0, which sends the unnamed statement
+  PgBouncer transaction pooling without prepared-statement support keeps SET LOCAL inside its transaction and starts the next one clean
+  PgBouncer transaction pooling over several server connections without prepared-statement support runs unnamed statements, streams included, from many clients at once
+  PgBouncer transaction pooling with max_prepared_statements shares one server connection between clients that cache the same statement
+  PgBouncer transaction pooling with max_prepared_statements pipelines, and cancels through the pooler with the key the pooler handed out
+  PgBouncer transaction pooling with max_prepared_statements streams through a portal, which pins the pooler's server connection until the stream ends
+  PgBouncer transaction pooling with max_prepared_statements rolls back a transaction a pooled engine connection leaves open
+  PgBouncer session pooling behaves like a direct connection, session state included
+  PostgreSQL version matrix runs against every server script/pg-matrix started
+  binary parameters against a live server keeps the types CockroachDB reads differently (float4, numeric) as text there, and sends everything else in binary
+  a TLS connection over a path that goes silent fails a request parked in SSL_read within timeout plus grace, and releases the descriptors, 50 times
+  a TLS connection over a path that goes silent fails a ping on an idle connection within its timeout, and releases the descriptors, 50 times
+  a TLS connection over a path that goes silent fails a request stuck writing into a full send buffer (the peer stopped reading), and releases the descriptors
+
+Finished in 2:22 minutes
+3233 examples, 0 failures, 0 errors, 19 pending
+
+real	4m2.804s
+user	4m29.084s
+sys	1m51.421s

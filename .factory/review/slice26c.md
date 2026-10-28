@@ -1,0 +1,11 @@
+# Review brief: slice 26c (staged, not yet committed)
+Return ONLY JSON: {"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":""}]}
+Approve when there are no blockers and no majors. Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (M5, refactor, behaviour unchanged): src/migrations.cr was ~540 lines; plan criteria: Migrator delegates lock_migrations/within_lock_timeout/require_read_committed!/migration_lock_key; migrations.cr below ~450 lines; all migration specs green.
+- New src/migration_lock.cr: `CQL::MigrationLock` (struct, schema + config): `acquire` is the old `lock_migrations`; `within_lock_timeout`, `lock_timeout_milliseconds`, `require_read_committed!` and `key` (old `migration_lock_key`) moved verbatim except `Error` -> `Migrator::Error` and line wrapping of two messages. Migrator builds `@lock` first in `initialize` and calls `@lock.acquire` where it called `lock_migrations`.
+- New src/migrator_config.cr: `MigratorConfig` moved unchanged.
+- New src/migration_table.cr: `MigrationTable#print`, the old private `print_table` body verbatim; `print_table` delegates. Printed output compared byte for byte at HEAD and staged (identical apart from a log timestamp).
+- migrations.cr is now 438 lines. `require "digest/crc32"` moved with the key.
+Check in particular: the error messages are character-for-character the same as before (specs or docs match them: spec/postgres/migrator_lock_live_spec.cr, docs/reference/error-codes.md); require order (MigratorConfig used by Migrator/MigrationLock; the constants resolve); `MigrationLock` being a struct holding a class `Schema` and a struct `MigratorConfig` copy (config changes after `Migrator.new`? `getter config` returns a struct copy, so nothing can mutate the Migrator's config; confirm); anything public that changed (API docs, `crystal docs`), and whether these new public types need docs or should be `private`/`:nodoc:`.
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.

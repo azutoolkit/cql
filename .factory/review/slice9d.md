@@ -1,0 +1,9 @@
+# Review brief: slice 9d (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (security polish, from the security review of 9c): `CQL::SchemaDump#generate_schema_content` (src/schema_dump.cr, check_names/check_name and the new check_foreign_key_name) refuses names CQL's unquoted DDL would mishandle. New: (1) a foreign key's columns, referenced table and referenced columns must pass `CQL::Identifier.valid?` (ASCII), because the FK DDL (src/expression/generator.cr validate_foreign_key! ~728) validates them with it, so a dump would write a schema that cannot build; (2) a name that is not valid UTF-8 raises SchemaDump::Error naming the table instead of the regex's ArgumentError; (3) a name holding an invisible Hangul filler (U+115F, U+1160, U+3164, U+FFA0, which are \p{L}) is refused. Docs add that reserved words pass the check but fail at build. Not done: a direct check_rule spec (SQLite/PG report only the five valid rules and the FK info types are private). Implemented by the orchestrator.
+Tests written first: spec/core/schema_dump_spec.cr, describe "names the dumped schema could not build, or that read as another name" (3 examples, each failed before).
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal; never git stash or touch the index/working tree. Temp files go in /tmp/claude-0/-home-user/448c1c81-04f8-5b52-9464-8cafcf121072/scratchpad, never in the repo; run `git status --short` before replying.

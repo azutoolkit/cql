@@ -1,0 +1,9 @@
+# Review brief: slice 24c (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (M4, from the security review of slice 24; the bug predates it): crystal-db's `TopLevelTransaction#commit` calls `perform_commit_transaction` before `close!`, so when the server refuses COMMIT (a serialization failure detected at commit under SERIALIZABLE, a deferred constraint or trigger) the pooled connection keeps crystal-db's `@transaction` flag and every later `transaction` on it raises "There is an existing transaction in this connection". The native driver's `CQL::Postgres::Connection#perform_commit_transaction` now releases the connection from the transaction when COMMIT fails and the server says the session is no longer in a transaction (ReadyForQuery 'I'), then re-raises; so `retrying_transaction` (6f8ddba, 0ae6fcc) also retries a 40001/40P01 raised at COMMIT. The pg shard has the same crystal-db flaw; not fixed here (user decision Q5 scopes retries to the native driver).
+Tests written first: spec/postgres/live_spec.cr (a DEFERRABLE INITIALLY DEFERRED constraint trigger raising at COMMIT, on a 1-connection pool).
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.

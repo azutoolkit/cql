@@ -1,0 +1,12 @@
+# Review brief: slice 26 (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human.
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (M4): `Update#with_optimistic_lock` applies in `to_sql` without mutating the builder or the schema column (plan criteria: to_sql shows version predicate and SET; second commit raises OptimisticLockError with no duplicate SET; column untouched).
+Before: `commit` called `handle_optimistic_locking`, which appended the version check to `@where` and the next version to `@setters` (so `to_sql` before commit showed neither, and a second commit doubled both: `SET ..., version = ?, version = ?`, which PostgreSQL rejects), and set `version_number = true` on the shared schema column when it was a plain `version` column or named by `column:`.
+After: `build` composes the check (`(existing) AND (version = ?)`) and appends the setter on local copies whenever `@version_value` is set; `version_column` resolves the column read-only (named, else `table.version_columns.first?`, else `columns[:version]?`, else CQL::Error); `@with_optimistic_locking` and `handle_optimistic_locking` are gone (its "Current version value is required" error was unreachable: `with_optimistic_lock` takes a non-nil Int32).
+Specs: spec/operations/update_spec.cr (spec-local SQLite schema). Docs: error-codes.md, doc comment, CHANGELOG Fixed.
+Check in particular: callers that relied on the column being flagged `version_number?` after a locked update (schema dump, `version_columns`, ActiveRecord optimistic_locking, migrations); every caller of `build` (Update is also built via `update_of` in ActiveRecord, `update_by`, `touch`, telemetry/explain paths) gets the lock; the error path when the version column is missing now raises from `to_sql`/`build`; thread-safety of a shared builder; generated SQL on PostgreSQL/MySQL (`Expression::Generator.new(CQL::Adapter::Postgres)`), e.g. qualified column names in SET.
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.

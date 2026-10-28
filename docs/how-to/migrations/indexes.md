@@ -85,6 +85,31 @@ end
 `UNIQUE constraint failed: users.email`. The table must be declared on the schema, or `schema.alter` raises
 `CQL::Schema::Error`.
 
+## Build an Index Without Blocking Writes (PostgreSQL)
+
+`CREATE INDEX CONCURRENTLY` keeps the table writable while the index builds, and PostgreSQL refuses it inside a
+transaction. `disable_ddl_transaction!` runs the migration's `up` alone, outside the transaction the other
+migrations share:
+
+```crystal
+class AddUsersEmailIndex < CQL::Migration(6)
+  disable_ddl_transaction!
+
+  def up
+    schema.exec("DROP INDEX CONCURRENTLY IF EXISTS idx_users_email") # one a failed build left INVALID
+    schema.exec("CREATE INDEX CONCURRENTLY idx_users_email ON users (email)")
+  end
+
+  def down
+    schema.exec("DROP INDEX IF EXISTS idx_users_email")
+  end
+end
+```
+
+Migrators take turns on such a migration: one runs it while the others wait, and they skip it once it is recorded.
+A build that fails leaves an `INVALID` index under the name; the `DROP` first makes the next run rebuild it. The turn
+is held on one pooled connection while the migration runs on another, so the pool needs at least two connections.
+
 ## Choose What to Index
 
 | Index | For |

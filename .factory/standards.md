@@ -1,0 +1,16 @@
+# Standards (apply to every builder and reviewer)
+- XP: one behaviour per slice; test first; simplest thing that works; refactor while fresh; commit only on green.
+- Minimal: YAGNI. Standard library before a dependency, existing helper before a new one.
+- Clean: intention-revealing names; functions fit on a screen at one level of abstraction; nesting depth <= 3; <= 4 parameters; files <= 400 lines (do not grow an already-large file needlessly); comment why, never what.
+- Cohesive and coherent: one reason to change per module; one way to do each thing; new code reads like the code around it.
+- SOLID: name a module's job without "and"; extend by adding implementations, not by editing stable switches; domain code depends on abstractions (Dialect, Visitor, Executor), never `if adapter ==` branches.
+- Enterprise: additive API and data changes; backward compatible unless the slice says UPGRADE; structured logs at boundaries.
+- Secure and fast by default: values always bound, identifiers via CQL::Identifier / Dialect#quote_identifier; never log bound values; know the complexity of every loop; bound everything.
+- Repo rules (CLAUDE.md): Visitor for SQL generation, Builder for queries, Strategy for dialects, Template Method for dialect defaults. A bug fix lands with a regression spec that fails without the fix. SQL assertions follow spec/core/query_spec.cr: `query.to_sql.should eq({sql, params})`. Only SQLite (and live Postgres via DATABASE_URL, pending without it) run live; MySQL/CockroachDB via generated-SQL specs (`Expression::Generator.new(CQL::Adapter::MySql)`). Behaviour changes go under `## [Unreleased]` in CHANGELOG.md (Keep a Changelog headings: Upgrade notes / Added / Changed / Fixed / Removed). Docs follow .claude/docs-style-guide.md; every class/method a page cites must exist in src/.
+- Ameba max cyclomatic complexity 10; `crystal tool format` clean.
+- Economy: grep before reading, read only what you need, stop when your gate is met, keep replies short.
+Environment: `cd /home/user/cql && source .factory/env.sh` puts Crystal 1.22.1 on PATH and sets DATABASE_URL to a live local Postgres 16. Run single spec files: `crystal spec <file>`; never the whole suite.
+- Probes and temp files go in /tmp/claude-0/-home-user/448c1c81-04f8-5b52-9464-8cafcf121072/scratchpad, never in the repo; a SQLite URI like `sqlite3:[:memory:]` creates a file named `[:memory:]` in the working directory (spec/configure/configure_spec.cr:96 fails on it). Run `git status --short` before you reply and remove anything you created.
+- Orchestrator: never mutate src/ in the shared working tree while reviewers run; do mutation checks in a scratchpad `git worktree`, with timeouts (slice 15: a mutant hung a spec).
+- After a container restart, `source .factory/env.sh` starts PostgreSQL and Redis; a full suite below 3380 examples or with more than 19 pending means a service is down (Redis specs go pending).
+- Reviewers share the database, Redis and the SQLite spec files with the orchestrator's suite runs (slice 27: two runs collided). Never run the whole suite or a whole directory; set `CQL_SPEC_DB_DIR=<your scratchpad dir>` when you run SQLite specs, and run live PostgreSQL probes in a database of your own (`CREATE DATABASE <name>`, dropped afterwards), never the spec database.

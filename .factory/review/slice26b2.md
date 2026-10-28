@@ -1,0 +1,10 @@
+# Review brief: slice 26b2 (staged, not yet committed)
+Return ONLY JSON: {"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":""}]}
+Approve when there are no blockers and no majors. Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (M4, split from 26b = 172efa5 over budget): the :delete_all destroy paths go all or none too, and a join model on another schema is pinned.
+- src/active_record/relations/many_collection.cr: `delete(id)` uses `all_or_none` for :delete_all as well as :destroy; `clear_with_delete` runs `clear_join_records` + `delete_targets` (chunked, soft-delete aware) inside `all_or_none` (Target.schema transaction + reload hook, from 26b).
+- spec/patterns/active_record/relations/destroy_transaction_spec.cr: a :delete_all association (`wiped_volumes`) whose target DELETE a SQLite trigger refuses: `delete` and `clear` both raise and keep every join row and target; a join model on another schema of the same SQLite file (`SplitShelf`/`SplitLink` on one schema, `SplitVolume` on another): `delete` and `clear` with :destroy succeed. Mutation-checked: unwrapping either :delete_all path fails the trigger spec; `all_or_none` on Through.schema fails the split spec with "database is locked".
+- docs many-to-many.md and the CHANGELOG bullet of 26b updated to name :delete_all.
+Check in particular: `delete_targets` on a soft-deletable target inside the transaction (`Target.query...delete_all`, which may itself open a transaction or go record by record), chunking inside one transaction (lock duration, statement count), the trigger spec's cleanup (trigger dropped even on failure; the in-memory SQLite shared across examples), the split spec's temp file (removed; schemas left open), and the CHANGELOG/doc wording.
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.

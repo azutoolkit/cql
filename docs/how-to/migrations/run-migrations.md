@@ -51,7 +51,7 @@ On PostgreSQL an advisory lock serialises migrators: `Migrator.new` takes it bef
 a run takes it when a first pick finds migrations to apply or roll back. A second `up` waits for the first, then applies
 only the migrations it picked that are still pending, so it never applies one twice; when the first rolled back an
 older migration meanwhile, it raises `CQL::Migrator::Error` instead of applying newer ones on top of it. A migration
-with `disable_ddl_transaction!` runs outside the lock: run one migrator at a time while one is pending.
+with `disable_ddl_transaction!` runs outside that lock; migrators take turns on it under a second one.
 Building a migrator waits too while another process runs migrations. A run with nothing to pick takes no lock and no
 check; listing `pending_migrations` takes no lock, runs no DDL and returns the snapshot of the transaction it runs in.
 

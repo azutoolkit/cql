@@ -1,0 +1,9 @@
+# Review brief: slice 18c (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (hangs; follow-up of 6f44894's security review): with a checkout deadline the native driver's connect was bounded per read only, so a peer trickling bytes stretched it (2.7-3.9 s against checkout_timeout=1). Now `Transport.open_stream(config, deadline, &)` yields the stream to `Session.attempt`'s handshake, and a private `watch` (src/postgres/transport.cr, modelled on Session#with_hard_deadline) closes the raw socket at the deadline unless the block finished, settling atomically (Atomic(Bool)#swap); its `ensure` turns whatever the block made of the closed socket (UnrecognizedStartupReply -> no 3.0 retry, IO::Error, TLSRefused) into IO::TimeoutError "cannot connect to <address>: the time to connect ran out". Without a deadline nothing is spawned. Error naming moved to `naming_server` (socket open and TLS negotiation only). Docs/CHANGELOG now say the connect as a whole is bounded. Implemented by the implementer.
+Tests written first: spec/postgres/checkout_budget_spec.cr (FakePG trickling the first startup reply, a later NoticeResponse, and a late SSLRequest answer plus a trickled TLS handshake: each < 1.4 s with checkout_timeout=1).
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL, TLS on); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.

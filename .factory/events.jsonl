@@ -1,0 +1,235 @@
+{"ts":"2026-10-26T23:19:21Z","ticket_id":"cql-v1","stage":"triage","outcome":"started","detail":"plan intake of six-pillar v1 hardening plan"}
+{"ts":"2026-10-26T23:20:11Z","ticket_id":"cql-v1","stage":"triage","outcome":"passed","detail":"plan input; grounding agents launched for pillars 1-6"}
+{"ts":"2026-10-26T23:36:37Z","ticket_id":"cql-v1","stage":"plan","outcome":"started","model":"opus","detail":"grounding done (3 audits, ~34 confirmed gaps); architect critique running"}
+{"ts":"2026-10-26T23:51:38Z","ticket_id":"cql-v1","stage":"plan","outcome":"parked","detail":"8 milestones 45 slices; awaiting approval"}
+{"ts":"2026-10-27T00:04:25Z","ticket_id":"cql-v1","stage":"plan","outcome":"passed","detail":"approved: build all; Q1 ENV.fetch; Q8 user cuts MAJOR; Q9 annotation"}
+{"ts":"2026-10-27T00:08:49Z","ticket_id":"cql-v1-m1","stage":"red","slice":0,"outcome":"started","detail":"stale delete! raises OptimisticLockError"}
+{"ts":"2026-10-27T00:12:10Z","ticket_id":"cql-v1-m1","stage":"red","slice":0,"outcome":"passed","model":"opus","detail":"3 failing examples + 1 guard"}
+{"ts":"2026-10-27T00:15:46Z","ticket_id":"cql-v1-m1","stage":"green","slice":0,"outcome":"passed","model":"opus","commit_lines":102,"detail":"gates pass; staged for review"}
+{"ts":"2026-10-27T00:24:24Z","ticket_id":"cql-v1-m1","stage":"review","slice":0,"outcome":"passed","commit_lines":107,"detail":"7a65ad0 full suite 3237/0"}
+{"ts":"2026-10-27T00:24:24Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":0,"outcome":"passed","commit_lines":107,"detail":"7a65ad0 full suite 3237/0"}
+{"ts":"2026-10-27T00:24:24Z","ticket_id":"cql-v1-m1","stage":"red","slice":1,"outcome":"started","detail":"duplicate migration versions raise"}
+{"ts":"2026-10-27T00:27:39Z","ticket_id":"cql-v1-m1","stage":"red","slice":1,"outcome":"passed","model":"opus","detail":"2 failing examples"}
+{"ts":"2026-10-27T00:29:33Z","ticket_id":"cql-v1-m1","stage":"green","slice":1,"outcome":"passed","model":"opus","commit_lines":60,"detail":"gates pass"}
+{"ts":"2026-10-27T00:37:55Z","ticket_id":"cql-v1-m1","stage":"review","slice":1,"outcome":"passed","commit_lines":77,"detail":"82b58ea full suite 3240/0"}
+{"ts":"2026-10-27T00:37:55Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":1,"outcome":"passed","commit_lines":77,"detail":"82b58ea full suite 3240/0"}
+{"ts":"2026-10-27T00:39:14Z","ticket_id":"cql-v1-m1","stage":"red","slice":2,"outcome":"passed","model":"opus","detail":"1 failing example"}
+{"ts":"2026-10-27T00:43:56Z","ticket_id":"cql-v1-m1","stage":"green","slice":2,"outcome":"passed","model":"opus","commit_lines":35,"detail":"plan drift: option b (explicit check + unguarded insert) due to SQLite close bug, slice 3b added"}
+{"ts":"2026-10-27T00:47:52Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":2,"outcome":"passed","commit_lines":35,"detail":"c656c4d full 3241/0"}
+{"ts":"2026-10-27T00:47:52Z","ticket_id":"cql-v1-m1","stage":"red","slice":3,"outcome":"started","detail":"slice 3b SQLite close re-raise"}
+{"ts":"2026-10-27T00:48:40Z","ticket_id":"cql-v1-m1","stage":"red","slice":3,"outcome":"escalated","detail":"slice 3b dropped: upstream sqlite3 bug fixed in 0.24"}
+{"ts":"2026-10-27T00:52:19Z","ticket_id":"cql-v1-m1","stage":"red","slice":4,"outcome":"passed","model":"opus","detail":"live PG concurrent migrators + dialect hook spec"}
+{"ts":"2026-10-27T00:55:56Z","ticket_id":"cql-v1-m1","stage":"green","slice":4,"outcome":"passed","model":"opus","commit_lines":118,"detail":"gates pass"}
+{"ts":"2026-10-27T01:05:39Z","ticket_id":"cql-v1-m1","stage":"review","slice":4,"outcome":"retry","model":"opus","detail":"3x request_changes: ctor lock, no-op double-check, RR fail-closed, key salt, wording"}
+{"ts":"2026-10-27T01:22:58Z","ticket_id":"cql-v1-m1","stage":"review","slice":4,"outcome":"retry","model":"opus","detail":"2nd request_changes (SERIALIZABLE snapshot, cascading rollback); proceeding with fail-closed fixes, reported as deviation"}
+{"ts":"2026-10-27T01:36:25Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":4,"outcome":"passed","commit_lines":243,"detail":"3 commits; full suite 3246/0 on final state"}
+{"ts":"2026-10-27T01:40:28Z","ticket_id":"cql-v1-m1","stage":"red","slice":8,"outcome":"started","detail":"slice 5 CURRENT_TIMESTAMP default on any Time column"}
+{"ts":"2026-10-27T01:44:03Z","ticket_id":"cql-v1-m1","stage":"red","slice":8,"outcome":"passed","model":"opus","detail":"3 failing + 1 guard"}
+{"ts":"2026-10-27T01:48:03Z","ticket_id":"cql-v1-m1","stage":"green","slice":8,"outcome":"passed","model":"opus","commit_lines":66,"detail":"gates pass; name rule kept for compat"}
+{"ts":"2026-10-27T02:06:11Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":8,"outcome":"passed","commit_lines":117,"detail":"d8d7dde full 3253/0"}
+{"ts":"2026-10-27T02:06:50Z","ticket_id":"cql-v1-m1","stage":"red","slice":9,"outcome":"started","detail":"slices 6+7 MySQL CHANGE/MODIFY keep NOT NULL/DEFAULT"}
+{"ts":"2026-10-27T02:09:06Z","ticket_id":"cql-v1-m1","stage":"red","slice":9,"outcome":"passed","model":"opus","detail":"4 failing"}
+{"ts":"2026-10-27T02:13:29Z","ticket_id":"cql-v1-m1","stage":"green","slice":9,"outcome":"passed","model":"opus","commit_lines":73,"detail":"gates pass"}
+{"ts":"2026-10-27T02:33:24Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":9,"outcome":"passed","commit_lines":122,"detail":"full 3261/0"}
+{"ts":"2026-10-27T02:33:55Z","ticket_id":"cql-v1-m1","stage":"red","slice":6,"outcome":"started","detail":"slice 4c SchemaDump unique"}
+{"ts":"2026-10-27T02:38:39Z","ticket_id":"cql-v1-m1","stage":"red","slice":6,"outcome":"passed","model":"opus","detail":"3 failing"}
+{"ts":"2026-10-27T02:41:38Z","ticket_id":"cql-v1-m1","stage":"green","slice":6,"outcome":"passed","model":"opus","detail":"gates"}
+{"ts":"2026-10-27T02:47:38Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":6,"outcome":"passed","commit_lines":95,"detail":"ed52116 full 3264/0"}
+{"ts":"2026-10-27T02:47:55Z","ticket_id":"cql-v1-m1","stage":"red","slice":7,"outcome":"started","model":"sonnet","detail":"slice 4b one-query pending"}
+{"ts":"2026-10-27T02:50:43Z","ticket_id":"cql-v1-m1","stage":"red","slice":7,"outcome":"passed","model":"sonnet","detail":"2 vs 40 statements"}
+{"ts":"2026-10-27T02:55:18Z","ticket_id":"cql-v1-m1","stage":"green","slice":7,"outcome":"passed","model":"opus","commit_lines":64,"detail":"old spec flipped: listing no longer creates table"}
+{"ts":"2026-10-27T03:01:09Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":7,"outcome":"passed","detail":"029c91f full 3265/0"}
+{"ts":"2026-10-27T03:01:36Z","ticket_id":"cql-v1-m1","stage":"red","slice":5,"outcome":"started","detail":"slice 4d lock timeout"}
+{"ts":"2026-10-27T03:09:48Z","ticket_id":"cql-v1-m1","stage":"red","slice":5,"outcome":"passed","model":"opus","detail":"compile-red on new property; behaviour red verified by tester"}
+{"ts":"2026-10-27T03:21:02Z","ticket_id":"cql-v1-m1","stage":"green","slice":5,"outcome":"passed","model":"opus","commit_lines":135,"detail":"gates pass"}
+{"ts":"2026-10-27T03:43:09Z","ticket_id":"cql-v1-m1","stage":"integrate","slice":5,"outcome":"passed","detail":"full 3268/0"}
+{"ts":"2026-10-27T03:43:26Z","ticket_id":"cql-v1-m1","stage":"document","outcome":"started","model":"sonnet","detail":"milestone 1 consistency pass"}
+{"ts":"2026-10-27T03:49:14Z","ticket_id":"cql-v1-m1","stage":"document","outcome":"passed","commit_lines":20,"detail":"docs consistency"}
+{"ts":"2026-10-27T03:49:14Z","ticket_id":"cql-v1-m1","stage":"integrate","outcome":"merged","detail":"branch claude/sharp-galileo-ygjvv3 (no PR yet)"}
+{"ts":"2026-10-27T10:52:13Z","ticket_id":"cql-v1-m2","stage":"triage","outcome":"started","detail":"milestone 2 secrets/PII/tenant isolation approved by user"}
+{"ts":"2026-10-27T10:52:14Z","ticket_id":"cql-v1-m2","stage":"red","slice":0,"outcome":"started","detail":"slice 8 insert error log"}
+{"ts":"2026-10-27T11:01:40Z","ticket_id":"cql-v1-m2","stage":"green","slice":0,"outcome":"passed","commit_lines":42,"detail":"orchestrator removed rescue/log blocks"}
+{"ts":"2026-10-27T11:15:37Z","ticket_id":"cql-v1-m2","stage":"integrate","slice":0,"outcome":"passed","commit_lines":51,"detail":"40e2a2c full 3270/0"}
+{"ts":"2026-10-27T11:16:03Z","ticket_id":"cql-v1-m2","stage":"red","slice":3,"outcome":"started","detail":"slices 9+10 schema file uri"}
+{"ts":"2026-10-27T11:20:11Z","ticket_id":"cql-v1-m2","stage":"red","slice":3,"outcome":"passed","model":"opus","detail":"3 failing"}
+{"ts":"2026-10-27T11:22:55Z","ticket_id":"cql-v1-m2","stage":"green","slice":3,"outcome":"passed","model":"opus","commit_lines":74,"detail":"gates pass"}
+{"ts":"2026-10-27T11:27:55Z","ticket_id":"cql-v1-m2","stage":"integrate","slice":3,"outcome":"passed","commit_lines":73,"detail":"21a99e0 full 3273/0"}
+{"ts":"2026-10-27T11:28:12Z","ticket_id":"cql-v1-m2","stage":"red","slice":2,"outcome":"started","detail":"slice 9b dump name safety"}
+{"ts":"2026-10-27T11:30:29Z","ticket_id":"cql-v1-m2","stage":"red","slice":2,"outcome":"passed","model":"opus","detail":"2 failing"}
+{"ts":"2026-10-27T11:32:37Z","ticket_id":"cql-v1-m2","stage":"green","slice":2,"outcome":"passed","model":"opus","detail":"gates"}
+{"ts":"2026-10-27T11:37:21Z","ticket_id":"cql-v1-m2","stage":"integrate","slice":2,"outcome":"passed","commit_lines":66,"detail":"1a2b174 full 3275/0"}
+{"ts":"2026-10-27T11:37:36Z","ticket_id":"cql-v1-m2","stage":"red","slice":4,"outcome":"started","detail":"slice 10b uri allowlist + env var name"}
+{"ts":"2026-10-27T11:43:23Z","ticket_id":"cql-v1-m2","stage":"green","slice":4,"outcome":"passed","model":"opus","commit_lines":101,"detail":"gates pass; escaping spec moved to env_var"}
+{"ts":"2026-10-27T11:48:21Z","ticket_id":"cql-v1-m2","stage":"integrate","slice":4,"outcome":"passed","commit_lines":102,"detail":"43a62b6 full 3279/0"}
+{"ts":"2026-10-27T11:48:29Z","ticket_id":"cql-v1-m2","stage":"red","slice":5,"outcome":"started","detail":"slice 9c refuse non-identifier names in dump"}
+{"ts":"2026-10-27T11:51:26Z","ticket_id":"cql-v1-m2","stage":"red","slice":5,"outcome":"passed","model":"opus","detail":"5 failing; 1a2b174 escaped-name spec replaced by refusal"}
+{"ts":"2026-10-27T11:55:37Z","ticket_id":"cql-v1-m2","stage":"green","slice":5,"outcome":"passed","model":"opus","detail":"gates"}
+{"ts":"2026-10-27T12:13:07Z","ticket_id":"cql-v1-m2","stage":"integrate","slice":5,"outcome":"passed","commit_lines":147,"detail":"f9a23c1 full 3284/0"}
+{"ts":"2026-10-27T12:19:44Z","ticket_id":"cql-v1-m2","stage":"integrate","slice":6,"outcome":"passed","commit_lines":22,"detail":"470971d 10c full 3285/0"}
+{"ts":"2026-10-27T12:20:05Z","ticket_id":"cql-v1-m2","stage":"red","slice":7,"outcome":"started","detail":"slice 12 pool_reset"}
+{"ts":"2026-10-27T12:24:20Z","ticket_id":"cql-v1-m2","stage":"red","slice":7,"outcome":"passed","model":"opus","detail":"4 failing + 1 default guard"}
+{"ts":"2026-10-27T12:27:11Z","ticket_id":"cql-v1-m2","stage":"green","slice":7,"outcome":"passed","model":"opus","detail":"gates"}
+{"ts":"2026-10-27T12:43:39Z","ticket_id":"cql-v1-m2","stage":"integrate","slice":7,"outcome":"passed","commit_lines":102,"detail":"fbdffb3 full 3291/0"}
+{"ts":"2026-10-27T12:44:04Z","ticket_id":"cql-v1-m2","stage":"red","slice":8,"outcome":"started","detail":"slice 11 db debug log args"}
+{"ts":"2026-10-27T12:48:48Z","ticket_id":"cql-v1-m2","stage":"green","slice":8,"outcome":"passed","commit_lines":49,"detail":"orchestrator implemented emit_log override"}
+{"ts":"2026-10-27T12:53:32Z","ticket_id":"cql-v1-m2","stage":"integrate","slice":8,"outcome":"passed","commit_lines":51,"detail":"a306dd4"}
+{"ts":"2026-10-27","slice":"11","event":"security_review","verdict":"approve","note":"after commit; minors folded into 8b"}
+{"ts":"2026-10-27","slice":"13","event":"red_done","files":["spec/expression/predicates_spec.cr","spec/patterns/active_record/typed_dsl_spec.cr"]}
+{"ts":"2026-10-27","slice":"13","event":"green_started"}
+{"ts":"2026-10-27","slice":"13","event":"green_done","lines":121}
+{"ts":"2026-10-27","slice":"13","event":"review","code":"approve (minors)","perf":"approve (minors)","security":"request_changes (blocker: NUL truncates SQLite LIKE pattern)"}
+{"ts":"2026-10-27","slice":"13","event":"committed","sha":"6d608e3","lines":127}
+{"ts":"2026-10-27","slice":"8b","event":"red_started"}
+{"ts":"2026-10-27","slice":"8b","event":"green_done","lines":51}
+{"ts":"2026-10-27","slice":"8b","event":"committed","sha":"f9e63ac","lines":51}
+{"ts":"2026-10-27","slice":"8d","event":"green_done","lines":24}
+{"ts":"2026-10-27","slice":"8d","event":"committed","sha":"675c4ae","lines":24}
+{"ts":"2026-10-27","slice":"8c","event":"red_started"}
+{"ts":"2026-10-27","slice":"8c","event":"red_done","files":["spec/performance/monitor_error_redaction_spec.cr"]}
+{"ts":"2026-10-27","slice":"8c","event":"green_started"}
+{"ts":"2026-10-27","slice":"8c","event":"green_done","lines":89}
+{"ts":"2026-10-27","slice":"8c","event":"committed","sha":"1ec0cf1","lines":89}
+{"ts":"2026-10-27","slice":"9d","event":"red_started"}
+{"ts":"2026-10-27","slice":"9d","event":"green_done","lines":48}
+{"ts":"2026-10-27","slice":"9d","event":"review","code":"approve (minors)","perf":"approve","security":"request_changes: 2 pre-existing blockers -> slice 9e; minors applied (NFC, dump)"}
+{"ts":"2026-10-27","slice":"9d","event":"committed","sha":"12bf9bc","lines":62}
+{"ts":"2026-10-27","slice":"9e","event":"red_started"}
+{"ts":"2026-10-27","slice":"9e","event":"green_done","lines":93}
+{"ts":"2026-10-27","slice":"9e","event":"review","code":"approve (minors applied)","perf":"approve","security":"request_changes (major: CockroachDB full-Unicode fold) -> fold_unquoted_name hook"}
+{"ts":"2026-10-27","slice":"9e","event":"committed","sha":"e7c5001","lines":110}
+{"ts":"2026-10-27","event":"decision","q2":"wire query_timeout, Time::Span? = nil","q6":"bound connect by checkout_timeout"}
+{"ts":"2026-10-27","slice":"14","event":"red_started"}
+{"ts":"2026-10-27","slice":"14","event":"red_done","files":["spec/postgres/query_timeout_spec.cr","spec/configure/configure_spec.cr"]}
+{"ts":"2026-10-27","slice":"14","event":"green_started"}
+{"ts":"2026-10-27","milestone":"M2","event":"docs_committed","sha":"857c4e8"}
+{"ts":"2026-10-27","slice":"14","event":"green_done","lines":104}
+{"ts":"2026-10-27","slice":"14","event":"review","code":"request_changes (major: pg shard ignores key, doc wrong)","security":"request_changes (same major)","perf":"pending"}
+{"ts":"2026-10-27","slice":"14","event":"committed","sha":"7e7ec5c","lines":130}
+{"ts":"2026-10-27","slice":"14b","event":"red_started"}
+{"ts":"2026-10-27","slice":"14b","event":"red_done"}
+{"ts":"2026-10-27","slice":"14b","event":"green_started"}
+{"ts":"2026-10-27","slice":"14b","event":"green_done","lines":89}
+{"ts":"2026-10-27","slice":"14b","event":"committed","sha":"281c803","lines":90}
+{"ts":"2026-10-27","slice":"15","event":"red_started"}
+{"ts":"2026-10-27","slice":"15","event":"red_done","files":["spec/postgres/engine_failover_live_spec.cr"]}
+{"ts":"2026-10-27","slice":"15","event":"green_started"}
+{"ts":"2026-10-27","slice":"15","event":"green_done","lines":95}
+{"ts":"2026-10-27","slice":"15","event":"review","code":"approve (minor: non-live spec, added)","perf":"approve (+0.24us/checkout)","security":"pending"}
+{"ts":"2026-10-27","slice":"15","event":"committed","sha":"e8cfe16","lines":112}
+{"ts":"2026-10-27","slice":"16a","event":"red_started"}
+{"ts":"2026-10-27","slice":"16a","event":"red_done","files":["spec/postgres/statement_retry_spec.cr"],"note":"slice 16 folded in"}
+{"ts":"2026-10-27","slice":"16a","event":"green_started"}
+{"ts":"2026-10-27","slice":"16a","event":"green_done","lines":123}
+{"ts":"2026-10-27","slice":"16a","event":"review","code":"approve (minors)","perf":"approve (225ns/checkout)","security":"approve (live: 8/8 duplicate writes gone; minor: translating_lost spec)"}
+{"ts":"2026-10-27","slice":"16a","event":"committed","sha":"fced483","lines":136}
+{"ts":"2026-10-27","slice":"16b","event":"red_started"}
+{"ts":"2026-10-27","slice":"16b","event":"red_done"}
+{"ts":"2026-10-27","slice":"16b","event":"green_started"}
+{"ts":"2026-10-27","slice":"16b","event":"green_done","lines":105}
+{"ts":"2026-10-27","slice":"16b","event":"review","code":"approve (minor: bound spec)","perf":"approve","security":"approve (live: no double execution on any CQL path; minors: termination spec, docs table; time bound -> slice 18)"}
+{"ts":"2026-10-27","slice":"16b","event":"committed","sha":"b151a4b","lines":127}
+{"ts":"2026-10-27","slice":"17","event":"red_started"}
+{"ts":"2026-10-27","slice":"17","event":"green_done","lines":57,"note":"perf review skipped: error-path string only"}
+{"ts":"2026-10-27","slice":"17","event":"review","code":"approve (+IPv6 delta approve)","security":"request_changes (major: unencoded @ in password leaks into host/address/messages)","perf":"skipped (error path)"}
+{"ts":"2026-10-27","slice":"17","event":"committed","sha":"5fd8b87","lines":109}
+{"ts":"2026-10-27","slice":"18","event":"red_started"}
+{"ts":"2026-10-27","slice":"18","event":"red_done","note":"split: engine pool in 18, crystal-db path in 18b (examples parked)"}
+{"ts":"2026-10-27","slice":"18","event":"green_started"}
+{"ts":"2026-10-27","slice":"18","event":"green_done","lines":120}
+{"ts":"2026-10-27","slice":"18","event":"review","code":"request_changes (majors: SSLRequest not limited; ping eats whole budget -> failover regression)","perf":"approve (minor: SSLRequest)","security":"pending"}
+{"ts":"2026-10-27","slice":"18","event":"committed","sha":"6f44894"}
+{"ts":"2026-10-27","slice":"18c","event":"red_started"}
+{"ts":"2026-10-27","slice":"18c","event":"red_done"}
+{"ts":"2026-10-27","slice":"18c","event":"green_started"}
+{"ts":"2026-10-27","slice":"18c","event":"green_done","lines":96}
+{"ts":"2026-10-27","slice":"18c","event":"committed","sha":"533e07e"}
+{"ts":"2026-10-27","slice":"18b","event":"red_started"}
+{"ts":"2026-10-27","slice":"18b","event":"red_done"}
+{"ts":"2026-10-27","slice":"18b","event":"green_started"}
+{"ts":"2026-10-27","slice":"18b","event":"green_done","lines":126}
+{"ts":"2026-10-27","slice":"18b","event":"review","code":"request_changes (major: health-check half not shared across crystal-db pings)"}
+{"ts":"2026-10-27","slice":"18b","event":"review","perf":"request_changes (major: 48B/query alloc -> struct)","security":"request_changes (same shared-budget major, measured; minor: checkout_timeout overflow)"}
+{"ts":"2026-10-27","slice":"18b","event":"committed","sha":"9ddd778"}
+{"ts":"2026-10-27","slice":"18d","event":"red_started","note":"spec-only guards"}
+{"ts":"2026-10-27","slice":"18d","event":"committed","sha":"30de5f0"}
+{"ts":"2026-10-27","slice":"19","event":"red_started"}
+{"ts":"2026-10-27","slice":"19","event":"red_done"}
+{"ts":"2026-10-27","slice":"19","event":"green_started"}
+{"ts":"2026-10-27","slice":"19","event":"green_done","lines":145}
+{"ts":"2026-10-27","slice":"19","event":"review","code":"approve (minors)","perf":"approve","security":"request_changes (major: 64KiB scan bypass -> tty prompt freezes process; fix: non-interactive passwd cb)"}
+{"ts":"2026-10-27","slice":"19","event":"committed","sha":"5779063"}
+{"ts":"2026-10-27","slice":"19b","event":"red_started"}
+{"ts":"2026-10-27","slice":"19b","event":"red_done"}
+{"ts":"2026-10-27","slice":"19b","event":"green_started"}
+{"ts":"2026-10-27","slice":"19b","event":"green_done","lines":77,"note":"perf review skipped: parse-time only"}
+{"ts":"2026-10-27","slice":"19b","event":"committed","sha":"89d8ef9","lines":84}
+{"ts":"2026-10-27","slice":"20","event":"red_started"}
+{"ts":"2026-10-27","slice":"20","event":"red_done","note":"orchestrator extended live example to DatabaseSource"}
+{"ts":"2026-10-27","slice":"20","event":"green_started"}
+{"ts":"2026-10-27","slice":"20","event":"green_done","lines":126,"note":"orchestrator renamed hook to isolation_level_sql (drops 3 ameba disables)"}
+{"ts":"2026-10-27","slice":"20","event":"committed","sha":"5f405a8","lines":134}
+{"ts":"2026-10-27","slice":"21","event":"red_started"}
+{"ts":"2026-10-27","slice":"21","event":"red_done"}
+{"ts":"2026-10-27","slice":"21","event":"green_started"}
+{"ts":"2026-10-27","slice":"21","event":"green_done","lines":113,"note":"orchestrator kept transaction(&) overridable + regression spec"}
+{"ts":"2026-10-27","slice":"21","event":"committed","sha":"8c9ef5e","lines":141}
+{"ts":"2026-10-27","slice":"22","event":"red_started"}
+{"ts":"2026-10-27","slice":"22","event":"red_done"}
+{"ts":"2026-10-27","slice":"22","event":"green_started"}
+{"ts":"2026-10-27","slice":"22","event":"green_done","lines":116}
+{"ts":"2026-10-28","slice":"22","event":"committed","sha":"aee8dbf","lines":136}
+{"ts":"2026-10-28","slice":"22b","event":"green_done","lines":23}
+{"ts":"2026-10-28","slice":"22b","event":"committed","sha":"27a780d","lines":26}
+{"ts":"2026-10-28","slice":"23","event":"green_done","lines":0,"note":"orchestrator TDD (small slice)"}
+{"ts":"2026-10-28","slice":"23","event":"committed","sha":"852ce6f","lines":59}
+{"ts":"2026-10-28","slice":"24","event":"red_started"}
+{"ts":"2026-10-28","slice":"24","event":"red_done","lines":85}
+{"ts":"2026-10-28","slice":"24","event":"green_started"}
+{"ts":"2026-10-28","slice":"24","event":"green_done","lines":149}
+{"ts":"2026-10-28","slice":"24","event":"committed","sha":"6f8ddba","lines":150}
+{"ts":"2026-10-28","slice":"24b","event":"green_done"}
+{"ts":"2026-10-28","slice":"24b","event":"committed","sha":"0ae6fcc","lines":42}
+{"ts":"2026-10-28","slice":"24c","event":"red_started"}
+{"ts":"2026-10-28","slice":"24c","event":"green_done"}
+{"ts":"2026-10-28","slice":"24c","event":"committed","sha":"05bcd81","lines":41}
+{"ts":"2026-10-28","slice":"24e","event":"green_done"}
+{"ts":"2026-10-28","slice":"24e","event":"committed","sha":"55ffdbc","lines":39}
+{"ts":"2026-10-28","slice":"24d","event":"red_started"}
+{"ts":"2026-10-28","slice":"24d","event":"red_done","lines":70}
+{"ts":"2026-10-28","slice":"24d","event":"green_started"}
+{"ts":"2026-10-28","slice":"24d","event":"green_done","lines":121}
+{"ts":"2026-10-28","slice":"24d1","event":"red_started"}
+{"ts":"2026-10-28","slice":"24d1","event":"red_done","lines":89}
+{"ts":"2026-10-28","slice":"24d1","event":"green_started"}
+{"ts":"2026-10-28","slice":"24d1","event":"green_done","lines":142}
+{"ts":"2026-10-28","slice":"24d1","event":"committed","sha":"80f1d05","lines":150}
+{"ts":"2026-10-28","slice":"24d1b","event":"red_started"}
+{"ts":"2026-10-28","slice":"24d1b","event":"red_done","lines":44}
+{"ts":"2026-10-28","slice":"24d1b","event":"green_started"}
+{"ts":"2026-10-28","slice":"24d1b","event":"green_done","lines":88}
+{"ts":"2026-10-28","slice":"24d1b","event":"committed","sha":"fd081dc","lines":99}
+{"ts":"2026-10-28","slice":"24d1c","event":"red_started"}
+{"ts":"2026-10-28","slice":"24d1c","event":"red_done","lines":48}
+{"ts":"2026-10-28","slice":"24d1c","event":"green_started"}
+{"ts":"2026-10-28","slice":"24d1c","event":"green_done","lines":93}
+{"ts":"2026-10-28","slice":"24d1c","event":"committed","sha":"26947c3","lines":115}
+{"ts":"2026-10-28","slice":"24d2","event":"green_done","lines":103,"note":"reapplied saved 24d patch on top of 24d1/24d1b/24d1c"}
+{"ts":"2026-10-28","slice":"24d2","event":"committed","sha":"5d21b62","lines":106}
+{"ts":"2026-10-28","slice":"24f","event":"red_started"}
+{"ts":"2026-10-28","slice":"24f","event":"red_done","lines":75}
+{"ts":"2026-10-28","slice":"24f","event":"green_started"}
+{"ts":"2026-10-28","slice":"24f","event":"green_done","lines":111}
+{"ts":"2026-10-28","slice":"24f","event":"committed","sha":"c6b53c6","lines":124}
+{"ts":"2026-10-28","slice":"24g","event":"green_done"}
+{"ts":"2026-10-28","slice":"24g","event":"committed","sha":"98cb44c","lines":73}
+{"ts":"2026-10-28","slice":"24h","event":"green_done"}
+{"ts":"2026-10-28","slice":"24h","event":"committed","sha":"0bfa438","lines":31}
+{"ts":"2026-10-28","slice":"24i","event":"green_done"}
+{"ts":"2026-10-28","slice":"24i","event":"committed","sha":"3d7c2ef","lines":68}
+{"ts":"2026-10-28","slice":"25","event":"committed","sha":"0e96ea3","lines":89}
+{"ts":"2026-10-28","slice":"26","event":"committed","sha":"1ca37ab","lines":67}
+{"ts":"2026-10-28","slice":"26b","event":"committed","sha":"172efa5","lines":143}
+{"ts":"2026-10-28","slice":"26b2","event":"committed","sha":"6024d28","lines":85}
+{"ts":"2026-10-28","milestone":"M4","event":"milestone_done"}
+{"ts":"2026-10-28","slice":"26c","event":"committed","sha":"9578993","lines":139}
+{"ts":"2026-10-28","slice":"27","event":"committed","sha":"d9bb0bd","lines":137}

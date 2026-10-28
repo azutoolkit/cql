@@ -1,0 +1,8 @@
+# Review brief: slice 24d2 (staged, not yet committed)
+Review this slice from a clean context. Return ONLY JSON:
+{"verdict":"approve|request_changes|escalate","summary":"","findings":[{"file":"","line":0,"severity":"blocker|major|minor","note":"what is wrong and the fix"}]}
+Approve when there are no blockers and no majors. Escalate only when the fix needs a human (design-level problem, ambiguous spec, auth, payments, PII, possible data loss).
+Standards: /home/user/cql/.factory/standards.md. Repo rules: /home/user/cql/CLAUDE.md.
+
+Slice (M4; user decision Q10 part 1, from the security review of `retrying_transaction`): a model record inserted inside a transaction that then rolls back (the outermost transaction, or the savepoint it was inserted in) gets its pre-insert state back: `id` nil (so `new_record?`), and its dirty-tracking snapshot as before the insert, so a later `save!` inserts again instead of UPDATE-ing a row that does not exist (which silently wrote nothing). This uses the schema's rollback hooks (src/rollback_hooks.cr; until now used only to restore `alter`ed table declarations), through `Schema#on_rollback(&)`, now public. A committed insert keeps its id (hooks are handed to the parent on a savepoint release and dropped after the outermost commit). Part 2 (`update!` raising when no row matched) is slice 24f.
+Diff: `cd /home/user/cql && git diff --cached`. `source /home/user/cql/.factory/env.sh` before crystal (live PG at DATABASE_URL); never git stash or touch the index/working tree; experiments in a scratchpad git worktree only. Run `git status --short` before replying.
