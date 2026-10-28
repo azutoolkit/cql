@@ -93,7 +93,7 @@ end
 
 `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and migrator runs nest the same way. A rollback removes
 the column from both the database and `AppDB`'s declaration, so model queries keep working, also when the `alter`'s
-savepoint committed before the outer block raised. A manual `tx.rollback`, or a rollback of a transaction you opened yourself and passed in with `schema.transaction(tx)`, leaves the declaration as altered.
+savepoint committed before the outer block raised. A manual `tx.rollback`, a rollback of a transaction you opened yourself and passed in with `schema.transaction(tx)`, or a COMMIT on PostgreSQL that fails without the server refusing it (a lost reply, a timeout: the column may exist) leaves the declaration as altered.
 {% endtab %}
 
 {% tab title="MySQL and CockroachDB" %}

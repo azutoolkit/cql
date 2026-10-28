@@ -63,6 +63,11 @@ module Expression
       false
     end
 
+    # Whether *error*, raised by COMMIT, surely means nothing committed (rollback hooks then run); false unless known.
+    def commit_refused?(error : Exception) : Bool
+      false
+    end
+
     # Whether a migrator that waited for `migration_lock_sql` at *level* (as `transaction_isolation_sql` reads it)
     # sees what the holder committed.
     def migration_lock_isolation_safe?(level : String) : Bool

@@ -3,6 +3,8 @@ module CQL
   # Undo steps for in-memory state (such as a table declaration changed by `Schema#alter`) that the work inside one
   # transaction changed. Only the fiber that runs the transaction touches them.
   class RollbackHooks
+    Log = CQL.config.logger
+
     @hooks = [] of ->
 
     def <<(hook : ->) : self
@@ -10,10 +12,14 @@ module CQL
       self
     end
 
-    # The transaction rolled back: undoes the changes, newest first.
+    # The transaction rolled back: undoes the changes, newest first; a raising hook is logged, so the others still run.
     def run : Nil
       hooks, @hooks = @hooks, [] of ->
-      hooks.reverse_each(&.call)
+      hooks.reverse_each do |hook|
+        hook.call
+      rescue ex
+        Log.warn &.emit("Rollback hook failed", error: ex.class.name, error_message: ex.message.to_s)
+      end
     end
 
     # The transaction committed. An enclosing transaction can still roll the work back, so the hooks move to its

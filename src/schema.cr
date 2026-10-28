@@ -365,10 +365,10 @@ module CQL
     # subscribers. A manual `tx.rollback` followed by a normal return still
     # reports Commit, since CQL cannot see it.
     #
-    # When the transaction rolls back (the block raises, including `DB::Rollback`,
-    # or the commit fails), table declarations changed by `alter` inside it are
-    # restored. A savepoint that commits leaves them to the enclosing transaction.
-    # A manual `tx.rollback` restores nothing, for the same reason as above.
+    # Its rollback hooks (`on_rollback`; `alter` restores the table declarations it changed) run when the block raises,
+    # `DB::Rollback` included, or COMMIT fails with an error `Dialect#commit_refused?` accepts; not when the block ended
+    # the transaction itself (`tx.commit`, `tx.rollback`), nor after a COMMIT whose outcome is unknown (a lost reply).
+    # A savepoint that commits leaves them to the enclosing transaction.
     #
     # *isolation* runs the transaction at that level (`transaction(isolation: :serializable) { }`), and *read_only*
     # has the database refuse its writes to permanent tables, a guard against accidental writes, not access control.
@@ -379,12 +379,15 @@ module CQL
       before_begin, after_begin = transaction_mode_statements(isolation, read_only, nested: !parent.nil?)
       observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
       rollback_hooks = RollbackHooks.new
+      block_finished = false
       open_transaction(parent, before_begin) do |tx|
         after_begin.try { |sql| tx.connection.unprepared.exec(sql) } # bypasses Execution, so telemetry sees no user statement
         with_active_transaction(tx, rollback_hooks) do
-          yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
+          result = yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
+          block_finished = true
+          result
         rescue ex
-          rollback_hooks.run
+          rollback_hooks.run unless tx.closed? # ended by the block, its work was kept: the `ensure` hands the hooks on
           observer.try &.failed(ex)
           raise ex
         end
@@ -393,10 +396,10 @@ module CQL
       # DB::Rollback should be caught silently by the outer source transaction
       # and perform the rollback without propagating the exception further.
       # We log it for debugging, but don't convert to ConnectionError.
-      rollback_hooks.try &.run
       Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
     rescue ex
-      rollback_hooks.try &.run
+      # Past the block, COMMIT (or a savepoint's RELEASE) failed: undo only what the database surely did not keep.
+      rollback_hooks.try &.run if block_finished && dialect.commit_refused?(ex)
       observer.try &.failed(ex)
       raise ex
     ensure
@@ -413,9 +416,10 @@ module CQL
     end
 
     def transaction(tx : DB::Transaction, &)
-      # Not this schema's transaction to commit or roll back: rollback hooks go to the enclosing one, if any.
-      rollback_hooks = active_frame.try(&.rollback_hooks) || RollbackHooks.new
-      with_active_transaction(tx, rollback_hooks) do
+      # Not this schema's transaction to commit or roll back: rollback hooks go to the enclosing one when *tx* runs on
+      # its connection, and are dropped otherwise.
+      shared = active_frame.try { |frame| frame.rollback_hooks if frame.transaction.connection.same?(tx.connection) }
+      with_active_transaction(tx, shared || RollbackHooks.new) do
         yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
       end
     end
@@ -554,9 +558,10 @@ module CQL
       transaction { yield }
     end
 
-    # Runs *hook* if the fiber's innermost open transaction rolls back, even after the savepoint it was registered in
-    # committed. Outside a transaction there is nothing to roll back, so it is dropped.
-    private def on_rollback(&hook : ->) : Nil
+    # Runs *hook* if the fiber's innermost open transaction on this schema rolls back, or, once that savepoint
+    # committed, an enclosing one does; hooks run newest first. Dropped after the outermost commit and outside a
+    # transaction, and not run when the block ended the transaction itself nor after a COMMIT whose outcome is unknown.
+    def on_rollback(&hook : ->) : Nil
       active_frame.try { |frame| frame.rollback_hooks << hook }
     end
 

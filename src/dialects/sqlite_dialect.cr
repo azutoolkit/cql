@@ -222,6 +222,14 @@ module Expression
       raise CQL::DialectError.new(display_name, "the #{isolation.to_sql.downcase} isolation level")
     end
 
+    # SQLite runs in process, so no reply is lost: a COMMIT that raised did not commit.
+    def commit_refused?(error : Exception) : Bool
+      {% if @top_level.has_constant?(:SQLite3) %}
+        return true if error.is_a?(SQLite3::Exception)
+      {% end %}
+      false
+    end
+
     def format_json_text(column : String, path_placeholder : String) : String
       "CAST(json_extract(#{column}, #{path_placeholder}) AS TEXT)"
     end

@@ -239,6 +239,23 @@ module Expression
       error.is_a?(CQL::Postgres::SerializationFailure | CQL::Postgres::DeadlockDetected)
     end
 
+    # A server's ERROR answer (CQL's driver, or the `pg` shard when loaded) or a request never sent; not a FATAL or 08
+    # answer (a pooler that lost the server) nor 40003 (CockroachDB's ambiguous COMMIT), which may follow a commit.
+    def commit_refused?(error : Exception) : Bool
+      {% if @top_level.has_constant?(:PQ) %}
+        if error.is_a?(PQ::PQError)
+          severity = error.field_message(:severity_unlocalized) || error.field_message(:severity)
+          return definite_refusal?(severity.to_s, error.field_message(:code).to_s)
+        end
+      {% end %}
+      return definite_refusal?(error.severity, error.sqlstate) if error.is_a?(CQL::Postgres::ServerError)
+      error.is_a?(CQL::Postgres::TransactionAborted | CQL::Postgres::ConnectionClosed)
+    end
+
+    private def definite_refusal?(severity : String, sqlstate : String) : Bool
+      severity == "ERROR" && !sqlstate.starts_with?("08") && sqlstate != "40003"
+    end
+
     # REPEATABLE READ and SERIALIZABLE take their snapshot at the lock statement, before it waits.
     def migration_lock_isolation_safe?(level : String) : Bool
       level.in?("read committed", "read uncommitted")
