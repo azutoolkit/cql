@@ -47,12 +47,13 @@ module CQL
           clear_changes!
         end
 
-        # Sends only the changed columns, and nothing when no column changed.
+        # Sends only the changed columns, and nothing when no column changed. A rollback makes them unsaved again.
         def self.update!(record : {{@type.id}})
           changed = record.changed_columns
           record.stamp_deferred_update(changed)
           unless changed.empty?
             update_row!(record.id!, &.set(changed))
+            schema.on_rollback(&record.persistence_snapshot)
           end
           record.clear_changes!
           record

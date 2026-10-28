@@ -78,7 +78,9 @@ module CQL
             .with_optimistic_lock(current_version, lock_version_col)
             .commit
 
-          # If successful (no exception), increment the local version to match DB
+          # If successful (no exception), increment the local version to match DB; a rollback puts it back
+          undo = record.persistence_snapshot
+          schema.on_rollback { record.{{version_column.id}} = current_version; undo.call }
           record.{{version_column.id}} = current_version + 1
           record.clear_changes! if record.responds_to?(:clear_changes!)
           record

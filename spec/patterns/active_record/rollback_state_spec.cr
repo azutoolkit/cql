@@ -54,6 +54,14 @@ describe "A record inserted in a transaction that rolls back" do
     user.id.should eq TestUserTransactional.find_by_name!("Ann").id
   end
 
+  it "reports an update's changes as unsaved again, so the next save! sends them" do
+    user = RollbackTrackedUser.create!(name: "Ann")
+    expect_raises(Exception, "boom") { db.transaction { user.name = "Bea"; user.save!; raise "boom" } }
+    user.changes[:name]?.should eq({"Ann", "Bea"})
+    user.save!
+    TestUserTransactional.find!(user.id!).name.should eq "Bea"
+  end
+
   it "reports its attributes as unsaved again, as before the insert" do
     user = RollbackTrackedUser.new("Ann")
     expect_raises(Exception, "boom") { db.transaction { user.save!; raise "boom" } }

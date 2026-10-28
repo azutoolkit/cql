@@ -57,13 +57,14 @@ end
 
 A record inserted with `save!` or `Model.create!(record)` in a transaction or savepoint that rolls back is new again:
 its `id` is nil, and with dirty tracking its attributes count as unsaved, so a later `save!` inserts it. A record
-deleted in it (`delete!`, `force_delete!`) gets its `id` back, and a soft-deleted one is not deleted any more. Other
-values stay as the block left them: a loaded record keeps its updated attributes. To undo state of your own, register
-a block with `AppDB.on_rollback`; it runs when the transaction rolls back, but not after the block ended it itself
-(`tx.commit`, `tx.rollback`), nor after a COMMIT whose outcome is unknown (a lost reply), nor for a transaction passed
-in with `AppDB.transaction(tx)` from another connection. CQL cannot see a COMMIT or ROLLBACK the block sends as SQL,
-or a statement that commits implicitly (DDL through `exec` on MySQL): a record inserted or deleted before it is reset
-although its change was kept, so do not send one.
+deleted in it (`delete!`, `force_delete!`) gets its `id` back, and a soft-deleted one is not deleted any more. A
+record updated in it keeps its new values, but with dirty tracking they count as unsaved again, and an
+optimistic-locking version goes back. To undo state of your own, register a block with `AppDB.on_rollback`; it runs
+when the transaction rolls back, but not after the block ended it itself (`tx.commit`, `tx.rollback`), nor after a
+COMMIT whose outcome is unknown (a lost reply), nor for a transaction passed in with `AppDB.transaction(tx)` from
+another connection. CQL cannot see a COMMIT or ROLLBACK the block sends as SQL, or a statement that commits implicitly
+(DDL through `exec` on MySQL): a record inserted, updated or deleted before it is reset although its change was kept
+(an updated one sends its kept changes again), so do not send one.
 
 ## Nest Savepoints
 

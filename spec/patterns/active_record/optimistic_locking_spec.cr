@@ -143,6 +143,15 @@ module CQL::ActiveRecord::OptimisticLockingSpec
       OPTIMISTIC_LOCKING_TEST_SCHEMA.int64_products.drop!
     end
 
+    it "puts its version back when the update's transaction rolls back, so the next update is not refused" do
+      product = Product.new("Lamp", 10.0, 1)
+      product.save!
+      expect_raises(Exception, "boom") { OPTIMISTIC_LOCKING_TEST_SCHEMA.transaction { product.name = "Desk"; product.update!; raise "boom" } }
+      product.version.should eq 1
+      product.update!
+      Product.find!(product.id!).name.should eq "Desk"
+    end
+
     it "saves a soft-deleted record under the lock, updating its row" do
       product = SoftLockedProduct.create!(name: "Old")
       product.delete!.should be_true
