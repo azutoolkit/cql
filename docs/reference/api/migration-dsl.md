@@ -30,6 +30,7 @@ end
 | :--- | :--- |
 | `class Name < CQL::Migration(V)` | `V` is an integer literal (usually a timestamp). Defining the class registers it in `CQL::Migrator.migrations`. |
 | `def up`, `def down` | Required. Apply and revert the change. There is no irreversible marker: raise from `down`. |
+| `disable_ddl_transaction!` | Runs `up` alone, outside the DDL transaction the run's other migrations share and outside the migration lock, for statements a transaction refuses (PostgreSQL's `CREATE INDEX CONCURRENTLY`). The migrations before it stay applied when it fails, and what it did before failing stays too. Run one migrator at a time while it is pending: two at once can both run it. Inside a transaction you opened, it runs in that transaction. `down` still runs in the rollback's transaction. |
 | `schema` | The `CQL::Schema` the migrator runs on. |
 | `Name.version` | `V` as `Int64`. |
 
@@ -251,7 +252,7 @@ migrator.up_to(20250125001401_i64)  # apply the pending ones up to and including
 | Method | Behavior |
 | :--- | :--- |
 | `schema.migrator`, `schema.migrator(config)`, `CQL::Migrator.new(schema, config = MigratorConfig.new)` | Builds the migrator and creates the migrations table (`ddl_transaction`). Writes no schema file. |
-| **`up(steps = all)`** | Applies the `steps` oldest pending migrations, in version order, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints the applied list. |
+| **`up(steps = all)`** | Applies the `steps` oldest pending migrations, in version order, in one `ddl_transaction` (one per run of migrations between those with `disable_ddl_transaction!`, which run alone); then rewrites the schema file (`auto_sync`) and prints the applied list. A run that fails after a batch committed leaves the file as it was until the next `up`. Raises `CQL::Migrator::Error` when, while it waited for the migration lock, another migrator rolled back a migration older than the ones it picked. |
 | **`down(steps = all)`** | Reverts the `steps` newest applied migrations, highest version first, in one `ddl_transaction`; then rewrites the schema file and prints what was rolled back. |
 | **`rollback(steps = 1)`** | `down(steps)`. |
 | `redo` | `rollback`, then `up`. |

@@ -56,8 +56,20 @@ class LockSpecReadLockTimeout < CQL::Migration(20990301000003)
   end
 end
 
+# PostgreSQL refuses CREATE INDEX CONCURRENTLY inside a transaction.
+class LockSpecConcurrentIndex < CQL::Migration(20990301000004)
+  disable_ddl_transaction!
+
+  def up
+    schema.exec("CREATE INDEX CONCURRENTLY IF NOT EXISTS #{COUNTER}_n ON #{COUNTER} (n)")
+  end
+
+  def down
+  end
+end
+
 # `CQL::Migration(V)` registers globally: keep these out of every other spec's registry.
-CQL::Migrator.migrations.reject!(&.in?(LockSpecCreateCounter, LockSpecIncrementCounter, LockSpecHoldLock, LockSpecReadLockTimeout))
+CQL::Migrator.migrations.reject!(&.in?(LockSpecCreateCounter, LockSpecIncrementCounter, LockSpecHoldLock, LockSpecReadLockTimeout, LockSpecConcurrentIndex))
 
 # Two schemas (separate pools, so separate connections) with only the lock-spec migrations registered and no
 # migrations table yet; restores the registry and drops the tables afterwards.
@@ -157,6 +169,34 @@ describe "CQL::Migrator's migration lock on PostgreSQL" do
 
       LockSpecReadLockTimeout.seen.should eq("7s")
       schema.exec_query(&.query_one("SELECT current_setting('lock_timeout')", as: String)).should eq("7s")
+    end
+  end
+
+  it "runs a migration with disable_ddl_transaction! outside the batch transaction, so CREATE INDEX CONCURRENTLY works" do
+    require_postgres!
+    with_lock_spec_migrations do |schemas, config|
+      CQL::Migrator.migrations = [LockSpecCreateCounter, LockSpecConcurrentIndex, LockSpecIncrementCounter] of CQL::BaseMigration.class
+      CQL::Migrator.new(schemas[0], config).up
+      recorded_versions(schemas[0]).should eq([20990301000001, 20990301000002, 20990301000004])
+      schemas[0].exec_query(&.query_one("SELECT count(*) FROM pg_indexes WHERE indexname = '#{COUNTER}_n'", as: Int64)).should eq(1)
+    end
+  end
+
+  it "stops an up that waited while another migrator rolled back an older migration, instead of passing over it" do
+    require_postgres!
+    with_lock_spec_migrations do |schemas, config|
+      CQL::Migrator.migrations << LockSpecReadLockTimeout
+      CQL::Migrator.new(schemas[0], config).up_to(LockSpecIncrementCounter.version)
+      roller, upper = schemas.map { |schema| CQL::Migrator.new(schema, config) }
+      errors = race({roller, upper}) do |migrator|
+        next migrator.rollback if migrator.same?(roller)
+        sleep 0.2.seconds # plans while the rollback holds the lock inside its 0.5 s down
+        migrator.up
+      end
+
+      errors.map(&.message.to_s).should eq(["Another migrator rolled back LockSpecIncrementCounter while this one " \
+                                            "waited for the migration lock; LockSpecReadLockTimeout and newer were not applied"])
+      recorded_versions(schemas[0]).should eq([LockSpecCreateCounter.version])
     end
   end
 

@@ -35,6 +35,19 @@ module CQL
     abstract def up
     abstract def down
 
+    # Runs this migration alone, outside the DDL transaction the others share and outside the migration lock, for
+    # statements a transaction refuses (PostgreSQL's `CREATE INDEX CONCURRENTLY`). Make it safe to run again: a
+    # failure keeps what it did, and two migrators starting at once can both run it.
+    macro disable_ddl_transaction!
+      def self.ddl_transaction? : Bool
+        false
+      end
+    end
+
+    def self.ddl_transaction? : Bool
+      true
+    end
+
     # Class method to access the migration version
     # Subclasses MUST define @@version
     def self.version : Int64
@@ -350,17 +363,38 @@ module CQL
       raise Error.new("No migration with version #{version}")
     end
 
+    # Consecutive migrations share a DDL transaction; one with `disable_ddl_transaction!` runs alone between them.
     private def migrate_up(&pick : -> Array(BaseMigration.class)) : Nil
-      with_migration_lock(pick.call) do
-        # Re-picked under the lock: a waiter finds nothing pending once the holder has applied it.
-        pick.call.each do |migration|
-          migration.new(schema).up
-          record_migration(migration)
-        end
+      pick.call.slice_when { |a, b| !(a.ddl_transaction? && b.ddl_transaction?) }.each do |batch|
+        next apply_alone(batch.first) unless batch.first.ddl_transaction?
+        with_migration_lock(batch) { oldest_pending(batch).each { |migration| apply(migration) } }
       end
 
       sync_schema_file if config.auto_sync?
       print_applied_migrations
+    end
+
+    # The planned migrations still pending, checked under the lock: a waiter skips what the holder applied meanwhile,
+    # and stops instead of passing over an older migration the holder rolled back.
+    private def oldest_pending(planned : Array(BaseMigration.class)) : Array(BaseMigration.class)
+      pending = pending_migrations
+      todo = planned.select { |migration| pending.includes?(migration) }
+      return todo if pending.first(todo.size) == todo
+      raise Error.new("Another migrator rolled back #{(pending - todo).first.name} while this one waited for the " \
+                      "migration lock; #{todo.first.name} and newer were not applied")
+    end
+
+    private def apply(migration : BaseMigration.class) : Nil
+      migration.new(schema).up
+      record_migration(migration)
+    end
+
+    # Outside the lock and any transaction of its own (`disable_ddl_transaction!`); recorded under the lock, unless a
+    # migrator that ran it at the same time recorded it first.
+    private def apply_alone(migration : BaseMigration.class) : Nil
+      return if oldest_pending([migration] of BaseMigration.class).empty?
+      migration.new(schema).up
+      with_migration_lock([migration]) { record_migration(migration) if oldest_pending([migration] of BaseMigration.class).any? }
     end
 
     private def migrate_down(&pick : -> Array(BaseMigration.class)) : Nil
