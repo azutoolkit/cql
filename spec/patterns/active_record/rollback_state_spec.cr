@@ -60,3 +60,23 @@ describe "A record inserted in a transaction that rolls back" do
     user.changes[:name]?.should eq({nil, "Ann"})
   end
 end
+
+describe "A record deleted in a transaction that rolls back" do
+  db = TestDBTransactional.tap(&.build)
+  before_each { db.exec("DELETE FROM test_users_transactional") }
+
+  it "gets its id back, so the next save! updates its row instead of inserting a second one" do
+    user = TestUserTransactional.create!(name: "Ann")
+    id = user.id
+    expect_raises(Exception, "boom") { db.transaction { user.delete!; raise "boom" } }
+    {user.id, user.destroyed?}.should eq({id, false})
+    user.update!(name: "Bea")
+    TestUserTransactional.all.map { |row| {row.id, row.name} }.should eq [{id, "Bea"}]
+  end
+
+  it "stays deleted when the block committed the delete before raising" do
+    user = TestUserTransactional.create!(name: "Ann")
+    expect_raises(Exception, "boom") { db.transaction { |tx| user.delete!; tx.commit; raise "boom" } }
+    {user.id, user.destroyed?, TestUserTransactional.count}.should eq({nil, true, 0})
+  end
+end

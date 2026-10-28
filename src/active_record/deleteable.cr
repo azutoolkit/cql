@@ -137,11 +137,18 @@ module CQL
           # Run after destroy callbacks and clear the ID if successful
           if success
             run_callbacks(:after_destroy)
+            undo_delete_on_rollback
             clear_id!
             self.destroyed = true
           end
 
           success
+        end
+
+        # A rollback puts the row back, so the record gets its id back, and `save!` updates it.
+        private def undo_delete_on_rollback : Nil
+          restore, destroyed = persistence_snapshot, self.destroyed
+          {{@type.id}}.schema.on_rollback { restore.call; self.destroyed = destroyed }
         end
 
         # Deletes this record's row and reports whether there was one; `optimistic_locking`

@@ -56,13 +56,14 @@ end
 ```
 
 A record inserted with `save!` or `Model.create!(record)` in a transaction or savepoint that rolls back is new again:
-its `id` is nil, and with dirty tracking its attributes count as unsaved, so a later `save!` inserts it. Other values
-stay as the block left them: a loaded record keeps its updated attributes, and a deleted one has lost its `id`. To
-undo state of your own, register a block with `AppDB.on_rollback`; it runs when the transaction rolls back, but not
-after the block ended it itself (`tx.commit`, `tx.rollback`), nor after a COMMIT whose outcome is unknown (a lost
-reply), nor for a transaction passed in with `AppDB.transaction(tx)` from another connection. CQL cannot see a COMMIT
-or ROLLBACK the block sends as SQL, or a statement that commits implicitly (DDL through `exec` on MySQL): a record
-inserted before it is reset although its row was kept, so do not send one.
+its `id` is nil, and with dirty tracking its attributes count as unsaved, so a later `save!` inserts it. A record
+deleted in it (`delete!`, `force_delete!`) gets its `id` back, and a soft-deleted one is not deleted any more. Other
+values stay as the block left them: a loaded record keeps its updated attributes. To undo state of your own, register
+a block with `AppDB.on_rollback`; it runs when the transaction rolls back, but not after the block ended it itself
+(`tx.commit`, `tx.rollback`), nor after a COMMIT whose outcome is unknown (a lost reply), nor for a transaction passed
+in with `AppDB.transaction(tx)` from another connection. CQL cannot see a COMMIT or ROLLBACK the block sends as SQL,
+or a statement that commits implicitly (DDL through `exec` on MySQL): a record inserted or deleted before it is reset
+although its change was kept, so do not send one.
 
 ## Nest Savepoints
 
@@ -173,11 +174,11 @@ error. Only the native PostgreSQL driver's errors, on PostgreSQL and CockroachDB
 `pg` shard run the block once. Inside another transaction it raises `ArgumentError`.
 
 {% hint style="warning" %}
-Only this transaction's work is undone before the block runs again. Load the records the block updates or deletes
-inside it: apart from a record it inserted, which is new again, a rolled-back record keeps what the run changed, so
-one from outside is changed twice or not at all. Everything else runs again: writes through another schema or
-connection, fibers the block spawned, emails, HTTP calls. A run whose block ended the transaction itself (`tx.commit`,
-`tx.rollback`) is not retried; a `COMMIT` or `ROLLBACK` statement it sends itself is not detected, so do not send one.
+Only this transaction's work is undone before the block runs again. Load the records the block updates inside it: a
+record it inserted or deleted gets its state back, but one it updated keeps what the run changed, so one from outside
+is changed twice or not at all. Everything else runs again: writes through another schema or connection, fibers the
+block spawned, emails, HTTP calls. A run whose block ended the transaction itself (`tx.commit`, `tx.rollback`) is not
+retried; a `COMMIT` or `ROLLBACK` statement it sends itself is not detected, so do not send one.
 {% endhint %}
 
 ## Observe Transactions
