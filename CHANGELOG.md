@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-28
+
 ### Upgrade notes
 
 - Native transaction scopes now reject queries, streams and savepoints from another fiber with `CQL::Postgres::WrongFiber`; start a separate transaction in that fiber.
