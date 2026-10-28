@@ -190,10 +190,13 @@ module CQL::Postgres
     end
 
     private def open(deadline : Time::Instant? = nil) : Connection
+      deadline ||= Time.instant + @options.checkout_timeout if @options.checkout_timeout.positive?
       ticket = @circuit.acquire
       begin
         connection = Connection.open(@config, deadline: deadline)
-        @options.setup.try(&.call(connection))
+        if hook = @options.setup
+          ConnectionSetup.run(connection, deadline) { hook.call(connection) }
+        end
         @circuit.succeeded(ticket)
         connection
       rescue ex

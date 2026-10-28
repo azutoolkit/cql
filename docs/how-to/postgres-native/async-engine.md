@@ -52,7 +52,7 @@ borrowed connections finish their work and are discarded on return. Run `warm_up
 | --- | --- | --- |
 | `pool_size` | Maximum connections, at least 1 | 10 |
 | `pool_min_size` | Connections opened by `connect`, 0 to `pool_size` | 0 |
-| `checkout_timeout` | Seconds for a checkout: waiting for a free connection (then `PoolTimeout`), health checks (at most half of the time left) and connecting, where the connect, from the TCP connection on, waits at most the time left (then `IO::TimeoutError`, even before `connect_timeout`; resolving the host is not bounded); 0 does not wait for a slot and connects within `connect_timeout` | 5 |
+| `checkout_timeout` | Seconds for a checkout: waiting for a free connection (then `PoolTimeout`), health checks (at most half of the time left) and connecting/setup, which from the TCP connection on share the time left (then `IO::TimeoutError`, even before `connect_timeout`; resolving the host is not bounded); 0 does not wait for a slot and connects within `connect_timeout` | 5 |
 | `health_check_after` | Ping a connection idle longer than this many seconds before lending it; a younger one is pinged only if the server wrote to or closed it while idle (a failover's FATAL), which the pool checks without a round trip | 30 |
 | `max_queries` | Retire a connection after this many requests | none |
 | `max_idle_lifetime` | Retire a connection idle this many seconds | none |
@@ -83,6 +83,16 @@ These options apply to `AsyncEngine` and `EngineSource`. A `CQL::Schema` or `DB.
 {% endhint %}
 
 ## Setup and Reset Hooks
+
+With a positive `checkout_timeout`, connection setup shares the checkout's remaining deadline. Startup warm-up
+gets that budget per connection; check-in rollback, reset and setup share a fresh budget. An expired setup closes
+its socket, releases the pool slot and raises `IO::TimeoutError`; expired check-in cleanup discards the connection.
+Neither path retries SQL or admits a late setup result.
+
+Bounded hooks run in a dedicated fiber, so they do not inherit the borrower's fiber-local context. Keep hooks to
+connection configuration and bound any external I/O they perform: Crystal cannot forcibly terminate arbitrary
+callback code. A callback waiting outside the driver can outlive its deadline, but its closed connection cannot
+be reused and it no longer holds a pool slot. A CPU-bound hook must yield to let deadlines run.
 
 ```crystal
 engine = CQL::Postgres::AsyncEngine.connect(
@@ -121,6 +131,10 @@ end
 # raise DB::Rollback.new rolls back quietly, and transaction returns nil.
 # tx is valid only inside its block; later use raises CQL::Postgres::TransactionClosed.
 ```
+
+Transaction scopes and their savepoints belong to the fiber that opened them. Queries, streams and savepoints
+from another fiber raise `CQL::Postgres::WrongFiber` before accessing the connection. Start a separate transaction
+inside a spawned fiber; do not pass it an existing scope.
 
 Isolation, savepoints and `synchronous_commit` are in [Configure TLS, Poolers, Timeouts and Transactions](tls-and-poolers.md#transactions-isolation-and-savepoints).
 

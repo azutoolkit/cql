@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Upgrade notes
 
+- Native transaction scopes now reject queries, streams and savepoints from another fiber with `CQL::Postgres::WrongFiber`; start a separate transaction in that fiber.
+- Positive native-pool checkout deadlines include setup. Setup/reset hooks now run in dedicated fibers with bounded waits and do not inherit the borrower's fiber-local context. Expired hooks lose their connection and pool slot even if application callback code has not returned.
+- Schema dumps use an atomic file replacement, preserve existing regular-file permissions, and create new files with mode 0600.
+- Release versioning applies the highest bump once per release. A mandatory gate requires the first stable release to be exactly 1.0.0; normal and squash merges are tested with the pinned version action.
 - The supported Crystal floor is now 1.19.1, matching the oldest compiler in CI. The previous 1.12.2 declaration was not covered by release checks.
 - Native PostgreSQL backend messages now reject trailing payload bytes and truncated or invalid COPY format vectors instead of accepting malformed replies.
 - A telemetry tracer cannot invoke a statement twice: CQL rejects the repeated invocation before sending another query.

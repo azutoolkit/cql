@@ -73,6 +73,11 @@ if [ "$base" != "$(git rev-parse "origin/$branch")" ]; then
 fi
 
 changelog_section Unreleased <CHANGELOG.md >"$notes_file"
+script/check-release-version "$version"
+if git show-ref --verify --quiet "refs/tags/$tag"; then
+  echo "Refusing to overwrite existing release tag $tag" >&2
+  exit 1
+fi
 sed -i.bak -E "s/^version: .*/version: $version/" shard.yml && rm shard.yml.bak
 if has_text "$notes_file"; then
   roll_changelog

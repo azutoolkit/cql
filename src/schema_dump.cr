@@ -1,6 +1,7 @@
 require "db"
 require "json"
 require "./exceptions"
+require "./atomic_file"
 require "./cql"
 
 module CQL
@@ -68,8 +69,7 @@ module CQL
                      schema_symbol : Symbol = :app_schema, env_var : String = "DATABASE_URL")
       schema_content = generate_schema_content(schema_name, schema_symbol, env_var)
 
-      Dir.mkdir_p(File.dirname(file_path))
-      File.write(file_path, schema_content)
+      AtomicFile.replace(file_path) { |file| file << schema_content }
       Log.info { "Schema dumped to #{file_path}" }
     end
 

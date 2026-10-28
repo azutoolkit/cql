@@ -67,41 +67,44 @@ matrix still need to pass on the reviewed commit.
 
 ## Release and deployment gates
 
-### Follow-up blocking review of `184714e`
+### Follow-up blocking review and corrections
 
-The successful local matrix did not establish v1 readiness. A subsequent review and the supplied hosted CI log
-identified these gaps. Evidence logs and standalone probes are retained under `/workspace/setup/logs/cql-review-*`
-and `/workspace/setup/cql-review/` in the prepared environment.
+The review of `184714e` reproduced four runtime/release gaps, in addition to the hosted CI fixture failure
+corrected by `cf7bcb8`. The following changes address those findings; the original failure evidence remains under
+`/workspace/setup/logs/cql-review-*`, and corrective validation is under `/workspace/setup/logs/cql-fix-*`.
 
-| Priority | Finding | Evidence and required action |
-| --- | --- | --- |
-| P1, corrected | PostgreSQL fixture opens before the integration-test guard | The supplied CI log aborts in `InsertFailureDB` initialization with `DB::ConnectionRefused` at localhost:5432. The compiler-floor job intentionally has no server. The fixture is now constructed after `require_postgres!` and closed in `ensure`; both database-free and live paths passed locally as recorded below. Deprecation warnings are unrelated. |
-| P1 | The release can publish the wrong major/version after merging | The pinned `paulhatch/semantic-version@v4.0.2` with `bump_each_commit: true` was run against local merge simulations using this branch's history and the verified `v0.0.925` base. Current head computes 1.0.0; an ordinary merge computes 1.0.1; a merge containing `(MAJOR)` computes 2.0.0; a single `(MAJOR)` squash computes 1.0.0. The workflow immediately calls `script/release` without asserting the intended version. Require the intended version before publication and use a verified single-squash release or revise the versioning policy. |
-| P1 | Checkout setup bypasses the remaining deadline | `Pool#open` passes the deadline to `Connection.open`, then calls `setup` without it. A real PostgreSQL setup query `SELECT pg_sleep(0.25)` succeeded after 254 ms with `checkout_timeout=0.05`. Bound setup SQL by the remaining checkout budget and discard timed-out connections before admission. The circuit breaker cannot recover a setup attempt that never completes. |
-| P1 | A transaction scope can outlive its lease across fibers | `TransactionScope#exec_query` checks `@finished` only before yielding; it has no owner check or active-operation lifetime guard. A child fiber entered the scope, paused, and resumed after the outer transaction returned the connection. It read the next borrower's `application_name`. Reject foreign-fiber scope use or retain the lease until all admitted operations complete. Existing sequential escaped-scope tests do not cover this interleaving. |
-| P2 | Failed schema writes can destroy the previous schema file | `SchemaDump#dump_to_file` writes directly to the destination. Injecting a 1 KiB file-size limit raised `IO::Error` after replacing the previous file with 1,024 bytes of the new content. `Migrator#sync_schema_file` only logs this error despite its preservation contract. Write a sibling temporary file, flush it, and replace the destination atomically only after success; test write failure after partial output. |
+| Finding | Correction and regression coverage |
+| --- | --- |
+| PostgreSQL fixture opened before its integration guard | The insert fixture is constructed after `require_postgres!` and closed in `ensure`. The corrected compiler-floor run passed 3,478 examples with zero failures/errors and 135 unavailable-fixture cases pending; the live insert selection passed 11/11. Deprecation warnings were unrelated to the CI failure. |
+| Per-commit versioning could publish 1.0.1 or 2.0.0 instead of 1.0.0 | Versioning now applies the highest bump once per release. `script/check-release-version` requires exactly 1.0.0 while the manifest is pre-v1, and a strictly increasing stable version thereafter. Both the workflow and `script/release` enforce it before mutations; existing tags are rejected before editing files. Five release-contract tests run the pinned action through branch, normal merge, major-marked merge and major-marked squash cases, reject an unmarked squash, and verify dry-run publication behavior. This CI job gates release. |
+| Setup SQL and callbacks bypassed the checkout deadline | New-connection setup shares the remaining checkout budget; warm-up gets a budget per connection. Check-in rollback/reset/setup share a fresh budget. Timed hooks run in a worker fiber; expiry hard-closes the private connection and releases the pool slot, with no late admission or SQL replay. Tests cover stalled SQL, callbacks blocked outside SQL, circuit recovery and reset-hook timeout. Hooks must bound their own external work: arbitrary callback fibers cannot be forcibly terminated and CPU-bound code must yield. |
+| A scope in another fiber accessed a returned connection | Transaction scopes and savepoints record their owner. Queries, streams and savepoints reject foreign fibers with `WrongFiber` before yielding a connection. Owner operations still work, and completed scopes remain closed. The ownership test also verifies that the next borrower works normally. |
+| A partial schema-file write destroyed the old file | Schema dumps write and fsync a sibling temporary file, then atomically rename it. Existing regular-file permissions are retained and new files use 0600. Partial-write and rename-failure tests require the original destination to remain intact and temporary files to be removed. This is atomic replacement, not a claim of crash durability for directory metadata. |
 
-The other four findings remain unresolved by the CI-fixture correction. Treat them as release-review blockers,
-not as passed scenarios covered by the earlier stress or migration checks. The crystal-db compatibility script
-passed independently for 0.13.1, 0.14.0, 0.15.0 and latest; that check is compilation, not a live dialect test.
+Corrective validation completed on the patched source:
 
-The fixture correction was validated with the actual supported floor, Crystal **1.19.1**: **3,478 examples,
-zero failures/errors, 135 pending**, with PostgreSQL deliberately unavailable. Those pending server/optional-fixture
-cases do not count as integration passes. On Crystal 1.22.1 with PostgreSQL 17, the insert selection passed **11
-examples with no pending cases**. Changed-file lint, formatting and documentation links passed. Hosted CI still
-needs to rerun on the corrective commit.
+- Crystal 1.22.1 with PostgreSQL 17 and TLS: **3,485 examples, zero failures/errors, 12 pending** optional fixtures.
+- Crystal 1.19.1 without PostgreSQL: **3,485 examples, zero failures/errors, 135 pending** server/optional fixtures.
+- Four-thread native stress, pool recovery, setup/reset deadlines and scope ownership: **13 passed**, zero pending.
+- Release contract: **5 tests passed**; the pinned action computed **1.0.0** for branch, ordinary merge,
+  major-marked merge and major-marked squash. An unmarked squash computed 0.0.926 and was rejected by the gate.
+- The original live PostgreSQL setup probe now raises at **50 ms** for its 50 ms budget, leaving **zero leases**.
+- The original 1 KiB file-size-limit fault raises a write error while preserving the previous schema unchanged.
+- All TLS probes passed; lint inspected **394 files with zero failures**; formatting and documentation checks passed.
+
+These results resolve the four reproduced blockers. Hosted CI still must pass on the final pushed commit.
+The earlier crystal-db compatibility check passed for 0.13.1, 0.14.0, 0.15.0 and latest; it is a compilation check,
+not a live dialect test.
 
 ### Remaining publication and application checks
 
 - Review the final PR commit and pass hosted CI, including every new required job. GitHub API access is currently
   denied in this environment; native Git access works. The supplied hosted log confirms the fixture failure above;
   no subsequent hosted pass, approval or release is asserted here.
-- The existing release workflow owns `shard.yml`, changelog, version commit, tag and GitHub release. With its
-  current per-commit versioning policy, use a single reviewed squash containing `(MAJOR)` for this initial v1
-  release and verify that the computed version is exactly `1.0.0` before publication. A normal merge retaining
-  the branch's existing major-bump commit over-bumps, even more if its merge message also contains `(MAJOR)`.
-  This corrects the earlier recommendation to preserve the marker with either merge strategy. Adding tests is
-  not authorization to bypass review or CI.
+- The existing release workflow owns `shard.yml`, changelog, version commit, tag and GitHub release. Normal merges
+  retain the branch's major-bump commit; squash merges must include `(MAJOR)` in the squash message. The pinned
+  version action and publication gate require the initial stable release to be exactly `1.0.0`. A squash without
+  the marker is rejected. This replaces the earlier unsafe per-commit merge guidance. Do not bypass review or CI.
 - Validate the actual application's TLS/proxy topology, database privileges, migration serialization, failover,
   backups/PITR, workload/SLO and telemetry export. Single-node transactional tests cannot establish distributed
   durability, cross-region recovery or a production capacity limit.

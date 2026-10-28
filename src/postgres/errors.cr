@@ -26,7 +26,7 @@ module CQL::Postgres
   class TransactionAborted < Error
   end
 
-  # A `RowStream` was read by a fiber other than the one that opened it.
+  # A `RowStream` or `TransactionScope` was used by a fiber other than its owner.
   class WrongFiber < Error
   end
 

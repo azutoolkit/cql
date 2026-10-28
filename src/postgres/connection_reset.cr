@@ -1,4 +1,5 @@
 require "./connection"
+require "./connection_setup"
 
 module CQL::Postgres
   # Puts a connection back in a clean state before the pool lends it again:
@@ -11,8 +12,13 @@ module CQL::Postgres
     end
 
     def call(connection : Connection) : Bool
-      rollback(connection) if connection.in_transaction?
-      @sql.try { |sql| reset(connection, sql) }
+      return true unless connection.in_transaction? || @sql
+      deadline = Time.instant + @timeout if @timeout.positive?
+      ConnectionSetup.run(connection, deadline) do
+        rollback(connection) if connection.in_transaction?
+        @sql.try { |sql| reset(connection, sql) }
+        nil
+      end
       !connection.in_transaction?
     rescue
       false

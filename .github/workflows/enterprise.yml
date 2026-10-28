@@ -34,7 +34,10 @@ jobs:
       - run: apt-get update && apt-get install -y libsqlite3-dev
       - run: shards install
       - name: Threaded contention and shutdown recovery
-        run: crystal spec -Dpreview_mt validation/native_stress_spec.cr spec/postgres/pool_shutdown_spec.cr spec/postgres/circuit_breaker_spec.cr
+        run: >-
+          crystal spec -Dpreview_mt validation/native_stress_spec.cr spec/postgres/pool_shutdown_spec.cr
+          spec/postgres/circuit_breaker_spec.cr spec/postgres/setup_deadline_spec.cr
+          spec/postgres/transaction_scope_fiber_spec.cr
       - name: Protocol, live transactions, cancellation and migration locking
         run: >-
           crystal spec spec/postgres/handshake_spec.cr spec/postgres/wire_spec.cr

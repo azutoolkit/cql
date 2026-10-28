@@ -4,6 +4,11 @@ description: "Generate a schema file from a live database, keep it in sync with 
 
 # Dump and Validate Your Schema
 
+Schema files are written to a temporary file in the destination directory, flushed to disk, then renamed over the
+destination. A failed write, flush or rename leaves the previous file intact and removes the temporary file.
+Existing regular-file permissions are preserved; a new schema file is private to its creator (0600). This protects
+against partial replacement, without claiming crash durability for the filesystem directory entry.
+
 | Tool | Compares or reads | Gives |
 | :--- | :--- | :--- |
 | `CQL::SchemaDump` | a live database | a `CQL::Schema.define` file |
