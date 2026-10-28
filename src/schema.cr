@@ -437,7 +437,9 @@ module CQL
       return {nil, nil} unless isolation || read_only
       raise_nested_modes(isolation, read_only) if nested
       strategy = dialect
-      sql = strategy.transaction_modes_sql(isolation, read_only)
+      sql = strategy.transaction_modes_sql(isolation, read_only).try(&.presence)
+      # A dialect that drops read_only (nil or a blank statement) would run the block read-write: refuse instead.
+      raise DialectError.new(strategy.display_name, "Schema#transaction(read_only:)") if read_only && sql.nil?
       strategy.transaction_modes_before_begin? ? {sql, nil} : {nil, sql}
     end
 

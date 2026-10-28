@@ -18,6 +18,19 @@ private class BeforeBeginSqliteSchema < CQL::Schema
   end
 end
 
+# A custom dialect that gives a blank statement for `read_only:`, which must not run the block read-write.
+private class SilentSqliteDialect < Expression::SqliteDialect
+  def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+    " " if read_only
+  end
+end
+
+private class SilentSqliteSchema < CQL::Schema
+  def dialect
+    SilentSqliteDialect.new
+  end
+end
+
 # A source of the application's own, overriding `transaction`.
 private class CountingSource < CQL::DatabaseSource
   getter transactions = 0
@@ -125,6 +138,13 @@ describe "CQL::Schema#transaction(isolation:)" do
     source.transaction(&.connection.scalar("SELECT 1")).should eq 1
   ensure
     source.try &.close
+  end
+
+  it "refuses read_only: when a dialect gives a blank statement for it, rather than running the block read-write" do
+    silent = SilentSqliteSchema.new(:tx_silent, schema.uri, CQL::Adapter::SQLite)
+    expect_raises(CQL::DialectError, /read_only/) { silent.transaction(read_only: true) { raise "the block ran" } }
+  ensure
+    silent.try &.close
   end
 
   it "keeps CQL::Postgres::IsolationLevel as an alias of CQL::IsolationLevel" do

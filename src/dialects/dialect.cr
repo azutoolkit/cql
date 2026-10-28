@@ -44,8 +44,8 @@ module Expression
     end
 
     # The statement that sets the transaction's *isolation* level (the counterpart of `transaction_isolation_sql`,
-    # which reads it) and makes it *read_only*; nil when the transaction already runs that way. An override raises
-    # `DialectError` for a mode it cannot set.
+    # which reads it) and makes it *read_only*; nil when *isolation* alone is already in effect. An override raises
+    # `DialectError` for a mode it cannot set (`Schema#transaction` refuses a nil or blank one for *read_only*).
     def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
       raise CQL::DialectError.new(display_name, "Schema#transaction(isolation:)") if isolation
       raise CQL::DialectError.new(display_name, "Schema#transaction(read_only:)") if read_only
