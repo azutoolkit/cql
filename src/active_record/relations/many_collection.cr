@@ -168,7 +168,7 @@ module CQL
       # - **param** : id (Pk)
       # - **return** : Target? - The target record if association was removed, nil otherwise
       def delete(id : Pk) : Target?
-        return unlink(id) unless @dependent == :destroy
+        return unlink(id) unless @dependent.in?(:destroy, :delete_all)
         unlinked = nil
         all_or_none { unlinked = unlink(id) }
         unlinked
@@ -263,10 +263,11 @@ module CQL
           # Get target IDs before clearing associations
           target_ids = @loaded ? @records.compact_map(&.id) : ids
 
-          # Clear join table associations
-          clear_join_records
-
-          delete_targets(target_ids)
+          # Clear join table associations and delete the targets, all or none
+          all_or_none do
+            clear_join_records
+            delete_targets(target_ids)
+          end
         else
           clear_join_records
         end

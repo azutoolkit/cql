@@ -55,8 +55,64 @@ class TxShelf
   has_many :held_volumes, TxVolume, foreign_key: :tx_shelf_id, dependent: :destroy
   many_to_many :linked_volumes, TxVolume, join_through: TxShelfVolume, foreign_key: :tx_shelf_id,
     association_foreign_key: :tx_volume_id, dependent: :destroy
+  many_to_many :wiped_volumes, TxVolume, join_through: TxShelfVolume, foreign_key: :tx_shelf_id,
+    association_foreign_key: :tx_volume_id, dependent: :delete_all
 
   def initialize(@name = "")
+  end
+end
+
+SPLIT_TX_FILE    = File.tempname("cql_split_tx", ".db")
+Spec.after_suite { File.delete?(SPLIT_TX_FILE) } # the schemas create it when the spec program loads
+SPLIT_TARGETS_DB = CQL::Schema.define(:split_tx_targets, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{SPLIT_TX_FILE}") do
+  table :split_volumes do
+    primary :id, Int32, auto_increment: true
+    text :name
+  end
+end
+SPLIT_LINKS_DB = CQL::Schema.define(:split_tx_links, adapter: CQL::Adapter::SQLite, uri: "sqlite3://#{SPLIT_TX_FILE}") do
+  table :split_shelves do
+    primary :id, Int32, auto_increment: true
+    text :name
+  end
+  table :split_links do
+    primary :id, Int32, auto_increment: true
+    integer :split_shelf_id
+    integer :split_volume_id
+  end
+end
+
+class SplitVolume
+  include CQL::ActiveRecord::Model(Int32)
+  db_context SPLIT_TARGETS_DB, :split_volumes
+
+  property name : String = ""
+
+  def initialize
+  end
+end
+
+class SplitLink
+  include CQL::ActiveRecord::Model(Int32)
+  db_context SPLIT_LINKS_DB, :split_links
+
+  property split_shelf_id : Int32?
+  property split_volume_id : Int32?
+
+  def initialize(@split_shelf_id = nil, @split_volume_id = nil)
+  end
+end
+
+class SplitShelf
+  include CQL::ActiveRecord::Model(Int32)
+  db_context SPLIT_LINKS_DB, :split_shelves
+
+  property name : String = ""
+
+  many_to_many :volumes, SplitVolume, join_through: SplitLink, foreign_key: :split_shelf_id,
+    association_foreign_key: :split_volume_id, dependent: :destroy
+
+  def initialize
   end
 end
 
@@ -109,5 +165,26 @@ describe "Association destroy paths" do
       DESTROY_TX_DB.transaction { links.clear; raise DB::Rollback.new }
       {TxShelfVolume.count, TxVolume.count, links.size}.should eq({2, 2, 2})
     end
+  end
+
+  it "keeps the join rows when many_to_many delete or clear with dependent: :delete_all cannot delete the targets" do
+    DESTROY_TX_DB.exec("CREATE TRIGGER keep_volumes BEFORE DELETE ON tx_volumes BEGIN SELECT RAISE(ABORT, 'kept'); END")
+    shelf_with_stale_last_volume do |shelf, volume|
+      expect_raises(SQLite3::Exception, "kept") { shelf.wiped_volumes.delete(volume.id!) }
+      expect_raises(SQLite3::Exception, "kept") { shelf.wiped_volumes.clear }
+    end
+    {TxShelfVolume.count, TxVolume.count}.should eq({2, 2})
+  ensure
+    DESTROY_TX_DB.exec("DROP TRIGGER IF EXISTS keep_volumes")
+  end
+
+  it "destroys through a join model on another schema of the same SQLite file" do
+    {SPLIT_TARGETS_DB, SPLIT_LINKS_DB}.each(&.build)
+    shelf = SplitShelf.new.tap(&.save!)
+    volumes = Array.new(3) { SplitVolume.new.tap(&.save!) }
+    volumes.each { |volume| SplitLink.new(shelf.id, volume.id).save! }
+    shelf.volumes.delete(volumes.first.id!)
+    shelf.volumes.clear
+    {SplitLink.count, SplitVolume.count}.should eq({0, 0})
   end
 end
