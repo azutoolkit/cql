@@ -86,6 +86,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `return` or `break` out of a `CQL::Schema#transaction` block whose COMMIT then failed raised `KeyError: Missing hash key: Fiber` instead of the COMMIT error (and, out of a nested transaction, dropped the enclosing transaction's frame and published the savepoint's telemetry end event twice), and ran the rollback hooks whatever the COMMIT outcome; they now run only when `Dialect#commit_refused?` accepts the error, as after a block that returns normally. A savepoint's hooks no longer run when its block ended an enclosing transaction (`outer.commit`) and then raised.
 - A COMMIT that failed (SQLite busy or a deferred constraint, or any driver's refused COMMIT) left the pooled connection inside the transaction: the next transaction on it raised "There is an existing transaction in this connection", and a plain write on it was never committed. `CQL::Schema#transaction` now rolls that connection back before the pool lends it again (when the ROLLBACK fails too, as after SQLite rolled back by itself, it releases crystal-db's transaction flag and logs a warning); the COMMIT error is still what raises.
 
+## [0.0.921] - 2026-10-27
+
+### Deprecated
+
+- `CQL::Cache::Middleware::Azu.setup!(app)`: it calls `app.use`, which `Azu::App` does not have. Mount the generic handler instead: `app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)`. `Azu::HandlerPipeline#use` still accepts the handler.
+- `CQL::Cache::Middleware::Azu::Handler`, now a subclass of `CQL::Cache::Middleware::HTTP` with the same behaviour: use `CQL::Cache::Middleware::HTTP`.
+- `CQL::Cache::Middleware::Azu::Controller`: it registers `before_action`/`after_action`, which Azu endpoints do not have.
+
+### Fixed
+
+- Docs and the framework-integration example: the Azu snippets used `Azu::Server`, `Azu::Application`, `Azu::Controller`, `use` on the app and `app.before`/`app.after`, none of which Azu has; they now mount `CQL::Cache::Middleware::HTTP` in the `Azu::App` handler array. They no longer describe the per-request query cache as a cache that speeds requests up: it is a process-wide repeated-query diagnostic that stores and serves no rows, and its middleware does not read `config.cache.on?` or `config.cache.request_cache?`.
+
 ## [0.0.916] - 2026-10-26
 
 ### Upgrade notes

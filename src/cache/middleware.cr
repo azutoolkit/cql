@@ -132,43 +132,48 @@ module CQL
         end
       end
 
-      # Azu framework middleware
-      # Usage Option 1 - As HTTP Handler:
-      #   Azu::Server.new([
-      #     CQL::Cache::Middleware::Azu::Handler.new,
+      # Generic HTTP::Server middleware. It starts the process-wide request query tracker (`RequestQueryCacheHelper`)
+      # with the request's `X-Request-ID` (or a random id) and ends it in an `ensure`.
+      # Usage:
+      #   server = HTTP::Server.new([
+      #     CQL::Cache::Middleware::HTTP.new,
       #     # ... other handlers
       #   ])
       #
-      # Usage Option 2 - In Controllers:
-      #   class ApplicationController < Azu::Controller
-      #     include CQL::Cache::Middleware::Azu::Controller
-      #   end
+      # In an Azu app, after `Azu::Handler::RequestId` (whose id it then reuses):
+      #   app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)
+      class HTTP
+        include ::HTTP::Handler
+        include BaseMiddleware
+
+        def call(context : ::HTTP::Server::Context)
+          request_id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
+          start_request_cache(request_id)
+
+          begin
+            call_next(context)
+          ensure
+            end_request_cache
+          end
+        end
+      end
+
+      # Azu framework middleware (deprecated). An `Azu::App` takes its handlers as an array and has no `use`, and Azu
+      # endpoints have no `before_action`/`after_action`: mount `CQL::Cache::Middleware::HTTP` instead (see above).
+      # Azu's own `require "azu/cql"` bridge (`Azu::CQL::Middleware`) is the Azu-aware piece: request tagging,
+      # telemetry and per-request transactions.
       #
-      # Usage Option 3 - Manual hooks:
-      #   # In your Azu application setup
-      #   app.before { |ctx| CQL::Cache::Middleware::Azu.before_request(ctx) }
-      #   app.after { |ctx| CQL::Cache::Middleware::Azu.after_request(ctx) }
+      # `before_request(ctx)` / `after_request(ctx)` can still be called from a handler of your own.
       module Azu
         extend BaseMiddleware
 
-        # HTTP Handler implementation for Azu
-        class Handler
-          include ::HTTP::Handler
-          include BaseMiddleware
-
-          def call(context : ::HTTP::Server::Context)
-            request_id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
-            start_request_cache(request_id)
-
-            begin
-              call_next(context)
-            ensure
-              end_request_cache
-            end
-          end
+        # The same handler as `CQL::Cache::Middleware::HTTP`, under its old name.
+        @[Deprecated("Use CQL::Cache::Middleware::HTTP")]
+        class Handler < CQL::Cache::Middleware::HTTP
         end
 
-        # Controller mixin for Azu controllers
+        # Controller mixin for frameworks with `before_action`/`after_action`; Azu endpoints have neither.
+        @[Deprecated("Azu endpoints have no before_action/after_action: mount CQL::Cache::Middleware::HTTP in the app's handlers")]
         module Controller
           extend BaseMiddleware
 
@@ -200,32 +205,11 @@ module CQL
 
         # Convenience method to set up automatic middleware
         # Usage: CQL::Cache::Middleware::Azu.setup!(app)
+        @[Deprecated("Azu::App has no `use`: app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler). Azu::HandlerPipeline#use still accepts the handler.")]
         def self.setup!(app)
           # This would integrate with Azu's middleware system
           # The exact implementation depends on Azu's API
           app.use(Handler.new)
-        end
-      end
-
-      # Generic HTTP::Server middleware
-      # Usage:
-      #   server = HTTP::Server.new([
-      #     CQL::Cache::Middleware::HTTP.new,
-      #     # ... other handlers
-      #   ])
-      class HTTP
-        include ::HTTP::Handler
-        include BaseMiddleware
-
-        def call(context : ::HTTP::Server::Context)
-          request_id = context.request.headers["X-Request-ID"]? || Random::Secure.hex(8)
-          start_request_cache(request_id)
-
-          begin
-            call_next(context)
-          ensure
-            end_request_cache
-          end
         end
       end
 
