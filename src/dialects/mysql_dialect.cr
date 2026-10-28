@@ -57,6 +57,15 @@ module Expression
       "?"
     end
 
+    # SET TRANSACTION sets the next transaction's modes; inside a transaction MySQL refuses it.
+    def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      set_transaction_sql(isolation, read_only)
+    end
+
+    def transaction_modes_before_begin? : Bool
+      true
+    end
+
     # The password goes in an option file that only its owner can read and that exists only while
     # mysqldump runs, never on the command line, which other users of the machine can see.
     def structure_dump(uri : URI) : String
@@ -111,6 +120,11 @@ module Expression
       "#{@@cached_strings["mysql_modify_prefix"]}#{column_name} #{column_type}"
     end
 
+    # CHANGE and MODIFY COLUMN drop the DEFAULT, NOT NULL and AUTO_INCREMENT they do not restate; they keep indexes.
+    def column_redefinition(type : String, definition : String, auto_increment : Bool) : String
+      auto_increment ? "#{definition}#{@@cached_strings["mysql_auto_increment"]}" : definition
+    end
+
     def drop_index(index_name : String, table_name : String) : String
       "#{@@cached_strings["mysql_drop_index_prefix"]}#{index_name}#{@@cached_strings["mysql_on_suffix"]}#{table_name}"
     end
@@ -150,7 +164,7 @@ module Expression
       timestamp_column : Bool,
     ) : String
       # For timestamp columns, use the database function directly (without quoting)
-      if timestamp_column && default_value.is_a?(String) && default_value.matches?(/\ANOW\(\d?\)\z/)
+      if timestamp_column && default_value.is_a?(String) && default_value.matches?(/\ANOW\([0-6]?\)\z/)
         build_sql(128) do |str|
           str << column_name << " " << column_type
           str << " DEFAULT " << default_value

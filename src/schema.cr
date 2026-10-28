@@ -146,6 +146,23 @@ module CQL
       end
     end
 
+    # The innermost open frame, as `active_frame`, once the hooks of savepoints the block released by hand above it
+    # (closed frames on its connection) were handed down to it in stack order: hooks keep running newest first.
+    private def settled_frame : TransactionFrame?
+      return if @fibers_in_transaction.get.zero?
+      @fiber_mutex.synchronize do
+        stack = @fiber_transactions[Fiber.current]? || return
+        open_index = stack.rindex { |frame| !frame.transaction.closed? } || return
+        target = stack[open_index]
+        (open_index + 1...stack.size).each do |index|
+          released = stack[index]
+          next unless released.transaction.connection.same?(target.transaction.connection)
+          released.rollback_hooks.hand_to(target.rollback_hooks)
+        end
+        target
+      end
+    end
+
     # Pushes *tx*, with the *rollback_hooks* of the work done in it, onto the fiber's transaction stack for the
     # block and pops it afterwards.
     private def with_active_transaction(tx : DB::Transaction, rollback_hooks : RollbackHooks, &)
@@ -154,14 +171,28 @@ module CQL
         (@fiber_transactions[fiber] ||= [] of TransactionFrame).push(TransactionFrame.new(tx, rollback_hooks))
         @fibers_in_transaction.set(@fiber_transactions.size)
       end
+      popped = false
       begin
         yield
       ensure
-        @fiber_mutex.synchronize do
-          stack = @fiber_transactions[fiber]
-          stack.pop
-          @fiber_transactions.delete(fiber) if stack.empty?
-          @fibers_in_transaction.set(@fiber_transactions.size)
+        # Pops once: crystal-db's COMMIT runs while a `return` or `break` unwinds the block, and its error runs this again.
+        @fiber_mutex.synchronize { pop_frame(fiber) } unless popped
+        popped = true # ameba:disable Lint/UselessAssign (read by this ensure's second run)
+      end
+    end
+
+    private def pop_frame(fiber : Fiber) : Nil
+      stack = @fiber_transactions[fiber]
+      stack.pop
+      @fiber_transactions.delete(fiber) if stack.empty?
+      @fibers_in_transaction.set(@fiber_transactions.size)
+    end
+
+    # The fiber's open transactions on *connection*: a savepoint begun on it now is nested in each of them.
+    private def open_transactions_on(connection : DB::Connection) : Array(DB::Transaction)
+      @fiber_mutex.synchronize do
+        @fiber_transactions[Fiber.current].compact_map do |frame|
+          frame.transaction if frame.transaction.connection.same?(connection) && !frame.transaction.closed?
         end
       end
     end
@@ -216,8 +247,17 @@ module CQL
       if source && (declared = source.adapter) && declared != @adapter
         raise ArgumentError.new("the connection source speaks #{declared}, the schema uses #{@adapter} (build the engine with adapter: to match)")
       end
-      @source = source || DatabaseSource.new(DB.open(@adapter.driver_uri(@uri)))
+      @source = source || DatabaseSource.new(open_database)
       @uri = source.database_uri(@uri) if source # `uri` names the same server; the source's own options stay out of it
+    end
+
+    private def open_database : DB::Database
+      url = URI.parse(@adapter.driver_uri(@uri))
+      if @adapter.postgres_compatible? && url.query_params.has_key?("query_timeout") &&
+         (reason = CQL::Postgres::Driver.unread_query_timeout(url.scheme.to_s))
+        CQL.config.effective_logger.warn { reason }
+      end
+      DB.open(url)
     end
 
     def dialect
@@ -356,46 +396,103 @@ module CQL
     # subscribers. A manual `tx.rollback` followed by a normal return still
     # reports Commit, since CQL cannot see it.
     #
-    # When the transaction rolls back (the block raises, including `DB::Rollback`,
-    # or the commit fails), table declarations changed by `alter` inside it are
-    # restored. A savepoint that commits leaves them to the enclosing transaction.
-    # A manual `tx.rollback` restores nothing, for the same reason as above.
-    def transaction(&)
-      parent = active_frame
+    # Its rollback hooks (`on_rollback`; `alter` restores the table declarations it changed) run when the block raises,
+    # `DB::Rollback` included, or COMMIT fails with an error `Dialect#commit_refused?` accepts (also while a `return` or
+    # `break` leaves the block); not when the block ended the transaction, or one it is nested in, itself (`tx.commit`,
+    # `tx.rollback`), nor after a COMMIT whose outcome is unknown (a lost reply).
+    # A savepoint that commits leaves them to the enclosing transaction.
+    #
+    # *isolation* runs the transaction at that level (`transaction(isolation: :serializable) { }`), and *read_only*
+    # has the database refuse its writes to permanent tables, a guard against accidental writes, not access control.
+    # A dialect that cannot honour them raises `DialectError`, and a nested call raises `ArgumentError`, before
+    # anything begins.
+    def transaction(*, isolation : IsolationLevel? = nil, read_only : Bool = false, &)
+      parent = settled_frame
+      before_begin, after_begin = transaction_mode_statements(isolation, read_only, nested: !parent.nil?)
       observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
       rollback_hooks = RollbackHooks.new
-      # Nested calls open a SAVEPOINT on the outer transaction's connection.
-      (parent.try(&.transaction) || @source).transaction do |tx|
+      enclosing = parent.try { |frame| open_transactions_on(frame.transaction.connection) }
+      left = raised = false
+      open_transaction(parent, before_begin) do |tx|
+        after_begin.try { |sql| tx.connection.unprepared.exec(sql) } # bypasses Execution, so telemetry sees no user statement
         with_active_transaction(tx, rollback_hooks) do
           yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
         rescue ex
-          rollback_hooks.run
+          # Once the block left (`return`, `break`), crystal-db commits while it unwinds, and COMMIT's error lands here.
+          raised = true unless left
           observer.try &.failed(ex)
           raise ex
+        ensure
+          # The block ended this transaction, or one it is nested in, itself (`commit`, `rollback`): its work was kept.
+          rollback_hooks.hand_to(parent.try(&.rollback_hooks)) if !left && ended?(tx, enclosing)
+          left = true
         end
       end
     rescue ex : DB::Rollback
       # DB::Rollback should be caught silently by the outer source transaction
       # and perform the rollback without propagating the exception further.
       # We log it for debugging, but don't convert to ConnectionError.
-      rollback_hooks.try &.run
       Log.warn { "Transaction rolled back via DB::Rollback: #{ex.message}" }
     rescue ex
-      rollback_hooks.try &.run
+      # Not the block's error: COMMIT (or a savepoint's RELEASE) failed. Undo only what the database surely did not keep.
+      rollback_hooks.try &.run if !raised && dialect.commit_refused?(ex)
       observer.try &.failed(ex)
       raise ex
     ensure
+      rollback_hooks.try &.run if raised
       # Hooks still pending belong to work that was kept (committed, or left by a `return` from the block).
       rollback_hooks.try &.hand_to(parent.try(&.rollback_hooks))
       observer.try &.finish
     end
 
+    # Whether *tx*, or one of the *enclosing* transactions open when it began, was ended (`commit`, `rollback`).
+    private def ended?(tx : DB::Transaction, enclosing : Array(DB::Transaction)?) : Bool
+      tx.closed? || !!enclosing.try(&.any?(&.closed?))
+    end
+
+    # Crystal consults `method_missing` before it casts a symbol to an enum, so `isolation: :serializable` lands here.
+    def transaction(*, isolation : Symbol, read_only : Bool = false, &)
+      level = IsolationLevel.parse?(isolation.to_s) || raise ArgumentError.new(
+        "unknown isolation level #{isolation.inspect}; use :read_uncommitted, :read_committed, :repeatable_read or :serializable")
+      transaction(isolation: level, read_only: read_only) { |tx| yield tx }
+    end
+
     def transaction(tx : DB::Transaction, &)
-      # Not this schema's transaction to commit or roll back: rollback hooks go to the enclosing one, if any.
-      rollback_hooks = active_frame.try(&.rollback_hooks) || RollbackHooks.new
-      with_active_transaction(tx, rollback_hooks) do
+      # Not this schema's transaction to commit or roll back: rollback hooks go to the enclosing one when *tx* runs on
+      # its connection, and are dropped otherwise.
+      shared = settled_frame.try { |frame| frame.rollback_hooks if frame.transaction.connection.same?(tx.connection) }
+      with_active_transaction(tx, shared || RollbackHooks.new) do
         yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
       end
+    end
+
+    # Nested calls open a SAVEPOINT on the outer transaction's connection.
+    private def open_transaction(parent : TransactionFrame?, before_begin : String?, &)
+      if parent
+        parent.transaction.transaction { |tx| yield tx }
+      elsif before_begin
+        @source.transaction(before_begin) { |tx| yield tx }
+      else
+        @source.transaction { |tx| yield tx }
+      end
+    end
+
+    # The statement setting *isolation* and *read_only*, as {before BEGIN, first in the transaction}, where the
+    # dialect takes it. A savepoint runs in the modes of the transaction it is in.
+    private def transaction_mode_statements(isolation : IsolationLevel?, read_only : Bool, nested : Bool) : {String?, String?}
+      return {nil, nil} unless isolation || read_only
+      raise_nested_modes(isolation, read_only) if nested
+      strategy = dialect
+      sql = strategy.transaction_modes_sql(isolation, read_only).try(&.presence)
+      # A dialect that drops read_only (nil or a blank statement) would run the block read-write: refuse instead.
+      raise DialectError.new(strategy.display_name, "Schema#transaction(read_only:)") if read_only && sql.nil?
+      strategy.transaction_modes_before_begin? ? {sql, nil} : {nil, sql}
+    end
+
+    private def raise_nested_modes(isolation : IsolationLevel?, read_only : Bool) : NoReturn
+      given = [("isolation:" if isolation), ("read_only:" if read_only)].compact
+      raise ArgumentError.new(
+        "#{given.join(" and ")} cannot change inside a transaction; set #{given.size > 1 ? "them" : "it"} on the outermost one")
     end
 
     # Creates a new migrator for the schema.
@@ -503,10 +600,12 @@ module CQL
       transaction { yield }
     end
 
-    # Runs *hook* if the fiber's innermost open transaction rolls back, even after the savepoint it was registered in
-    # committed. Outside a transaction there is nothing to roll back, so it is dropped.
-    private def on_rollback(&hook : ->) : Nil
-      active_frame.try { |frame| frame.rollback_hooks << hook }
+    # Runs *hook* if the fiber's innermost open transaction on this schema rolls back, or, once that savepoint
+    # committed, an enclosing one does; hooks run newest first. Dropped after the outermost commit and outside a
+    # transaction, and not run when the block ended the transaction itself nor after a COMMIT whose outcome is unknown.
+    # A COMMIT the block sends as SQL, or a statement that commits implicitly, is not seen: the hooks would still run.
+    def on_rollback(&hook : ->) : Nil
+      settled_frame.try { |frame| frame.rollback_hooks << hook }
     end
 
     # Raises where DDL commits implicitly, because running it inside an open transaction would
@@ -523,3 +622,5 @@ module CQL
     end
   end
 end
+
+require "./schema/transaction_retry"

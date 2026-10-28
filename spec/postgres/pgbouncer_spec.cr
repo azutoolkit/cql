@@ -16,6 +16,7 @@ end
 
 private def pooler_session(variable : String, extra = "") : PG::Session
   url = pooler_url(variable, extra)
+  raise "required PgBouncer fixture missing: #{variable}" if !url && ENV["CQL_PGB_REQUIRED"]? == "1"
   pending! "set #{variable} (see script/pgbouncer-matrix)" unless url
   PG::Session.connect(PG::Config.parse(url))
 end

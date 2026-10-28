@@ -97,6 +97,10 @@ describe "CQL::Error Handling" do
     end
   end
 
+  it "shows an OptimisticLockError's actual version without an expected one" do
+    CQL::OptimisticLockError.new(actual_version: 6).message.to_s.should end_with("\nActual version: 6")
+  end
+
   it "provides enhanced OptimisticLockError with version information" do
     raise CQL::OptimisticLockError.new(
       model_class: "Post",
@@ -113,7 +117,8 @@ describe "CQL::Error Handling" do
     message = ex.message
     message.should_not be_nil
     if message
-      message.should contain("Post#123")
+      message.should contain("(Post)")
+      message.should_not contain("123")
       message.should contain("Expected version: 5")
       message.should contain("actual: 6")
     end

@@ -87,6 +87,7 @@
 - [Set Up Connection Pooling](how-to/configuration/connection-pooling.md)
 - [Configure Multiple Environments](how-to/configuration/environments.md)
 - [Enable SSL Connections](how-to/configuration/ssl.md)
+- [Use MySQL 8.4 with Verified TLS](how-to/configuration/mysql.md)
 - [Use CockroachDB](how-to/configuration/cockroachdb.md)
 
 ### Native PostgreSQL Driver

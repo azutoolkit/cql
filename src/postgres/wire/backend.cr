@@ -71,6 +71,7 @@ module CQL::Postgres::Wire
           raise ProtocolError.new("invalid field length #{length}") if length < -1
           yield(length == -1 ? nil : reader.bytes(length))
         end
+        raise ProtocolError.new("trailing bytes in DataRow") unless reader.remaining == 0
       end
 
       def values : Array(Bytes?)
@@ -160,30 +161,32 @@ module CQL::Postgres::Wire
     end
 
     def self.decode(type : Char, reader : Reader) : Message
-      case type
-      when 'R'      then authentication(reader)
-      when 'S'      then ParameterStatus.new(reader.cstring, reader.cstring)
-      when 'K'      then backend_key_data(reader)
-      when 'Z'      then ready_for_query(reader)
-      when 'v'      then negotiate_protocol_version(reader)
-      when 'T'      then row_description(reader)
-      when 'D'      then DataRow.new(reader.rest)
-      when 'C'      then CommandComplete.new(reader.cstring)
-      when 'E'      then ErrorResponse.new(error_fields(reader))
-      when 'N'      then NoticeResponse.new(error_fields(reader))
-      when 'A'      then NotificationResponse.new(reader.int32, reader.cstring, reader.cstring)
-      when 't'      then ParameterDescription.new(Array.new(reader.uint16.to_i) { reader.uint32 })
-      when 'G', 'H' then copy_response(type, reader)
-      when 'd'      then CopyData.new(reader.rest)
-      when 'c'      then CopyDone.new
-      when 'I'      then EmptyQueryResponse.new
-      when '1'      then ParseComplete.new
-      when '2'      then BindComplete.new
-      when '3'      then CloseComplete.new
-      when 'n'      then NoData.new
-      when 's'      then PortalSuspended.new
-      else               raise ProtocolError.new("unexpected message type #{type.inspect}")
-      end
+      message = case type
+                when 'R'      then authentication(reader)
+                when 'S'      then ParameterStatus.new(reader.cstring, reader.cstring)
+                when 'K'      then backend_key_data(reader)
+                when 'Z'      then ready_for_query(reader)
+                when 'v'      then negotiate_protocol_version(reader)
+                when 'T'      then row_description(reader)
+                when 'D'      then DataRow.new(reader.rest)
+                when 'C'      then CommandComplete.new(reader.cstring)
+                when 'E'      then ErrorResponse.new(error_fields(reader))
+                when 'N'      then NoticeResponse.new(error_fields(reader))
+                when 'A'      then NotificationResponse.new(reader.int32, reader.cstring, reader.cstring)
+                when 't'      then ParameterDescription.new(Array.new(reader.uint16.to_i) { reader.uint32 })
+                when 'G', 'H' then copy_response(type, reader)
+                when 'd'      then CopyData.new(reader.rest)
+                when 'c'      then CopyDone.new
+                when 'I'      then EmptyQueryResponse.new
+                when '1'      then ParseComplete.new
+                when '2'      then BindComplete.new
+                when '3'      then CloseComplete.new
+                when 'n'      then NoData.new
+                when 's'      then PortalSuspended.new
+                else               raise ProtocolError.new("unexpected message type #{type.inspect}")
+                end
+      raise ProtocolError.new("trailing bytes in #{type.inspect} message") unless reader.remaining == 0
+      message
     end
 
     private def self.authentication(reader : Reader) : Message
@@ -242,10 +245,16 @@ module CQL::Postgres::Wire
       fields
     end
 
-    # The overall format is kept; the per-column formats that follow are not needed.
+    # Validate every format even though only the overall format is needed by COPY.
     private def self.copy_response(direction : Char, reader : Reader) : CopyResponse
-      binary = reader.int8 == 1
-      CopyResponse.new(direction, reader.uint16, binary)
+      format = reader.int8
+      raise ProtocolError.new("invalid COPY format #{format}") unless format.in?(0, 1)
+      count = reader.uint16
+      count.times do
+        column_format = reader.int16
+        raise ProtocolError.new("invalid COPY column format #{column_format}") unless column_format.in?(0, 1)
+      end
+      CopyResponse.new(direction, count, format == 1)
     end
 
     private def self.negotiate_protocol_version(reader : Reader) : NegotiateProtocolVersion

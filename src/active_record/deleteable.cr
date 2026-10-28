@@ -116,6 +116,8 @@ module CQL
         # - **@return** [Bool] True if deleted successfully, false otherwise
         # - **@raise** [CQL::ActiveRecord::Relations::BaseRelation::RelationError] If a
         #   `restrict_with_error` association has records; nothing is deleted then
+        # - **@raise** [CQL::OptimisticLockError] With `optimistic_locking`, if the row no longer has this
+        #   copy's version or is gone; nothing is deleted then
         #
         # **Example** Deleting a record
         #
@@ -130,16 +132,29 @@ module CQL
           # Run before destroy callbacks
           return false unless run_callbacks(:before_destroy)
 
-          success = delete_with_dependents { {{@type.id}}.delete!(id!).rows_affected > 0 }
+          success = delete_with_dependents { delete_row! }
 
           # Run after destroy callbacks and clear the ID if successful
           if success
             run_callbacks(:after_destroy)
+            undo_delete_on_rollback
             clear_id!
             self.destroyed = true
           end
 
           success
+        end
+
+        # A rollback puts the row back, so the record gets its id back, and `save!` updates it.
+        private def undo_delete_on_rollback : Nil
+          restore, destroyed = persistence_snapshot, self.destroyed
+          {{@type.id}}.schema.on_rollback { restore.call; self.destroyed = destroyed }
+        end
+
+        # Deletes this record's row and reports whether there was one; `optimistic_locking`
+        # overrides it to delete only the version this copy read.
+        private def delete_row! : Bool
+          {{@type.id}}.delete!(id!).rows_affected > 0
         end
       end
     end

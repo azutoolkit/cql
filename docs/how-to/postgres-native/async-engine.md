@@ -37,14 +37,26 @@ engine.exec("INSERT INTO notes (body) VALUES ($1)", ["first".as(DB::Any)])
 
 Pool settings are URL query options:
 
+`connect_failure_threshold=3&connect_retry_delay=1` enables circuit breaking for new connections. The threshold
+defaults to `0` (disabled); the delay defaults to one second and must be positive. After the threshold of consecutive
+connection/setup failures, new attempts raise `CQL::Postgres::CircuitOpen` until the delay expires. Exactly one
+recovery probe may connect then; success closes the circuit and failure restarts the delay. Results from connections
+started before the circuit opened cannot close it. Existing healthy pooled connections remain available.
+
+This mechanism does not retry SQL, cancel existing leases or bound the application's number of waiting fibers.
+Limit incoming work in the application as well as setting `pool_size` and `checkout_timeout`. `DB.open` rejects the
+circuit options: use `AsyncEngine` or `EngineSource`. `close` rejects connections still being established; already
+borrowed connections finish their work and are discarded on return. Run `warm_up` once at startup before serving work.
+
 | Option | Meaning | Default |
 | --- | --- | --- |
 | `pool_size` | Maximum connections, at least 1 | 10 |
 | `pool_min_size` | Connections opened by `connect`, 0 to `pool_size` | 0 |
-| `checkout_timeout` | Seconds to wait for a free connection, then `PoolTimeout` | 5 |
-| `health_check_after` | Ping a connection idle longer than this many seconds before lending it | 30 |
+| `checkout_timeout` | Seconds for a checkout: waiting for a free connection (then `PoolTimeout`), health checks (at most half of the time left) and connecting/setup, which from the TCP connection on share the time left (then `IO::TimeoutError`, even before `connect_timeout`; resolving the host is not bounded); 0 does not wait for a slot and connects within `connect_timeout` | 5 |
+| `health_check_after` | Ping a connection idle longer than this many seconds before lending it; a younger one is pinged only if the server wrote to or closed it while idle (a failover's FATAL), which the pool checks without a round trip | 30 |
 | `max_queries` | Retire a connection after this many requests | none |
 | `max_idle_lifetime` | Retire a connection idle this many seconds | none |
+| `pool_reset` | `discard_all`: run `DISCARD ALL` on every return, for tenant isolation (see Setup and Reset Hooks); any other value raises `ArgumentError`, and `DB.open` refuses the key | none |
 
 ```crystal
 engine = CQL::Postgres::AsyncEngine.connect(
@@ -56,7 +68,10 @@ engine.pool.stats.to_s # => "0 in use, 2 idle, 20 max"
 # Pings and resets count as requests. pool_size=abc raises ArgumentError.
 #
 # Connection options:
-#   connect_timeout=10        seconds for each connecting step; 0 waits forever
+#   connect_timeout=10        seconds for each connecting step (in a checkout, at most the time left); 0 waits forever
+#   query_timeout=30          seconds each call may run, COMMIT and DDL included (unset: no limit): a whole pipeline,
+#                             script, or stream or COPY with its block. Past it CQL::Postgres::QueryTimeout after a cancel
+#                             (silent server: plus the 5 s cancel grace, connection dropped); a timed-out COMMIT's outcome is unknown
 #   application_name=cql
 #   statement_cache_size=256  prepared statements kept per connection; 0 turns the cache off
 #   binary_params=false       send parameters in binary; see the COPY and binary parameters guide
@@ -69,6 +84,16 @@ These options apply to `AsyncEngine` and `EngineSource`. A `CQL::Schema` or `DB.
 
 ## Setup and Reset Hooks
 
+With a positive `checkout_timeout`, connection setup shares the checkout's remaining deadline. Startup warm-up
+gets that budget per connection; check-in rollback, reset and setup share a fresh budget. An expired setup closes
+its socket, releases the pool slot and raises `IO::TimeoutError`; expired check-in cleanup discards the connection.
+Neither path retries SQL or admits a late setup result.
+
+Bounded hooks run in a dedicated fiber, so they do not inherit the borrower's fiber-local context. Keep hooks to
+connection configuration and bound any external I/O they perform: Crystal cannot forcibly terminate arbitrary
+callback code. A callback waiting outside the driver can outlive its deadline, but its closed connection cannot
+be reused and it no longer holds a pool slot. A CPU-bound hook must yield to let deadlines run.
+
 ```crystal
 engine = CQL::Postgres::AsyncEngine.connect(
   ENV["DATABASE_URL"],
@@ -77,6 +102,12 @@ engine = CQL::Postgres::AsyncEngine.connect(
 )
 # On return, a transaction the borrower left open is rolled back, then reset runs, the statement
 # cache is cleared and setup runs again. If any step fails, the connection is dropped, not reused.
+#
+# pool_reset=discard_all in the URL is the tenant-isolation setting. DISCARD ALL clears session parameters
+# (set_config included), SET ROLE and SET SESSION AUTHORIZATION, search_path, temp tables, LISTEN channels,
+# session advisory locks, prepared statements and cursors. It costs one round trip per return, and since the
+# statement cache is dropped, each borrow prepares its statements again. Verified on PostgreSQL only; CockroachDB
+# is untested. reset: takes its place; an empty reset: keeps it.
 ```
 
 ## Borrow One Connection
@@ -100,6 +131,10 @@ end
 # raise DB::Rollback.new rolls back quietly, and transaction returns nil.
 # tx is valid only inside its block; later use raises CQL::Postgres::TransactionClosed.
 ```
+
+Transaction scopes and their savepoints belong to the fiber that opened them. Queries, streams and savepoints
+from another fiber raise `CQL::Postgres::WrongFiber` before accessing the connection. Start a separate transaction
+inside a spawned fiber; do not pass it an existing scope.
 
 Isolation, savepoints and `synchronous_commit` are in [Configure TLS, Poolers, Timeouts and Transactions](tls-and-poolers.md#transactions-isolation-and-savepoints).
 

@@ -68,6 +68,40 @@ module Expression
     end
   end
 
+  # LIKE on user text that matches literally: its `%`, `_` and ESCAPE characters are escaped.
+  class EscapedLike < Condition
+    # Not a backslash: its SQL spelling changes under MySQL's NO_BACKSLASH_ESCAPES, and SQLite has no default.
+    ESCAPE = '!'
+
+    enum Position
+      Contains
+      StartsWith
+      EndsWith
+    end
+
+    getter column : BaseColumn
+    getter text : String
+    getter position : Position
+
+    def initialize(@column : BaseColumn, @text : String, @position : Position)
+      raise ArgumentError.new("LIKE text must not contain NUL: SQLite would end the pattern there") if text.includes?('\0')
+    end
+
+    # The bound pattern: the escaped text with `%` on the sides its position leaves open.
+    def pattern : String
+      escaped = text.gsub { |char| char.in?(ESCAPE, '%', '_') ? "#{ESCAPE}#{char}" : char }
+      case position
+      in .contains?    then "%#{escaped}%"
+      in .starts_with? then "#{escaped}%"
+      in .ends_with?   then "%#{escaped}"
+      end
+    end
+
+    def accept(visitor : Visitor)
+      visitor.visit(self)
+    end
+  end
+
   # Null checking
   class IsNull < Condition
     getter column : BaseColumn

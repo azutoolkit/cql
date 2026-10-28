@@ -1,5 +1,39 @@
 require "../spec_helper"
 
+# The `table :name do ... end` block of *table* in a dump.
+private def dumped_table(content : String, table : String) : String
+  content[/^  table :#{table} do\n.*?^  end\n/m]
+end
+
+# *name* as a double-quoted SQL identifier.
+private def quoted_identifier(name : String) : String
+  %("#{name.gsub('"', %(""))}")
+end
+
+# Yields a dumper over a fresh SQLite database built by *ddl*, and its URI; deletes the database afterwards.
+private def with_sqlite_dump(*ddl : String, &)
+  uri = spec_sqlite_uri("schema_dump_#{Random::Secure.hex(4)}.db")
+  DB.open(uri) { |db| ddl.each { |sql| db.exec(sql) } }
+  dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+  yield dumper, uri
+ensure
+  dumper.try(&.close)
+  uri.try { |path| File.delete?(path.lchop("sqlite3://")) }
+end
+
+# Yields a dumper over the shared PostgreSQL database once *table* exists with *column*; drops the table afterwards.
+private def with_postgres_dump(table : String, column : String, &)
+  require_postgres!
+  DB.open(postgres_database_url, &.exec("CREATE TABLE #{quoted_identifier(table)} (id SERIAL PRIMARY KEY, #{quoted_identifier(column)} TEXT)"))
+  begin
+    dumper = CQL::SchemaDump.new(CQL::Adapter::Postgres, postgres_database_url)
+    yield dumper
+  ensure
+    dumper.try(&.close)
+    DB.open(postgres_database_url, &.exec("DROP TABLE IF EXISTS #{quoted_identifier(table)}"))
+  end
+end
+
 describe CQL::SchemaDump do
   describe "SQLite schema dumping" do
     it "can dump a SQLite database schema" do
@@ -55,6 +89,18 @@ describe CQL::SchemaDump do
 
       dumper.close
     end
+
+    it "omits the foreign key rules SQLite reports as NO ACTION, and writes the others as CQL's symbols" do
+      with_sqlite_dump("CREATE TABLE parents (id INTEGER PRIMARY KEY)",
+        "CREATE TABLE children (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parents (id), " \
+        "owner_id INTEGER REFERENCES parents (id) ON DELETE CASCADE ON UPDATE SET NULL)") do |dumper|
+        table = dumped_table(dumper.generate_schema_content(:RulesDB, :rules_db), "children")
+
+        table.should contain("    foreign_key [:parent_id], references: :parents, references_columns: [:id]\n")
+        table.should contain("    foreign_key [:owner_id], references: :parents, references_columns: [:id], " \
+                             "on_delete: :cascade, on_update: :set_null\n")
+      end
+    end
   end
 
   describe "type mapping" do
@@ -106,6 +152,60 @@ describe CQL::SchemaDump do
     dumper.try(&.close)
   end
 
+  describe "unique constraints" do
+    it "writes unique: true for a single-column UNIQUE constraint or unique index on SQLite, and only for it" do
+      uri = spec_sqlite_uri("schema_dump_unique_#{Random::Secure.hex(4)}.db")
+      DB.open(uri) do |db|
+        db.exec("CREATE TABLE unique_rows (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, code TEXT NOT NULL, " \
+                "name TEXT NOT NULL, a TEXT NOT NULL, b TEXT NOT NULL, UNIQUE (a, b))")
+        db.exec("CREATE UNIQUE INDEX unique_rows_code ON unique_rows (code)")
+        db.exec("CREATE INDEX unique_rows_name ON unique_rows (name)")
+      end
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+
+      table = dumped_table(dumper.generate_schema_content(:UniqueDB, :unique_db), "unique_rows")
+
+      table.should contain("    text :email, unique: true\n")
+      table.should contain("    text :code, unique: true\n")
+      table.should contain("    primary :id, String\n")
+      {"name", "a", "b"}.each { |column| table.should contain("    text :#{column}\n") }
+    ensure
+      dumper.try(&.close)
+      uri.try { |path| File.delete?(path.lchop("sqlite3://")) }
+    end
+
+    it "keeps UNIQUE(version) of the migrations table CQL::Migrator creates" do
+      schema = spec_sqlite_schema("schema_dump_migrations_#{Random::Secure.hex(4)}.db")
+      CQL::Migrator.new(schema)
+
+      content = CQL::SchemaDump.open(schema, &.generate_schema_content(:MigrationsDB, :migrations_db))
+
+      dumped_table(content, "cql_schema_migrations").should contain("    bigint :version, unique: true\n")
+    ensure
+      schema.try(&.close)
+      schema.try { |opened| File.delete?(opened.uri.lchop("sqlite3://")) }
+    end
+
+    it "writes unique: true for a single-column UNIQUE constraint on PostgreSQL, and only for it" do
+      require_postgres!
+      table_name = "schema_dump_unique_#{Random::Secure.hex(4)}"
+      DB.open(postgres_database_url) do |db|
+        db.exec("CREATE TABLE #{table_name} (id SERIAL PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, " \
+                "a TEXT NOT NULL, b TEXT NOT NULL, UNIQUE (a, b))")
+      end
+      dumper = CQL::SchemaDump.new(CQL::Adapter::Postgres, postgres_database_url)
+
+      table = dumped_table(dumper.generate_schema_content(:UniqueDB, :unique_db), table_name)
+
+      table.should contain("    text :email, unique: true\n")
+      table.should contain("    primary :id, Int32\n")
+      {"name", "a", "b"}.each { |column| table.should contain("    text :#{column}\n") }
+    ensure
+      dumper.try(&.close)
+      DB.open(postgres_database_url, &.exec("DROP TABLE IF EXISTS #{table_name}")) if table_name
+    end
+  end
+
   describe ".open" do
     it "returns the block's value and closes the dumper's connections" do
       pending!("needs /proc/self/fd") unless FileHandles.supported?
@@ -117,6 +217,251 @@ describe CQL::SchemaDump do
 
       content.should contain("table :users do")
       FileHandles.count(db_file).should eq(before)
+    end
+  end
+
+  describe "the uri: line" do
+    it "reads DATABASE_URL and falls back to the URI without its password" do
+      require_postgres!
+      uri = URI.parse(postgres_database_url)
+      uri.query = "sslmode=disable&password=qp_leak"
+      dumper = CQL::SchemaDump.new(CQL::Adapter::Postgres, uri.to_s)
+      secret = uri.password
+      uri.password = nil
+      uri.query = "sslmode=disable"
+
+      content = dumper.generate_schema_content(:AppDB, :app_db)
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{uri.to_s.inspect})) do\n")
+      content.should_not contain("qp_leak")
+      secret.try { |password| content.should_not contain(":#{password}@") }
+    ensure
+      dumper.try(&.close)
+    end
+
+    it "writes the fallback and the variable name as escaped Crystal string literals" do
+      uri = spec_sqlite_uri(%(schema_dump_q"uote_#{Random::Secure.hex(4)}.db))
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+
+      content = dumper.generate_schema_content(:AppDB, :app_db, env_var: "A\#{x}\"")
+      content.should contain("ENV.fetch(#{"A\#{x}\"".inspect}, #{uri.inspect})) do\n")
+    ensure
+      dumper.try(&.close)
+      uri.try { |written| File.delete?(URI.parse(written).path) }
+    end
+
+    it "keeps a SQLite URI without credentials as the fallback" do
+      dir = File.join(Dir.tempdir, "schema_dump_uri_#{Random::Secure.hex(4)}")
+      Dir.mkdir_p(File.join(dir, "db"))
+      content = Dir.cd(dir) do
+        dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, "sqlite3://./db/app.db")
+        dumper.generate_schema_content(:AppDB, :app_db).tap { dumper.close }
+      end
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", \"sqlite3://./db/app.db\")) do\n")
+    ensure
+      dir.try { |path| FileUtils.rm_rf(path) }
+    end
+
+    it "keeps only known non-secret query parameters in the fallback" do
+      base = spec_sqlite_uri("schema_dump_params_#{Random::Secure.hex(4)}.db")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, base + "?sslmode=require&sslpassword=sslpw_leak&Password=pw_leak" \
+                                                                "&api_key=key_leak&app.token=token_leak&options=opts_leak&application_name=my%20app")
+
+      content = dumper.generate_schema_content(:AppDB, :app_db)
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{(base + "?sslmode=require&application_name=my%20app").inspect})) do\n")
+      %w[sslpw_leak pw_leak key_leak token_leak opts_leak].each { |secret| content.should_not contain(secret) }
+    ensure
+      dumper.try(&.close)
+      base.try { |written| File.delete?(URI.parse(written).path) }
+    end
+
+    it "splits the fallback query on ; as well as &, and matches only ASCII parameter names" do
+      base = spec_sqlite_uri("schema_dump_separators_#{Random::Secure.hex(4)}.db")
+      query = "?sslmode=require;password=pw_leak&application_name=app;api_key=key_leak&health_chec\u212A_after=k_leak"
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, base + query)
+
+      content = dumper.generate_schema_content(:AppDB, :app_db)
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{(base + "?sslmode=require&application_name=app").inspect})) do\n")
+      %w[pw_leak key_leak k_leak].each { |secret| content.should_not contain(secret) }
+    ensure
+      dumper.try(&.close)
+      base.try { |written| File.delete?(URI.parse(written).path) }
+    end
+
+    it "drops the URL fragment from the fallback" do
+      base = spec_sqlite_uri("schema_dump_fragment_#{Random::Secure.hex(4)}.db")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, base + "?sslmode=require#frag_leak")
+
+      content = dumper.generate_schema_content(:AppDB, :app_db)
+
+      content.should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{(base + "?sslmode=require").inspect})) do\n")
+      content.should_not contain("frag_leak")
+    ensure
+      dumper.try(&.close)
+      base.try { |written| File.delete?(URI.parse(written).path) }
+    end
+
+    it "reads the environment variable dump_to_file is given, DATABASE_URL by default" do
+      uri = spec_sqlite_uri("schema_dump_env_#{Random::Secure.hex(4)}.db")
+      file = File.join(Dir.tempdir, "schema_dump_env_#{Random::Secure.hex(4)}.cr")
+      dumper = CQL::SchemaDump.new(CQL::Adapter::SQLite, uri)
+
+      dumper.dump_to_file(file, :AppDB, :app_db, env_var: "ANALYTICS_DATABASE_URL")
+      File.read(file).should contain("  uri: ENV.fetch(\"ANALYTICS_DATABASE_URL\", #{uri.inspect})) do\n")
+      dumper.dump_to_file(file, :AppDB, :app_db)
+      File.read(file).should contain("  uri: ENV.fetch(\"DATABASE_URL\", #{uri.inspect})) do\n")
+    ensure
+      dumper.try(&.close)
+      file.try { |path| File.delete?(path) }
+      uri.try { |written| File.delete?(URI.parse(written).path) }
+    end
+  end
+
+  describe "names read from the database" do
+    it "refuses a table name that is not a plain identifier before writing anything, and runs nothing else" do
+      table = "x); DROP TABLE decoy; --"
+      file = File.join(Dir.tempdir, "schema_dump_decoy_#{Random::Secure.hex(4)}.cr")
+      with_sqlite_dump("CREATE TABLE decoy (id INTEGER PRIMARY KEY)",
+        "CREATE TABLE #{quoted_identifier(table)} (id INTEGER PRIMARY KEY, decoy_id INTEGER REFERENCES decoy (id))") do |dumper, uri|
+        expect_raises(CQL::SchemaDump::Error, table.inspect) { dumper.dump_to_file(file, :DecoyDB, :decoy_db) }
+
+        File.exists?(file).should be_false
+        DB.open(uri, &.query_all("SELECT name FROM sqlite_master WHERE name = 'decoy'", as: String)).should eq(["decoy"])
+      end
+    ensure
+      file.try { |path| File.delete?(path) }
+    end
+
+    it "refuses a column name that is not a plain identifier, naming the column and its table" do
+      column = "note TEXT, injected TEXT)--"
+      with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier(column)} TEXT)") do |dumper|
+        error = expect_raises(CQL::SchemaDump::Error, column.inspect) { dumper.generate_schema_content(:NotesDB, :notes_db) }
+
+        error.message.to_s.should contain("notes")
+      end
+    end
+
+    it "refuses a foreign key whose column, referenced table or referenced column is not a plain identifier" do
+      {"my col"            => "%s INTEGER REFERENCES parents (id)",
+       "parents (id)); --" => "parent_id INTEGER REFERENCES %s (id)",
+       "their col"         => "parent_id INTEGER REFERENCES parents (%s)"}.each do |name, column|
+        with_sqlite_dump("CREATE TABLE children (id INTEGER PRIMARY KEY, #{column % quoted_identifier(name)})") do |dumper|
+          expect_raises(CQL::SchemaDump::Error, name.inspect) { dumper.generate_schema_content(:ChildrenDB, :children_db) }
+        end
+      end
+    end
+
+    it "writes table and column names in letters of any script as symbols" do
+      with_sqlite_dump("CREATE TABLE café (id INTEGER PRIMARY KEY, naïve TEXT NOT NULL)") do |dumper|
+        dumper.generate_schema_content(:CafeDB, :cafe_db).should contain("  table :café do\n    primary :id, Int32\n    text :naïve\n")
+      end
+    end
+
+    it "refuses a PostgreSQL table name that is not a plain identifier" do
+      require_postgres!
+      table = "t(id int);DROP TABLE decoy;--#{Random::Secure.hex(4)}"
+      DB.open(postgres_database_url, &.exec("CREATE TABLE #{quoted_identifier(table)} (id SERIAL PRIMARY KEY)"))
+      dumper = CQL::SchemaDump.new(CQL::Adapter::Postgres, postgres_database_url)
+
+      expect_raises(CQL::SchemaDump::Error, table.inspect) { dumper.generate_schema_content(:NamesDB, :names_db) }
+    ensure
+      dumper.try(&.close)
+      table.try { |name| DB.open(postgres_database_url, &.exec("DROP TABLE IF EXISTS #{quoted_identifier(name)}")) }
+    end
+  end
+
+  describe "names the dumped schema could not build, or that read as another name" do
+    it "refuses a foreign key name that CQL::Identifier rejects, as the foreign key DDL validates it with it" do
+      {"ü_id"      => "%s INTEGER REFERENCES parents (id)",
+       "könig"     => "parent_id INTEGER REFERENCES %s (id)",
+       "schlüssel" => "parent_id INTEGER REFERENCES parents (%s)"}.each do |name, column|
+        with_sqlite_dump("CREATE TABLE children (id INTEGER PRIMARY KEY, #{column % name})") do |dumper|
+          error = expect_raises(CQL::SchemaDump::Error, name.dump) { dumper.generate_schema_content(:ChildrenDB, :children_db) }
+
+          error.message.to_s.should contain("children")
+        end
+      end
+    end
+
+    it "refuses a name that is not valid UTF-8 with an Error naming its table, not the regex's ArgumentError" do
+      column = String.new(Bytes[0x61, 0xFF, 0x62])
+      with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier(column)} TEXT)") do |dumper|
+        expect_raises(CQL::SchemaDump::Error, "notes") { dumper.generate_schema_content(:NotesDB, :notes_db) }
+      end
+    end
+
+    it "refuses a column name holding an invisible Hangul filler, which reads as the name without it" do
+      {'ㅤ', 'ﾠ', 'ᅟ', 'ᅠ'}.each do |filler|
+        with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier("a#{filler}")} TEXT)") do |dumper|
+          error = expect_raises(CQL::SchemaDump::Error, "notes") { dumper.generate_schema_content(:NotesDB, :notes_db) }
+          error.message.to_s.should contain("a\\u#{filler.ord.to_s(16).upcase}") # escaped, so the message shows it
+        end
+      end
+    end
+
+    it "refuses a name that is not in NFC, which reads as its composed form" do
+      with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier("\u1100\u1161")} TEXT)") do |dumper|
+        expect_raises(CQL::SchemaDump::Error, "notes") { dumper.generate_schema_content(:NotesDB, :notes_db) }
+      end
+    end
+  end
+
+  describe "names the unquoted DDL reads as other SQL or folds into another name" do
+    it "refuses a SQLite column named constraint in any case, which the DDL reads as a table constraint" do
+      {"constraint", "CONSTRAINT", "Constraint"}.each do |column|
+        with_sqlite_dump("CREATE TABLE notes (id INTEGER PRIMARY KEY, #{quoted_identifier(column)} TEXT)") do |dumper|
+          error = expect_raises(CQL::SchemaDump::Error, column.dump) { dumper.generate_schema_content(:NotesDB, :notes_db) }
+          error.message.to_s.should contain(%("notes"))
+        end
+      end
+      with_sqlite_dump("CREATE TABLE Notes (id INTEGER PRIMARY KEY, Title TEXT)") do |dumper|
+        dumper.generate_schema_content(:NotesDB, :notes_db).should contain("text :Title") # SQLite keeps the case
+      end
+    end
+
+    it "refuses a PostgreSQL column named like, read as a LIKE clause, and a name with an uppercase letter, folded" do
+      suffix = Random::Secure.hex(4)
+      {"likes_#{suffix}" => {"like", "like"}, "Users_#{suffix}" => {"note", "Users_#{suffix}"},
+       "emails_#{suffix}" => {"Email", "Email"}}.each do |table, (column, refused)|
+        with_postgres_dump(table, column) do |dumper|
+          error = expect_raises(CQL::SchemaDump::Error, refused.dump) { dumper.generate_schema_content(:NamesDB, :names_db) }
+          error.message.to_s.should contain(table.dump)
+        end
+      end
+    end
+
+    it "folds an unquoted name as each database does" do
+      CQL::Adapter::SQLite.dialect.fold_unquoted_name("Users").should eq("Users")
+      CQL::Adapter::Postgres.dialect.fold_unquoted_name("Émail_Users").should eq("Émail_users") # A-Z only in UTF-8
+      CQL::Adapter::CockroachDB.dialect.fold_unquoted_name("Émail_Users").should eq("émail_users")
+      CQL::Adapter::CockroachDB.dialect.fold_unquoted_name("lıke").should eq("like") # dotless i folds to i
+      CQL::Adapter::CockroachDB.dialect.fold_unquoted_name("LİKE").should eq("like")
+    end
+
+    it "dumps a lowercase PostgreSQL table and keyword column" do
+      table = "schema_dump_keys_#{Random::Secure.hex(4)}"
+      with_postgres_dump(table, "key") do |dumper|
+        dumped_table(dumper.generate_schema_content(:KeysDB, :keys_db), table).should contain("    text :key, null: true\n")
+      end
+    end
+
+    it "dumps keyword columns SQLite builds unquoted, and the dumped DSL builds a table that has them" do
+      schema = spec_sqlite_schema("schema_dump_keywords_#{Random::Secure.hex(4)}.db")
+      schema.table :keywords do
+        primary :id, Int32
+        text :key
+        text :first
+      end
+      schema.build
+
+      DB.open(schema.uri, &.query_all("SELECT name FROM pragma_table_info('keywords')", as: String)).should eq(%w[id key first])
+      dumped_table(CQL::SchemaDump.open(schema, &.generate_schema_content(:KeywordDB, :keyword_db)), "keywords")
+        .should eq("  table :keywords do\n    primary :id, Int32\n    text :key\n    text :first\n  end\n")
+    ensure
+      schema.try { |opened| opened.close; File.delete?(opened.uri.lchop("sqlite3://")) }
     end
   end
 

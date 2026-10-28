@@ -37,10 +37,10 @@ module CQL::Postgres
   # roots). Query values are percent-decoded only; `+` stays a plus.
   class Config
     SCHEMES              = {"postgres", "postgresql", "cockroachdb"}
-    POOL_OPTION_KEYS     = {"pool_size", "pool_min_size", "checkout_timeout", "health_check_after", "max_queries", "max_idle_lifetime"}
+    POOL_OPTION_KEYS     = {"pool_size", "pool_min_size", "checkout_timeout", "health_check_after", "max_queries", "max_idle_lifetime", "pool_reset", "connect_failure_threshold", "connect_retry_delay"}
     DRIVER_OPTION_KEYS   = POOL_OPTION_KEYS + {"min_protocol_version", "max_protocol_version", "binary_params"}
     RESERVED_PARAMETERS  = {"user", "database", "dbname", "password", "hostaddr", "client_encoding", "replication"}
-    UNSUPPORTED_LIBPQ    = {"sslcert", "sslkey", "sslcrl", "sslcompression", "sslsni", "sslpassword", "channel_binding", "require_auth", "target_session_attrs", "passfile", "service", "gssencmode", "krbsrvname"}
+    UNSUPPORTED_LIBPQ    = {"sslcrl", "sslcompression", "sslsni", "sslpassword", "channel_binding", "require_auth", "target_session_attrs", "passfile", "service", "gssencmode", "krbsrvname"}
     DEFAULT_CONNECT_WAIT = 10.0
 
     # Accepted for configuration written for the `pg` shard or crystal-db's pool (`CQL.configure` emits both):
@@ -55,9 +55,14 @@ module CQL::Postgres
     getter database : String
     getter ssl_mode : SSLMode
     getter ssl_root_cert : String?
+    # The client certificate (chain) and its unencrypted key, PEM files presented when the server asks; both or neither.
+    getter ssl_cert : String?
+    getter ssl_key : String?
     # How long each step of connecting and starting up may block (TCP connect,
     # TLS, every server reply), not a total deadline; nil waits indefinitely.
     getter connect_timeout : Time::Span?
+    # The deadline of every statement that passes no `timeout:` of its own; nil (the default) waits indefinitely.
+    getter query_timeout : Time::Span?
     getter application_name : String
     getter statement_cache_size : Int32
     getter startup_options : Hash(String, String)
@@ -86,6 +91,32 @@ module CQL::Postgres
       binary_params?
     end
 
+    private def check_client_certificate : Nil
+      certificate, key = ssl_cert, ssl_key
+      return unless certificate || key
+      raise ArgumentError.new("sslcert and sslkey must be set together") unless certificate && key
+      {"sslcert" => certificate, "sslkey" => key}.each do |option, path|
+        raise ArgumentError.new("#{option} #{path} is not a readable file") unless File.file?(path) && File::Info.readable?(path)
+      end
+      warn_if_key_exposed(key)
+    end
+
+    @@exposed_keys_warned = Set(String).new
+    @@exposed_keys_lock = CQL::Compat::Mutex.new
+
+    # libpq refuses a key open to group or others (a root-owned key may be group-readable); CQL warns instead, once
+    # per path, as secret mounts (Kubernetes) are often root-owned 0644. A key that vanished since it was checked
+    # is left to the TLS handshake to report: a warning never fails a connect.
+    private def warn_if_key_exposed(path : String) : Nil
+      {% if flag?(:unix) %}
+        info = File.info?(path) || return
+        mode = info.permissions.value
+        return if mode & (info.owner_id == "0" ? 0o037 : 0o077) == 0
+        return unless @@exposed_keys_lock.synchronize { @@exposed_keys_warned.add?(path) }
+        Session::Log.warn { "sslkey #{path} has mode #{"%04o" % mode}, open to group or others: libpq would refuse it (chmod 600)" }
+      {% end %}
+    end
+
     def max_protocol_version : ProtocolVersion
       ProtocolVersion.parse(driver_options["max_protocol_version"]? || "latest")
     end
@@ -93,8 +124,10 @@ module CQL::Postgres
     def initialize(@host = "localhost", @port = 5432, @user = "postgres", @password = nil, database : String? = nil,
                    @ssl_mode = SSLMode::Prefer, @ssl_root_cert = nil, @connect_timeout = DEFAULT_CONNECT_WAIT.seconds,
                    @application_name = "cql", @statement_cache_size = 256,
-                   @startup_options = {} of String => String, @driver_options = {} of String => String, @cockroachdb = false)
+                   @startup_options = {} of String => String, @driver_options = {} of String => String, @cockroachdb = false,
+                   @query_timeout = nil, @ssl_cert = nil, @ssl_key = nil)
       check_binary_params
+      check_client_certificate
       raise ArgumentError.new("min_protocol_version #{min_protocol_version} is newer than max_protocol_version #{max_protocol_version}") if min_protocol_version > max_protocol_version
       @database = database || @user
     end
@@ -103,7 +136,8 @@ module CQL::Postgres
     # A host starting with `/` (percent-encoded in the authority, or given as
     # `?host=`) is the directory of a Unix socket.
     def self.parse(url : String) : Config
-      from_uri(URI.parse(url), *userinfo(url))
+      location, user, password = split_userinfo(url)
+      from_uri(URI.parse(location), user, password)
     end
 
     # For callers that only hold a parsed URI (crystal-db's driver interface).
@@ -112,6 +146,11 @@ module CQL::Postgres
     # caller and are not read as settings; `COMPAT_IGNORED_KEYS` are always dropped.
     def self.from_uri(uri : URI, user : String? = uri.user.presence, password : String? = uri.password, ignoring : Enumerable(String) = [] of String) : Config
       raise ArgumentError.new("expected a postgres:// URL, got scheme #{uri.scheme.inspect}") unless SCHEMES.includes?(uri.scheme)
+      # URI.parse ends the user info at the first '@', leaving the rest of a password with an unencoded '@' in the host
+      # (a socket directory, which starts with '/', may hold an '@' of its own).
+      if uri.user && uri.host.try { |host| host.includes?('@') && !host.starts_with?('/') }
+        raise ArgumentError.new("the URL's host holds an '@': write an '@' in the password as %40")
+      end
       params = query_parameters(uri.query)
       ignoring.each { |key| params.delete(key) }
       COMPAT_IGNORED_KEYS.each { |key| params.delete(key) }
@@ -131,7 +170,10 @@ module CQL::Postgres
         database: uri.path.lstrip('/').presence.try { |name| URI.decode(name) },
         ssl_mode: ssl_mode,
         ssl_root_cert: ssl_root_cert,
+        ssl_cert: pop(params, "sslcert").presence,
+        ssl_key: pop(params, "sslkey").presence,
         connect_timeout: timeout(pop(params, "connect_timeout")),
+        query_timeout: positive_seconds(pop(params, "query_timeout"), "query_timeout"),
         application_name: pop(params, "application_name") || "cql",
         statement_cache_size: number(pop(params, "statement_cache_size"), "statement_cache_size") || 256,
         startup_options: startup_options(params),
@@ -140,13 +182,14 @@ module CQL::Postgres
       )
     end
 
-    # URI.parse reads `+` in the user info as a space (form encoding); in a URL
-    # it is a literal plus, so the user info is split and percent-decoded here.
-    private def self.userinfo(url : String) : {String?, String?}
-      authority = url.partition("://")[2].split(/[\/?#]/, 2).first
-      return {nil, nil} unless at = authority.rindex('@')
-      user, separator, password = authority[0, at].partition(':')
-      {URI.decode(user).presence, separator.empty? ? nil : URI.decode(password)}
+    # URI.parse reads `+` in the user info as a space (form encoding) and ends it at the first '@'; in a URL `+` is a
+    # literal plus, and an unencoded '@' of a password must not reach the host. So the user info ends at the
+    # authority's last '@' and is percent-decoded here; the URL comes back without it.
+    private def self.split_userinfo(url : String) : {String, String?, String?}
+      scheme, separator, rest = url.partition("://")
+      return {url, nil, nil} unless scheme.matches?(/\A[a-z][a-z0-9+.\-]*\z/i) && (at = rest[/\A[^\/?#]*/].rindex('@'))
+      user, colon, password = rest[0, at].partition(':')
+      {"#{scheme}#{separator}#{rest[at + 1..]}", URI.decode(user).presence, colon.empty? ? nil : URI.decode(password)}
     end
 
     private def self.query_parameters(query : String?) : Hash(String, String)
@@ -174,6 +217,13 @@ module CQL::Postgres
       text.try { |value| value.to_i64? || raise ArgumentError.new("#{name} must be a whole number, got #{value.inspect}") }
     end
 
+    # Like `seconds`, but zero is refused: unlike `connect_timeout`, it does not mean "no deadline".
+    private def self.positive_seconds(text : String?, name : String) : Time::Span?
+      return unless text
+      span = text.to_f?.try { |number| number.seconds if number.finite? && number <= 31_536_000 }
+      span.try(&.positive?) ? span : raise ArgumentError.new("#{name} must be a positive number of seconds up to a year, got #{text.inspect}")
+    end
+
     private def self.timeout(text : String?) : Time::Span?
       seconds = text.try { |value| value.to_f?.try { |number| number if number.finite? } || raise ArgumentError.new("connect_timeout must be a number of seconds, got #{value.inspect}") } || DEFAULT_CONNECT_WAIT
       seconds.positive? ? seconds.seconds : nil
@@ -188,9 +238,10 @@ module CQL::Postgres
       end
     end
 
-    # Where the connection goes, for error messages.
+    # Where the connection goes, for error messages; an IPv6 host is bracketed so its port reads apart from it.
     def address : String
-      unix_socket? ? socket_path : "#{host}:#{port}"
+      return socket_path if unix_socket?
+      host.includes?(':') ? "[#{host}]:#{port}" : "#{host}:#{port}"
     end
 
     def unix_socket? : Bool

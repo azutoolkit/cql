@@ -32,7 +32,7 @@ block.
 | Option | Effect on the `ADD COLUMN` statement |
 | :--- | :--- |
 | `null: false` | adds `NOT NULL` |
-| `default:` | adds `DEFAULT <value>`, which also fills the existing rows |
+| `default:` | adds `DEFAULT <value>`, which also fills the existing rows; on SQLite `"CURRENT_TIMESTAMP"` on a `Time` column raises `CQL::SQLiteUnsupportedFeatureError`, so backfill it with `exec` instead |
 | `unique: true` | adds `UNIQUE`; SQLite rejects it ("Cannot add a UNIQUE column"), so use `create_index ..., unique: true` |
 | `index: true` | runs `CREATE INDEX idx_<table>_<column>` after the column (`UNIQUE` with `unique: true`) |
 | `size:` | `VARCHAR(size)` for a `String` column on PostgreSQL, CockroachDB and MySQL; SQLite's `TEXT` has no length |

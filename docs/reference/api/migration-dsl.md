@@ -30,6 +30,7 @@ end
 | :--- | :--- |
 | `class Name < CQL::Migration(V)` | `V` is an integer literal (usually a timestamp). Defining the class registers it in `CQL::Migrator.migrations`. |
 | `def up`, `def down` | Required. Apply and revert the change. There is no irreversible marker: raise from `down`. |
+| `disable_ddl_transaction!` | Runs `up` alone, outside the DDL transaction the run's other migrations share and outside the migration lock, for statements a transaction refuses (PostgreSQL's `CREATE INDEX CONCURRENTLY`). The migrations before it stay applied when it fails, and what it did before failing stays too. Run one migrator at a time while it is pending: two at once can both run it. Inside a transaction you opened, it runs in that transaction. `down` still runs in the rollback's transaction. |
 | `schema` | The `CQL::Schema` the migrator runs on. |
 | `Name.version` | `V` as `Int64`. |
 
@@ -100,7 +101,7 @@ end
 | Option | Type | Default | SQL |
 | :--- | :--- | :--- | :--- |
 | `null` | `Bool` | `false` | `false` adds `NOT NULL` |
-| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings single-quoted with `'` doubled (on MySQL also `\` doubled and NUL as `\0`), `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere. On `created_at` and `updated_at`, a whole current-time call (`datetime('now')` on SQLite, `NOW(3)` on MySQL, `CURRENT_TIMESTAMP` on PostgreSQL) is written unquoted, and any other string is quoted |
+| `default` | `DB::Any` | `nil` | `DEFAULT <literal>`; strings single-quoted with `'` doubled (on MySQL also `\` doubled and NUL as `\0`), `Bool` as `1`/`0` on SQLite and `TRUE`/`FALSE` elsewhere. On a `Time` column (not `date`), `"CURRENT_TIMESTAMP"` (any case) is the database's current time on every database. A whole current-time call in the dialect's spelling (`datetime('now')` on SQLite, `NOW(3)` on MySQL, `CURRENT_TIMESTAMP` on PostgreSQL) is written unquoted on a `Time` column or on a `created_at`/`updated_at` column of any type; any other string is quoted |
 | `unique` | `Bool` | `false` | `UNIQUE`; with `index: true` the index is unique too |
 | `index` | `Bool` | `false` | Declares `idx_<t>_<column>` (e.g. `idx_posts_slug`), created by `create!` after the table |
 | `as` | `String?` | `nil` | Alias used when the column is selected |
@@ -181,15 +182,19 @@ Methods of `CQL::AlterTable`, available inside `schema.alter :name do ... end`. 
 
 | Method | Defaults | Notes |
 | :--- | :--- | :--- |
-| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | The same column definition as `CREATE TABLE`: `default` emits `DEFAULT`, which fills existing rows, and `size` follows [Column options](#column-options). `index: true` then runs `CREATE INDEX idx_<t>_<column>`. |
+| **`add_column(name, type, as: nil, null: true, default: nil, unique: false, size: nil, index: false)`** | `null: true` | The same column definition as `CREATE TABLE`: `default` emits `DEFAULT`, which fills existing rows, and `size` follows [Column options](#column-options). `index: true` then runs `CREATE INDEX idx_<t>_<column>`. On SQLite, a `"CURRENT_TIMESTAMP"` default on a `Time` column raises `CQL::SQLiteUnsupportedFeatureError` (SQLite takes it only on an empty table): add the column without a default and backfill it with `exec`, or rebuild the table. |
 | **`drop_column(name)`** | | Emits `DROP COLUMN` whether or not the schema declares the column; the name must be an identifier |
-| **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column |
-| **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
+| **`rename_column(old, new)`** | | Raises `KeyError` for an undeclared column. MySQL's `CHANGE` restates the column's `DEFAULT`, `NOT NULL` and a primary key's `AUTO_INCREMENT`, never `UNIQUE` or `PRIMARY KEY` (its indexes stay) |
+| **`change_column(name, type)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite. The declaration keeps the column's `null`, `default`, `unique` and `index`, and a primary key stays the primary key; its `size` starts over and its `as:` alias is dropped. A column the schema does not declare is declared nullable. MySQL's `MODIFY COLUMN` restates what `CHANGE` does |
 | **`rename_table(new_name)`** | | Statements before it in the block use the old name, statements after it the new one |
 | **`create_index(name : Symbol, columns : Array(Symbol), unique: false)`** | | No `IF NOT EXISTS` |
 | **`drop_index(name : Symbol)`** | | |
 | **`foreign_key(columns or column, references:, references_columns: nil, name : Symbol? = nil, on_delete: :no_action, on_update: :no_action)`** | `references_columns` defaults to the referenced table's primary key, name `fk_<t>_<columns>` | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
 | **`drop_foreign_key(name : Symbol)`** | | Raises `CQL::SQLiteUnsupportedFeatureError` on SQLite |
+
+{% hint style="warning" %}
+MySQL's `CHANGE` and `MODIFY COLUMN` still reset what CQL does not model: `COMMENT`, character set and collation, `ON UPDATE CURRENT_TIMESTAMP` and generated columns. The restated `NOT NULL` fails over existing `NULL` rows in strict mode and turns them into the type's zero value otherwise, so backfill them first; the declared `default` must be valid for the new type.
+{% endhint %}
 
 ```crystal
 # PostgreSQL. On SQLite, change_column, foreign_key and drop_foreign_key raise.
@@ -221,8 +226,8 @@ end
 | `add_column :level, Int32, default: 1, null: false, index: true` | `... ADD COLUMN level INTEGER DEFAULT 1 NOT NULL`, then `CREATE INDEX idx_users_level ON users (level)` | `... level INTEGER DEFAULT 1 NOT NULL` (`INT4` on CockroachDB), same index | `... level INT DEFAULT 1 NOT NULL`, same index |
 | `add_column :code, String, size: 12` | `... ADD COLUMN code TEXT` | `... code VARCHAR(12)` | `... code VARCHAR(12)` |
 | `drop_column :bio` | `... DROP COLUMN bio` (SQLite 3.35+) | `... DROP COLUMN bio` | `... DROP COLUMN bio` |
-| `rename_column :nick, :handle` | `... RENAME COLUMN nick TO handle` | same | `... CHANGE nick handle VARCHAR(255)` (`VARCHAR(n)` for a sized column) |
-| `change_column :score, Int64` | raises | `... ALTER COLUMN score TYPE BIGINT` | `... MODIFY COLUMN score BIGINT` |
+| `rename_column :nick, :handle` | `... RENAME COLUMN nick TO handle` | same | `... CHANGE nick handle VARCHAR(255) NOT NULL` (`VARCHAR(n)` for a sized column, `DEFAULT` when declared, `AUTO_INCREMENT` on such a key) |
+| `change_column :score, Int64` | raises | `... ALTER COLUMN score TYPE BIGINT` | `... MODIFY COLUMN score BIGINT NOT NULL` (`DEFAULT` when declared, `AUTO_INCREMENT` on such a key) |
 | `create_index :idx_users_phone, [:phone], unique: true` | `CREATE UNIQUE INDEX idx_users_phone ON users (phone)` | same | same |
 | `drop_index :idx_users_phone` | `DROP INDEX IF EXISTS idx_users_phone` | same | `DROP INDEX idx_users_phone ON users` |
 | `foreign_key [:team_id], references: :teams` | raises | `... ADD CONSTRAINT fk_users_team_id FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE NO ACTION ON UPDATE NO ACTION` | same |
@@ -247,7 +252,7 @@ migrator.up_to(20250125001401_i64)  # apply the pending ones up to and including
 | Method | Behavior |
 | :--- | :--- |
 | `schema.migrator`, `schema.migrator(config)`, `CQL::Migrator.new(schema, config = MigratorConfig.new)` | Builds the migrator and creates the migrations table (`ddl_transaction`). Writes no schema file. |
-| **`up(steps = all)`** | Applies the `steps` oldest pending migrations, in version order, in one `ddl_transaction`; then rewrites the schema file (`auto_sync`) and prints the applied list. |
+| **`up(steps = all)`** | Applies the `steps` oldest pending migrations, in version order, in one `ddl_transaction` (one per run of migrations between those with `disable_ddl_transaction!`, which run alone); then rewrites the schema file (`auto_sync`) and prints the applied list. A run that fails after a batch committed leaves the file as it was until the next `up`. Raises `CQL::Migrator::Error` when, while it waited for the migration lock, another migrator rolled back a migration older than the ones it picked. |
 | **`down(steps = all)`** | Reverts the `steps` newest applied migrations, highest version first, in one `ddl_transaction`; then rewrites the schema file and prints what was rolled back. |
 | **`rollback(steps = 1)`** | `down(steps)`. |
 | `redo` | `rollback`, then `up`. |
@@ -271,6 +276,8 @@ migrator.up_to(20250125001401_i64)  # apply the pending ones up to and including
 | `schema_symbol` | `Symbol` | `:app_schema` |
 | `migration_table_name` | `Symbol` | `:cql_schema_migrations` |
 | `auto_sync?` | `Bool` | `true`: rewrite the schema file after `up` / `down` |
+| `lock_timeout` | `Time::Span?` | `60.seconds`: how long `Migrator.new` and a run wait for another migrator's PostgreSQL migration lock before raising `CQL::Migrator::Error`; replaces the server's `lock_timeout` for that wait only, and under 1 ms counts as 1 ms; `nil` leaves the wait to the server's `lock_timeout`. `CQL.configure` does not set it |
+| `schema_url_env` | `String` | `"DATABASE_URL"`: the environment variable the schema file's `uri:` line reads, for the file written and for `verify_schema_consistency` |
 
 `CQL.build_migrator(schema)` builds the config from `CQL.configure` instead (table `:schema_migrations`); see the [Configuration Reference](../configuration.md#helpers).
 

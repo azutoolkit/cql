@@ -48,6 +48,14 @@ module CQL
     # Article.published.recent(7).order(created_at: :desc).all # Mixed with query methods
     # ```
     module Scopes
+      # Raised when a scope's body fails; an ArgumentError, as before, that keeps the failure as `cause`.
+      class ScopeError < ArgumentError
+        def initialize(message : String, cause : Exception)
+          super(message)
+          @cause = cause
+        end
+      end
+
       macro included
         # Track all defined scopes for debugging and introspection
         @@defined_scopes = {} of String => String
@@ -136,13 +144,14 @@ module CQL
       end
 
       # Runs a scope's body with *builder* as the receiver of its unqualified calls; a call the
-      # builder does not answer goes to the model.
+      # builder does not answer goes to the model. Another error becomes an ArgumentError that
+      # names its class and keeps it as `cause`: a driver message can quote row values.
       def self.evaluate(name : String, builder, &)
         with builder yield
       rescue ex : ArgumentError
         raise ex
       rescue ex
-        raise ArgumentError.new("Error in scope '#{name}': #{ex.message}")
+        raise ScopeError.new("Error in scope '#{name}' (#{ex.class.name})", cause: ex)
       end
 
       # Utility methods for scope introspection and debugging

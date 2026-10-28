@@ -50,6 +50,9 @@ module CQL::Performance
     # N+1 detection configuration
     class Detection
       property? enabled : Bool = true
+      # Capture a stack only when a new N+1 pattern is detected. Use synchronous
+      # monitoring to capture the application caller rather than an async worker.
+      property? capture_backtrace : Bool = false
       property threshold : Int32 = 2
       property? strict_mode : Bool = false
       property ignore_patterns : Array(String) = ["COMMIT", "BEGIN", "ROLLBACK"]

@@ -23,10 +23,24 @@ engine = CQL::Postgres::AsyncEngine.connect("postgres://app:secret@db.internal/a
 # Unix socket: host names the socket directory
 "postgres://app@/app?host=/var/run/postgresql"
 
-# ArgumentError: sslmode=allow or verify-ca, sslcert, sslkey, and sslrootcert without verify-full
+# ArgumentError: sslmode=allow or verify-ca, sslrootcert without verify-full, sslcert without sslkey, sslpassword
 
 # TLS required but not had (server declines, handshake fails, bad certificate): CQL::Postgres::TLSRefused.
 # It is not an IO::Error, so crystal-db's pool does not retry it; a hang-up mid-handshake is retried.
+```
+
+### Client certificates
+
+```crystal
+# PEM files read by every new connection; an encrypted key raises CQL::Postgres::TLSRefused (no sslpassword)
+"postgres://app@db.internal/app?sslmode=verify-full&sslcert=/etc/app/client.pem&sslkey=/etc/app/client.key"
+
+# Presented only when TLS is negotiated: sslmode=disable, or prefer against a server without TLS, never sends them.
+# Rotate by replacing each file atomically (write a new one, then rename): a half-written file fails the
+# connect as TLSRefused, which is not retried.
+# A key open to group or others (chmod 600; root-owned may be 0640) logs a warning once per path: libpq refuses it.
+# When the pg shard serves postgres:// (require "pg" anywhere), an encrypted key still prompts for a pass phrase:
+# the shard loads it without this guard.
 ```
 
 ## Protocol Versions
@@ -59,7 +73,7 @@ Not tested: RDS Proxy, Supavisor, other pgpool-II settings.
 ```crystal
 # Transaction-mode pooler without prepared-statement support: named statements collide between
 # clients (SQLSTATE 42P05, or 26000 on the next server connection). Use the unnamed statement:
-"postgres://app:secret@pgbouncer.internal:6432/app?statement_cache_size=0&max_protocol_version=3.0"
+"postgres://app:secret@pgbouncer.internal:6432/app?sslmode=verify-full&statement_cache_size=0&max_protocol_version=3.0"
 # Pipelining needs the cache, so engine.pipeline raises ArgumentError there.
 # In transaction mode a stream's portal pins the pooler's server connection until its block ends.
 ```
@@ -70,6 +84,15 @@ POOLER_NAME=pgbouncer POOLER_PORT=6432 POOLER_USER=app POOLER_PASSWORD=secret cr
 # Nine probes: connect, cached statements, interleaved clients, statement_cache_size=0, pipelining,
 # SET LOCAL, timeout cancel, streaming, savepoints. POOLER_QUERY adds URL options (default sslmode=disable).
 ```
+
+The release workflow runs all ten PgBouncer regression cases against four disposable configurations:
+transaction pooling with prepared statements disabled (one and three backend connections), transaction pooling
+with `max_prepared_statements=100`, and session pooling. Missing services fail that job instead of becoming pending.
+Local validation uses PgBouncer 1.24.1; CI installs the Ubuntu 24.04 package and records its version.
+The tests cover statement-name collisions and their `statement_cache_size=0` remedy, interleaved clients,
+`SET LOCAL` isolation, streaming, pipelining, cancellation and rollback after an abandoned transaction.
+These fixtures use loopback SCRAM connections; the separate TLS tests exercise the native driver directly.
+They do not validate TLS termination, failover or certificate rotation in your deployed proxy topology.
 
 ## Timeouts and Cancel
 
@@ -88,7 +111,7 @@ end
 A cancel request carries the session's secret key over a new, **unencrypted** connection, even under `sslmode=require`, as libpq does before version 17.
 {% endhint %}
 
-`Session#ping(timeout)` closes a connection that does not answer in time. Pool health checks ping idle connections for at most 5 seconds (`Session::PING_TIMEOUT`) within one `checkout_timeout` budget per checkout, so several dead connections delay a checkout by about one timeout. A dropped connection skips the TLS close_notify, which could block on a dead path.
+`Session#ping(timeout)` closes a connection that does not answer in time. Pool health checks ping idle connections for at most 5 seconds (`Session::PING_TIMEOUT`) and share at most half of a checkout's remaining `checkout_timeout`, so several dead connections delay a checkout by about half of it and it can still connect a replacement. A dropped connection skips the TLS close_notify, which could block on a dead path.
 
 ## LISTEN and NOTIFY
 

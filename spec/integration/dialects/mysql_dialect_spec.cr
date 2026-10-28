@@ -167,6 +167,29 @@ module Expression
       end
     end
 
+    describe "#transaction_modes_sql" do
+      it "sets the next transaction's level, which MySQL accepts only before BEGIN" do
+        dialect = CQL::Adapter::MySql.dialect
+        dialect.transaction_modes_sql(CQL::IsolationLevel::RepeatableRead, false).should eq("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        dialect.transaction_modes_sql(CQL::IsolationLevel::ReadUncommitted, false).should eq("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+        dialect.transaction_modes_before_begin?.should be_true
+      end
+
+      it "sets the next transaction read-only, alone or with a level" do
+        dialect = CQL::Adapter::MySql.dialect
+        dialect.transaction_modes_sql(nil, true).should eq("SET TRANSACTION READ ONLY")
+        dialect.transaction_modes_sql(CQL::IsolationLevel::Serializable, true).should eq("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY")
+        dialect.transaction_modes_sql(CQL::IsolationLevel::Serializable, false).should eq("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        dialect.transaction_modes_sql(nil, false).should be_nil
+      end
+
+      it "is set inside the transaction on every other dialect" do
+        [CQL::Adapter::Postgres, CQL::Adapter::CockroachDB, CQL::Adapter::SQLite].each do |adapter|
+          adapter.dialect.transaction_modes_before_begin?.should be_false
+        end
+      end
+    end
+
     describe "#format_returning" do
       it "does not support RETURNING clause" do
         dialect = MySqlDialect.new

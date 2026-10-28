@@ -132,6 +132,21 @@ module CQL
       def not_ilike(pattern : String) : Expression::ConditionBuilder
         @expression.not_ilike(pattern)
       end
+
+      # LIKE '%text%' with *text* matched literally.
+      def contains(text : String) : Expression::ConditionBuilder
+        @expression.contains(text)
+      end
+
+      # LIKE 'text%' with *text* matched literally.
+      def starts_with(text : String) : Expression::ConditionBuilder
+        @expression.starts_with(text)
+      end
+
+      # LIKE '%text' with *text* matched literally.
+      def ends_with(text : String) : Expression::ConditionBuilder
+        @expression.ends_with(text)
+      end
     end
 
     # JSON columns add document predicates.

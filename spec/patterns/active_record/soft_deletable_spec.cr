@@ -576,4 +576,26 @@ describe CQL::ActiveRecord::SoftDeletable do
       PostRestrictedSoftDeletableUser.find!(restricted.id!).deleted_at.should be_nil
     end
   end
+
+  describe "in a transaction that rolls back" do
+    it "is not deleted any more after a soft delete, nor without its id after a force delete" do
+      user = SoftDeletableUser.new("John Doe", "john@example.com", 30)
+      user.create!
+      expect_raises(Exception, "boom") { SoftDeletableDB.transaction { user.delete!; raise "boom" } }
+      {user.deleted?, user.destroyed?, user.persisted?}.should eq({false, false, true})
+      id = user.id
+      expect_raises(Exception, "boom") { SoftDeletableDB.transaction { user.force_delete!; raise "boom" } }
+      {user.id, user.destroyed?}.should eq({id, false})
+    end
+
+    it "stays deleted when a restore and a delete in it roll back, so save! does not undelete its row" do
+      user = SoftDeletableUser.new("John Doe", "john@example.com", 30)
+      user.create!
+      user.delete!
+      expect_raises(Exception, "boom") { SoftDeletableDB.transaction { user.restore!; user.delete!; raise "boom" } }
+      {user.deleted?, user.destroyed?}.should eq({true, true})
+      user.save!
+      SoftDeletableUser.only_deleted.count.should eq 1
+    end
+  end
 end

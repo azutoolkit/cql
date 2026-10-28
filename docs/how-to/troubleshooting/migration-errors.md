@@ -114,12 +114,14 @@ CQL::Postgres::ForeignKeyViolation: ERROR: insert or update on table "posts" vio
 CQL::Migrator::Error: Schema update failed: Unable to create directory: 'db/schema': File exists
 ```
 
-**Cause:** with `auto_sync` on, the migrator dumps the schema file after `up` and `down`, and a path under an existing file cannot be created.
+**Cause:** `update_schema_file` or `bootstrap_schema` (also run by `CQL.build_migrator` and `CQL.verify_schema(auto_fix: true)`) could not write the schema file, here because a path under an existing file cannot be created; a name the dump refuses (`Cannot dump table ...`) fails the same way. After `up` and `down` with `auto_sync`, the same failure only logs a warning and keeps the old file.
 
 ```crystal
 AppDB.migrator(CQL::MigratorConfig.new(schema_file_path: "src/schemas/app_schema.cr")) # a writable path
 AppDB.migrator(CQL::MigratorConfig.new(auto_sync: false))                            # or no schema file
 ```
+
+Rename a refused table or column first; [Dump and Validate Your Schema](../migrations/schema-dump-and-validation.md#generate-a-schema-file-from-a-database) lists the names the dump refuses.
 
 ## No migration with that version
 

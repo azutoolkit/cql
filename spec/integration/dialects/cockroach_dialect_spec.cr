@@ -25,11 +25,46 @@ describe "CockroachDB adapter" do
     CQL::Adapter::MySql.dialect.supports_returning?.should be_false
   end
 
+  it "locks the rows a SELECT reads, as PostgreSQL and MySQL do and SQLite does not" do
+    {cockroach, CQL::Adapter::Postgres, CQL::Adapter::MySql, CQL::Adapter::SQLite}
+      .map(&.dialect.supports_row_locks?).should eq({true, true, true, false})
+  end
+
   it "rolls back DDL with its transaction, as PostgreSQL and SQLite do and MySQL and CockroachDB do not" do
     cockroach.dialect.supports_transactional_ddl?.should be_false
     CQL::Adapter::Postgres.dialect.supports_transactional_ddl?.should be_true
     CQL::Adapter::SQLite.dialect.supports_transactional_ddl?.should be_true
     CQL::Adapter::MySql.dialect.supports_transactional_ddl?.should be_false
+  end
+
+  it "serialises migrators with a transaction-scoped advisory lock on PostgreSQL only" do
+    CQL::Adapter::Postgres.dialect.migration_lock_sql.to_s.should contain("pg_advisory_xact_lock")
+    cockroach.dialect.migration_lock_sql.should be_nil
+    CQL::Adapter::SQLite.dialect.migration_lock_sql.should be_nil
+    CQL::Adapter::MySql.dialect.migration_lock_sql.should be_nil
+  end
+
+  it "lets PostgreSQL migrators wait for the lock at READ COMMITTED only, as their snapshot follows the wait" do
+    postgres = CQL::Adapter::Postgres.dialect
+    postgres.transaction_isolation_sql.should eq("SHOW transaction_isolation")
+    {"read committed", "read uncommitted"}.each { |level| postgres.migration_lock_isolation_safe?(level).should be_true }
+    {"repeatable read", "serializable"}.each { |level| postgres.migration_lock_isolation_safe?(level).should be_false }
+    {CQL::Adapter::SQLite, CQL::Adapter::MySql}.each do |adapter|
+      adapter.dialect.transaction_isolation_sql.should be_nil
+      adapter.dialect.migration_lock_isolation_safe?("serializable").should be_true
+    end
+  end
+
+  it "bounds the PostgreSQL migration lock wait with a transaction-local lock_timeout, failing with SQLSTATE 55P03" do
+    postgres = CQL::Adapter::Postgres.dialect
+    postgres.lock_timeout_sql.should eq("SELECT current_setting('lock_timeout')")
+    postgres.set_lock_timeout_sql.should eq("SELECT set_config('lock_timeout', $1, true)")
+    server_error = ->(code : String) { CQL::Postgres::ServerError.from({'S' => "ERROR", 'C' => code, 'M' => "boom"}) }
+    postgres.lock_timed_out?(server_error.call("55P03")).should be_true
+    {server_error.call("57014"), Exception.new("55P03")}.each { |error| postgres.lock_timed_out?(error).should be_false }
+    {CQL::Adapter::SQLite, CQL::Adapter::MySql}.each do |adapter|
+      {adapter.dialect.lock_timeout_sql, adapter.dialect.set_lock_timeout_sql}.should eq({nil, nil})
+    end
   end
 
   it "allows 32767 bound parameters, the most every driver accepts" do

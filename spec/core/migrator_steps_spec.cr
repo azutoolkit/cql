@@ -23,6 +23,24 @@ end
   end
 {% end %}
 
+# Runs its own BEGIN and COMMIT, which SQLite refuses inside a transaction, as PostgreSQL refuses
+# CREATE INDEX CONCURRENTLY; takes the place of version 3.
+class StepMigrationAlone < StepMigration
+  disable_ddl_transaction!
+  class_property? fail = false
+
+  def self.version : Int64
+    3_i64
+  end
+
+  def up
+    raise "boom" if self.class.fail?
+    schema.with_connection { |connection| connection.exec("BEGIN"); connection.exec("CREATE TABLE step_migration_3 (id INTEGER)"); connection.exec("COMMIT") }
+  end
+end
+
+private ALONE_MIGRATIONS = [StepMigration1, StepMigration2, StepMigrationAlone, StepMigration4, StepMigration5] of CQL::BaseMigration.class
+
 private STEP_MIGRATIONS = [StepMigration1, StepMigration2, StepMigration3, StepMigration4, StepMigration5] of CQL::BaseMigration.class
 
 private def with_step_migrator(migrations = STEP_MIGRATIONS, &)
@@ -163,6 +181,32 @@ describe "CQL::Migrator steps" do
       with_step_migrator do |migrator|
         expect_raises(CQL::Migrator::Error, "No migration with version 99") { migrator.up_to(99_i64) }
         applied_versions(migrator).should be_empty
+      end
+    end
+  end
+
+  describe "a migration with disable_ddl_transaction!" do
+    it "runs outside the batch's transaction, between the migrations before and after it" do
+      with_step_migrator(ALONE_MIGRATIONS) do |migrator|
+        migrator.up
+        applied_versions(migrator).should eq([1_i64, 2_i64, 3_i64, 4_i64, 5_i64])
+      end
+    end
+
+    it "keeps the migrations before it applied, and runs none after it, when it fails" do
+      StepMigrationAlone.fail = true
+      with_step_migrator(ALONE_MIGRATIONS) do |migrator|
+        expect_raises(Exception, "boom") { migrator.up }
+        applied_versions(migrator).should eq([1_i64, 2_i64])
+      end
+    ensure
+      StepMigrationAlone.fail = false
+    end
+
+    it "is applied by up(steps) as one of its steps" do
+      with_step_migrator(ALONE_MIGRATIONS) do |migrator|
+        migrator.up(3)
+        applied_versions(migrator).should eq([1_i64, 2_i64, 3_i64])
       end
     end
   end

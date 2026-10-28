@@ -55,7 +55,7 @@ CQL::Performance.flush(5.seconds)         # metrics lag until the queue drains: 
 ```crystal
 CQL::Performance.enable_sql_logging(colorize: false, pretty: true) # turns monitoring on too; NO_COLOR disables colors
 CQL::Performance.configure do |config| # info; warn from slow_query_threshold; error from very_slow_threshold
-  config.logging.include_params = true # default false: adds bound values and unredacted driver errors
+  config.logging.include_params = true # default false: adds bound values and full driver error messages
   config.logging.max_param_length = 20 # default 50 characters per value
   config.logging.max_sql_length = 500  # default 500 characters of SQL
 end
@@ -73,7 +73,7 @@ SQL: SELECT users.id FROM users WHERE nope = ?
 Params: [secret]
 ```
 
-`{req-123}` is the [context](telemetry.md#capture-parameters-and-tag-events). Without `include_params`, a driver error's quoted span becomes `'?'` in logs and the metrics JSON (`Duplicate entry '?'`); text outside quotes and values written into the SQL itself are kept.
+`{req-123}` is the [context](telemetry.md#capture-parameters-and-tag-events). Without `include_params`, a driver error becomes its class and code in logs and the metrics JSON (`Query failed: SQLite3::Exception (code 1)`, `CQL::Postgres::UndefinedColumn (SQLSTATE 42703)`, else the bare class); values written into the SQL itself are kept.
 
 ## Read the Profile
 

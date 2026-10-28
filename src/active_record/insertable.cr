@@ -164,6 +164,7 @@ module CQL
         # User.create!(user)
         # ```
         def self.create!(record : {{@type.id}}) : {{@type.id}}
+          undo_insert = record.persistence_snapshot
           attrs = record.attributes
           attrs.delete(primary_key_column)
 
@@ -215,7 +216,23 @@ module CQL
             {% end %}
           {% end %}
 
+          # A rollback deletes the row, so the record becomes unsaved again and a later `save!` inserts it
+          schema.on_rollback(&undo_insert)
           record.as({{@type.id}})
+        end
+
+        # :nodoc:
+        # A proc that puts this record's id back as it is now.
+        protected def persistence_snapshot : ->
+          previous_id = id
+          -> do
+            if previous = previous_id
+              self.id = previous
+            else
+              clear_id!
+            end
+            nil
+          end
         end
 
         # Validate this record as `:create` and insert it, with its timestamps set as `save` sets them

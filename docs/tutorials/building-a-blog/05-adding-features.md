@@ -380,14 +380,14 @@ MIGRATOR_CONFIG = CQL::MigratorConfig.new(
 ```
 {% endcode %}
 
-The generated `AppSchema` hard-codes the adapter and URL it was dumped from, so edit those two lines by hand. With `auto_sync: false` the migrator stops rewriting the file; add new tables to it yourself:
+The generated `AppSchema` hard-codes the adapter it was dumped from, so edit that line by hand; its `uri:` already reads `DATABASE_URL`. With `auto_sync: false` the migrator stops rewriting the file; add new tables to it yourself:
 
 {% code title="src/schemas/app_schema.cr" %}
 ```crystal
 AppSchema = CQL::Schema.define(
   :app_schema,
   adapter: ENV["CRYSTAL_ENV"]? == "production" ? CQL::Adapter::Postgres : CQL::Adapter::SQLite,
-  uri: ENV["DATABASE_URL"]? || "sqlite3://./db/blog_development.db?foreign_keys=1") do
+  uri: ENV.fetch("DATABASE_URL", "sqlite3://./db/blog_development.db?foreign_keys=1")) do
   # ... generated table definitions ...
 end
 ```

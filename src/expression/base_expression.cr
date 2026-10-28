@@ -86,6 +86,21 @@ module Expression
       ConditionBuilder.new(NotLike.new(self, pattern))
     end
 
+    # LIKE '%text%' with *text* matched literally (`%` and `_` in it are not wildcards).
+    def contains(text : String) : ConditionBuilder
+      ConditionBuilder.new(EscapedLike.new(self, text, :contains))
+    end
+
+    # LIKE 'text%' with *text* matched literally.
+    def starts_with(text : String) : ConditionBuilder
+      ConditionBuilder.new(EscapedLike.new(self, text, :starts_with))
+    end
+
+    # LIKE '%text' with *text* matched literally.
+    def ends_with(text : String) : ConditionBuilder
+      ConditionBuilder.new(EscapedLike.new(self, text, :ends_with))
+    end
+
     # JSON documents: the value at *path* (a key, an index, or a list of them) equals
     # *value*, compared as text.
     def json_eq(path : JsonPath::Segment | Array(JsonPath::Segment), value : String | Int | Float | Bool) : ConditionBuilder

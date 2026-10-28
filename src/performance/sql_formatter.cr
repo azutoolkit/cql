@@ -21,8 +21,6 @@ module CQL::Performance
       types:     %w[INTEGER INT BIGINT VARCHAR TEXT BOOLEAN DATE TIMESTAMP JSON UUID],
     }
 
-    QUOTE_BYTES = {'\''.ord.to_u8, '"'.ord.to_u8}
-
     @colorize_enabled : Bool
     @pretty_format : Bool
     @max_sql_length : Int32
@@ -81,12 +79,13 @@ module CQL::Performance
       format_params(params) if @include_params && !params.empty?
     end
 
-    # A driver's error message as it may appear in a log line: everything from the
-    # first to the last quote becomes `'?'` / `"?"` unless `include_params` is on.
-    def loggable_error(message : String) : String
-      return message if @include_params
+    # A failed statement's error as it may be logged or stored: its message with `include_params` on,
+    # else its class and driver code, as a message can echo a bound value unquoted (a trigger's RAISE).
+    def loggable_error(error : Exception) : String
+      return error.message.to_s if @include_params
 
-      redact_quoted(message)
+      code = driver_code(error)
+      code ? "#{error.class.name} (#{code})" : error.class.name
     end
 
     # Configure formatter
@@ -100,19 +99,15 @@ module CQL::Performance
       @include_params = include_params unless include_params.nil?
     end
 
-    # Drivers print a bound value inside quotes without escaping the quotes it holds, so where
-    # it ends cannot be told: one span from the earliest to the latest quote of either kind, or to
-    # the end of the message when a kind occurs once. Quotes are ASCII, so byte offsets are safe.
-    private def redact_quoted(text : String) : String
-      bounds = QUOTE_BYTES.compact_map do |quote|
-        first = text.byte_index(quote)
-        {first, text.to_slice.rindex(quote) || first} if first
-      end
-      return text if bounds.empty?
-
-      opening = bounds.min_of(&.first)
-      closing = bounds.any? { |first, last| first == last } ? text.bytesize : bounds.max_of(&.last)
-      "#{text.byte_slice(0, opening + 1)}?#{text.byte_slice(closing)}"
+    # The sqlite3 and pg shards are optional, so their errors are matched only when the app loads them.
+    private def driver_code(error : Exception) : String?
+      {% if @top_level.has_constant?(:SQLite3) %}
+        return "code #{error.code}" if error.is_a?(SQLite3::Exception)
+      {% end %}
+      {% if @top_level.has_constant?(:PQ) %}
+        return "SQLSTATE #{error.field_message(:code)}" if error.is_a?(PQ::PQError)
+      {% end %}
+      "SQLSTATE #{error.sqlstate}" if error.is_a?(CQL::Postgres::ServerError)
     end
 
     private def pretty_format_sql(sql : String) : String

@@ -206,15 +206,15 @@ With `auto_sync`, the migrator wrote the database's real tables to `src/schemas/
 AppSchema = CQL::Schema.define(
   :app_schema,
   adapter: CQL::Adapter::SQLite,
-  uri: "sqlite3://./db/blog_development.db?foreign_keys=1") do
+  uri: ENV.fetch("DATABASE_URL", "sqlite3://./db/blog_development.db?foreign_keys=1")) do
   table :cql_schema_migrations do
     # the migrator's own bookkeeping
   end
 
   table :users do
     primary :id, Int32
-    text :username
-    text :email
+    text :username, unique: true
+    text :email, unique: true
     text :first_name, null: true
     text :last_name, null: true
     boolean :active, default: "1"
@@ -229,8 +229,8 @@ end
 Your models use `AppSchema` from Part 3: it knows every table, so a program that never runs the migrations can still query them. Keep the file in version control and recompile after each migration.
 
 - SQLite integer keys come back as `Int32`; the models still declare `Model(Int64)`.
-- The dump holds columns and foreign keys only; unique constraints and indexes stay in the migrations.
-- The file embeds the connection URL. If the URL holds a password, set `auto_sync: false` there and keep a hand-written schema (Part 5).
+- The dump holds columns, foreign keys and one-column unique constraints (`unique: true`); other indexes stay in the migrations.
+- The file reads `DATABASE_URL` and falls back to the URL it was dumped from, without its password and with only known non-secret query parameters such as `foreign_keys`.
 {% endstep %}
 {% endstepper %}
 

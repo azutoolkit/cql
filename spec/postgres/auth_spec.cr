@@ -146,7 +146,8 @@ describe CQL::Postgres::Config do
       expect_raises(ArgumentError, /#{key} cannot be set/) { CQL::Postgres::Config.parse("postgres://h/db?#{key}=#{value}") }
     end
     expect_raises(ArgumentError, /sslmod/) { CQL::Postgres::Config.parse("postgres://h/db?sslmod=verify-full") }
-    expect_raises(ArgumentError, /sslcert/) { CQL::Postgres::Config.parse("postgres://h/db?sslcert=/x.pem") }
+    expect_raises(ArgumentError, /sslcrl/) { CQL::Postgres::Config.parse("postgres://h/db?sslcrl=/x.pem") }
+    expect_raises(ArgumentError, /sslpassword/) { CQL::Postgres::Config.parse("postgres://h/db?sslpassword=pw") }
     expect_raises(ArgumentError, /require_auth/) { CQL::Postgres::Config.parse("postgres://h/db?require_auth=scram-sha-256") }
   end
 

@@ -112,6 +112,12 @@ describe "Typed query DSL" do
       sql_of.call(DslAuthor.query.where { name.ilike("a%") }).first.should contain("LOWER(authors.name) LIKE LOWER(?)")
     end
 
+    it "escapes the text of contains on a String column" do
+      sql, params = sql_of.call(DslAuthor.query.where { name.contains("5%_") })
+      sql.should end_with("WHERE authors.name LIKE ? ESCAPE '!'")
+      params.should eq(["%5!%!_%"] of DB::Any)
+    end
+
     it "accepts numeric literals for wider numeric columns" do
       sql_of.call(DslAuthor.query.where { score > 1 }).last.should eq([1.0] of DB::Any)
       sql_of.call(DslAuthor.query.where { id == 7 }).last.should eq([7] of DB::Any)

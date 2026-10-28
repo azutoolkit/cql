@@ -78,6 +78,7 @@ module CQL
     class TransactionObserver
       @started : Time::Instant = Time.instant
       @error : Exception? = nil
+      @finished = false
 
       getter id : Int64
 
@@ -89,7 +90,10 @@ module CQL
         @error ||= error
       end
 
+      # Publishes once: a `return` out of a savepoint whose enclosing COMMIT then fails unwinds through it twice.
       def finish : Nil
+        return if @finished
+        @finished = true
         state = @error ? TransactionState::Rollback : TransactionState::Commit
         Telemetry.emit_transaction(TransactionEvent.new(state, @id, Time.instant - @started, @nested, @error, @adapter))
       end
@@ -326,14 +330,18 @@ module CQL
       if tracer = @@tracer
         result = uninitialized T
         completed = false
+        invocations = 0
         failure = nil
         tracer.in_span(operation, sql) do
+          invocations += 1
+          raise CQL::Error.new("tracing must never retry a query") if invocations > 1
           result = yield
           completed = true
         rescue ex
           failure = ex
           raise ex
         end
+        raise CQL::Error.new("#{tracer.class} called in_span's statement more than once; tracing must never retry a query") if invocations > 1
         raise failure if failure
         raise "#{tracer.class} did not run the statement inside in_span" unless completed
         result

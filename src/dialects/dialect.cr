@@ -33,6 +33,72 @@ module Expression
       false
     end
 
+    # Whether a SELECT can lock the rows it reads (`Query#lock`, which raises when SQL is generated otherwise).
+    def supports_row_locks? : Bool
+      true
+    end
+
+    # The statement that holds migrators off until the transaction ends, binding the lock key; nil takes no lock.
+    def migration_lock_sql : String?
+      nil
+    end
+
+    # Reads the isolation level without taking a snapshot, before `migration_lock_sql` waits; nil reads none.
+    def transaction_isolation_sql : String?
+      nil
+    end
+
+    # The statement that sets the transaction's *isolation* level (the counterpart of `transaction_isolation_sql`,
+    # which reads it) and makes it *read_only*; nil when *isolation* alone is already in effect. An override raises
+    # `DialectError` for a mode it cannot set (`Schema#transaction` refuses a nil or blank one for *read_only*).
+    def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      raise CQL::DialectError.new(display_name, "Schema#transaction(isolation:)") if isolation
+      raise CQL::DialectError.new(display_name, "Schema#transaction(read_only:)") if read_only
+    end
+
+    # Whether `transaction_modes_sql` runs just before BEGIN on the transaction's connection instead of as its first
+    # statement: a database whose statement sets the next transaction's modes refuses it inside one.
+    def transaction_modes_before_begin? : Bool
+      false
+    end
+
+    # Whether *error* means the database undid the whole transaction over a clash with a concurrent one, so
+    # `Schema#retrying_transaction` runs it again. False unless a dialect knows such errors: any other would recur.
+    def retryable_transaction_error?(error : Exception) : Bool
+      false
+    end
+
+    # Whether *error*, raised by COMMIT, surely means nothing committed (rollback hooks then run); false unless known.
+    def commit_refused?(error : Exception) : Bool
+      false
+    end
+
+    # Whether a migrator that waited for `migration_lock_sql` at *level* (as `transaction_isolation_sql` reads it)
+    # sees what the holder committed.
+    def migration_lock_isolation_safe?(level : String) : Bool
+      true
+    end
+
+    # The name an unquoted *name* refers to in DDL: unchanged unless the database folds unquoted names.
+    def fold_unquoted_name(name : String) : String
+      name
+    end
+
+    # Reads the bound on lock waits, to restore once `migration_lock_sql` holds the lock; nil bounds no lock wait.
+    def lock_timeout_sql : String?
+      nil
+    end
+
+    # Sets the bound on lock waits until the transaction ends, binding whole milliseconds or what `lock_timeout_sql` read.
+    def set_lock_timeout_sql : String?
+      nil
+    end
+
+    # Whether *error* is a lock wait that outlasted the bound `set_lock_timeout_sql` set.
+    def lock_timed_out?(error : Exception) : Bool
+      false
+    end
+
     # Dumps only the DB structure (no data) to a string
     # that can be executed by the database client
     abstract def structure_dump(uri : URI) : String
@@ -416,6 +482,11 @@ module Expression
       "#{column} NOT LIKE #{placeholder}"
     end
 
+    # The clause after a LIKE whose pattern escapes its wildcards with *escape*.
+    def format_like_escape(escape : Char) : String
+      " ESCAPE '#{escape}'"
+    end
+
     def format_is_null(column : String) : String
       "#{column} IS NULL"
     end
@@ -440,14 +511,29 @@ module Expression
     end
 
     # Generates the ALTER TABLE action that adds a column, from its `define_column` definition.
-    def add_column(column_definition : String, primary_key : Bool) : String
+    # *current_time_default* tells a dialect that cannot fill existing rows with the current time to refuse.
+    def add_column(column_definition : String, primary_key : Bool, current_time_default : Bool = false) : String
       "ADD COLUMN #{column_definition}#{" PRIMARY KEY" if primary_key}"
+    end
+
+    # What `rename_column` and `modify_column` take after the column name: its *type*, as they change only that.
+    # A dialect whose statement replaces the whole column takes its *definition* (type, DEFAULT, NOT NULL) instead.
+    def column_redefinition(type : String, definition : String, auto_increment : Bool) : String
+      type
     end
 
     # The SQL type of a column declared with *size*: VARCHAR takes it as its length, other types ignore it.
     def sized_type(column_type : String, size : Int32?) : String
       return column_type unless size && column_type.starts_with?("VARCHAR")
       "VARCHAR(#{size})"
+    end
+
+    # The SQL standard's `SET TRANSACTION`, for the dialects whose `transaction_modes_sql` it is.
+    protected def set_transaction_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      modes = [] of String
+      isolation.try { |level| modes << "ISOLATION LEVEL #{level.to_sql}" }
+      modes << "READ ONLY" if read_only
+      "SET TRANSACTION #{modes.join(", ")}" unless modes.empty?
     end
 
     # Generates SQL to create an index that is skipped when it already exists.

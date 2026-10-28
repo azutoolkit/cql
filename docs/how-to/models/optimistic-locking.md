@@ -67,8 +67,11 @@ first.save                # UPDATE users SET name = ?, version = ? WHERE (users.
 first.version             # => 2
 
 second.name = "Second"
-second.save               # raises CQL::OptimisticLockError: Record has been modified by another process
+second.save               # raises CQL::OptimisticLockError: Record has been modified by another process (User)
+                          #   Expected version: 1
 ```
+
+The error carries `model_class`, `id` and `expected_version`. Its message leaves the id out, since a key can be a natural one.
 
 Reload and reapply the change, with a retry limit:
 
@@ -90,6 +93,14 @@ rename(second, "Second")  # => true
 ```
 
 `update!` raises `CQL::Error` on an unsaved record or a `nil` version. The class method `User.update!(id, attributes)` writes the row directly and skips the check.
+
+`delete!` checks the version too: a stale copy, or one whose row another process already deleted, raises `CQL::OptimisticLockError` and deletes nothing, not even its `dependent:` associations. The check runs last, after `before_destroy` callbacks and the dependent deletes, which the raise rolls back. The class method `User.delete!(id)`, `delete_all` on a model without callbacks or `dependent:` associations, removal through an association (`user.posts.delete(post)`), and a `SoftDeletable` model's `delete!` and `force_delete!` skip the check.
+
+```crystal
+stale = User.find!(1)
+User.find!(1).update!(name: "Other")  # the row moves to the next version
+stale.delete!                          # raises CQL::OptimisticLockError
+```
 
 ## Combine With Other Modules
 

@@ -431,6 +431,116 @@ describe "CQL::Postgres against a live server" do
     engine.close
   end
 
+  it "sets the isolation level of one Schema#transaction only, through the engine and through crystal-db" do
+    require_live!
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    {PG::EngineSource.connect("#{LIVE_URL}#{separator}pool_size=1"), nil}.each do |source| # one connection: a level that outlived its transaction shows
+      schema = CQL::Schema.new(:isolation_live, source ? LIVE_URL : "#{LIVE_URL}#{separator}max_pool_size=1", CQL::Adapter::Postgres, source: source)
+      schema.transaction(isolation: :serializable, &.connection.scalar("SHOW transaction_isolation").should eq("serializable"))
+      schema.transaction(isolation: :repeatable_read, &.connection.scalar("SHOW transaction_isolation").should eq("repeatable read")) unless cockroach?
+      schema.transaction(&.connection.scalar("SHOW transaction_isolation").should eq(cockroach? ? "serializable" : "read committed"))
+      schema.close
+    end
+  end
+
+  it "makes one Schema#transaction read-only, through the engine and through crystal-db" do
+    require_live!
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    table = "cql_read_only_live_#{Process.pid}"
+    {PG::EngineSource.connect("#{LIVE_URL}#{separator}pool_size=1"), nil}.each do |source| # one connection, as above
+      schema = CQL::Schema.new(:read_only_live, source ? LIVE_URL : "#{LIVE_URL}#{separator}max_pool_size=1", CQL::Adapter::Postgres, source: source)
+      schema.transaction(read_only: true, &.connection.scalar("SHOW transaction_read_only").should eq("on"))
+      schema.transaction(isolation: :serializable, read_only: true) do |tx|
+        tx.connection.scalar("SHOW transaction_read_only").should eq("on")
+        tx.connection.scalar("SHOW transaction_isolation").should eq("serializable")
+      end
+      schema.transaction(&.connection.scalar("SHOW transaction_read_only").should eq("off"))
+      writes = {
+        ->(tx : DB::Transaction) { tx.connection.exec("CREATE TEMP TABLE read_only_live (id int)") },
+        ->(_tx : DB::Transaction) { schema.exec("CREATE TABLE #{table} (id int)") },                        # through the Schema
+        ->(_tx : DB::Transaction) { schema.transaction { schema.exec("CREATE TABLE #{table} (id int)") } }, # in a savepoint
+      }
+      writes.each do |write|
+        denied = expect_raises(Exception) { schema.transaction(read_only: true) { |tx| write.call(tx) } }
+        (denied.is_a?(PQ::PQError) ? denied.field_message(:code) : denied.as(PG::ServerError).sqlstate).should eq "25006"
+      end
+    ensure
+      schema.try &.exec("DROP TABLE IF EXISTS #{table}")
+      schema.try &.close
+    end
+  end
+
+  it "runs a Schema#retrying_transaction again after a real serialization failure, through the engine" do
+    require_live!
+    pending! "CockroachDB's REPEATABLE READ differs" if cockroach?
+    other = live_session # commits between the first run's read and its write
+    other.simple_query("INSERT INTO cql_wire_live_accounts (name, balance) VALUES ('shared', 10)")
+    schema = CQL::Schema.new(:retry_live, LIVE_URL, CQL::Adapter::Postgres, source: PG::EngineSource.connect(LIVE_URL))
+    runs = 0
+    schema.retrying_transaction(isolation: :repeatable_read) do |tx|
+      balance = tx.connection.scalar("SELECT balance FROM cql_wire_live_accounts WHERE name = 'shared'").as(Int64)
+      other.simple_query("UPDATE cql_wire_live_accounts SET balance = balance + 1 WHERE name = 'shared'") if (runs += 1) == 1
+      tx.connection.exec("UPDATE cql_wire_live_accounts SET balance = $1 WHERE name = 'shared'", balance * 2)
+    end
+    {runs, other.query("SELECT balance FROM cql_wire_live_accounts").rows}.should eq({2, [[22_i64]]})
+  ensure
+    schema.try &.close
+    other.try &.close
+  end
+
+  it "frees a pooled connection whose COMMIT the server refused, so a retry and the next transaction run on it" do
+    require_live!
+    pending! "CockroachDB has no constraint triggers" if cockroach?
+    table = "cql_commit_refused_live_#{Process.pid}"
+    setup = live_session
+    # A deferred trigger refuses COMMIT with 40001 for the first row ever inserted and for every row with refuse = true.
+    setup.simple_query(<<-SQL)
+      CREATE TABLE #{table} (id int, refuse bool NOT NULL DEFAULT false); CREATE SEQUENCE #{table}_seq;
+      CREATE FUNCTION #{table}_check() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+        IF NEW.refuse OR nextval('#{table}_seq') = 1 THEN RAISE 'refused at commit' USING ERRCODE = '40001'; END IF;
+        RETURN NULL;
+      END $$;
+      CREATE CONSTRAINT TRIGGER #{table}_check AFTER INSERT ON #{table} DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE FUNCTION #{table}_check()
+      SQL
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    source = PG::EngineSource.connect("#{LIVE_URL}#{separator}pool_size=1") # one connection: a transaction left open shows
+    schema = CQL::Schema.new(:commit_refused_live, LIVE_URL, CQL::Adapter::Postgres, source: source)
+    runs = 0
+    schema.retrying_transaction { |tx| runs += 1; tx.connection.exec("INSERT INTO #{table} (id) VALUES (1)") }
+    expect_raises(PG::SerializationFailure) { schema.transaction(&.connection.exec("INSERT INTO #{table} VALUES (2, true)")) }
+    schema.transaction(&.connection.exec("INSERT INTO #{table} (id) VALUES (3)"))
+    {runs, setup.query("SELECT id FROM #{table} ORDER BY id").rows}.should eq({2, [[1], [3]]})
+  ensure
+    schema.try &.close
+    setup.try &.simple_query("DROP TABLE IF EXISTS #{table}; DROP FUNCTION IF EXISTS #{table}_check(); DROP SEQUENCE IF EXISTS #{table}_seq")
+    setup.try &.close
+  end
+
+  it "raises instead of reporting success when COMMIT rolled back a transaction that a rescued error had aborted" do
+    require_live!
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    table = "cql_aborted_live_#{Process.pid}"
+    schema = CQL::Schema.new(:aborted_live, LIVE_URL, CQL::Adapter::Postgres, source: PG::EngineSource.connect("#{LIVE_URL}#{separator}pool_size=1"))
+    schema.exec("CREATE TABLE #{table} (id int)")
+    expect_raises(PG::TransactionAborted, /nothing was committed/) do
+      schema.transaction do |tx|
+        tx.connection.exec("INSERT INTO #{table} VALUES (1)")
+        tx.connection.exec("SELECT 1/0") rescue nil # PostgreSQL has aborted the transaction
+      end
+    end
+    runs = 0
+    expect_raises(PG::TransactionAborted) do # not retried: the block would fail the same way again
+      schema.retrying_transaction { |tx| runs += 1; tx.connection.exec("SELECT 1/0") rescue nil }
+    end
+    runs.should eq 1
+    schema.transaction(&.connection.exec("INSERT INTO #{table} VALUES (2)")) # the connection is still usable
+    schema.exec_query(&.query_all("SELECT id FROM #{table}", as: Int32)).should eq [2]
+  ensure
+    schema.try &.exec("DROP TABLE IF EXISTS #{table}")
+    schema.try &.close
+  end
+
   it "rolls back to a savepoint without ending the surrounding transaction" do
     require_live!
     engine = PG::AsyncEngine.connect(LIVE_URL)

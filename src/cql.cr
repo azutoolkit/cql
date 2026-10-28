@@ -9,6 +9,7 @@ require "./ulid_compat"
 require "colorize"
 require "./compat"
 require "./identifier"
+require "./isolation_level"
 
 require "./expression"
 require "./exceptions"

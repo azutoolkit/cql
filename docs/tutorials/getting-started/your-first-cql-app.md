@@ -4,7 +4,7 @@ description: "Build a small SQLite app: connect, migrate, define models, query, 
 
 # Your First CQL App
 
-**You need:** Crystal 1.12.2 or later and the SQLite 3 development library (`libsqlite3-dev` on Debian and Ubuntu).
+**You need:** Crystal 1.19.1 or later and the SQLite 3 development library (`libsqlite3-dev` on Debian and Ubuntu).
 
 {% stepper %}
 {% step %}
@@ -62,7 +62,7 @@ end
 # Other databases:
 #   PostgreSQL: no shard or require needed (CQL ships a native driver; the pg shard also works)
 #     adapter: CQL::Adapter::Postgres, uri: "postgres://user:pass@localhost:5432/myapp"
-#   MySQL: add the mysql shard (github: crystal-lang/crystal-mysql) and require "mysql"
+#   MySQL: add the mysql shard (github: crystal-lang/crystal-mysql, version ~> 0.16.0) and require "cql/mysql"
 #     adapter: CQL::Adapter::MySql, uri: "mysql://user:pass@localhost:3306/myapp"
 ```
 {% endcode %}

@@ -50,14 +50,15 @@ module CQL::ActiveRecord::Relations
     # Safe database operation wrapper with consistent error handling
     # - **param** : operation (Block) - The database operation to execute
     # - **return** : T - The result of the operation
-    # - **raise** : RelationError on database errors
+    # - **raise** : RelationError on database errors, with the original error as its `cause`; the
+    #   message names only the error class, since a driver message can quote row values
     macro safe_db_operation(&block)
       begin
         {{block.body}}
       rescue ex : DB::Error
-        raise RelationError.new("Database operation failed: #{ex.message}")
+        raise RelationError.new("Database operation failed (#{ex.class.name})", cause: ex)
       rescue ex : CQL::Schema::ConnectionError
-        raise RelationError.new("Connection error: #{ex.message}")
+        raise RelationError.new("Connection error (#{ex.class.name})", cause: ex)
       end
     end
 

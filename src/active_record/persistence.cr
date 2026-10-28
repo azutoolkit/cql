@@ -173,6 +173,7 @@ module CQL
 
         # Save the record to the database or update it if it already exists
         # - **@return** [Bool] True if saved; false if the record is invalid (see `errors`) or a callback halted
+        # - **@raise** [CQL::RecordNotFound] If a saved record's row is gone (deleted, or its insert rolled back)
         #
         # **Example** Saving a record
         #
@@ -233,6 +234,7 @@ module CQL
         # - **@return** [Bool] True when saved
         # - **@raise** [CQL::RecordInvalid] If the record is invalid (as `Validations::ValidationError`)
         # - **@raise** [CQL::RecordNotSaved] If a callback halts the save
+        # - **@raise** [CQL::RecordNotFound] If a saved record's row is gone (deleted, or its insert rolled back)
         #
         # **Example** Saving a record with exception handling
         #

@@ -161,26 +161,26 @@ module CQL
 
   # ========== Concurrency Errors ==========
 
-  # Optimistic Lock Error - Raised when a concurrent update has occurred
+  # Optimistic Lock Error - Raised when a concurrent update has occurred.
+  # The message names the model and the versions, never the id: it ends up in logs, and a key can be a natural one.
   class OptimisticLockError < Error
     getter model_class : String?
-    getter id : DB::Any?
+    getter id : (DB::Any | UUID)?
     getter expected_version : Int32?
     getter actual_version : Int32?
 
     def initialize(
       message : String = "Record has been modified by another process",
       @model_class : String? = nil,
-      @id : DB::Any? = nil,
+      @id : (DB::Any | UUID)? = nil,
       @expected_version : Int32? = nil,
       @actual_version : Int32? = nil,
     )
       full_message = message
-      if model_class && id
-        full_message += " (#{model_class}##{id})"
-      end
-      if expected_version && actual_version
-        full_message += "\nExpected version: #{expected_version}, actual: #{actual_version}"
+      full_message += " (#{model_class})" if model_class
+      full_message += "\nExpected version: #{expected_version}" if expected_version
+      if actual_version
+        full_message += expected_version ? ", actual: #{actual_version}" : "\nActual version: #{actual_version}"
       end
       super(full_message)
     end

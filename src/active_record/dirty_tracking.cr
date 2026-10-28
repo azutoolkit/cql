@@ -47,12 +47,13 @@ module CQL
           clear_changes!
         end
 
-        # Sends only the changed columns, and nothing when no column changed.
+        # Sends only the changed columns, and nothing when no column changed. A rollback makes them unsaved again.
         def self.update!(record : {{@type.id}})
           changed = record.changed_columns
           record.stamp_deferred_update(changed)
           unless changed.empty?
-            update_of(record.id!).set(changed).commit
+            update_row!(record.id!, &.set(changed))
+            schema.on_rollback(&record.persistence_snapshot)
           end
           record.clear_changes!
           record
@@ -66,6 +67,13 @@ module CQL
 
         def reload!
           previous_def.tap { clear_changes! }
+        end
+
+        # :nodoc:
+        # Also puts back the saved values, so a record whose insert rolled back counts its attributes as changed.
+        protected def persistence_snapshot : ->
+          restore_id, persisted = previous_def, @persisted_attributes
+          -> { restore_id.call; @persisted_attributes = persisted; nil }
         end
 
         # A record with nothing to save is not stamped, so its UPDATE can be skipped; a callback

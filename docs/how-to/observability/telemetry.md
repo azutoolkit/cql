@@ -73,9 +73,16 @@ CQL::Telemetry.with_context("req-123") do
 end
 ```
 
+`capture_params` also decides whether the native PostgreSQL driver's `db` Debug log (`Executing query`) lists the bound values; off, it logs only `args_count`, and on, that log lists them too. Linking the `pg` shard hands `postgres://` to its driver whatever the require order. The SQLite, MySQL and `pg` shard drivers keep crystal-db's own Debug log, which lists them: bind `db` at Info or above in production.
+
 The context is per fiber and is the same one `CQL::Performance.with_context` sets. It also appears in SQL log lines whatever `capture_params` says, so use a request id, not personal data. `event.error.message` may hold data too: redact it before shipping it.
 
 ## Trace Statements
+
+A tracer must call its statement block exactly once. Calling it twice raises `CQL::Error` before a second execution,
+even if the tracer swallows that error. Retries belong in the transaction/application policy, because a failed write
+may already have reached the server. Subscribers remain isolated from query outcomes; keep synchronous handlers
+short, or use the bounded async queue and monitor `dropped_events`.
 
 ```crystal
 class TimingTracer < CQL::Telemetry::Tracer
@@ -108,7 +115,7 @@ end
 CQL::Telemetry.unsubscribe_transactions("tx")
 ```
 
-`Schema#transaction` publishes `Begin` before it checks out a connection. An exception ends in `Rollback` and is re-raised, `DB::Rollback` is still swallowed, and a failing `COMMIT` is reported as `Rollback`. `Schema#transaction(tx)` publishes nothing, and a transaction that began before the first subscriber registered publishes nothing. Where DDL is transactional (SQLite, PostgreSQL), `alter`, `build`, `Table#create!`/`drop!`/`truncate!`, `Migrator.new`, `up`, `down` and `pending_migrations` (once per migration it checks) run inside `Schema#transaction` and publish these events (`nested` when a transaction is already open).
+`Schema#transaction` publishes `Begin` before it checks out a connection. An exception ends in `Rollback` and is re-raised, `DB::Rollback` is still swallowed, and a failing `COMMIT` is reported as `Rollback`. `Schema#transaction(tx)` publishes nothing, and a transaction that began before the first subscriber registered publishes nothing. Where DDL is transactional (SQLite, PostgreSQL), `alter`, `build`, `Table#create!`/`drop!`/`truncate!`, `Migrator.new`, `up` and `down` run inside `Schema#transaction` and publish these events (`nested` when a transaction is already open).
 
 {% hint style="warning" %}
 Calling `tx.rollback` yourself and returning normally still reports `Commit`. An async transaction subscriber shares the query queue and its bound, so handle an end event whose `Begin` was dropped.

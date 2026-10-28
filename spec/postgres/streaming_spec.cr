@@ -210,7 +210,7 @@ describe "CQL::Postgres streaming" do
         client.ok_handshake
         client.serve_prepare([] of UInt32, [] of {String, UInt32})
         client.expect('B'); client.expect('E'); client.expect('H')
-        client.send('2'); client.send('G', Bytes[0, 0, 0, 0, 0])
+        client.send('2'); client.send('G', Bytes[0, 0, 1, 0, 0])
         client.expect('f')
         client.expect('S')
         client.error("57014", "COPY from stdin failed")

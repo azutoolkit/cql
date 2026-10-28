@@ -10,7 +10,7 @@ SQLite · PostgreSQL · MySQL · CockroachDB
 [![Crystal CI](https://github.com/azutoolkit/cql/actions/workflows/crystal.yml/badge.svg)](https://github.com/azutoolkit/cql/actions/workflows/crystal.yml)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/a85e29e6b78849c28fb813397cc3eb1a)](https://app.codacy.com/gh/azutoolkit/cql/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Latest release](https://img.shields.io/github/v/release/azutoolkit/cql?sort=semver)](https://github.com/azutoolkit/cql/releases)
-[![Crystal ≥ 1.12.2](https://img.shields.io/badge/crystal-%E2%89%A5%201.12.2-000000?logo=crystal)](https://crystal-lang.org/install/)
+[![Crystal ≥ 1.19.1](https://img.shields.io/badge/crystal-%E2%89%A5%201.19.1-000000?logo=crystal)](https://crystal-lang.org/install/)
 [![License: MIT](https://img.shields.io/github/license/azutoolkit/cql)](LICENSE)
 [![Docs on GitBook](https://img.shields.io/badge/docs-GitBook-3884FF?logo=gitbook&logoColor=white)](https://azutopia.gitbook.io/cql)
 [![API reference](https://img.shields.io/badge/API-reference-2E1052)](https://azutoolkit.github.io/cql/)
@@ -30,6 +30,16 @@ SQLite · PostgreSQL · MySQL · CockroachDB
 > reference and the design notes. Its source is in [`docs/`](docs/README.md), but it reads best on the site.
 
 ## Why CQL
+
+The v1 release candidate continues [PR #65](https://github.com/azutoolkit/cql/pull/65).
+See [the release audit and validation record](V1_READINESS.md) for the tested configurations and remaining
+release gates. The automated release workflow owns the version bump; this branch is not a published v1.0.0.
+
+For the native engine, `connect_failure_threshold=3&connect_retry_delay=1` enables a connection circuit breaker:
+failed connects open it, one probe tests recovery after the delay, and healthy existing connections remain usable.
+It never retries statements. Use `sslmode=verify-full` to verify the PostgreSQL server, and size the pool and query
+timeouts for the application. [Pool configuration](docs/how-to/postgres-native/async-engine.md#pool-options) explains
+the defaults and failure behavior.
 
 - **Mistakes stop the build.** Schemas, models and queries are Crystal code, so a misspelled column or a value of
   the wrong type is a compiler error instead of a runtime one.
@@ -76,13 +86,18 @@ dependencies:
     version: ~> 0.0.861
   sqlite3: # for SQLite
     github: crystal-lang/crystal-sqlite3
-  mysql: # for MySQL
+  mysql: # for MySQL; used by the optional cql/mysql integration
     github: crystal-lang/crystal-mysql
+    version: ~> 0.16.0
 ```
 
 > [!NOTE]
-> PostgreSQL and CockroachDB need nothing more, because CQL ships the driver. CQL needs Crystal 1.12.2 or later; CI
+> PostgreSQL and CockroachDB need nothing more, because CQL ships the driver. CQL needs Crystal 1.19.1 or later; CI
 > tests Crystal 1.19.1 and 1.22.1.
+
+For MySQL 8.4, use `require "cql/mysql"` to enable `caching_sha2_password` and verified TLS.
+Set `ssl-ca=/path/to/ca.pem` in the database URL for a private CA; see
+[MySQL 8.4 setup guide](docs/how-to/configuration/mysql.md).
 
 ## Quick Start
 
@@ -175,7 +190,7 @@ go. [How CQL Keeps Queries Fast](docs/explanation/performance-design.md) walks t
 | :--- | :--- | :--- | :--- | :--- |
 | SQLite | `CQL::Adapter::SQLite` | `sqlite3://` | `sqlite3` shard | the spec suite runs live |
 | PostgreSQL | `CQL::Adapter::Postgres` | `postgres://`, `postgresql://` | built in | generated-SQL specs; driver live specs on PostgreSQL 11 to 18 |
-| MySQL | `CQL::Adapter::MySql` | `mysql://` | `mysql` shard | generated-SQL specs |
+| MySQL | `CQL::Adapter::MySql` | `mysql://` | `mysql` shard + `require "cql/mysql"` | live MySQL 8.0/8.4 transaction and authentication contracts |
 | CockroachDB | `CQL::Adapter::CockroachDB` | `cockroachdb://` | built in | generated-SQL specs; driver live specs on CockroachDB 24.3 |
 
 Feature differences, such as upsert, `RETURNING`, `DISTINCT ON`, locking, JSON and the minimum versions for CTEs and

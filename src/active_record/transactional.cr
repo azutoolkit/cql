@@ -21,6 +21,22 @@ module CQL
           end
         end
 
+        # *isolation* and *read_only* set the transaction's modes, as `CQL::Schema#transaction` does:
+        # `User.transaction(isolation: :serializable, read_only: true) { }`. Overloads of their own, so a model's
+        # `def self.transaction(&)` keeps overriding the call without options.
+        def self.transaction(*, isolation : CQL::IsolationLevel?, read_only : Bool = false, &block : DB::Transaction -> _)
+          self.schema.transaction(isolation: isolation, read_only: read_only) do |tx|
+            yield tx
+          end
+        end
+
+        # :ditto:
+        def self.transaction(*, read_only : Bool, &block : DB::Transaction -> _)
+          self.schema.transaction(read_only: read_only) do |tx|
+            yield tx
+          end
+        end
+
         # Defines a class method `transaction` that takes an existing transaction
         # to create a nested transaction (SAVEPOINT).
         #

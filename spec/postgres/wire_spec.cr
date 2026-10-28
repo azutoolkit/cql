@@ -295,7 +295,8 @@ describe CQL::Postgres::Wire::Backend do
     expect_raises(CQL::Postgres::ProtocolError, /truncated/) { backend('t', "8000" + "00000017") }
     expect_raises(CQL::Postgres::ProtocolError) { backend('T', "ffff") }
     expect_raises(CQL::Postgres::ProtocolError, /truncated/) { backend('D', "8000").as(Wire::Backend::DataRow).values }
-    backend('G', "00" + "ffff").as(Wire::Backend::CopyResponse).column_count.should eq 65535
+    backend('G', "00" + "ffff" + "0000" * 65535).as(Wire::Backend::CopyResponse).column_count.should eq 65535
+    expect_raises(CQL::Postgres::ProtocolError, /truncated/) { backend('G', "00" + "ffff") }
   end
 
   it "reads field counts as unsigned and only -1 as NULL" do

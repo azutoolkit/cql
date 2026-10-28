@@ -21,7 +21,12 @@ module CQL::Postgres
   class TransactionClosed < Error
   end
 
-  # A `RowStream` was read by a fiber other than the one that opened it.
+  # COMMIT found the transaction aborted by a statement that failed in it (its error rescued or ignored): the server
+  # rolled it back.
+  class TransactionAborted < Error
+  end
+
+  # A `RowStream` or `TransactionScope` was used by a fiber other than its owner.
   class WrongFiber < Error
   end
 
@@ -46,8 +51,12 @@ module CQL::Postgres
   class UnsupportedProtocol < Error
   end
 
-  # The socket failed or the connection was already closed.
+  # The socket failed during or after a request, so the statement may have run, or the connection was already closed.
   class ConnectionLost < Error
+  end
+
+  # The connection was already closed, so nothing of the request was sent: running it elsewhere is safe.
+  class ConnectionClosed < ConnectionLost
   end
 
   # A statement exceeded its time limit and was canceled on the server.
@@ -58,6 +67,10 @@ module CQL::Postgres
   end
 
   class PoolClosed < Error
+  end
+
+  # The native engine pool is suppressing new connects during an outage.
+  class CircuitOpen < Error
   end
 
   # An ErrorResponse from the server. The server's own wording

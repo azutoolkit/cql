@@ -11,6 +11,12 @@ private class ScopesArchivedPost
   getter published : Bool
 
   scope :recent, -> { order(created_at: :desc) }
+  # Stands in for a query in a scope body failing with a message that quotes a value
+  scope :leaky, -> { raise DB::Error.new("bad value marker-secret-42") if published_marker?; where(published: true) }
+
+  def self.published_marker? : Bool
+    true
+  end
 
   def initialize(@title : String, @published = false)
   end
@@ -109,6 +115,12 @@ describe CQL::ActiveRecord::Scopes do
       message = "Scope 'published' expects no arguments, got 1 positional and 0 keyword arguments"
       expect_raises(ArgumentError, message) { ScopesPost.published(1) }
       expect_raises(ArgumentError, message) { ScopesPost.query.published(1) }
+    end
+
+    it "raises ArgumentError naming the scope and the error class, keeping the error as its cause" do
+      error = expect_raises(ArgumentError, "Error in scope 'leaky' (DB::Error)") { ScopesArchivedPost.leaky }
+      error.message.to_s.should_not contain("marker-secret-42")
+      error.cause.try(&.message).should eq("bad value marker-secret-42")
     end
 
     it "runs the scope of the model it is chained on" do

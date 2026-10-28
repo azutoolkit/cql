@@ -4,8 +4,9 @@ require "./refusal"
 
 module CQL::Postgres
   # Lets crystal-db open `postgres://` and `postgresql://` URLs with the wire
-  # driver, so `CQL::Schema` and `DB.open` use it unless another PostgreSQL
-  # driver (the `pg` shard) registered those names first. `cockroachdb://` is
+  # driver, so `CQL::Schema` and `DB.open` use it unless the `pg` shard is also
+  # linked: it registers both names unconditionally, so it takes them whatever
+  # the require order (and its statements log bound values). `cockroachdb://` is
   # opt-in (`register_cockroachdb`, or compile with
   # `-Dcql_postgres_driver_cockroachdb`) because only CockroachDB 24.3 was
   # checked against a real server.
@@ -17,13 +18,17 @@ module CQL::Postgres
     DB_OWNED_KEYS    = {"initial_pool_size", "max_pool_size", "max_idle_pool_size", "checkout_timeout", "retry_attempts", "retry_delay", "prepared_statements", "prepared_statements_cache"}
 
     class Builder < ::DB::ConnectionBuilder
-      def initialize(@config : Config, @options : ::DB::Connection::Options)
+      def initialize(@config : Config, @options : ::DB::Connection::Options, @checkout_timeout : Time::Span = Connection::DEFAULT_CHECKOUT_TIMEOUT)
       end
 
-      # Transport failures become `DB::ConnectionRefused`, which crystal-db's
-      # pool retries (`retry_attempts`, `retry_delay`); server errors do not.
+      # Connects by the checkout's deadline (`CQL::CheckoutBudget`; zero *checkout_timeout*: within
+      # `connect_timeout` alone). Transport failures, a spent deadline included, become `DB::ConnectionRefused`,
+      # which crystal-db's pool retries (`retry_attempts`, `retry_delay`); server errors do not.
       def build : ::DB::Connection
-        Refusal.translate { Connection.open(@config, @options) }
+        deadline = CheckoutBudget.claim(@checkout_timeout)
+        connection = Refusal.translate { Connection.open(@config, @options, deadline: deadline) }
+        connection.checkout_timeout = @checkout_timeout
+        connection
       end
     end
 
@@ -48,10 +53,22 @@ module CQL::Postgres
       false
     end
 
+    # Why `query_timeout` goes unread when crystal-db opens *scheme* (another driver, such as the pg
+    # shard's, took it), or nil. It names no URL: a URL holds the password.
+    def self.unread_query_timeout(scheme : String) : String?
+      return unless registered?(scheme) && (driver = ::DB.driver_class(scheme)) != self
+      "query_timeout is ignored by schemas opened through crystal-db: #{driver} handles #{scheme}://, and only CQL's native PostgreSQL driver reads it"
+    end
+
     def connection_builder(uri : URI) : ::DB::ConnectionBuilder
       params = HTTP::Params.parse(uri.query || "")
+      raise ArgumentError.new("pool_reset needs the engine's pool, as crystal-db's cannot reset a returned connection: use CQL::Postgres::EngineSource or AsyncEngine") if params.has_key?("pool_reset")
+      if params.has_key?("connect_failure_threshold") || params.has_key?("connect_retry_delay")
+        raise ArgumentError.new("connection circuit breaking needs CQL::Postgres::EngineSource or AsyncEngine; crystal-db owns this pool")
+      end
       options = connection_options(params).copy_with(prepared_statements_cache: false)
-      Builder.new(Config.from_uri(uri, ignoring: DB_OWNED_KEYS), options)
+      checkout_timeout = Config.seconds(params["checkout_timeout"]?, "checkout_timeout") || Connection::DEFAULT_CHECKOUT_TIMEOUT
+      Builder.new(Config.from_uri(uri, ignoring: DB_OWNED_KEYS), options, checkout_timeout)
     end
   end
 end

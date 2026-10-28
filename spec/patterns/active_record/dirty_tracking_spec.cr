@@ -326,4 +326,10 @@ describe CQL::ActiveRecord::DirtyTracking do
     statements.first.should_not contain("updated_at")
     person.updated_at.should eq(stamped)
   end
+
+  it "raises RecordNotFound when it sends a change to a row another statement deleted" do
+    person = DtPerson.create!(name: "Ada", email: "ada@example.com", age: 36).tap(&.age=(37))
+    DirtyTrackingDB.exec("DELETE FROM dt_people")
+    expect_raises(CQL::RecordNotFound) { person.save! }
+  end
 end

@@ -271,8 +271,9 @@ module CQL::Performance
       record_pool_wait(pool_wait) if pool_wait
       if error
         @error_count.add(1)
-        record_execution(sql, params, duration, nil, error.message.to_s)
-        Log.error { failure_message(error, sql, params) } if @config.logging.enabled?
+        summary = @sql_formatter.loggable_error(error)
+        record_execution(sql, params, duration, nil, summary)
+        Log.error { failure_message(summary, sql, params) } if @config.logging.enabled?
       else
         record_execution(sql, params, duration, rows_affected)
         log_query(sql, params, duration, rows_affected) if @config.logging.enabled?
@@ -289,7 +290,6 @@ module CQL::Performance
       detector = @detector unless error
       return unless profiler || detector
 
-      error = error.try { |message| @sql_formatter.loggable_error(message) }
       normalized_sql = SQLUtils.normalize_sql(sql)
       profiler.try(&.record_query(sql, params, execution_time, rows_affected, error, normalized_sql: normalized_sql))
       detector.try(&.record_query(sql, normalized_sql: normalized_sql))
@@ -315,8 +315,8 @@ module CQL::Performance
       @sql_formatter.format(sql, params, execution_time, rows_affected, CQL::Telemetry.current_context)
     end
 
-    private def failure_message(ex : Exception, sql : String, params : Array(DB::Any)) : String
-      message = "Query failed: #{@sql_formatter.loggable_error(ex.message.to_s)}\nSQL: #{sql}"
+    private def failure_message(error : String, sql : String, params : Array(DB::Any)) : String
+      message = "Query failed: #{error}\nSQL: #{sql}"
       formatted_params = @sql_formatter.loggable_params(params)
       formatted_params ? "#{message}\nParams: #{formatted_params}" : message
     end

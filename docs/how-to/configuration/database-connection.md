@@ -42,10 +42,10 @@ If the app also requires the `pg` shard, `pg` serves `postgres://` URLs instead 
 {% tab title="MySQL" %}
 ```crystal
 require "cql"
-require "mysql"
+require "cql/mysql" # requires the mysql shard, version ~> 0.16.0
 
 CQL.configure do |config|
-  config.db = ENV["DATABASE_URL"]? || "mysql://user:pass@localhost:3306/myapp"
+  config.db = ENV["DATABASE_URL"]? || "mysql://user:pass@localhost:3306/myapp?ssl-ca=/etc/myapp/mysql-ca.pem"
 end
 
 CQL.config.adapter # => CQL::Adapter::MySql
@@ -79,6 +79,17 @@ end
 ```
 
 `CQL.build_schema` opens `config.full_db_url`, so pool, SSL, database-specific and `adapter_options` settings reach the connection. `CQL.config` is process-wide: it describes one database. Any other scheme fails validation: `redis://localhost:6379` raises `ArgumentError: Unsupported database URL: redis://localhost:6379`.
+
+## MySQL authentication and TLS
+
+Use `require "cql/mysql"` with the `mysql` shard (`~> 0.16.0`) for MySQL 8.4's default
+`caching_sha2_password` authentication, verified TLS and bounded authentication. Requiring only `"mysql"`
+retains its original authentication behavior. The default `ssl-mode=verify_identity` requires a trusted CA
+and matching hostname; supply `ssl-ca` for a private CA.
+
+See [Use MySQL 8.4 with Verified TLS](mysql.md) for installation, complete connection examples, supported URL
+options, deadline semantics, troubleshooting and secret rotation. MySQL uses `ssl-mode` and `ssl-ca`, not the
+differently named options emitted by `config.ssl`.
 
 ## See what `full_db_url` adds
 

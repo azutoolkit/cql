@@ -50,10 +50,6 @@ module CQL::Postgres
       end
     end
 
-    def transaction(& : ::DB::Transaction -> _)
-      using_connection { |connection| connection.transaction { |transaction| yield transaction } }
-    end
-
     def pool_stats : PoolStats
       stats = @engine.pool.stats
       PoolStats.new(stats.in_use + stats.idle, stats.idle, stats.in_use, stats.max_size)

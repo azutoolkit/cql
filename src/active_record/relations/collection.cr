@@ -486,9 +486,11 @@ module CQL::ActiveRecord::Relations
       when :destroy
         # Call destroy on each record (triggers callbacks)
         load_records unless @loaded
-        @records.each do |record|
-          safe_db_operation { record.delete! }
-          records_affected += 1
+        all_or_none do
+          @records.each do |record|
+            safe_db_operation { record.delete! }
+            records_affected += 1
+          end
         end
       when :delete_all
         # Delete records without callbacks (more efficient)
@@ -503,6 +505,16 @@ module CQL::ActiveRecord::Relations
 
       reload if @loaded
       records_affected
+    end
+
+    # Runs a destroy in one transaction on the target's schema (a savepoint inside an open one), so a target whose
+    # `delete!` raises (a stale one) rolls back the deletes before it, and a rollback has the collection load its rows
+    # again. Statements on another schema, such as a many_to_many join table's, run outside it.
+    private def all_or_none(&)
+      Target.schema.transaction do
+        Target.schema.on_rollback { @loaded = false }
+        yield
+      end
     end
 
     # Check if the collection includes a specific record

@@ -1,18 +1,10 @@
 require "../executor"
+require "../isolation_level"
 require "./connection"
 require "./query_streaming"
 
 module CQL::Postgres
-  enum IsolationLevel
-    ReadUncommitted
-    ReadCommitted
-    RepeatableRead
-    Serializable
-
-    def to_sql : String
-      to_s.underscore.tr("_", " ").upcase
-    end
-  end
+  alias IsolationLevel = CQL::IsolationLevel
 
   # An open transaction on one pooled connection. Statements run `using(scope)`
   # join it, and `savepoint` nests inside it. The scope is only good for the
@@ -25,6 +17,7 @@ module CQL::Postgres
     getter adapter : CQL::Adapter
 
     def initialize(@adapter : CQL::Adapter, @connection : Connection, @transaction : ::DB::Transaction)
+      @owner = Fiber.current
       @finished = false
     end
 
@@ -54,7 +47,8 @@ module CQL::Postgres
     end
 
     private def ensure_open : Nil
-      raise TransactionClosed.new("the transaction has ended; this scope can no longer run statements") if @finished
+      raise WrongFiber.new("a transaction scope must be used by the fiber that opened it; open a separate transaction in this fiber") unless Fiber.current == @owner
+      raise TransactionClosed.new("the transaction has ended; this scope can no longer run statements") if @finished || @transaction.closed?
     end
   end
 end

@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "log/spec"
 require "../support/fake_pg_server"
 require "../../src/postgres"
 
@@ -10,6 +11,27 @@ private def decline_tls_then_start_up(client : FakePG::Client) : Nil
   client.io.flush
   client.read_startup["protocol"].should eq "3.2"
   client.ok_handshake
+end
+
+private def mutual_tls_query(key : String, certificate : String) : String
+  "sslmode=verify-full&sslrootcert=#{TlsFixture.paths.not_nil![1]}&sslcert=#{certificate}&sslkey=#{key}"
+end
+
+# A server whose handshake fails, as the client presents no certificate it accepts.
+private def certificate_demanding_server(context : OpenSSL::SSL::Context::Server) : FakePG
+  FakePG.start do |client|
+    client.read_startup
+    client.upgrade_to_tls(context)
+  rescue OpenSSL::SSL::Error | IO::Error
+  end
+end
+
+# An empty file standing in for a client key: parsing checks only that sslcert and sslkey are readable files.
+private def key_file(mode : Int32) : String
+  File.tempname("cql-client", ".key").tap do |path|
+    File.write(path, "")
+    File.chmod(path, mode)
+  end
 end
 
 describe CQL::Postgres::Transport do
@@ -115,6 +137,23 @@ describe CQL::Postgres::Transport do
     error.message.to_s.should_not contain "hunter2"
   end
 
+  describe ".input_pending?" do
+    it "answers without blocking whether the peer wrote or hung up, and consumes nothing" do
+      local, peer = UNIXSocket.pair
+      local.read_timeout = 1.second # a peek that consumed the byte would leave read_byte waiting
+      PG::Transport.input_pending?(local).should be_false
+      peer.write("E".to_slice)
+      PG::Transport.input_pending?(local).should be_true
+      local.read_byte.should eq 'E'.ord # the peek left the byte in place
+      PG::Transport.input_pending?(local).should be_false
+      peer.close
+      PG::Transport.input_pending?(local).should be_true # end of stream
+      PG::Transport.input_pending?(IO::Memory.new("x")).should be_false
+    ensure
+      local.try &.close
+    end
+  end
+
   describe "network failures during TLS setup stay retryable IO errors" do
     it "when the server hangs up after the SSLRequest" do
       server = FakePG.start(&.read_startup)
@@ -172,8 +211,8 @@ describe CQL::Postgres::Transport do
         client.read_startup
         client.ok_handshake
         client.expect('Q')
-        client.send('G', Bytes[0, 0, 0, 0, 0])
-        sleep 30.seconds # never reads the COPY data: the client's send buffer fills up
+        client.send('G', Bytes[0, 0, 1, 0, 0]) # one text-format column
+        sleep 30.seconds                       # never reads the COPY data: the client's send buffer fills up
       rescue OpenSSL::SSL::Error | IO::Error
       end
       session = PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=require")))
@@ -187,6 +226,92 @@ describe CQL::Postgres::Transport do
       end
       (Time.instant - started).should be < 5.seconds
       session.closed?.should be_true
+    end
+  end
+
+  describe "client certificates (sslcert and sslkey)" do
+    it "presents them to a server that demands one" do
+      context, client = TlsFixture.client_certificate_required_context, TlsFixture.client_paths
+      pending! "needs the openssl command line tool for a certificate" unless context && client
+      seen = Channel(String?).new(1)
+      server = FakePG.start do |peer|
+        peer.read_startup
+        seen.send peer.upgrade_to_tls(context).peer_certificate.try(&.subject.to_a.to_h["CN"]?)
+        peer.read_startup
+        peer.ok_handshake
+      end
+      config = PG::Config.parse(server.url(query: mutual_tls_query(*client)))
+      io = PG::Transport.connect(config)
+      PG::Handshake.new(config, io).run.process_id.should eq 4242
+      io.close
+      seen.receive.should eq "cql-client"
+    end
+
+    # TLS 1.3 ends the client's handshake before the server checks for a certificate, so the refusal arrives later.
+    it "fails as TLSRefused without one" do
+      context = TlsFixture.client_certificate_required_context
+      pending! "needs the openssl command line tool for a certificate" unless context
+      config = PG::Config.parse(certificate_demanding_server(context).url(query: "sslmode=verify-full&sslrootcert=#{TlsFixture.paths.not_nil![1]}"))
+      expect_raises(PG::TLSRefused, /TLS to 127.0.0.1.* failed/) { PG::Session.connect(config) }
+    end
+
+    it "fails as TLSRefused naming sslkey, never its content, when the key does not load; sslpassword is not supported" do
+      context, client = TlsFixture.client_certificate_required_context, TlsFixture.client_paths
+      pending! "needs the openssl command line tool for a certificate" unless context && client
+      key, certificate = client
+      garbage, encrypted, padded = {"garbage", "encrypted", "padded"}.map { |name| File.join(File.dirname(key), "#{name}.key") }
+      File.write(garbage, "-----BEGIN PRIVATE KEY-----\nTOPSECRETKEYMATERIAL\n-----END PRIVATE KEY-----\n")
+      Process.run("openssl", ["pkey", "-in", key, "-aes256", "-passout", "pass:pw", "-out", encrypted]).success?.should be_true
+      File.write(padded, "preamble\n" * 8_000 + File.read(encrypted)) # OpenSSL skips any text before a PEM block, so no prefix scan finds it
+      {garbage, encrypted, padded}.each { |path| File.chmod(path, 0o600) }
+      {garbage => /sslkey/, encrypted => /sslkey.*sslpassword/, padded => /sslkey.*sslpassword/}.each do |bad_key, message|
+        url = certificate_demanding_server(context).url(query: mutual_tls_query(bad_key, certificate))
+        error = expect_raises(PG::TLSRefused, message) { PG::Session.connect(PG::Config.parse(url)) }
+        error.message.to_s.should_not contain "TOPSECRET"
+      end
+    end
+
+    it "checks at parse that both are given and readable, naming the key and the path" do
+      key, certificate = TlsFixture.client_paths || pending!("needs the openssl command line tool for a certificate")
+      base = "postgres://h/db?sslmode=require"
+      expect_raises(ArgumentError, %r{sslcert.*/nonexistent/client.pem}) { PG::Config.parse("#{base}&sslcert=/nonexistent/client.pem&sslkey=#{key}") }
+      expect_raises(ArgumentError, %r{sslkey.*/nonexistent/client.key}) { PG::Config.parse("#{base}&sslcert=#{certificate}&sslkey=/nonexistent/client.key") }
+      expect_raises(ArgumentError, /sslkey/) { PG::Config.parse("#{base}&sslcert=#{certificate}") }
+      expect_raises(ArgumentError, /sslcert/) { PG::Config.parse("#{base}&sslkey=#{key}") }
+      PG::Config.parse("#{base}&sslcert=#{certificate}&sslkey=#{key}").startup_options.should be_empty
+    end
+
+    # libpq refuses such a key; CQL warns instead, as secret mounts (Kubernetes) are often root-owned 0644.
+    it "warns once per path at parse when sslkey is open to group or others, naming sslkey, the path and the mode" do
+      keys = {0o600, 0o640, 0o644}.map { |mode| key_file(mode) }
+      private_key, group_readable, world_readable = keys
+      parse = ->(key : String) { PG::Config.parse("postgres://h/db?sslmode=require&sslcert=#{__FILE__}&sslkey=#{key}") }
+      Log.capture("cql.postgres", level: :warn) do |logs|
+        parse.call(private_key)
+        parse.call(group_readable) if File.info(group_readable).owner_id == "0" # libpq accepts 0640 when root owns the key
+        logs.empty
+        2.times { parse.call(world_readable) }
+        logs.next(:warn, /sslkey.*#{Regex.escape(world_readable)}.*0644/).empty
+        if LibC.getuid == 0
+          File.chown(group_readable, 65534) # not root-owned: libpq's stricter rule refuses 0640 too
+          parse.call(group_readable)
+          logs.next(:warn, /sslkey.*#{Regex.escape(group_readable)}.*0640/).empty
+        end
+      end
+    ensure
+      keys.try &.each { |path| File.delete(path) }
+    end
+
+    # The certificate is a Crystal source file here: nothing may load it while TLS is off.
+    it "are neither loaded nor make the client ask for TLS when sslmode=disable" do
+      key = key_file(0o600)
+      server = FakePG.start do |peer|
+        peer.read_startup
+        peer.ok_handshake
+      end
+      PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=disable&sslcert=#{__FILE__}&sslkey=#{key}"))).close
+    ensure
+      key.try { |path| File.delete(path) }
     end
   end
 end

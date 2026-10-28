@@ -29,6 +29,23 @@ OPTIMISTIC_LOCKING_TEST_SCHEMA = CQL::Schema.define(
     lock_version :version
     timestamp :deleted_at, null: true
   end
+
+  table :parted_products do
+    primary :id, Int32, auto_increment: true
+    varchar :name
+    lock_version :version
+  end
+
+  table :uuid_products do
+    primary :id, String, auto_increment: false
+    varchar :name
+    lock_version :version
+  end
+
+  table :product_parts do
+    primary :id, Int32, auto_increment: true
+    integer :parted_product_id
+  end
 end
 
 # Define our test class using Active Record
@@ -97,6 +114,41 @@ class SoftLockedProduct
   optimistic_locking version_column: :version
 end
 
+class UuidProduct
+  include CQL::ActiveRecord::Model(UUID)
+  include CQL::ActiveRecord::OptimisticLocking
+
+  db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :uuid_products
+
+  property name : String = ""
+  property version : Int32 = 1
+
+  def initialize
+  end
+
+  optimistic_locking version_column: :version
+end
+
+class ProductPart
+  include CQL::ActiveRecord::Model(Int32)
+  db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :product_parts
+
+  property parted_product_id : Int32 = 0
+end
+
+# Optimistic locking together with a `dependent:` association
+class PartedProduct
+  include CQL::ActiveRecord::Model(Int32)
+  include CQL::ActiveRecord::OptimisticLocking
+  db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :parted_products
+
+  property name : String = ""
+  property version : Int32 = 1
+
+  has_many :parts, ProductPart, foreign_key: :parted_product_id, dependent: :delete_all
+  optimistic_locking version_column: :version
+end
+
 module CQL::ActiveRecord::OptimisticLockingSpec
   describe "Optimistic Locking" do
     before_each do
@@ -110,6 +162,15 @@ module CQL::ActiveRecord::OptimisticLockingSpec
       # Clean up after all tests
       OPTIMISTIC_LOCKING_TEST_SCHEMA.products.drop!
       OPTIMISTIC_LOCKING_TEST_SCHEMA.int64_products.drop!
+    end
+
+    it "puts its version back when the update's transaction rolls back, so the next update is not refused" do
+      product = Product.new("Lamp", 10.0, 1)
+      product.save!
+      expect_raises(Exception, "boom") { OPTIMISTIC_LOCKING_TEST_SCHEMA.transaction { product.name = "Desk"; product.update!; raise "boom" } }
+      product.version.should eq 1
+      product.update!
+      Product.find!(product.id!).name.should eq "Desk"
     end
 
     it "saves a soft-deleted record under the lock, updating its row" do
@@ -213,6 +274,88 @@ module CQL::ActiveRecord::OptimisticLockingSpec
       custom_product.update!
 
       custom_product.version.should eq(2)
+    end
+
+    context "when deleting" do
+      it "raises on a stale copy and keeps the row the other copy saved" do
+        copy_a = Product.create!(name: "Original")
+        copy_b = Product.find!(copy_a.id!)
+        copy_a.name = "Changed by A"
+        copy_a.update!
+
+        expect_raises(CQL::OptimisticLockError) { copy_b.delete! }
+
+        Product.find!(copy_a.id!).name.should eq("Changed by A")
+        copy_b.destroyed?.should be_false
+        copy_b.id.should eq(copy_a.id)
+      end
+
+      it "deletes a current record and returns true" do
+        product = Product.create!(name: "Current")
+        product_id = product.id!
+
+        product.delete!.should be_true
+        Product.find?(product_id).should be_nil
+      end
+
+      it "raises when another process already deleted the row" do
+        product = Product.create!(name: "Gone")
+        Product.delete!(product.id!)
+
+        expect_raises(CQL::OptimisticLockError) { product.delete! }
+      end
+
+      it "keeps the dependent rows when a stale delete raises" do
+        copy_a = PartedProduct.create!(name: "Original")
+        ProductPart.create!(parted_product_id: copy_a.id!)
+        copy_b = PartedProduct.find!(copy_a.id!)
+        copy_a.name = "Changed by A"
+        copy_a.update!
+
+        expect_raises(CQL::OptimisticLockError) { copy_b.delete! }
+
+        ProductPart.where(parted_product_id: copy_a.id!).count.should eq(1)
+      end
+    end
+
+    context "the error" do
+      stale_copy = -> do
+        OPTIMISTIC_LOCKING_TEST_SCHEMA.exec_query do |conn|
+          conn.exec("INSERT INTO products (id, name, version, created_at, updated_at) VALUES (424242, 'Lamp', 3, ?, ?)", args: [Time.utc, Time.utc])
+        end
+        copy = Product.find!(424242)
+        Product.update!(424242, version: 4)
+        copy
+      end
+
+      it "names the model and the version a stale update expected, and keeps the id out of its message" do
+        copy = stale_copy.call
+        copy.name = "Desk"
+        error = expect_raises(CQL::OptimisticLockError) { copy.update! }
+        {error.model_class, error.id, error.expected_version}.should eq({"Product", 424242, 3})
+        error.message.to_s.should contain("Expected version: 3")
+        error.message.to_s.should_not contain("424242")
+      end
+
+      it "does the same for a stale delete" do
+        error = expect_raises(CQL::OptimisticLockError) { stale_copy.call.delete! }
+        {error.model_class, error.id, error.expected_version}.should eq({"Product", 424242, 3})
+        error.message.to_s.should_not contain("424242")
+      end
+
+      it "carries a UUID key" do
+        copy = UuidProduct.new.tap(&.save!)
+        UuidProduct.update!(copy.id!, version: 2)
+        error = expect_raises(CQL::OptimisticLockError) { copy.delete! }
+        error.id.should eq copy.id
+        error.message.to_s.should_not contain(copy.id.to_s)
+      end
+
+      it "carries the expected version from an update builder" do
+        update = OPTIMISTIC_LOCKING_TEST_SCHEMA.update.table(:products).set(name: "Desk").where(id: 1)
+        error = expect_raises(CQL::OptimisticLockError) { update.with_optimistic_lock(version: 9).commit }
+        error.expected_version.should eq 9
+      end
     end
 
     context "with an Int64 primary key" do

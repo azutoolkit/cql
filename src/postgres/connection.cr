@@ -1,4 +1,5 @@
 require "db"
+require "../checkout_budget"
 require "./session"
 require "./statement"
 
@@ -7,13 +8,18 @@ module CQL::Postgres
   # yields, so every CQL statement type runs on it unchanged.
   class Connection < ::DB::Connection
     DRIVER_NAME = "postgres"
+    # crystal-db's, for a connection that no `Driver::Builder` made.
+    DEFAULT_CHECKOUT_TIMEOUT = ::DB::Pool::Options.new.checkout_timeout.seconds
 
     getter session : CQL::Postgres::Session
+    # What a crystal-db checkout may spend checking and connecting (the URL's, via `Driver::Builder`); zero: no deadline.
+    property checkout_timeout : Time::Span = DEFAULT_CHECKOUT_TIMEOUT
 
     # crystal-db's own per-connection statement-wrapper cache is off: the
     # session already keeps a bounded cache of prepared statements.
-    def self.open(config : Config, options : ::DB::Connection::Options = ::DB::Connection::Options.new(prepared_statements_cache: false)) : Connection
-      new(CQL::Postgres::Session.connect(config), options)
+    def self.open(config : Config, options : ::DB::Connection::Options = ::DB::Connection::Options.new(prepared_statements_cache: false),
+                  *, deadline : Time::Instant? = nil) : Connection
+      new(CQL::Postgres::Session.connect(config, deadline), options)
     end
 
     def initialize(@session : CQL::Postgres::Session, options : ::DB::Connection::Options = ::DB::Connection::Options.new(prepared_statements_cache: false))
@@ -24,6 +30,18 @@ module CQL::Postgres
     # error or a timeout) is closed for good, even if nobody called `close`.
     def closed? : Bool
       super || @session.closed?
+    end
+
+    # crystal-db's pool calls it as it lends the connection. One the server wrote to or hung up on while it sat
+    # idle (a FATAL on a restart or failover) is pinged within the checkout's `CQL::CheckoutBudget`, and closed
+    # unpinged once its health checks' share is spent; a failed ping closes it, so its next request is refused
+    # before anything is sent and crystal-db runs the statement on another connection. (Public: an override
+    # outside crystal-db's namespace cannot be called by its pool while protected.)
+    def before_checkout
+      super
+      return if @session.closed? || !@session.input_pending?
+      wait = CheckoutBudget.check_wait(checkout_timeout, CQL::Postgres::Session::PING_TIMEOUT)
+      wait ? @session.ping(wait) : @session.close
     end
 
     # crystal-db 0.15 requires it: the name the driver is registered with.
@@ -66,6 +84,33 @@ module CQL::Postgres
 
     def in_transaction? : Bool
       @session.in_transaction?
+    end
+
+    # A COMMIT the server refuses (a serialization failure found at commit, a deferred constraint) ends the transaction
+    # there, but crystal-db's `TopLevelTransaction#commit` raises before it releases the connection, which would then
+    # refuse every later transaction: release it once the server reports the session out of the transaction. A session
+    # left in one ('T', 'E') is rolled back by the pool's `ConnectionReset` on release.
+    #
+    # A transaction a failed statement aborted ('E') rolls back at COMMIT without an error: raise, not report success.
+    def perform_commit_transaction
+      aborted = @session.transaction_status == 'E'
+      super
+      raise TransactionAborted.new("COMMIT rolled back the transaction: a statement in it failed, so nothing " \
+                                   "was committed") if aborted
+    rescue ex
+      release_from_transaction unless @session.closed? || @session.in_transaction?
+      raise ex
+    end
+
+    # A ROLLBACK on a dropped session cannot reach the server, which discards the transaction once it notices
+    # the closed socket; it would only replace the error that dropped it (a QueryTimeout, say) with a lost connection.
+    # Nor on an idle one: after a refused COMMIT the server already ended the transaction, and would only warn.
+    def perform_rollback_transaction
+      super if !@session.closed? && @session.in_transaction?
+    end
+
+    def perform_rollback_savepoint(name)
+      super unless @session.closed?
     end
 
     def on_notice(&handler : Hash(Char, String) ->) : Nil
@@ -125,9 +170,10 @@ module CQL::Postgres
       translating_lost { @session.pipeline(statements) }
     end
 
+    # As in `Statement`: only a request refused before it was sent is safe to run again.
     private def translating_lost(&)
       yield
-    rescue ex : ConnectionLost
+    rescue ex : ConnectionClosed
       raise ::DB::ConnectionLost.new(self, cause: ex)
     end
 

@@ -76,14 +76,14 @@ module CQL::Postgres
 
     # Connects, asking for the newest protocol the config allows. A server that
     # rejects that version outright (before PostgreSQL 9.3.21, or some poolers)
-    # gets one more try with 3.0 when the config allows it.
-    def self.connect(config : Config) : Session
+    # gets one more try with 3.0 when the config allows it. Both tries end by *deadline*, when one is given.
+    def self.connect(config : Config, deadline : Time::Instant? = nil) : Session
       requested = config.max_protocol_version
-      attempt(config, requested)
+      attempt(config, requested, deadline)
     rescue ex : ServerError | UnrecognizedStartupReply
       raise ex unless rejected_version?(ex) && requested.try { |version| version > ProtocolVersion::V3_0 } && config.min_protocol_version <= ProtocolVersion::V3_0
       Log.info { "#{fallback_reason(ex, requested)}; reconnecting with 3.0 (set max_protocol_version=3.0 to skip the first attempt)" }
-      attempt(config, ProtocolVersion::V3_0)
+      attempt(config, ProtocolVersion::V3_0, deadline)
     end
 
     private def self.fallback_reason(error : Error, requested : ProtocolVersion?) : String
@@ -101,15 +101,11 @@ module CQL::Postgres
       end
     end
 
-    private def self.attempt(config : Config, version : ProtocolVersion) : Session
-      stream = Transport.open_stream(config)
-      begin
-        outcome = Handshake.new(config, stream.io, version).run
+    private def self.attempt(config : Config, version : ProtocolVersion, deadline : Time::Instant?) : Session
+      Transport.open_stream(config, deadline) do |stream|
+        outcome = Handshake.new(config, stream.io, version, deadline).run
         Transport.relax(stream.io)
         new(config, stream.io, outcome, stream.socket)
-      rescue ex
-        stream.socket.close
-        raise ex
       end
     end
 
@@ -141,6 +137,11 @@ module CQL::Postgres
 
     def closed? : Bool
       @closed
+    end
+
+    # Whether the server sent something or hung up since the last request (see `Transport.input_pending?`).
+    def input_pending? : Bool
+      Transport.input_pending?(@socket)
     end
 
     # A value as a bind parameter for this session, in binary if its config allows.
@@ -236,7 +237,7 @@ module CQL::Postgres
     def ping(timeout : Time::Span = PING_TIMEOUT) : Bool
       return false if cancels_pending? # a late cancel could hit whatever runs next: not a connection to trust
       answered = false
-      exclusive { answered = with_hard_deadline(timeout) { run_simple("") } }
+      exclusive(default_deadline: false) { answered = with_hard_deadline(timeout) { run_simple("") } }
       answered && !@closed
     rescue Error
       false
@@ -293,12 +294,13 @@ module CQL::Postgres
     rescue IO::Error | OpenSSL::Error
     end
 
-    private def exclusive(timeout : Time::Span? = nil, &)
+    # A request without a *timeout* of its own gets the config's `query_timeout`; a ping keeps only its hard deadline.
+    private def exclusive(timeout : Time::Span? = nil, default_deadline : Bool = true, &)
       @lock.synchronize do
-        raise ConnectionLost.new("the connection is closed") if @closed
+        raise ConnectionClosed.new("the connection is closed") if @closed
         @deadline_expired = false
         @requests += 1
-        guarded { with_deadline(timeout) { yield } }
+        guarded { with_deadline(default_deadline ? timeout || @config.query_timeout : timeout) { yield } }
       ensure
         settle_cancels
         @last_used = Time.instant
@@ -356,12 +358,17 @@ module CQL::Postgres
       state.compare_and_set(Deadline::Running, Deadline::Done)[1]
     end
 
+    # Unbounded requests skip `watched`, whose closure would cost an allocation each.
+    private def with_deadline(timeout : Time::Span?, &)
+      return yield unless timeout
+      watched(timeout) { yield }
+    end
+
     # Cancels the statement when *timeout* passes. A cancel racing with a
     # statement that just finished could hit the next one, so unless the server
     # confirmed the cancel the session is dropped instead of reused. The
     # watchdog and the request fiber settle who got there first atomically.
-    private def with_deadline(timeout : Time::Span?, &)
-      return yield unless timeout
+    private def watched(timeout : Time::Span, &)
       state = Atomic(Deadline).new(Deadline::Running)
       finished = Channel(Nil).new
       cancel_sent = Channel(Nil).new(1)

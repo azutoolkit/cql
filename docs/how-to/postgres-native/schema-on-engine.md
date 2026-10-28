@@ -71,10 +71,11 @@ AppDB.uri # => "postgres://app:secret@db.internal/app?sslmode=verify-full"
 
 | Failure | crystal-db's pool | `EngineSource` |
 | --- | --- | --- |
-| Cannot connect | `DB::ConnectionRefused` on the first connect, then `DB::PoolRetryAttemptsExceeded` without `cause` | `DB::ConnectionRefused`, `cause` is the `IO::Error` |
+| Cannot connect | `DB::ConnectionRefused` on each call, after one connection attempt within `checkout_timeout` | `DB::ConnectionRefused`, `cause` is the `IO::Error` |
 | Pool saturated | `DB::PoolTimeout` | `DB::PoolTimeout`, `cause` is `CQL::Postgres::PoolTimeout` |
 | Server or TLS error | `CQL::Postgres::ServerError` subclass, `TLSRefused` | the same |
-| Connect retries | `retry_attempts`, `retry_delay` | none |
+| Idle connection ended by the server | skipped at checkout: each idle connection, then one new one, may be tried within one `checkout_timeout` (their pings share half of it); a block that started is never run again | pinged at checkout and dropped when the ping fails; a statement already sent is never run again |
+| Connect retries | none: `retry_attempts` and `retry_delay` are not used | none |
 
 The engine ignores `max_idle_pool_size`, `retry_attempts`, `retry_delay`, `prepared_statements` and `prepared_statements_cache`. `prepared_statements=false` has no effect on the engine: it still prepares statements and caches them up to `statement_cache_size`; set `statement_cache_size=0` to turn the cache off. Any other key it does not know is still sent to the server as a startup parameter.
 

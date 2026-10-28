@@ -3,6 +3,11 @@ require "./dialect"
 module Expression
   # PostgreSQL specific dialect implementation - optimized for performance
   class PostgresDialect < BaseDialect
+    # A-Z only in a multibyte (UTF-8) database; a single-byte encoding also folds other letters, not handled here.
+    def fold_unquoted_name(name : String) : String
+      name.downcase(Unicode::CaseOptions::ASCII)
+    end
+
     # Cache for frequently used PostgreSQL-specific strings
     @@cached_strings = {
       "postgres_drop_index_prefix"  => "DROP INDEX IF EXISTS ",
@@ -26,12 +31,16 @@ module Expression
       run_dump("pg_dump", args, env: dump_env(uri))
     end
 
-    # The password and the `sslmode` query parameter of *uri*, as pg_dump reads them from its
-    # environment. Other query parameters are ignored.
+    private DUMP_SSL_VARIABLES = {"sslmode" => "PGSSLMODE", "sslrootcert" => "PGSSLROOTCERT", "sslcert" => "PGSSLCERT", "sslkey" => "PGSSLKEY"}
+
+    # The password and the TLS query parameters of *uri* (`sslmode`, `sslrootcert`, `sslcert`, `sslkey`), as pg_dump
+    # reads them from its environment. A parameter *uri* does not name is not passed, so pg_dump inherits it from this
+    # process's environment. Other query parameters are ignored.
     private def dump_env(uri : URI) : Hash(String, String)
       env = {} of String => String
       uri.password.try { |password| env["PGPASSWORD"] = password }
-      uri.query_params["sslmode"]?.try { |mode| env["PGSSLMODE"] = mode }
+      params = uri.query_params
+      DUMP_SSL_VARIABLES.each { |key, variable| params[key]?.try { |value| env[variable] = value } }
       env
     end
 
@@ -209,6 +218,67 @@ module Expression
 
     def supports_transactional_ddl? : Bool
       true
+    end
+
+    # `pg_advisory_xact_lock` on the bound key: held until the transaction ends.
+    def migration_lock_sql : String?
+      "SELECT pg_advisory_xact_lock(#{placeholder_format(1)})"
+    end
+
+    # `SHOW transaction_isolation` reads the level in lower case ("read committed") and takes no snapshot.
+    def transaction_isolation_sql : String?
+      "SHOW transaction_isolation"
+    end
+
+    def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      set_transaction_sql(isolation, read_only)
+    end
+
+    # SQLSTATE 40001 and 40P01 from CQL's own driver only (the `pg` shard's errors are not retried).
+    def retryable_transaction_error?(error : Exception) : Bool
+      error.is_a?(CQL::Postgres::SerializationFailure | CQL::Postgres::DeadlockDetected)
+    end
+
+    # A server's ERROR answer (CQL's driver, or the `pg` shard when loaded) or a request never sent (CQL's driver may
+    # wrap that in crystal-db's `ConnectionLost`, which alone can follow a sent one); not a FATAL or 08 answer (a pooler
+    # that lost the server) nor 40003 (CockroachDB's ambiguous COMMIT), which may follow a commit.
+    def commit_refused?(error : Exception) : Bool
+      {% if @top_level.has_constant?(:PQ) %}
+        if error.is_a?(PQ::PQError)
+          severity = error.field_message(:severity_unlocalized) || error.field_message(:severity)
+          return definite_refusal?(severity.to_s, error.field_message(:code).to_s)
+        end
+      {% end %}
+      return definite_refusal?(error.severity, error.sqlstate) if error.is_a?(CQL::Postgres::ServerError)
+      return error.cause.is_a?(CQL::Postgres::ConnectionClosed) if error.is_a?(::DB::ConnectionLost)
+      error.is_a?(CQL::Postgres::TransactionAborted | CQL::Postgres::ConnectionClosed)
+    end
+
+    private def definite_refusal?(severity : String, sqlstate : String) : Bool
+      severity == "ERROR" && !sqlstate.starts_with?("08") && sqlstate != "40003"
+    end
+
+    # REPEATABLE READ and SERIALIZABLE take their snapshot at the lock statement, before it waits.
+    def migration_lock_isolation_safe?(level : String) : Bool
+      level.in?("read committed", "read uncommitted")
+    end
+
+    # The server's `lock_timeout` as text, such as "0" or "1min".
+    def lock_timeout_sql : String?
+      "SELECT current_setting('lock_timeout')"
+    end
+
+    # `true`: SET LOCAL, so the bound ends with the transaction.
+    def set_lock_timeout_sql : String?
+      "SELECT set_config('lock_timeout', #{placeholder_format(1)}, true)"
+    end
+
+    # SQLSTATE 55P03 (lock_not_available), from CQL's own driver or, when the app loads it, the `pg` shard.
+    def lock_timed_out?(error : Exception) : Bool
+      {% if @top_level.has_constant?(:PQ) %}
+        return error.field_message(:code) == "55P03" if error.is_a?(PQ::PQError)
+      {% end %}
+      error.is_a?(CQL::Postgres::ServerError) && error.sqlstate == "55P03"
     end
 
     def format_returning(columns : Array(String)) : String

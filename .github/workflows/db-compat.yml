@@ -1,6 +1,7 @@
 name: crystal-db compatibility
 
 on:
+  workflow_call:
   push:
     branches: [master]
   pull_request:

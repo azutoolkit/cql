@@ -17,7 +17,7 @@ user.delete!     # => false: no id any more
 User.find(1)     # => nil
 ```
 
-`delete!` runs `before_destroy` / `after_destroy` and the associations' `dependent:` strategies. It returns `false` when the record has no id, a `before_destroy` callback returns `false`, or no row matched. A `restrict_with_error` association that has records raises and deletes nothing.
+`delete!` runs `before_destroy` / `after_destroy` and the associations' `dependent:` strategies. It returns `false` when the record has no id, a `before_destroy` callback returns `false`, or no row matched. A `restrict_with_error` association that has records raises and deletes nothing. On a model with [`optimistic_locking`](../models/optimistic-locking.md), a stale version or a row already gone raises `CQL::OptimisticLockError` instead of returning `false`.
 
 ## Delete Without Loading Records
 

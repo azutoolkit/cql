@@ -6,7 +6,7 @@ description: "Create the blog_engine project, add CQL and connect it to SQLite."
 
 Parts 2 to 5 build on this project, so keep it.
 
-**You need:** Crystal 1.12.2 or later and the SQLite 3 development library. [Your First CQL App](../getting-started/your-first-cql-app.md) is a shorter introduction.
+**You need:** Crystal 1.19.1 or later and the SQLite 3 development library. [Your First CQL App](../getting-started/your-first-cql-app.md) is a shorter introduction.
 
 ## What you will build
 

@@ -1,0 +1,153 @@
+require "../spec_helper"
+
+# SQLite standing in for MySQL, which sets the level before BEGIN: like SET TRANSACTION there, `PRAGMA synchronous`
+# is refused inside a transaction and holds per connection.
+private class BeforeBeginSqliteDialect < Expression::SqliteDialect
+  def transaction_modes_before_begin? : Bool
+    true
+  end
+
+  def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+    "PRAGMA synchronous = OFF"
+  end
+end
+
+private class BeforeBeginSqliteSchema < CQL::Schema
+  def dialect
+    BeforeBeginSqliteDialect.new
+  end
+end
+
+# A custom dialect that gives a blank statement for `read_only:`, which must not run the block read-write.
+private class SilentSqliteDialect < Expression::SqliteDialect
+  def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+    " " if read_only
+  end
+end
+
+private class SilentSqliteSchema < CQL::Schema
+  def dialect
+    SilentSqliteDialect.new
+  end
+end
+
+# A source of the application's own, overriding `transaction`.
+private class CountingSource < CQL::DatabaseSource
+  getter transactions = 0
+
+  def transaction(& : DB::Transaction -> _)
+    @transactions += 1
+    super { |transaction| yield transaction }
+  end
+end
+
+describe "CQL::Schema#transaction(isolation:)" do
+  schema = CQL::Schema.define(:tx_options, adapter: CQL::Adapter::SQLite, uri: spec_sqlite_uri("transaction_options.db")) do
+    table :tx_option_rows do
+      primary :id, Int32
+      column :label, String
+    end
+  end
+  committed_labels = -> { DB.open(schema.uri, &.query_all("SELECT label FROM tx_option_rows", as: String)) }
+
+  before_each do
+    schema.build
+    schema.exec("DELETE FROM tx_option_rows")
+  end
+
+  it "commits a serializable transaction on SQLite, which is always serializable" do
+    schema.transaction(isolation: :serializable) { schema.exec("INSERT INTO tx_option_rows (label) VALUES ('A')") }
+    committed_labels.call.should eq ["A"]
+  end
+
+  it "refuses a level SQLite cannot honour before a transaction begins" do
+    events = [] of CQL::Telemetry::TransactionEvent
+    CQL::Telemetry.subscribe_transactions("tx_options_spec") { |event| events << event }
+    expect_raises(CQL::DialectError, /SQLite.*read.?committed/i) do
+      schema.transaction(isolation: :read_committed) { raise "the block ran" }
+    end
+    events.should be_empty
+  ensure
+    CQL::Telemetry.unsubscribe_transactions("tx_options_spec")
+  end
+
+  it "refuses read_only: on SQLite, which has no read-only transactions, before a transaction begins" do
+    events = [] of CQL::Telemetry::TransactionEvent
+    CQL::Telemetry.subscribe_transactions("tx_options_spec") { |event| events << event }
+    expect_raises(CQL::DialectError, /SQLite.*read.?only/i) { schema.transaction(read_only: true) { raise "the block ran" } }
+    expect_raises(CQL::DialectError, /SQLite.*read.?only/i) do
+      schema.transaction(isolation: :serializable, read_only: true) { raise "the block ran" }
+    end
+    events.should be_empty
+    CQL::Adapter::SQLite.dialect.transaction_modes_sql(CQL::IsolationLevel::Serializable, false).should be_nil
+    CQL::Adapter::SQLite.dialect.transaction_modes_sql(nil, false).should be_nil
+  ensure
+    CQL::Telemetry.unsubscribe_transactions("tx_options_spec")
+  end
+
+  it "refuses isolation: on a nested transaction (a savepoint), leaving the outer one to commit" do
+    schema.transaction do
+      schema.exec("INSERT INTO tx_option_rows (label) VALUES ('outer')")
+      expect_raises(ArgumentError) { schema.transaction(isolation: :serializable) { } }
+      expect_raises(ArgumentError, /read.?only/i) { schema.transaction(read_only: true) { } }
+    end
+    committed_labels.call.should eq ["outer"]
+  end
+
+  it "gives PostgreSQL and CockroachDB the level and access mode as the transaction's first statement" do
+    [CQL::Adapter::Postgres, CQL::Adapter::CockroachDB].each do |adapter|
+      dialect = adapter.dialect
+      dialect.transaction_modes_sql(CQL::IsolationLevel::Serializable, false).should eq "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"
+      dialect.transaction_modes_sql(CQL::IsolationLevel::ReadCommitted, false).should eq "SET TRANSACTION ISOLATION LEVEL READ COMMITTED"
+      dialect.transaction_modes_sql(nil, true).should eq "SET TRANSACTION READ ONLY"
+      dialect.transaction_modes_sql(CQL::IsolationLevel::Serializable, true).should eq "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY"
+      dialect.transaction_modes_sql(nil, false).should be_nil
+    end
+  end
+
+  it "runs a before-BEGIN dialect's statement on the transaction's connection before BEGIN, and commits the work" do
+    # Two idle connections: a statement run on a checkout of its own would leave the transaction's connection at 2 (FULL).
+    before_begin = BeforeBeginSqliteSchema.new(:tx_before_begin, "#{schema.uri}?initial_pool_size=2&max_idle_pool_size=2", CQL::Adapter::SQLite)
+    before_begin.transaction(isolation: :serializable) do |tx|
+      before_begin.exec("INSERT INTO tx_option_rows (label) VALUES ('B')")
+      tx.connection.scalar("PRAGMA synchronous").should eq 0
+    end
+    committed_labels.call.should eq ["B"]
+  ensure
+    before_begin.try &.close
+  end
+
+  it "refuses a misspelled level, naming the valid ones" do
+    expect_raises(ArgumentError, /:serialisable.*:read_uncommitted.*:serializable/) { schema.transaction(isolation: :serialisable) { } }
+  end
+
+  it "opens a transaction without isolation: through a custom source's own transaction" do
+    source = CountingSource.new(DB.open(schema.uri))
+    counted = CQL::Schema.new(:tx_options_counted, schema.uri, CQL::Adapter::SQLite, source: source)
+    counted.transaction { counted.exec("INSERT INTO tx_option_rows (label) VALUES ('counted')") }
+    source.transactions.should eq 1
+    committed_labels.call.should eq ["counted"]
+  ensure
+    counted.try &.close
+  end
+
+  it "closes a connection whose BEGIN failed after the before-BEGIN statement, so no borrower inherits what it left" do
+    source = CQL::DatabaseSource.new(DB.open("#{schema.uri}?max_pool_size=1"))
+    source.using_connection(&.begin_transaction) # left open, so crystal-db refuses the next BEGIN on this connection
+    expect_raises(DB::Error, /existing transaction/) { source.transaction("SELECT 1") { raise "the block ran" } }
+    source.transaction(&.connection.scalar("SELECT 1")).should eq 1
+  ensure
+    source.try &.close
+  end
+
+  it "refuses read_only: when a dialect gives a blank statement for it, rather than running the block read-write" do
+    silent = SilentSqliteSchema.new(:tx_silent, schema.uri, CQL::Adapter::SQLite)
+    expect_raises(CQL::DialectError, /read_only/) { silent.transaction(read_only: true) { raise "the block ran" } }
+  ensure
+    silent.try &.close
+  end
+
+  it "keeps CQL::Postgres::IsolationLevel as an alias of CQL::IsolationLevel" do
+    CQL::Postgres::IsolationLevel::Serializable.should eq CQL::IsolationLevel::Serializable
+  end
+end

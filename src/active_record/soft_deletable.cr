@@ -119,6 +119,7 @@ module CQL
 
           # Run after destroy callbacks
           if success
+            undo_soft_delete_on_rollback
             @deleted_at = timestamp
             run_callbacks(:after_destroy)
             self.destroyed = true
@@ -141,6 +142,7 @@ module CQL
           # Run after destroy callbacks and clear the ID if successful
           if success
             run_callbacks(:after_destroy)
+            undo_delete_on_rollback
             clear_id!
             self.destroyed = true
           end
@@ -148,10 +150,17 @@ module CQL
           success
         end
 
+        # A rollback undoes a soft delete or a restore, so the record's `deleted_at` is what its row holds again.
+        private def undo_soft_delete_on_rollback : Nil
+          deleted_at, destroyed = @deleted_at, self.destroyed
+          {{@type.id}}.schema.on_rollback { @deleted_at = deleted_at; self.destroyed = destroyed }
+        end
+
         # Restore a soft-deleted record
         def restore! : Bool
           return false unless deleted?
 
+          undo_soft_delete_on_rollback
           @deleted_at = nil
 
           # Update the record in the database

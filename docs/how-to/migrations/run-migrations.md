@@ -21,8 +21,8 @@ config.migration_table_name    # => :cql_schema_migrations, created by AppDB.mig
 ```
 
 With `auto_sync: true`, every `up` and `down` rewrites the schema file from the live database, creating missing
-directories; building the migrator writes nothing. Pass `auto_sync: false` in production and in tests so the file is
-left alone.
+directories; if that write fails, the run logs a warning and keeps the old file. Building the migrator writes nothing.
+Pass `auto_sync: false` in production and in tests so the file is left alone.
 
 ## Apply Pending Migrations
 
@@ -36,14 +36,45 @@ migrator.up_to(5_i64)   # every pending migration up to and including version 5;
 {% tabs %}
 {% tab title="SQLite and PostgreSQL" %}
 The whole run, migration records included, is one transaction on one connection: a failing migration rolls back
-everything the run did.
+everything the run did. A migration with `disable_ddl_transaction!` runs alone between two such transactions, so a
+failure keeps what ran before it.
 {% endtab %}
 
 {% tab title="MySQL and CockroachDB" %}
-Each statement commits on its own, so a failure leaves the run's earlier migrations applied. Building a migrator, calling
-`up` or listing `pending_migrations` inside an open transaction raises `CQL::DialectError`.
+Each statement commits on its own, so a failure leaves the run's earlier migrations applied. Inside an open transaction,
+building a migrator raises `CQL::DialectError`, and so do `up`, `up_to`, `down`, `down_to` and `rollback` when they have a
+migration to run; with nothing to do they return. Listing `pending_migrations` only reads.
 {% endtab %}
 {% endtabs %}
+
+On PostgreSQL an advisory lock serialises migrators: `Migrator.new` takes it before it creates the migrations table, and
+a run takes it when a first pick finds migrations to apply or roll back. A second `up` waits for the first, then applies
+only the migrations it picked that are still pending, so it never applies one twice; when the first rolled back an
+older migration meanwhile, it raises `CQL::Migrator::Error` instead of applying newer ones on top of it. A migration
+with `disable_ddl_transaction!` runs outside the lock: run one migrator at a time while one is pending.
+Building a migrator waits too while another process runs migrations. A run with nothing to pick takes no lock and no
+check; listing `pending_migrations` takes no lock, runs no DDL and returns the snapshot of the transaction it runs in.
+
+The wait lasts at most `lock_timeout` (60 seconds by default), then `CQL::Migrator::Error` names the migrations table
+and nothing more runs (what the run committed before that wait stays). The bound replaces the server's `lock_timeout` for this wait, even a shorter one, and a bound under
+1 ms counts as 1 ms (PostgreSQL reads 0 as no bound). It bounds only the wait for the lock: the migrations run under the
+connection's own `lock_timeout`. `CQL.configure` has no setting for it: pass your `MigratorConfig` to `schema.migrator`
+or as the second argument of `CQL.build_migrator`.
+
+```crystal
+CQL::MigratorConfig.new(lock_timeout: 5.minutes) # wait longer for another process's run
+CQL::MigratorConfig.new(lock_timeout: nil)       # wait as long as the server's lock_timeout allows
+```
+
+Run migrations at READ COMMITTED: inside a REPEATABLE READ or SERIALIZABLE transaction, or under such a
+`default_transaction_isolation`, building a migrator and a run that has migrations to apply or roll back raise
+`CQL::Migrator::Error`.
+
+A `down`, `down_to` or `rollback` raises `CQL::Migrator::Error` and rolls back nothing when its pick under the lock
+differs from its pick before it, as when the run it waited for changed the applied migrations. `redo` locks its rollback
+and its `up` separately, so two `redo`s can interleave: run those from one process. On SQLite a concurrent run fails with
+`database is locked`. MySQL and CockroachDB take no migration lock, so two migrators can both apply a migration before
+either records it: run migrations from one process.
 
 {% hint style="warning" %}
 On PostgreSQL a run holds its DDL locks until the final commit, and `CREATE INDEX CONCURRENTLY` fails inside a migration. Use `up(steps)` or `up_to` to keep runs short.

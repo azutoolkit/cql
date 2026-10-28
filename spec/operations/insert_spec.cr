@@ -1,4 +1,29 @@
 require "../spec_helper"
+require "log/spec"
+
+private INSERT_FAILURE_MARKER = "secret-marker-42"
+
+# Build only after require_postgres!: a top-level constant connects before specs
+# can skip this integration case in the database-free compiler job.
+private def insert_failure_db : CQL::Schema
+  CQL::Schema.define(:insert_failure_db, adapter: CQL::Adapter::Postgres, uri: postgres_database_url) do
+    table :insert_failures do
+      primary :id, Int64, auto_increment: true
+      bigint :amount
+    end
+  end
+end
+
+# The log lines (message and exception message) that mention the failure while *block* raises *error*.
+private def leaked_log_lines(error : T.class, & : ->) forall T
+  backend = Log::MemoryBackend.new
+  Log.builder.bind("*", :trace, backend)
+  leaks = {"Insert failed", INSERT_FAILURE_MARKER, expect_raises(error) { yield }.message.to_s}.reject(&.empty?)
+  lines = backend.entries.map { |entry| "#{entry.message} #{entry.exception.try(&.message)}" }
+  lines.select { |line| leaks.any? { |leak| line.includes?(leak) } }
+ensure
+  Log.builder.unbind("*", :trace, backend) if backend
+end
 
 describe CQL::Insert do
   it "creates Insert Into query" do
@@ -112,5 +137,34 @@ describe CQL::Insert do
 
   it "raises ArgumentError for a table the schema does not know" do
     expect_raises(ArgumentError, "Table nope not found") { Northwind.insert.into(:nope) }
+  end
+
+  describe "a failed insert" do
+    it "raises on #commit (SQLite) and reports the error to telemetry without logging it" do
+      Northwind.users.drop! rescue nil
+      Northwind.users.create!
+      duplicate = -> { Northwind.insert.into(:users).values(id: 1, name: INSERT_FAILURE_MARKER, email: INSERT_FAILURE_MARKER, age: 1).commit }
+      duplicate.call
+      errors = [] of Exception?
+      CQL::Telemetry.subscribe("insert_spec_failure") { |event| errors << event.error }
+      leaks = leaked_log_lines(SQLite3::Exception) { duplicate.call }
+      errors.compact.size.should eq 1
+      leaks.should be_empty
+    ensure
+      CQL::Telemetry.unsubscribe("insert_spec_failure")
+      Northwind.users.drop! rescue nil
+    end
+
+    it "raises on #get (PostgreSQL) without logging the driver's message" do
+      require_postgres!
+      schema = insert_failure_db
+      schema.insert_failures.drop! rescue nil
+      schema.insert_failures.create!
+      insert = schema.insert.into(:insert_failures).values(amount: INSERT_FAILURE_MARKER).back(:id)
+      leaked_log_lines(PQ::PQError) { insert.get(Int64) }.should be_empty
+    ensure
+      schema.try(&.insert_failures.drop!) rescue nil
+      schema.try(&.close)
+    end
   end
 end

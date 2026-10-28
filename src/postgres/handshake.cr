@@ -15,8 +15,9 @@ module CQL::Postgres
       version : ProtocolVersion = ProtocolVersion::V3_0
 
     # Asks for *requested* and settles for the highest version the server offers,
-    # as long as it is not older than the config's minimum.
-    def initialize(@config : Config, @io : IO, @requested : ProtocolVersion = config.max_protocol_version)
+    # as long as it is not older than the config's minimum. Every reply is awaited
+    # no later than *deadline*, when one is given.
+    def initialize(@config : Config, @io : IO, @requested : ProtocolVersion = config.max_protocol_version, @deadline : Time::Instant? = nil)
       @parameters = {} of String => String
       @process_id = 0
       @secret_key = Bytes.empty
@@ -68,11 +69,12 @@ module CQL::Postgres
     # A first reply that does not parse means the peer is not speaking the
     # protocol version we asked for (see `UnrecognizedStartupReply`).
     private def read_message
+      Transport.limit(@io, @config, @deadline)
       Wire::Backend.read(@io, MAX_MESSAGE_SIZE).tap { @heard = true }
     rescue ex : ProtocolError
       raise @heard ? ex : UnrecognizedStartupReply.new(ex.message)
-    rescue ex : IO::TimeoutError
-      raise ex # a stall is not a rejection
+    rescue ex : IO::TimeoutError # a stall is not a rejection
+      raise IO::TimeoutError.new("cannot connect to #{@config.address}: #{ex.message}", cause: ex)
     rescue ex : IO::Error
       # The peer hung up (EOF) or reset the connection (Odyssey does, on a 3.2 startup)
       # before saying anything.

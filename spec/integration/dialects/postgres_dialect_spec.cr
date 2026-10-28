@@ -44,11 +44,12 @@ module Expression
         end
       end
 
-      it "passes the URI's sslmode in PGSSLMODE and ignores its other query parameters" do
-        FakeExecutable.with("pg_dump", %(printf '%s\n' "$@"; echo "PGSSLMODE=$PGSSLMODE")) do
-          PostgresDialect.new.structure_dump(URI.parse("postgres://user@db.example/mydb?sslmode=verify-full&pool_size=5")).should eq([
+      it "passes the URI's sslmode, sslrootcert, sslcert and sslkey in PGSSL* variables and ignores its other query parameters" do
+        FakeExecutable.with("pg_dump", %(printf '%s\n' "$@" "PGSSLMODE=$PGSSLMODE" "PGSSLROOTCERT=$PGSSLROOTCERT" "PGSSLCERT=$PGSSLCERT" "PGSSLKEY=$PGSSLKEY")) do
+          query = "sslmode=verify-full&sslrootcert=/certs/ca.pem&sslcert=/certs/client.pem&sslkey=/certs/client.key&pool_size=5"
+          PostgresDialect.new.structure_dump(URI.parse("postgres://user@db.example/mydb?#{query}")).should eq([
             "--no-comments", "--schema-only", "--username=user", "--dbname=mydb", "--host=db.example",
-            "PGSSLMODE=verify-full",
+            "PGSSLMODE=verify-full", "PGSSLROOTCERT=/certs/ca.pem", "PGSSLCERT=/certs/client.pem", "PGSSLKEY=/certs/client.key",
           ].join("\n") + "\n")
         end
       end

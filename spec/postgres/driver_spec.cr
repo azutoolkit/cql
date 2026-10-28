@@ -58,6 +58,16 @@ describe CQL::Postgres::Driver do
     startup.not_nil!.has_key?("auth_methods").should be_false
   end
 
+  it "refuses pool_reset, since crystal-db's pool cannot reset a connection, and points to EngineSource" do
+    expect_raises(ArgumentError, /EngineSource/) { build_through_driver("postgres://localhost:1/db?pool_reset=discard_all") }
+  end
+
+  it "refuses a checkout_timeout that is not a finite number of seconds up to a year" do
+    {"inf", "nan", "-1", "31536001"}.each do |value|
+      expect_raises(ArgumentError, /checkout_timeout/) { build_through_driver("postgres://localhost:1/db?checkout_timeout=#{value}") }
+    end
+  end
+
   it "reports a refused or unreachable server as DB::ConnectionRefused, which crystal-db retries, but not a server error" do
     closed = TCPServer.new("127.0.0.1", 0)
     closed_port = closed.local_address.port

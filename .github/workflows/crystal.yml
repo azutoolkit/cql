@@ -10,6 +10,24 @@ permissions:
   contents: read
 
 jobs:
+  release-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: paulhatch/semantic-version
+          ref: v4.0.2
+          path: .release-action
+      - name: Verify merge strategies and publication guard
+        run: python3 script/test_release.py --action .release-action/dist/index.js
+
+  enterprise:
+    uses: ./.github/workflows/enterprise.yml
+
+  db-compat:
+    uses: ./.github/workflows/db-compat.yml
+
   build:
     runs-on: ubuntu-latest
     container:
@@ -51,9 +69,9 @@ jobs:
       - name: Install shards
         run: shards install --ignore-crystal-version
       - name: Check formatting
-        run: crystal tool format --check ./src ./spec
+        run: crystal tool format --check ./src ./spec ./validation
       - name: Check code linting with Ameba
-        run: crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec
+        run: crystal run lib/ameba/bin/ameba.cr -- -f progress ./src ./spec ./validation
       - name: Wait for Postgres
         run: |
           for i in {1..30}; do
@@ -123,6 +141,9 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs:
+      - release-contract
+      - enterprise
+      - db-compat
       - build
       - build-crystal-1-19
       - docs
@@ -150,8 +171,12 @@ jobs:
           minor_pattern: "(MINOR)"
           # A string to determine the format of the version output
           format: "${major}.${minor}.${patch}"
-          # If this is set to true, *every* commit will be treated as a new version.
-          bump_each_commit: true
+          # Apply the highest bump once per release, regardless of merge strategy.
+          bump_each_commit: false
+      - name: Require the intended release version
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
+        run: script/check-release-version "$VERSION"
       - name: Bump the version, roll the changelog, tag and publish the release
         id: publish
         env:

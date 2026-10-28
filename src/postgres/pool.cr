@@ -1,12 +1,14 @@
 require "db"
 require "./connection"
 require "./connection_reset"
+require "./circuit_breaker"
 
 module CQL::Postgres
-  # Bounded set of connections shared by many fibers. `checkout` waits (up to
-  # `checkout_timeout`) for a free slot; `release` returns the connection, or
+  # Bounded set of connections shared by many fibers. `checkout` times its wait
+  # for a free slot, its health checks and its connect from one
+  # `checkout_timeout`; `release` returns the connection, or
   # drops it if it is closed or still inside a transaction. Idle connections
-  # that sat unused for `health_check_after` are pinged before being handed out.
+  # that sat unused for `health_check_after`, or have input waiting, are pinged before being handed out.
   class Pool
     include ::DB::ConnectionContext
 
@@ -23,7 +25,9 @@ module CQL::Postgres
       max_queries : Int64? = nil,
       max_idle_lifetime : Time::Span? = nil,
       reset_sql : String? = nil,
-      setup : Proc(Connection, Nil)? = nil do
+      setup : Proc(Connection, Nil)? = nil,
+      connect_failure_threshold : Int32 = 0,
+      connect_retry_delay : Time::Span = 1.second do
       def self.from(config : Config) : Options
         driver = config.driver_options
         defaults = new
@@ -33,8 +37,19 @@ module CQL::Postgres
           checkout_timeout: Config.seconds(driver["checkout_timeout"]?, "checkout_timeout") || defaults.checkout_timeout,
           health_check_after: Config.seconds(driver["health_check_after"]?, "health_check_after") || defaults.health_check_after,
           max_queries: Config.whole(driver["max_queries"]?, "max_queries"),
-          max_idle_lifetime: Config.seconds(driver["max_idle_lifetime"]?, "max_idle_lifetime")
+          max_idle_lifetime: Config.seconds(driver["max_idle_lifetime"]?, "max_idle_lifetime"),
+          reset_sql: reset_statement(driver["pool_reset"]?),
+          connect_failure_threshold: Config.number(driver["connect_failure_threshold"]?, "connect_failure_threshold") || defaults.connect_failure_threshold,
+          connect_retry_delay: Config.seconds(driver["connect_retry_delay"]?, "connect_retry_delay") || defaults.connect_retry_delay
         )
+      end
+
+      # Only DISCARD ALL keeps tenants apart: RESET ALL leaves the role, temp tables, LISTENs, advisory
+      # locks and prepared statements (which the reset's cache flush would then leak) to the next borrower.
+      private def self.reset_statement(value : String?) : String?
+        return unless value
+        raise ArgumentError.new("pool_reset must be discard_all, got #{value.inspect}") unless value == "discard_all"
+        "DISCARD ALL"
       end
     end
 
@@ -44,9 +59,6 @@ module CQL::Postgres
       end
     end
 
-    # A health check with less time left than this is not worth a round trip.
-    MIN_PING_BUDGET = 50.milliseconds
-
     getter config : Config
     getter options : Options
 
@@ -54,6 +66,8 @@ module CQL::Postgres
       raise ArgumentError.new("pool_size must be at least 1") if @options.max_size < 1
       raise ArgumentError.new("pool_min_size must be between 0 and pool_size") unless 0 <= @options.min_size <= @options.max_size
       raise ArgumentError.new("max_queries must be positive") if @options.max_queries.try { |limit| limit < 1 }
+      raise ArgumentError.new("checkout_timeout must be nonnegative") if @options.checkout_timeout < Time::Span.zero
+      @circuit = CircuitBreaker.new(@options.connect_failure_threshold, @options.connect_retry_delay)
       @reset = ConnectionReset.new(@options.reset_sql, @options.setup, @options.checkout_timeout)
       @slots = Channel(Nil).new(@options.max_size)
       @options.max_size.times { @slots.send(nil) }
@@ -64,7 +78,7 @@ module CQL::Postgres
     end
 
     def closed? : Bool
-      @closed
+      @lock.synchronize { @closed }
     end
 
     def inspect(io : IO) : Nil
@@ -75,9 +89,13 @@ module CQL::Postgres
     # for connecting and a wrong URL fails at startup. They are not refilled
     # when retired later; the pool then grows on demand.
     def warm_up : self
+      raise PoolClosed.new("the pool is closed") if closed?
       opened = [] of Connection
       (@options.min_size - idle_count).times { opened << open }
-      @lock.synchronize { @idle.concat(opened) }
+      @lock.synchronize do
+        raise PoolClosed.new("the pool closed during warm_up") if @closed
+        @idle.concat(opened)
+      end
       self
     rescue ex
       opened.try(&.each(&.close))
@@ -89,14 +107,23 @@ module CQL::Postgres
     end
 
     def checkout : Connection
-      raise PoolClosed.new("the pool is closed") if @closed
+      raise PoolClosed.new("the pool is closed") if closed?
+      deadline = Time.instant + @options.checkout_timeout if @options.checkout_timeout.positive? # zero: no wait for a slot, no deadline
       wait_for_slot
       begin
-        raise PoolClosed.new("the pool was closed while waiting for a connection") if @closed
-        connection = healthy_idle(Time.instant) || open
+        raise PoolClosed.new("the pool was closed while waiting for a connection") if closed?
+        connection = healthy_idle(deadline) || open(deadline)
         connection.context = self
         connection.auto_release = false
-        @lock.synchronize { @in_use << connection }
+        admitted = @lock.synchronize do
+          next false if @closed
+          @in_use << connection
+          true
+        end
+        unless admitted
+          connection.close
+          raise PoolClosed.new("the pool closed while establishing a connection")
+        end
         connection
       rescue ex
         return_slot
@@ -150,7 +177,7 @@ module CQL::Postgres
       select
       when @slots.receive
       when timeout(@options.checkout_timeout)
-        raise PoolTimeout.new("no connection became free within #{@options.checkout_timeout} (pool size #{@options.max_size})")
+        raise PoolTimeout.new("no connection to #{@config.address} became free within #{@options.checkout_timeout} (pool size #{@options.max_size})")
       end
     rescue Channel::ClosedError
       raise PoolClosed.new("the pool was closed while waiting for a connection")
@@ -162,13 +189,19 @@ module CQL::Postgres
     rescue Channel::ClosedError
     end
 
-    private def open : Connection
-      connection = Connection.open(@config)
+    private def open(deadline : Time::Instant? = nil) : Connection
+      deadline ||= Time.instant + @options.checkout_timeout if @options.checkout_timeout.positive?
+      ticket = @circuit.acquire
       begin
-        @options.setup.try(&.call(connection))
+        connection = Connection.open(@config, deadline: deadline)
+        if hook = @options.setup
+          ConnectionSetup.run(connection, deadline) { hook.call(connection) }
+        end
+        @circuit.succeeded(ticket)
         connection
       rescue ex
-        connection.close
+        connection.try(&.close)
+        @circuit.failed(ticket)
         raise ex
       end
     end
@@ -177,30 +210,28 @@ module CQL::Postgres
       @lock.synchronize { @idle.size }
     end
 
-    # Health checks share one budget of `checkout_timeout`, so a batch of
-    # connections on a dropped network path cannot hold a checkout for
-    # one timeout each: after the first ping, a connection that finds the
-    # budget spent is discarded unpinged.
-    private def healthy_idle(started : Time::Instant) : Connection?
-      pinged = false
+    # Health checks share the half of the time left that a `CQL::CheckoutBudget` gives them: a connection that
+    # finds it spent is discarded unpinged.
+    private def healthy_idle(deadline : Time::Instant?) : Connection?
+      checks = CQL::CheckoutBudget.new(deadline)
       while connection = @lock.synchronize { @idle.pop? }
         verdict = quick_verdict(connection)
         if verdict.nil?
-          budget = @options.checkout_timeout - (Time.instant - started)
-          verdict = !(pinged && budget < MIN_PING_BUDGET) && connection.ping(Math.min(Math.max(budget, MIN_PING_BUDGET), CQL::Postgres::Session::PING_TIMEOUT))
-          pinged = true
+          wait = checks.check_wait(CQL::Postgres::Session::PING_TIMEOUT)
+          verdict = wait ? connection.ping(wait) : false
         end
         return connection if verdict
         connection.close
       end
     end
 
-    # true or false when the connection's age settles it, nil when it needs a ping.
+    # true or false when the connection's age settles it, nil when it needs a ping: it is old, or the server
+    # wrote to it or hung up while it sat idle (a backend's FATAL on a restart or failover is read by the ping).
     private def quick_verdict(connection : Connection) : Bool?
       return false if connection.closed? || connection.session.closed?
       idle_for = Time.instant - connection.session.last_used
       return false if @options.max_idle_lifetime.try { |lifetime| idle_for >= lifetime }
-      idle_for < @options.health_check_after ? true : nil
+      idle_for < @options.health_check_after && !connection.session.input_pending? ? true : nil
     end
 
     private def reusable?(connection : Connection) : Bool

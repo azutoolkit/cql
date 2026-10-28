@@ -80,9 +80,8 @@ describe CQL::ActiveRecord::Updateable do
         end
       end
 
-      it "returns zero affected rows when updating non-existent record" do
-        result = TestUser.update!(999, name: "Jane Doe")
-        result.rows_affected.should eq(0)
+      it "raises RecordNotFound when updating a non-existent record" do
+        expect_raises(CQL::RecordNotFound, /TestUser/) { TestUser.update!(999, name: "Jane Doe") }
       end
     end
 

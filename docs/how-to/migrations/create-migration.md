@@ -33,6 +33,9 @@ end
 ```crystal
 # CQL::Migration(2)               the version is an Int64, unique, applied in ascending order
 # CQL::Migration(20250125120000)  timestamps sort the same way
+# Two migrations with the same version make CQL::Migrator.new raise CQL::Migrator::Error:
+# renumber the one cql_schema_migrations does not list. If that one already ran, first insert a
+# cql_schema_migrations row with its full class name and new version, or `up` runs it again
 
 # Only defined classes are registered: require every file before running the migrator
 require "./db/migrations/*"

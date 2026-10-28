@@ -122,10 +122,17 @@ module Expression
       end
     end
 
-    def add_column(column_definition : String, primary_key : Bool) : String
+    def add_column(column_definition : String, primary_key : Bool, current_time_default : Bool = false) : String
       # SQLite doesn't support adding a PRIMARY KEY constraint to an existing table
       if primary_key
         raise CQL::SQLiteUnsupportedFeatureError.new("adding a PRIMARY KEY constraint to an existing table")
+      end
+      # SQLite accepts it only while the table is empty; refusing always keeps a migration from passing in development
+      # and failing on a production table that has rows
+      if current_time_default
+        raise CQL::SQLiteUnsupportedFeatureError.new("adding a column whose default is the current time",
+          "Add the column without a default and backfill it with exec (UPDATE ... SET <column> = datetime('now')), " \
+          "or rebuild the table with the column declared.")
       end
 
       "#{@@cached_strings["sqlite_add_column_prefix"]}#{column_definition}"
@@ -208,6 +215,25 @@ module Expression
       true
     end
 
+    # SQLite transactions are always serializable, and may write.
+    def transaction_modes_sql(isolation : CQL::IsolationLevel?, read_only : Bool) : String?
+      raise CQL::DialectError.new(display_name, "read-only transactions") if read_only
+      return if isolation.nil? || isolation.serializable?
+      raise CQL::DialectError.new(display_name, "the #{isolation.to_sql.downcase} isolation level")
+    end
+
+    # BUSY, LOCKED and CONSTRAINT (a deferred foreign key) leave the transaction open and uncommitted; after IOERR,
+    # FULL, CORRUPT or any other result a COMMIT that raised may be durable.
+    def commit_refused?(error : Exception) : Bool
+      {% if @top_level.has_constant?(:SQLite3) %}
+        if error.is_a?(SQLite3::Exception)
+          primary = LibSQLite3::Code.new(error.code & 0xff) # an extended code keeps its primary one in the low byte
+          return primary.busy? || primary.locked? || primary.constraint?
+        end
+      {% end %}
+      false
+    end
+
     def format_json_text(column : String, path_placeholder : String) : String
       "CAST(json_extract(#{column}, #{path_placeholder}) AS TEXT)"
     end
@@ -219,6 +245,10 @@ module Expression
       in false                  then "0"
       in String, Int64, Float64 then value.to_s
       end
+    end
+
+    def supports_row_locks? : Bool
+      false
     end
 
     def format_lock(lock : Expression::RowLock) : String

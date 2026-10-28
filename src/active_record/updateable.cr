@@ -15,6 +15,24 @@ module CQL
           CQL::Update.new(schema).table(table).where { key.in(ids) }
         end
 
+        # Commits the update of *id*'s row the block shapes, raising `RecordNotFound` when it matched no row (the
+        # row was deleted, or its insert rolled back); the id stays out of the message, as a key can be PII.
+        private def self.update_row!(id : Pk, & : CQL::Update -> CQL::Update) : DB::ExecResult
+          result = (yield update_of(id)).commit
+          return result if result.rows_affected > 0 || row_exists?(id)
+          raise CQL::RecordNotFound.new("#{name}: the UPDATE matched no row (it was deleted, or its insert rolled back)")
+        end
+
+        # Whether *id*'s row exists, which a count of 0 does not rule out (MySQL counts changed rows, and a trigger
+        # can skip the write). It matches the row as `update_of` does, by primary key without scopes such as
+        # soft-delete, and locks it where the dialect can, to read the current row instead of a REPEATABLE READ
+        # snapshot. Outside a transaction a row inserted with the key since the UPDATE still counts as existing.
+        private def self.row_exists?(id : Pk) : Bool
+          rows = QueryBuilder({{@type.id}}).from_model({{@type.id}}).where_primary_key(id)
+          rows = rows.with_query(&.lock) if schema.dialect.supports_row_locks?
+          rows.exists?
+        end
+
         # Update a record by ID with given attributes
         # - **@param** id [Pk] The ID of the record
         # - **@param** attrs [Hash(Symbol, DB::Any)] The attributes to update
@@ -42,7 +60,7 @@ module CQL
             end
           end
 
-          update_of(id).set(attrs).commit
+          update_row!(id, &.set(attrs))
         end
 
         # Update a record by ID with given fields
@@ -72,7 +90,7 @@ module CQL
             end
           end
 
-          update_of(id).set(**attrs).commit
+          update_row!(id, &.set(**attrs))
         end
 
         # Write every column of a saved record to its row, without validations or callbacks
@@ -92,7 +110,7 @@ module CQL
           # Remove the ID from the attributes
           attrs.delete(primary_key_column)
 
-          update_of(record.id!).set(attrs).commit
+          update_row!(record.id!, &.set(attrs))
 
           record
         end
