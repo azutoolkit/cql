@@ -146,6 +146,23 @@ module CQL
       end
     end
 
+    # The innermost open frame, as `active_frame`, once the hooks of savepoints the block released by hand above it
+    # (closed frames on its connection) were handed down to it in stack order: hooks keep running newest first.
+    private def settled_frame : TransactionFrame?
+      return if @fibers_in_transaction.get.zero?
+      @fiber_mutex.synchronize do
+        stack = @fiber_transactions[Fiber.current]? || return
+        open_index = stack.rindex { |frame| !frame.transaction.closed? } || return
+        target = stack[open_index]
+        (open_index + 1...stack.size).each do |index|
+          released = stack[index]
+          next unless released.transaction.connection.same?(target.transaction.connection)
+          released.rollback_hooks.hand_to(target.rollback_hooks)
+        end
+        target
+      end
+    end
+
     # Pushes *tx*, with the *rollback_hooks* of the work done in it, onto the fiber's transaction stack for the
     # block and pops it afterwards.
     private def with_active_transaction(tx : DB::Transaction, rollback_hooks : RollbackHooks, &)
@@ -390,7 +407,7 @@ module CQL
     # A dialect that cannot honour them raises `DialectError`, and a nested call raises `ArgumentError`, before
     # anything begins.
     def transaction(*, isolation : IsolationLevel? = nil, read_only : Bool = false, &)
-      parent = active_frame
+      parent = settled_frame
       before_begin, after_begin = transaction_mode_statements(isolation, read_only, nested: !parent.nil?)
       observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
       rollback_hooks = RollbackHooks.new
@@ -443,7 +460,7 @@ module CQL
     def transaction(tx : DB::Transaction, &)
       # Not this schema's transaction to commit or roll back: rollback hooks go to the enclosing one when *tx* runs on
       # its connection, and are dropped otherwise.
-      shared = active_frame.try { |frame| frame.rollback_hooks if frame.transaction.connection.same?(tx.connection) }
+      shared = settled_frame.try { |frame| frame.rollback_hooks if frame.transaction.connection.same?(tx.connection) }
       with_active_transaction(tx, shared || RollbackHooks.new) do
         yield tx # Yield the transaction object itself, block can get connection via tx.connection if needed
       end
@@ -588,7 +605,7 @@ module CQL
     # transaction, and not run when the block ended the transaction itself nor after a COMMIT whose outcome is unknown.
     # A COMMIT the block sends as SQL, or a statement that commits implicitly, is not seen: the hooks would still run.
     def on_rollback(&hook : ->) : Nil
-      active_frame.try { |frame| frame.rollback_hooks << hook }
+      settled_frame.try { |frame| frame.rollback_hooks << hook }
     end
 
     # Raises where DDL commits implicitly, because running it inside an open transaction would

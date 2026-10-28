@@ -25,6 +25,7 @@ module CQL
     # The transaction committed. An enclosing transaction can still roll the work back, so the hooks move to its
     # *parent* hooks; after the outermost commit there is no parent and they are dropped.
     def hand_to(parent : RollbackHooks?) : Nil
+      return if parent.same?(self) # a frame of `Schema#transaction(tx)` shares its enclosing frame's hooks
       @hooks.each { |hook| parent << hook } if parent
       @hooks.clear
     end

@@ -152,6 +152,52 @@ describe "CQL::Schema#on_rollback" do
     errors.map { |error| CQL::Adapter::Postgres.dialect.commit_refused?(error) }.should eq [false] * 9
   end
 
+  it "keeps hooks newest first when a savepoint released by hand goes on registering them" do
+    schema.transaction do
+      schema.transaction do |savepoint|
+        schema.on_rollback { ran << :before_release }
+        savepoint.commit
+        schema.on_rollback { ran << :after_release }
+      end
+      raise DB::Rollback.new
+    end
+    ran.should eq [:after_release, :before_release]
+  end
+
+  it "keeps hooks newest first when a savepoint released by hand opens another" do
+    schema.transaction do
+      schema.transaction do |savepoint|
+        schema.on_rollback { ran << :before_release }
+        savepoint.commit
+        schema.transaction { schema.on_rollback { ran << :nested } }
+        schema.on_rollback { ran << :after_nested }
+      end
+      raise DB::Rollback.new
+    end
+    ran.should eq [:after_nested, :nested, :before_release]
+  end
+
+  it "settles a released savepoint passed in with transaction(tx), which shares its enclosing frame's hooks" do
+    schema.transaction do |outer|
+      schema.on_rollback { ran << :first }
+      outer.transaction { |raw| schema.transaction(raw) { raw.commit; schema.on_rollback { ran << :second } } }
+      raise DB::Rollback.new
+    end
+    ran.should eq [:second, :first]
+  end
+
+  it "keeps hooks newest first when transaction(tx) joins after a savepoint released by hand" do
+    schema.transaction do |outer|
+      schema.transaction do |savepoint|
+        schema.on_rollback { ran << :before_release }
+        savepoint.commit
+        schema.transaction(outer) { schema.on_rollback { ran << :joined } }
+      end
+      raise DB::Rollback.new
+    end
+    ran.should eq [:joined, :before_release]
+  end
+
   it "runs every hook when one raises, and the caller still sees the transaction's own outcome" do
     expect_raises(Exception, "boom") { schema.transaction { schema.on_rollback { ran << :older }; schema.on_rollback { raise "hook failed" }; raise "boom" } }
     schema.transaction { schema.on_rollback { ran << :quiet }; schema.on_rollback { raise "hook failed" }; raise DB::Rollback.new }.should be_nil
