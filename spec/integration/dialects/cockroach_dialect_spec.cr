@@ -25,6 +25,11 @@ describe "CockroachDB adapter" do
     CQL::Adapter::MySql.dialect.supports_returning?.should be_false
   end
 
+  it "locks the rows a SELECT reads, as PostgreSQL and MySQL do and SQLite does not" do
+    {cockroach, CQL::Adapter::Postgres, CQL::Adapter::MySql, CQL::Adapter::SQLite}
+      .map(&.dialect.supports_row_locks?).should eq({true, true, true, false})
+  end
+
   it "rolls back DDL with its transaction, as PostgreSQL and SQLite do and MySQL and CockroachDB do not" do
     cockroach.dialect.supports_transactional_ddl?.should be_false
     CQL::Adapter::Postgres.dialect.supports_transactional_ddl?.should be_true

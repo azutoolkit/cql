@@ -51,6 +51,12 @@ User.touch_all([1_i64, 2_i64])  # => 2
 `update!` skips validations and callbacks, and neither form refreshes `updated_at`. `update!(email: "bad")` stores the bad value; use `save` when the model's rules must hold.
 {% endhint %}
 
+`save`, `save!` and `update!` of a saved record, and `User.update!(1, ...)`, raise `CQL::RecordNotFound` when no row
+has the record's key (another statement deleted it, or its insert rolled back) instead of returning as if written;
+rescue it where a concurrent delete is expected. An `UPDATE` that reports 0 rows (MySQL counts changed rows) is
+checked with a locking lookup of the row first, best effort outside a transaction. With dirty tracking, a record with
+no changes sends no `UPDATE`, so a deleted row goes unnoticed.
+
 ## Update Many Rows
 
 ```crystal

@@ -52,7 +52,7 @@ module CQL
           changed = record.changed_columns
           record.stamp_deferred_update(changed)
           unless changed.empty?
-            update_of(record.id!).set(changed).commit
+            update_row!(record.id!, &.set(changed))
           end
           record.clear_changes!
           record

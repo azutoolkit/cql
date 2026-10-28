@@ -33,6 +33,11 @@ module Expression
       false
     end
 
+    # Whether a SELECT can lock the rows it reads (`Query#lock`, which raises when SQL is generated otherwise).
+    def supports_row_locks? : Bool
+      true
+    end
+
     # The statement that holds migrators off until the transaction ends, binding the lock key; nil takes no lock.
     def migration_lock_sql : String?
       nil

@@ -247,6 +247,10 @@ module Expression
       end
     end
 
+    def supports_row_locks? : Bool
+      false
+    end
+
     def format_lock(lock : Expression::RowLock) : String
       raise CQL::DialectError.new(display_name, "row locking (FOR UPDATE / FOR SHARE)", "SQLite serializes writers; use a transaction instead.")
     end
