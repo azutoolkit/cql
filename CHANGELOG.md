@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.923] - 2026-10-28
+
 ### Upgrade notes
 
 - The `CQL::Cache::Middleware` hooks (`HTTP`, `Kemal`, `Lucky`, `Amber`, `SpiderGazelle`, `Manual`, `Azu`) now start tracking only when `cache.on` and `cache.request_cache` are both set, like `CQL.with_request_cache`. `cache.on` defaults to `true` only when `CRYSTAL_ENV` is `development` or unset; in every other environment (`production`, `test`, `staging`, ...) it defaults to `false`, so to keep the middleware tracking there, set `CQL.configure { |c| c.cache.on = true }` (`c.cache.request_cache` is `true` by default). `cache.on` is also the switch `CQL.build_schema` and `CQL.cache_on` read to set up the main cache (`CQL::Cache::Cache.enabled`); to get the tracker without that, call `CQL::Cache::RequestQueryCacheHelper.start_request`/`end_request` yourself (they ignore `cache.on` and do not validate the request id).
