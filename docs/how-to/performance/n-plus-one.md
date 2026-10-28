@@ -6,6 +6,12 @@ description: "Load associations and counts for a whole collection in a fixed num
 
 ## Spot the Pattern
 
+For call-site diagnostics, set `config.detection.capture_backtrace = true` on a performance configuration and keep
+`config.monitoring.async = false`. Newly detected patterns expose `pattern.backtrace`; a growing count preserves
+the first captured stack. Stack capture is off by default and the detector retains at most 100 patterns. In async
+mode the stack belongs to the monitoring worker, so use synchronous monitoring when investigating an application
+call site. This does not make full query building or row materialization allocation-free.
+
 ```crystal
 # ❌ 1 query for the posts, then 1 query per post on first access to post.user
 posts = Post.all

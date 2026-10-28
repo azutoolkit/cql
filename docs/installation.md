@@ -5,7 +5,7 @@ icon: "download"
 
 # Installation
 
-CQL needs Crystal 1.12.2 or later (`shard.yml`); CI builds with Crystal 1.22.1.
+CQL needs Crystal 1.19.1 or later (`shard.yml`); CI builds with Crystal 1.22.1.
 
 ## 1. Add CQL and Your Driver
 

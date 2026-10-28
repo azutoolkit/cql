@@ -79,6 +79,11 @@ The context is per fiber and is the same one `CQL::Performance.with_context` set
 
 ## Trace Statements
 
+A tracer must call its statement block exactly once. Calling it twice raises `CQL::Error` before a second execution,
+even if the tracer swallows that error. Retries belong in the transaction/application policy, because a failed write
+may already have reached the server. Subscribers remain isolated from query outcomes; keep synchronous handlers
+short, or use the bounded async queue and monitor `dropped_events`.
+
 ```crystal
 class TimingTracer < CQL::Telemetry::Tracer
   def in_span(operation : Symbol, sql : String, & : -> T) : T forall T

@@ -1,6 +1,7 @@
 require "db"
 require "./connection"
 require "./connection_reset"
+require "./circuit_breaker"
 
 module CQL::Postgres
   # Bounded set of connections shared by many fibers. `checkout` times its wait
@@ -24,7 +25,9 @@ module CQL::Postgres
       max_queries : Int64? = nil,
       max_idle_lifetime : Time::Span? = nil,
       reset_sql : String? = nil,
-      setup : Proc(Connection, Nil)? = nil do
+      setup : Proc(Connection, Nil)? = nil,
+      connect_failure_threshold : Int32 = 0,
+      connect_retry_delay : Time::Span = 1.second do
       def self.from(config : Config) : Options
         driver = config.driver_options
         defaults = new
@@ -35,7 +38,9 @@ module CQL::Postgres
           health_check_after: Config.seconds(driver["health_check_after"]?, "health_check_after") || defaults.health_check_after,
           max_queries: Config.whole(driver["max_queries"]?, "max_queries"),
           max_idle_lifetime: Config.seconds(driver["max_idle_lifetime"]?, "max_idle_lifetime"),
-          reset_sql: reset_statement(driver["pool_reset"]?)
+          reset_sql: reset_statement(driver["pool_reset"]?),
+          connect_failure_threshold: Config.number(driver["connect_failure_threshold"]?, "connect_failure_threshold") || defaults.connect_failure_threshold,
+          connect_retry_delay: Config.seconds(driver["connect_retry_delay"]?, "connect_retry_delay") || defaults.connect_retry_delay
         )
       end
 
@@ -61,6 +66,8 @@ module CQL::Postgres
       raise ArgumentError.new("pool_size must be at least 1") if @options.max_size < 1
       raise ArgumentError.new("pool_min_size must be between 0 and pool_size") unless 0 <= @options.min_size <= @options.max_size
       raise ArgumentError.new("max_queries must be positive") if @options.max_queries.try { |limit| limit < 1 }
+      raise ArgumentError.new("checkout_timeout must be nonnegative") if @options.checkout_timeout < Time::Span.zero
+      @circuit = CircuitBreaker.new(@options.connect_failure_threshold, @options.connect_retry_delay)
       @reset = ConnectionReset.new(@options.reset_sql, @options.setup, @options.checkout_timeout)
       @slots = Channel(Nil).new(@options.max_size)
       @options.max_size.times { @slots.send(nil) }
@@ -71,7 +78,7 @@ module CQL::Postgres
     end
 
     def closed? : Bool
-      @closed
+      @lock.synchronize { @closed }
     end
 
     def inspect(io : IO) : Nil
@@ -82,9 +89,13 @@ module CQL::Postgres
     # for connecting and a wrong URL fails at startup. They are not refilled
     # when retired later; the pool then grows on demand.
     def warm_up : self
+      raise PoolClosed.new("the pool is closed") if closed?
       opened = [] of Connection
       (@options.min_size - idle_count).times { opened << open }
-      @lock.synchronize { @idle.concat(opened) }
+      @lock.synchronize do
+        raise PoolClosed.new("the pool closed during warm_up") if @closed
+        @idle.concat(opened)
+      end
       self
     rescue ex
       opened.try(&.each(&.close))
@@ -96,15 +107,23 @@ module CQL::Postgres
     end
 
     def checkout : Connection
-      raise PoolClosed.new("the pool is closed") if @closed
+      raise PoolClosed.new("the pool is closed") if closed?
       deadline = Time.instant + @options.checkout_timeout if @options.checkout_timeout.positive? # zero: no wait for a slot, no deadline
       wait_for_slot
       begin
-        raise PoolClosed.new("the pool was closed while waiting for a connection") if @closed
+        raise PoolClosed.new("the pool was closed while waiting for a connection") if closed?
         connection = healthy_idle(deadline) || open(deadline)
         connection.context = self
         connection.auto_release = false
-        @lock.synchronize { @in_use << connection }
+        admitted = @lock.synchronize do
+          next false if @closed
+          @in_use << connection
+          true
+        end
+        unless admitted
+          connection.close
+          raise PoolClosed.new("the pool closed while establishing a connection")
+        end
         connection
       rescue ex
         return_slot
@@ -171,12 +190,15 @@ module CQL::Postgres
     end
 
     private def open(deadline : Time::Instant? = nil) : Connection
-      connection = Connection.open(@config, deadline: deadline)
+      ticket = @circuit.acquire
       begin
+        connection = Connection.open(@config, deadline: deadline)
         @options.setup.try(&.call(connection))
+        @circuit.succeeded(ticket)
         connection
       rescue ex
-        connection.close
+        connection.try(&.close)
+        @circuit.failed(ticket)
         raise ex
       end
     end

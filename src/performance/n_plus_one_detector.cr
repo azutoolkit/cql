@@ -14,8 +14,9 @@ module CQL::Performance
     getter repeated_query : String
     getter repetition_count : Int32
     getter timestamp : Time = Time.utc
+    getter backtrace : Array(String)?
 
-    def initialize(@parent_query, @repeated_query, @repetition_count)
+    def initialize(@parent_query, @repeated_query, @repetition_count, @backtrace = nil)
     end
   end
 
@@ -135,8 +136,10 @@ module CQL::Performance
     # A new or grown pattern goes last, as the latest detected.
     private def store_pattern(query : String, count : Int32, offset : Int32) : Nil
       parent = @recent_queries.query_before(offset) || "Unknown"
-      @patterns.delete(query)
-      @patterns[query] = NPlusOnePattern.new(parent, query, count)
+      previous = @patterns.delete(query)
+      trace = previous.try(&.backtrace)
+      trace ||= caller if previous.nil? && @config.capture_backtrace?
+      @patterns[query] = NPlusOnePattern.new(parent, query, count, trace)
       @patterns.shift if @patterns.size > MAX_PATTERNS
     end
 

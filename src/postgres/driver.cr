@@ -63,6 +63,9 @@ module CQL::Postgres
     def connection_builder(uri : URI) : ::DB::ConnectionBuilder
       params = HTTP::Params.parse(uri.query || "")
       raise ArgumentError.new("pool_reset needs the engine's pool, as crystal-db's cannot reset a returned connection: use CQL::Postgres::EngineSource or AsyncEngine") if params.has_key?("pool_reset")
+      if params.has_key?("connect_failure_threshold") || params.has_key?("connect_retry_delay")
+        raise ArgumentError.new("connection circuit breaking needs CQL::Postgres::EngineSource or AsyncEngine; crystal-db owns this pool")
+      end
       options = connection_options(params).copy_with(prepared_statements_cache: false)
       checkout_timeout = Config.seconds(params["checkout_timeout"]?, "checkout_timeout") || Connection::DEFAULT_CHECKOUT_TIMEOUT
       Builder.new(Config.from_uri(uri, ignoring: DB_OWNED_KEYS), options, checkout_timeout)

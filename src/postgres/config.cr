@@ -37,7 +37,7 @@ module CQL::Postgres
   # roots). Query values are percent-decoded only; `+` stays a plus.
   class Config
     SCHEMES              = {"postgres", "postgresql", "cockroachdb"}
-    POOL_OPTION_KEYS     = {"pool_size", "pool_min_size", "checkout_timeout", "health_check_after", "max_queries", "max_idle_lifetime", "pool_reset"}
+    POOL_OPTION_KEYS     = {"pool_size", "pool_min_size", "checkout_timeout", "health_check_after", "max_queries", "max_idle_lifetime", "pool_reset", "connect_failure_threshold", "connect_retry_delay"}
     DRIVER_OPTION_KEYS   = POOL_OPTION_KEYS + {"min_protocol_version", "max_protocol_version", "binary_params"}
     RESERVED_PARAMETERS  = {"user", "database", "dbname", "password", "hostaddr", "client_encoding", "replication"}
     UNSUPPORTED_LIBPQ    = {"sslcrl", "sslcompression", "sslsni", "sslpassword", "channel_binding", "require_auth", "target_session_attrs", "passfile", "service", "gssencmode", "krbsrvname"}

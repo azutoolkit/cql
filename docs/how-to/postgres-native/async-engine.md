@@ -37,6 +37,17 @@ engine.exec("INSERT INTO notes (body) VALUES ($1)", ["first".as(DB::Any)])
 
 Pool settings are URL query options:
 
+`connect_failure_threshold=3&connect_retry_delay=1` enables circuit breaking for new connections. The threshold
+defaults to `0` (disabled); the delay defaults to one second and must be positive. After the threshold of consecutive
+connection/setup failures, new attempts raise `CQL::Postgres::CircuitOpen` until the delay expires. Exactly one
+recovery probe may connect then; success closes the circuit and failure restarts the delay. Results from connections
+started before the circuit opened cannot close it. Existing healthy pooled connections remain available.
+
+This mechanism does not retry SQL, cancel existing leases or bound the application's number of waiting fibers.
+Limit incoming work in the application as well as setting `pool_size` and `checkout_timeout`. `DB.open` rejects the
+circuit options: use `AsyncEngine` or `EngineSource`. `close` rejects connections still being established; already
+borrowed connections finish their work and are discarded on return. Run `warm_up` once at startup before serving work.
+
 | Option | Meaning | Default |
 | --- | --- | --- |
 | `pool_size` | Maximum connections, at least 1 | 10 |

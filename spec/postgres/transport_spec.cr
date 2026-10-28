@@ -211,8 +211,8 @@ describe CQL::Postgres::Transport do
         client.read_startup
         client.ok_handshake
         client.expect('Q')
-        client.send('G', Bytes[0, 0, 0, 0, 0])
-        sleep 30.seconds # never reads the COPY data: the client's send buffer fills up
+        client.send('G', Bytes[0, 0, 1, 0, 0]) # one text-format column
+        sleep 30.seconds                       # never reads the COPY data: the client's send buffer fills up
       rescue OpenSSL::SSL::Error | IO::Error
       end
       session = PG::Session.connect(PG::Config.parse(server.url(query: "sslmode=require")))

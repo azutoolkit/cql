@@ -28,7 +28,9 @@ AppDB.query.from(:users).where(name: "Ada").to_sql(for: CQL::Adapter::Postgres)
 # => {"SELECT users.id, users.name, users.email FROM users WHERE users.name = $1", ["Ada"]}
 ```
 
-Only SQLite runs live in CQL's specs; the other dialects are checked through generated SQL, and the native driver against real PostgreSQL and CockroachDB 24.3 servers.
+The main model suite uses SQLite, while native-driver specs use real PostgreSQL and CockroachDB servers when
+configured. The release validation matrix adds live model and transaction contracts across all four dialects;
+generated-SQL tests cover the broader dialect syntax. See the tested versions and limits below.
 
 ## Dialect properties
 
@@ -44,6 +46,17 @@ Only SQLite runs live in CQL's specs; the other dialects are checked through gen
 | Identifier quoting (`quote_identifiers: true`) | `"name"` | `"name"` | `` `name` `` | `"name"` |
 
 ## Queries
+
+The release validation matrix exercises optimistic locking, nested savepoints and isolation on SQLite, PostgreSQL,
+MySQL 8.0 with `mysql_native_password` as the server default, and CockroachDB 24.3. SQLite rejects explicit
+`read_committed`; CockroachDB may strengthen a requested level to `serializable`. Server durability settings and
+storage determine crash guarantees; CQL does not override them to claim ACID behavior.
+
+The current dependency resolution selects `crystal-mysql` 0.16 with `crystal-db` 0.13. Its authentication exchange
+does not support MySQL's default `caching_sha2_password` or authentication-switch packets. MySQL 8.4 failed the
+connection probe even with a native-password user; it is not covered by this release's live validation. Do not
+weaken an existing deployment's authentication to match a test fixture. Such deployments need a compatible driver
+and separate authentication/TLS validation.
 
 | Feature | SQLite | PostgreSQL | MySQL | CockroachDB |
 | :--- | :--- | :--- | :--- | :--- |

@@ -43,6 +43,17 @@ private def create_last_users
   create_last_user("Charlie", 30)
 end
 
+private def with_join_profiles(&)
+  UserDB.profiles.create!
+  matched = create_last_user("Alpha", 30)
+  create_last_user("Bravo", 40)
+  UserDB.insert.into(:profiles).values(bio: "matched", avatar_url: "a", profile_owner_id: matched.id!).commit
+  UserDB.insert.into(:profiles).values(bio: "orphan", avatar_url: "b", profile_owner_id: nil).commit
+  yield
+ensure
+  UserDB.profiles.drop!
+end
+
 describe CQL::ActiveRecord::Queryable::QueryBuilder do
   before_each do
     UserDB.users.create!
@@ -197,13 +208,16 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
   end
 
   describe "#having" do
-    pending "adds having conditions" do
+    it "adds having conditions and filters grouped rows" do
+      create_last_users
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
-      new_builder = builder.having do
-        count(:id) > 5
+      new_builder = builder.group(:age).having do
+        count(:id) > 1
       end
 
-      new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      new_builder.to_sql.should contain "HAVING COUNT(users.id) > ?"
+      new_builder.query.select(:age).all(as: Int32).should eq [30]
+      builder.to_sql.should_not contain "HAVING"
     end
   end
 
@@ -224,13 +238,16 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
 
-    pending "executes inner join with block conditions" do
+    it "executes inner join with block conditions" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       new_builder = builder.join(:profiles) do |filter|
-        filter.eq(:users_id, :profiles_user_id)
+        filter.users.id.eq(filter.profiles.profile_owner_id)
       end
 
-      new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      with_join_profiles do
+        new_builder.query.select(users: [:name]).all(as: String).should eq ["Alpha"]
+      end
+      builder.to_sql.should_not contain "JOIN"
     end
 
     it "executes inner join with named arguments" do
@@ -249,13 +266,15 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
 
-    pending "executes left join with block conditions" do
+    it "executes left join with block conditions" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       new_builder = builder.left(:profiles) do |filter|
-        filter.eq(:users_id, :profiles_user_id)
+        filter.users.id.eq(filter.profiles.profile_owner_id)
       end
 
-      new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      with_join_profiles do
+        new_builder.query.select(users: [:name]).all(as: String).sort.should eq ["Alpha", "Bravo"]
+      end
     end
   end
 
@@ -267,13 +286,15 @@ describe CQL::ActiveRecord::Queryable::QueryBuilder do
       new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
     end
 
-    pending "executes right join with block conditions" do
+    it "executes right join with block conditions" do
       builder = CQL::ActiveRecord::Queryable::QueryBuilder(TestUser).from_model(TestUser)
       new_builder = builder.right(:profiles) do |filter|
-        filter.eq(:users_id, :profiles_user_id)
+        filter.users.id.eq(filter.profiles.profile_owner_id)
       end
 
-      new_builder.should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(TestUser))
+      with_join_profiles do
+        new_builder.query.select(users: [:name]).all(as: String?).to_set.should eq Set{"Alpha", nil}
+      end
     end
   end
 

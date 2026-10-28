@@ -112,6 +112,7 @@ All inherit from `CQL::Postgres::Error < CQL::Error`. Messages never contain cre
 | `ConnectionClosed` < `ConnectionLost` | The connection was already closed, so nothing was sent; through crystal-db it is the `cause` of a `DB::ConnectionLost`, which the pool retries |
 | `QueryTimeout` | No answer within the read timeout; the statement is canceled on the server |
 | `PoolTimeout` / `PoolClosed` | The `AsyncEngine` pool had no free connection in time / is closed |
+| `CircuitOpen` | The native engine temporarily refuses new connections after repeated connect/setup failures; wait for `connect_retry_delay` and investigate the underlying outage |
 | `TransactionClosed` | A `TransactionScope` was used after its transaction ended |
 | `WrongFiber` / `StreamClosed` | A `RowStream` was read by another fiber / after its block ended or its statement failed |
 | `UnsupportedValue` | A valid PostgreSQL value Crystal cannot represent (infinite or far-out dates) |

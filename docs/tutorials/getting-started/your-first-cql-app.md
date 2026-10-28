@@ -4,7 +4,7 @@ description: "Build a small SQLite app: connect, migrate, define models, query, 
 
 # Your First CQL App
 
-**You need:** Crystal 1.12.2 or later and the SQLite 3 development library (`libsqlite3-dev` on Debian and Ubuntu).
+**You need:** Crystal 1.19.1 or later and the SQLite 3 development library (`libsqlite3-dev` on Debian and Ubuntu).
 
 {% stepper %}
 {% step %}

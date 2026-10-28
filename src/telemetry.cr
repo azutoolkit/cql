@@ -330,14 +330,18 @@ module CQL
       if tracer = @@tracer
         result = uninitialized T
         completed = false
+        invocations = 0
         failure = nil
         tracer.in_span(operation, sql) do
+          invocations += 1
+          raise CQL::Error.new("tracing must never retry a query") if invocations > 1
           result = yield
           completed = true
         rescue ex
           failure = ex
           raise ex
         end
+        raise CQL::Error.new("#{tracer.class} called in_span's statement more than once; tracing must never retry a query") if invocations > 1
         raise failure if failure
         raise "#{tracer.class} did not run the statement inside in_span" unless completed
         result
