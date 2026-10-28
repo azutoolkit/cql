@@ -125,12 +125,15 @@ end
 `isolation:` takes `:read_uncommitted`, `:read_committed`, `:repeatable_read` or `:serializable`. PostgreSQL runs
 `:read_uncommitted` as read committed and the other levels as asked; CockroachDB may run a level weaker than
 serializable as serializable. With `read_only: true` the database refuses writes to permanent tables on the
-transaction's connection (SQLSTATE `25006` on PostgreSQL); given both, one `SET TRANSACTION` sets them. MySQL refuses `SET TRANSACTION` inside a transaction, so CQL
-runs it just before BEGIN, on the transaction's connection. SQLite transactions are always serializable and may write,
-so it takes `:serializable` only and no `read_only:`. Anything else on SQLite, and `isolation:` or `read_only:` inside
-an `AppDB.transaction` on the same fiber (a savepoint keeps its transaction's modes), raise before the transaction
-begins: `CQL::DialectError`, or `ArgumentError` for the nested call. `Model.transaction` takes no options; the native
-PostgreSQL engine's `transaction` also takes `deferrable:` and `synchronous_commit:`, as
+transaction's connection (SQLSTATE `25006` on PostgreSQL); given both, one `SET TRANSACTION` sets them. MySQL refuses
+`SET TRANSACTION` inside a transaction, so CQL runs it just before BEGIN, on the transaction's connection. SQLite
+transactions are always serializable and may write, so it takes `:serializable` only and no `read_only:`. Anything
+else on SQLite, and `isolation:` or `read_only:` inside an `AppDB.transaction` on the same fiber (a savepoint keeps
+its transaction's modes), raise before the transaction begins: `CQL::DialectError`, or `ArgumentError` for the nested
+call. `Model.transaction` takes the same `isolation:` and `read_only:`, for its model's schema only (a model of
+another schema runs outside the transaction, and can write); a model's own `def self.transaction(&)` redefines only
+the call without them. The native PostgreSQL engine's `transaction` also takes `deferrable:` and
+`synchronous_commit:`, as
 [Transactions: Isolation and Savepoints](../postgres-native/tls-and-poolers.md#transactions-isolation-and-savepoints) shows.
 
 {% hint style="warning" %}

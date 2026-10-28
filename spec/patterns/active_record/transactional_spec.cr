@@ -1,5 +1,23 @@
 require "../../spec_helper.cr"
 
+# Wraps its own transactions, as an application adds tenant or audit setup.
+private class WrappedUserTransactional
+  include CQL::ActiveRecord::Model(Int32)
+  db_context TestDBTransactional, :test_users_transactional
+
+  getter id : Int32?
+  getter name : String
+  class_getter wrapped = 0
+
+  def initialize(@name : String, @id : Int32? = nil)
+  end
+
+  def self.transaction(&block : DB::Transaction -> _)
+    @@wrapped += 1
+    previous_def { |tx| yield tx }
+  end
+end
+
 describe "CQL::ActiveRecord::Transactional" do
   # Ensure DB setup runs once before these describe blocks
   TestDBTransactional.build
@@ -19,6 +37,21 @@ describe "CQL::ActiveRecord::Transactional" do
       TestUserTransactional.find_by_name("Alice Transactional").should_not be_nil
       TestUserTransactional.find_by_name("Bob Transactional").should_not be_nil
       TestUserTransactional.count.should eq(2)
+    end
+
+    it "runs at the isolation level and access mode it is given, through the model's schema" do
+      TestUserTransactional.transaction(isolation: :serializable) { TestUserTransactional.create!(name: "Serial") }
+      TestUserTransactional.count.should eq 1
+      expect_raises(CQL::DialectError, /read committed/) { TestUserTransactional.transaction(isolation: :read_committed) { } }
+      expect_raises(CQL::DialectError, /read-only/) { TestUserTransactional.transaction(read_only: true) { } }
+      level = CQL::IsolationLevel::ReadCommitted # not a literal: no symbol autocast
+      expect_raises(CQL::DialectError, /read committed/) { TestUserTransactional.transaction(isolation: level) { } }
+    end
+
+    it "keeps a model's own transaction, and its previous_def, for the call without options" do
+      WrappedUserTransactional.transaction { WrappedUserTransactional.create!(name: "Wrapped") }
+      WrappedUserTransactional.wrapped.should eq 1
+      TestUserTransactional.count.should eq 1
     end
 
     it "rolls back operations without raising an exception" do
