@@ -1,4 +1,6 @@
-require "digest/crc32"
+require "./migration_lock"
+require "./migrator_config"
+require "./migration_table"
 require "./schema_dump"
 
 module CQL
@@ -86,31 +88,6 @@ module CQL
     end
   end
 
-  # Configuration for schema synchronization
-  struct MigratorConfig
-    property schema_file_path : String
-    property schema_name : Symbol
-    property schema_symbol : Symbol
-    property migration_table_name : Symbol
-    property? auto_sync : Bool = true
-    # How long `Migrator.new` and a run wait for another migrator's PostgreSQL migration lock before raising; nil
-    # leaves the wait to the server's own `lock_timeout` (none by default). Only that wait: migrations keep theirs.
-    property lock_timeout : Time::Span?
-    # The environment variable the schema file's `uri:` line reads.
-    property schema_url_env : String
-
-    def initialize(
-      @schema_file_path : String = "src/schemas/app_schema.cr",
-      @schema_name : Symbol = :AppSchema,
-      @schema_symbol : Symbol = :app_schema,
-      @migration_table_name : Symbol = :cql_schema_migrations,
-      @auto_sync : Bool? = true,
-      @lock_timeout : Time::Span? = 60.seconds,
-      @schema_url_env : String = "DATABASE_URL",
-    )
-    end
-  end
-
   # The `Migrator` class is used to manage migrations and provides methods to apply,
   # rollback, and redo migrations.
   # The `Migrator` class also provides methods to list applied and pending migrations.
@@ -136,8 +113,9 @@ module CQL
     getter repo : Repository(MigrationRecord, Int32)
 
     def initialize(@schema : Schema, @config = MigratorConfig.new)
+      @lock = MigrationLock.new(@schema, @config)
       reject_duplicate_versions!
-      schema.ddl_transaction { lock_migrations; ensure_schema_migrations_table }
+      schema.ddl_transaction { @lock.acquire; ensure_schema_migrations_table }
       @repo = Repository(MigrationRecord, Int32).new(schema, @config.migration_table_name)
     end
 
@@ -333,39 +311,7 @@ module CQL
     end
 
     private def print_table(m : Array(MigrationRecord), status : String = "✔".colorize.green.to_s)
-      return if m.empty?
-
-      # Calculate dynamic column widths
-      status_width = 6 # Reduced from 8 for better fit
-      version_width = [7, m.max_of?(&.version.to_s.size) || 7].max
-      name_width = [20, m.max_of?(&.name.size) || 20].max
-
-      # Ensure reasonable limits
-      name_width = [name_width, 45].min # Reduced max width
-
-      # Table header
-      puts
-      puts "┌#{"─" * (status_width + 2)}┬#{"─" * (name_width + 2)}┬#{"─" * (version_width + 2)}┐"
-      puts "│ #{"Status".center(status_width)} │ #{"Migration".ljust(name_width)} │ #{"Version".rjust(version_width)} │"
-      puts "├#{"─" * (status_width + 2)}┼#{"─" * (name_width + 2)}┼#{"─" * (version_width + 2)}┤"
-
-      # Table rows
-      m.each do |migration|
-        # Format migration.name (truncate if too long)
-        formatted_name = migration.name
-
-        # Center status within exact width
-        formatted_status = status.center(status_width)
-
-        # Right-align version numbers for better readability
-        formatted_version = migration.version.to_s.rjust(version_width)
-
-        puts "│ #{formatted_status} │ #{formatted_name} │ #{formatted_version} │"
-      end
-
-      # Table footer
-      puts "└#{"─" * (status_width + 2)}┴#{"─" * (name_width + 2)}┴#{"─" * (version_width + 2)}┘"
-      puts
+      MigrationTable.new(m, status).print
     end
 
     private def build_migration_record(migration : BaseMigration.class) : MigrationRecord
@@ -448,7 +394,7 @@ module CQL
     private def with_migration_lock(picked : Array(BaseMigration.class), &) : Nil
       return if picked.empty?
       schema.ddl_transaction do
-        lock_migrations
+        @lock.acquire
         yield
       end
     end
@@ -458,54 +404,6 @@ module CQL
       return if picked == locked
       raise Error.new("Another migrator changed the applied migrations while this one waited for the migration " \
                       "lock; nothing was rolled back")
-    end
-
-    # Held until the batch transaction ends. Keyed by the records table, so migrators of other tables do not wait.
-    private def lock_migrations : Nil
-      return unless sql = schema.dialect.migration_lock_sql
-      require_read_committed!
-      schema.with_connection do |connection|
-        within_lock_timeout(connection) { connection.exec(sql, migration_lock_key) }
-      end
-    end
-
-    # Bounds the lock wait alone: the migrations then run under the lock_timeout the connection had.
-    private def within_lock_timeout(connection : DB::Connection, &) : Nil
-      dialect, timeout = schema.dialect, config.lock_timeout
-      read, set = dialect.lock_timeout_sql, dialect.set_lock_timeout_sql
-      return yield unless timeout && read && set
-      previous = connection.query_one(read, as: String)
-      connection.exec(set, lock_timeout_milliseconds(timeout))
-      begin
-        yield
-      rescue error
-        raise error unless dialect.lock_timed_out?(error)
-        raise Error.new("Another migrator holds the migration lock on #{config.migration_table_name}; gave up after " \
-                        "#{timeout.total_seconds} s (MigratorConfig#lock_timeout) and ran nothing. Raise lock_timeout, " \
-                        "or set it to nil to wait until that run ends", cause: error)
-      end
-      connection.exec(set, previous)
-    end
-
-    # At least 1 ms (0 means no bound) and at most Int32::MAX ms, the largest lock_timeout PostgreSQL takes.
-    private def lock_timeout_milliseconds(timeout : Time::Span) : String
-      timeout.total_milliseconds.clamp(1.0, Int32::MAX.to_f).ceil.to_i.to_s
-    end
-
-    # A snapshot taken before the lock wait (REPEATABLE READ, SERIALIZABLE) misses the run it waited for.
-    private def require_read_committed! : Nil
-      return unless sql = schema.dialect.transaction_isolation_sql
-      level = schema.with_connection(&.query_one(sql, as: String))
-      return if schema.dialect.migration_lock_isolation_safe?(level)
-      raise Error.new("Migrations take an advisory lock and must run at READ COMMITTED, not #{level.upcase}: run " \
-                      "them outside a REPEATABLE READ or SERIALIZABLE transaction and with " \
-                      "default_transaction_isolation at READ COMMITTED")
-    end
-
-    # A CQL salt ("CQLM") in the high 32 bits keeps the key clear of the small integers apps use for their locks.
-    private def migration_lock_key : Int64
-      table = config.migration_table_name.to_s.downcase.rpartition('.').last
-      (0x43514C4D_i64 << 32) | Digest::CRC32.checksum(table).to_i64
     end
 
     private def ensure_schema_migrations_table
