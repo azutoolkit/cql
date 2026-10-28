@@ -86,6 +86,17 @@ module CQL::Postgres
       @session.in_transaction?
     end
 
+    # A COMMIT the server refuses (a serialization failure found at commit, a deferred constraint) ends the transaction
+    # there, but crystal-db's `TopLevelTransaction#commit` raises before it releases the connection, which would then
+    # refuse every later transaction: release it once the server reports the session out of the transaction. A session
+    # left in one ('T', 'E') is rolled back by the pool's `ConnectionReset` on release.
+    def perform_commit_transaction
+      super
+    rescue ex
+      release_from_transaction unless @session.closed? || @session.in_transaction?
+      raise ex
+    end
+
     # A ROLLBACK on a dropped session cannot reach the server, which discards the transaction once it notices
     # the closed socket; it would only replace the error that dropped it (a QueryTimeout, say) with a lost connection.
     def perform_rollback_transaction

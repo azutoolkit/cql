@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A COMMIT the server refuses on the native PostgreSQL driver (a serialization failure found at commit under SERIALIZABLE, a deferred constraint or trigger) no longer leaves the pooled connection refusing every later transaction with "There is an existing transaction in this connection". `retrying_transaction` now retries a serialization failure or deadlock raised at COMMIT. The `pg` shard keeps crystal-db's behaviour.
 - PostgreSQL `structure_dump` passes the URI's `sslrootcert`, `sslcert` and `sslkey` to `pg_dump` as `PGSSLROOTCERT`, `PGSSLCERT` and `PGSSLKEY`, as it passed `sslmode`, so a dump against a server that verifies or demands certificates uses the same files as the app.
 - A native PostgreSQL server that refuses the client's certificate (or its lack) under TLS 1.3 now fails the connect with `CQL::Postgres::TLSRefused` (`TLS to <host:port> failed: ... certificate required`), which pools do not retry, instead of a raw `OpenSSL::SSL::Error` from the first startup read (`DB::ConnectionRefused` through crystal-db's pool, which retried it).
 - A native PostgreSQL connect that stalls in the startup handshake raises `IO::TimeoutError` reading `cannot connect to 127.0.0.1:5432: Read timed out`, naming the server as a TCP or TLS timeout does, instead of a bare `Read timed out`.

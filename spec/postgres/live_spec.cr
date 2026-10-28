@@ -488,6 +488,35 @@ describe "CQL::Postgres against a live server" do
     other.try &.close
   end
 
+  it "frees a pooled connection whose COMMIT the server refused, so a retry and the next transaction run on it" do
+    require_live!
+    pending! "CockroachDB has no constraint triggers" if cockroach?
+    table = "cql_commit_refused_live_#{Process.pid}"
+    setup = live_session
+    # A deferred trigger refuses COMMIT with 40001 for the first row ever inserted and for every row with refuse = true.
+    setup.simple_query(<<-SQL)
+      CREATE TABLE #{table} (id int, refuse bool NOT NULL DEFAULT false); CREATE SEQUENCE #{table}_seq;
+      CREATE FUNCTION #{table}_check() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+        IF NEW.refuse OR nextval('#{table}_seq') = 1 THEN RAISE 'refused at commit' USING ERRCODE = '40001'; END IF;
+        RETURN NULL;
+      END $$;
+      CREATE CONSTRAINT TRIGGER #{table}_check AFTER INSERT ON #{table} DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE FUNCTION #{table}_check()
+      SQL
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    source = PG::EngineSource.connect("#{LIVE_URL}#{separator}pool_size=1") # one connection: a transaction left open shows
+    schema = CQL::Schema.new(:commit_refused_live, LIVE_URL, CQL::Adapter::Postgres, source: source)
+    runs = 0
+    schema.retrying_transaction { |tx| runs += 1; tx.connection.exec("INSERT INTO #{table} (id) VALUES (1)") }
+    expect_raises(PG::SerializationFailure) { schema.transaction(&.connection.exec("INSERT INTO #{table} VALUES (2, true)")) }
+    schema.transaction(&.connection.exec("INSERT INTO #{table} (id) VALUES (3)"))
+    {runs, setup.query("SELECT id FROM #{table} ORDER BY id").rows}.should eq({2, [[1], [3]]})
+  ensure
+    schema.try &.close
+    setup.try &.simple_query("DROP TABLE IF EXISTS #{table}; DROP FUNCTION IF EXISTS #{table}_check(); DROP SEQUENCE IF EXISTS #{table}_seq")
+    setup.try &.close
+  end
+
   it "rolls back to a savepoint without ending the surrounding transaction" do
     require_live!
     engine = PG::AsyncEngine.connect(LIVE_URL)
