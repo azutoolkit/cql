@@ -67,34 +67,6 @@ See [Use CockroachDB](cockroachdb.md).
 {% endtab %}
 {% endtabs %}
 
-## MySQL authentication and TLS
-
-Add `mysql` (`github: crystal-lang/crystal-mysql`, `version: ~> 0.16.0`) and require `"cql/mysql"`.
-This optional integration registers the `mysql://` driver, adding authentication and TLS while retaining
-crystal-mysql's statements and row decoding. Requiring only `"mysql"` keeps its original authentication behavior.
-
-MySQL 8.4's default `caching_sha2_password` supports both cached and full authentication, including a server
-plugin switch. Full password authentication requires TLS. Legacy `mysql_native_password` is also supported;
-CQL does not enable it on the server. RSA public-key retrieval, other plugins and mutual TLS are unsupported.
-
-| URL parameter | Default | Behavior |
-| --- | --- | --- |
-| `ssl-mode` | `verify_identity` | Requires TLS and validates the CA and server hostname. `required` encrypts without verifying identity; `disabled` explicitly permits plaintext, but cannot perform full `caching_sha2_password` authentication. No automatic fallback to plaintext. |
-| `ssl-ca` | system trust store | PEM CA file for a private CA. Use a hostname matching the certificate, including its SAN. |
-| `connect_timeout` | `5` seconds | Positive seconds, at most 300. Bounds authentication, including stalled TLS and trickling packets. TCP connection and DNS resolution also have timeouts. |
-| `encoding` | `utf8mb4_unicode_ci` | Collation resolved by crystal-mysql. |
-
-Use `verify_identity` in production. Query-string values must be URL-encoded. Standard crystal-db pool settings
-such as `max_pool_size` still apply. Authentication errors omit server-provided text and credentials; invalid
-certificates fail without retry or downgrade. Existing connections retain their authenticated identity after a
-password rotation: create a new pool with the new secret and drain the old pool. CQL does not rotate secrets itself.
-
-The release fixture uses MySQL 8.4 with `require_secure_transport=ON`, a `caching_sha2_password` account,
-a disposable CA and hostname verification. It checks cold/warm authentication, bad credentials, untrusted CA,
-wrong hostname, plaintext refusal, concurrent pooling, optimistic locking, savepoints and isolation.
-
-
-
 Then build the schema from the config:
 
 ```crystal
@@ -107,6 +79,17 @@ end
 ```
 
 `CQL.build_schema` opens `config.full_db_url`, so pool, SSL, database-specific and `adapter_options` settings reach the connection. `CQL.config` is process-wide: it describes one database. Any other scheme fails validation: `redis://localhost:6379` raises `ArgumentError: Unsupported database URL: redis://localhost:6379`.
+
+## MySQL authentication and TLS
+
+Use `require "cql/mysql"` with the `mysql` shard (`~> 0.16.0`) for MySQL 8.4's default
+`caching_sha2_password` authentication, verified TLS and bounded authentication. Requiring only `"mysql"`
+retains its original authentication behavior. The default `ssl-mode=verify_identity` requires a trusted CA
+and matching hostname; supply `ssl-ca` for a private CA.
+
+See [Use MySQL 8.4 with Verified TLS](mysql.md) for installation, complete connection examples, supported URL
+options, deadline semantics, troubleshooting and secret rotation. MySQL uses `ssl-mode` and `ssl-ca`, not the
+differently named options emitted by `config.ssl`.
 
 ## See what `full_db_url` adds
 

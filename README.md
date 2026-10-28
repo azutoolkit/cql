@@ -97,7 +97,7 @@ dependencies:
 
 For MySQL 8.4, use `require "cql/mysql"` to enable `caching_sha2_password` and verified TLS.
 Set `ssl-ca=/path/to/ca.pem` in the database URL for a private CA; see
-[MySQL configuration](docs/how-to/configuration/database-connection.md#mysql-authentication-and-tls).
+[MySQL 8.4 setup guide](docs/how-to/configuration/mysql.md).
 
 ## Quick Start
 

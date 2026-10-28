@@ -56,7 +56,7 @@ storage determine crash guarantees; CQL does not override them to claim ACID beh
 The optional `require "cql/mysql"` integration adds modern authentication to the tested `crystal-mysql` 0.16 /
 `crystal-db` 0.13 combination. It verifies TLS identity by default and rejects plaintext full-password authentication.
 The original `require "mysql"` entry point alone does not gain this behavior. See
-[MySQL authentication and TLS](../how-to/configuration/database-connection.md#mysql-authentication-and-tls)
+[MySQL authentication and TLS](../how-to/configuration/mysql.md)
 for supported options and limitations. Do not weaken a deployment's authentication to match a legacy fixture.
 
 | Feature | SQLite | PostgreSQL | MySQL | CockroachDB |

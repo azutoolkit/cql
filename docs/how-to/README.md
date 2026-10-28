@@ -86,6 +86,7 @@ New to CQL? Start with the [tutorials](../tutorials/README.md); for every option
 - [Set Up Connection Pooling](configuration/connection-pooling.md)
 - [Configure Multiple Environments](configuration/environments.md)
 - [Enable SSL Connections](configuration/ssl.md)
+- [Use MySQL 8.4 with Verified TLS](configuration/mysql.md)
 - [Use CockroachDB](configuration/cockroachdb.md)
 
 ## Native PostgreSQL Driver
