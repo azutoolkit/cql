@@ -36,6 +36,12 @@ OPTIMISTIC_LOCKING_TEST_SCHEMA = CQL::Schema.define(
     lock_version :version
   end
 
+  table :uuid_products do
+    primary :id, String, auto_increment: false
+    varchar :name
+    lock_version :version
+  end
+
   table :product_parts do
     primary :id, Int32, auto_increment: true
     integer :parted_product_id
@@ -103,6 +109,21 @@ class SoftLockedProduct
   property version : Int32
 
   def initialize(@name = "", @version = 1)
+  end
+
+  optimistic_locking version_column: :version
+end
+
+class UuidProduct
+  include CQL::ActiveRecord::Model(UUID)
+  include CQL::ActiveRecord::OptimisticLocking
+
+  db_context OPTIMISTIC_LOCKING_TEST_SCHEMA, :uuid_products
+
+  property name : String = ""
+  property version : Int32 = 1
+
+  def initialize
   end
 
   optimistic_locking version_column: :version
@@ -294,6 +315,46 @@ module CQL::ActiveRecord::OptimisticLockingSpec
         expect_raises(CQL::OptimisticLockError) { copy_b.delete! }
 
         ProductPart.where(parted_product_id: copy_a.id!).count.should eq(1)
+      end
+    end
+
+    context "the error" do
+      stale_copy = -> do
+        OPTIMISTIC_LOCKING_TEST_SCHEMA.exec_query do |conn|
+          conn.exec("INSERT INTO products (id, name, version, created_at, updated_at) VALUES (424242, 'Lamp', 3, ?, ?)", args: [Time.utc, Time.utc])
+        end
+        copy = Product.find!(424242)
+        Product.update!(424242, version: 4)
+        copy
+      end
+
+      it "names the model and the version a stale update expected, and keeps the id out of its message" do
+        copy = stale_copy.call
+        copy.name = "Desk"
+        error = expect_raises(CQL::OptimisticLockError) { copy.update! }
+        {error.model_class, error.id, error.expected_version}.should eq({"Product", 424242, 3})
+        error.message.to_s.should contain("Expected version: 3")
+        error.message.to_s.should_not contain("424242")
+      end
+
+      it "does the same for a stale delete" do
+        error = expect_raises(CQL::OptimisticLockError) { stale_copy.call.delete! }
+        {error.model_class, error.id, error.expected_version}.should eq({"Product", 424242, 3})
+        error.message.to_s.should_not contain("424242")
+      end
+
+      it "carries a UUID key" do
+        copy = UuidProduct.new.tap(&.save!)
+        UuidProduct.update!(copy.id!, version: 2)
+        error = expect_raises(CQL::OptimisticLockError) { copy.delete! }
+        error.id.should eq copy.id
+        error.message.to_s.should_not contain(copy.id.to_s)
+      end
+
+      it "carries the expected version from an update builder" do
+        update = OPTIMISTIC_LOCKING_TEST_SCHEMA.update.table(:products).set(name: "Desk").where(id: 1)
+        error = expect_raises(CQL::OptimisticLockError) { update.with_optimistic_lock(version: 9).commit }
+        error.expected_version.should eq 9
       end
     end
 

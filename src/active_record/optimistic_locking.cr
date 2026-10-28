@@ -73,10 +73,11 @@ module CQL
           attrs.delete(primary_key_column)
           attrs.delete(lock_version_col)
 
-          update_of(record.id!)
-            .set(attrs)
-            .with_optimistic_lock(current_version, lock_version_col)
-            .commit
+          begin
+            update_of(record.id!).set(attrs).with_optimistic_lock(current_version, lock_version_col).commit
+          rescue CQL::OptimisticLockError
+            raise CQL::OptimisticLockError.new(model_class: name, id: record.id.as?(DB::Any | UUID), expected_version: current_version)
+          end
 
           # If successful (no exception), increment the local version to match DB; a rollback puts it back
           undo = record.persistence_snapshot
@@ -97,8 +98,7 @@ module CQL
           expected = self.{{version_column.id}}
           raise CQL::Error.new("Version value missing for optimistic locking") if expected.nil?
           return true if {{@type.id}}.delete_of(id!).where({{version_column.id}}: expected).commit.rows_affected > 0
-          # The id stays out of the error: its message ends up in logs, and a key can be a natural one
-          raise CQL::OptimisticLockError.new(model_class: self.class.name, expected_version: expected)
+          raise CQL::OptimisticLockError.new(model_class: self.class.name, id: id.as?(DB::Any | UUID), expected_version: expected)
         end
       end
     end

@@ -91,7 +91,7 @@ module CQL
       result = CQL::Execution.run(executor, query, params, :update) { |connection| connection.exec(query, args: params) }
 
       if @with_optimistic_locking && result.rows_affected == 0
-        raise CQL::OptimisticLockError.new("Record has been modified by another process")
+        raise CQL::OptimisticLockError.new(expected_version: @version_value)
       end
 
       result

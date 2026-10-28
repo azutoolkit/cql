@@ -67,8 +67,11 @@ first.save                # UPDATE users SET name = ?, version = ? WHERE (users.
 first.version             # => 2
 
 second.name = "Second"
-second.save               # raises CQL::OptimisticLockError: Record has been modified by another process
+second.save               # raises CQL::OptimisticLockError: Record has been modified by another process (User)
+                          #   Expected version: 1
 ```
+
+The error carries `model_class`, `id` and `expected_version`. Its message leaves the id out, since a key can be a natural one.
 
 Reload and reapply the change, with a retry limit:
 
