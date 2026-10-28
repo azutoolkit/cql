@@ -3,11 +3,14 @@ require "log/spec"
 
 private INSERT_FAILURE_MARKER = "secret-marker-42"
 
-# A table of its own: other specs change the shared schemas' declarations.
-private InsertFailureDB = CQL::Schema.define(:insert_failure_db, adapter: CQL::Adapter::Postgres, uri: postgres_database_url) do
-  table :insert_failures do
-    primary :id, Int64, auto_increment: true
-    bigint :amount
+# Build only after require_postgres!: a top-level constant connects before specs
+# can skip this integration case in the database-free compiler job.
+private def insert_failure_db : CQL::Schema
+  CQL::Schema.define(:insert_failure_db, adapter: CQL::Adapter::Postgres, uri: postgres_database_url) do
+    table :insert_failures do
+      primary :id, Int64, auto_increment: true
+      bigint :amount
+    end
   end
 end
 
@@ -154,12 +157,14 @@ describe CQL::Insert do
 
     it "raises on #get (PostgreSQL) without logging the driver's message" do
       require_postgres!
-      InsertFailureDB.insert_failures.drop! rescue nil
-      InsertFailureDB.insert_failures.create!
-      insert = InsertFailureDB.insert.into(:insert_failures).values(amount: INSERT_FAILURE_MARKER).back(:id)
+      schema = insert_failure_db
+      schema.insert_failures.drop! rescue nil
+      schema.insert_failures.create!
+      insert = schema.insert.into(:insert_failures).values(amount: INSERT_FAILURE_MARKER).back(:id)
       leaked_log_lines(PQ::PQError) { insert.get(Int64) }.should be_empty
     ensure
-      InsertFailureDB.insert_failures.drop! rescue nil
+      schema.try(&.insert_failures.drop!) rescue nil
+      schema.try(&.close)
     end
   end
 end
