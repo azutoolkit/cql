@@ -517,6 +517,30 @@ describe "CQL::Postgres against a live server" do
     setup.try &.close
   end
 
+  it "raises instead of reporting success when COMMIT rolled back a transaction that a rescued error had aborted" do
+    require_live!
+    separator = LIVE_URL.includes?('?') ? '&' : '?'
+    table = "cql_aborted_live_#{Process.pid}"
+    schema = CQL::Schema.new(:aborted_live, LIVE_URL, CQL::Adapter::Postgres, source: PG::EngineSource.connect("#{LIVE_URL}#{separator}pool_size=1"))
+    schema.exec("CREATE TABLE #{table} (id int)")
+    expect_raises(PG::TransactionAborted, /nothing was committed/) do
+      schema.transaction do |tx|
+        tx.connection.exec("INSERT INTO #{table} VALUES (1)")
+        tx.connection.exec("SELECT 1/0") rescue nil # PostgreSQL has aborted the transaction
+      end
+    end
+    runs = 0
+    expect_raises(PG::TransactionAborted) do # not retried: the block would fail the same way again
+      schema.retrying_transaction { |tx| runs += 1; tx.connection.exec("SELECT 1/0") rescue nil }
+    end
+    runs.should eq 1
+    schema.transaction(&.connection.exec("INSERT INTO #{table} VALUES (2)")) # the connection is still usable
+    schema.exec_query(&.query_all("SELECT id FROM #{table}", as: Int32)).should eq [2]
+  ensure
+    schema.try &.exec("DROP TABLE IF EXISTS #{table}")
+    schema.try &.close
+  end
+
   it "rolls back to a savepoint without ending the surrounding transaction" do
     require_live!
     engine = PG::AsyncEngine.connect(LIVE_URL)

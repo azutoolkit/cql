@@ -76,7 +76,9 @@ end
 ```
 
 An inner exception undoes the inner block. If the outer block rescues it, the outer work still commits; if it
-propagates, everything rolls back.
+propagates, everything rolls back. To go on after a statement that may fail, run it in a nested transaction as above.
+On PostgreSQL a statement that fails outside one aborts the whole transaction: a block that rescues its error and
+returns gets `CQL::Postgres::TransactionAborted` from the native driver at COMMIT, and nothing is committed.
 
 ## Change the Schema Inside a Transaction
 

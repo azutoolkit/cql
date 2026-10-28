@@ -21,6 +21,11 @@ module CQL::Postgres
   class TransactionClosed < Error
   end
 
+  # COMMIT found the transaction aborted by a statement that failed in it (its error rescued or ignored): the server
+  # rolled it back.
+  class TransactionAborted < Error
+  end
+
   # A `RowStream` was read by a fiber other than the one that opened it.
   class WrongFiber < Error
   end

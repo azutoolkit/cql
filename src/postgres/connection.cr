@@ -90,8 +90,13 @@ module CQL::Postgres
     # there, but crystal-db's `TopLevelTransaction#commit` raises before it releases the connection, which would then
     # refuse every later transaction: release it once the server reports the session out of the transaction. A session
     # left in one ('T', 'E') is rolled back by the pool's `ConnectionReset` on release.
+    #
+    # A transaction a failed statement aborted ('E') rolls back at COMMIT without an error: raise, not report success.
     def perform_commit_transaction
+      aborted = @session.transaction_status == 'E'
       super
+      raise TransactionAborted.new("COMMIT rolled back the transaction: a statement in it failed, so nothing " \
+                                   "was committed") if aborted
     rescue ex
       release_from_transaction unless @session.closed? || @session.in_transaction?
       raise ex
