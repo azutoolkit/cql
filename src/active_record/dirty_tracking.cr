@@ -68,6 +68,13 @@ module CQL
           previous_def.tap { clear_changes! }
         end
 
+        # :nodoc:
+        # Also puts back the saved values, so a record whose insert rolled back counts its attributes as changed.
+        protected def persistence_snapshot : ->
+          restore_id, persisted = previous_def, @persisted_attributes
+          -> { restore_id.call; @persisted_attributes = persisted; nil }
+        end
+
         # A record with nothing to save is not stamped, so its UPDATE can be skipped; a callback
         # that then changes it gets its stamp in `update!`.
         private def set_timestamps!

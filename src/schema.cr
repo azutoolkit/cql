@@ -586,6 +586,7 @@ module CQL
     # Runs *hook* if the fiber's innermost open transaction on this schema rolls back, or, once that savepoint
     # committed, an enclosing one does; hooks run newest first. Dropped after the outermost commit and outside a
     # transaction, and not run when the block ended the transaction itself nor after a COMMIT whose outcome is unknown.
+    # A COMMIT the block sends as SQL, or a statement that commits implicitly, is not seen: the hooks would still run.
     def on_rollback(&hook : ->) : Nil
       active_frame.try { |frame| frame.rollback_hooks << hook }
     end

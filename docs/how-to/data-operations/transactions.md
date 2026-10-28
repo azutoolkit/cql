@@ -55,6 +55,15 @@ def transfer(from_id : Int64, to_id : Int64, cents : Int64)
 end
 ```
 
+A record inserted with `save!` or `Model.create!(record)` in a transaction or savepoint that rolls back is new again:
+its `id` is nil, and with dirty tracking its attributes count as unsaved, so a later `save!` inserts it. Other values
+stay as the block left them: a loaded record keeps its updated attributes, and a deleted one has lost its `id`. To
+undo state of your own, register a block with `AppDB.on_rollback`; it runs when the transaction rolls back, but not
+after the block ended it itself (`tx.commit`, `tx.rollback`), nor after a COMMIT whose outcome is unknown (a lost
+reply), nor for a transaction passed in with `AppDB.transaction(tx)` from another connection. CQL cannot see a COMMIT
+or ROLLBACK the block sends as SQL, or a statement that commits implicitly (DDL through `exec` on MySQL): a record
+inserted before it is reset although its row was kept, so do not send one.
+
 ## Nest Savepoints
 
 ```crystal
@@ -93,7 +102,9 @@ end
 
 `AppDB.build`, a table's `create!`, `drop!` and `truncate!`, and migrator runs nest the same way. A rollback removes
 the column from both the database and `AppDB`'s declaration, so model queries keep working, also when the `alter`'s
-savepoint committed before the outer block raised. A manual `tx.rollback`, a rollback of a transaction you opened yourself and passed in with `schema.transaction(tx)`, or a COMMIT that fails without the database refusing it (a lost reply or a timeout on PostgreSQL, a disk error on SQLite: the column may exist) leaves the declaration as altered.
+savepoint committed before the outer block raised. A manual `tx.rollback`, a rollback of a transaction you opened
+yourself and passed in with `schema.transaction(tx)`, or a COMMIT that fails without the database refusing it (a lost
+reply or a timeout on PostgreSQL, a disk error on SQLite: the column may exist) leaves the declaration as altered.
 {% endtab %}
 
 {% tab title="MySQL and CockroachDB" %}
@@ -162,11 +173,11 @@ error. Only the native PostgreSQL driver's errors, on PostgreSQL and CockroachDB
 `pg` shard run the block once. Inside another transaction it raises `ArgumentError`.
 
 {% hint style="warning" %}
-Only this transaction's work is undone before the block runs again. Build or load the records the block changes inside
-it: a rolled-back record keeps its `id` and attributes, so one from outside writes nothing (its `save!` updates no row
-and succeeds) or is changed twice. Everything else runs again: writes through another schema or connection, fibers the
-block spawned, emails, HTTP calls. A run whose block ended the transaction itself (`tx.commit`, `tx.rollback`) is not
-retried; a `COMMIT` or `ROLLBACK` statement it sends itself is not detected, so do not send one.
+Only this transaction's work is undone before the block runs again. Load the records the block updates or deletes
+inside it: apart from a record it inserted, which is new again, a rolled-back record keeps what the run changed, so
+one from outside is changed twice or not at all. Everything else runs again: writes through another schema or
+connection, fibers the block spawned, emails, HTTP calls. A run whose block ended the transaction itself (`tx.commit`,
+`tx.rollback`) is not retried; a `COMMIT` or `ROLLBACK` statement it sends itself is not detected, so do not send one.
 {% endhint %}
 
 ## Observe Transactions
