@@ -20,6 +20,9 @@ end
 # Example demonstrating per-request query caching integration with Azu framework
 # This shows multiple ways to integrate the caching with Azu applications
 
+# The middleware tracks only with cache.on and cache.request_cache (true by default)
+CQL.configure { |c| c.cache.on = true }
+
 # Set up a simple database schema for the demo
 schema = CQL::Schema.define(:azu_demo, "sqlite3://azu_demo.db", CQL::Adapter::SQLite) do
   table :users do
@@ -229,7 +232,8 @@ puts "=== What the tracker does ==="
 puts "- Counts repeated identical statements within a request (an N+1 diagnostic)"
 puts "- Works with any CQL select (all, get, find, counts, joins)"
 puts "- Stores and serves no rows: every query still runs, so it makes nothing faster"
-puts "- One tracker per process: concurrent requests share its statements and counters"
+puts "- Each request fiber has its own id, statements and counters; fibers it spawns are not tracked"
+puts "- Tracks only with cache.on and cache.request_cache set in CQL.configure"
 puts ""
 
 puts "=== Cache Statistics Summary ==="

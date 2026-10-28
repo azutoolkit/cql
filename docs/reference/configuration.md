@@ -213,7 +213,7 @@ end
 | `key_prefix` | `String` | `"cql"` | fragment cache keys | none |
 | `name` | `String` | `"cql"` | `Cache.cache_name` | none |
 | `memory_size` | `Int32?` | `1000` (`1000` / `100` / `5000`) | memory and fragment cache size | `memory_size must be positive` |
-| `request_cache` | `Bool` | `true` | `CQL.start_request_cache`, `end_request_cache`, `with_request_cache` | none |
+| `request_cache` | `Bool` | `true` | `CQL.start_request_cache`, `end_request_cache`, `with_request_cache` and the `CQL::Cache::Middleware` hooks | none |
 | `request_size` | `Int32` | `1000` (`1000` / `100` / `2000`) | validation only | `request_size must be positive` |
 | `fragment_versions` | `Bool` | `true` | fragment cache `enable_versioning` | none |
 | `fragment_tags` | `Bool` | `true` | fragment cache `enable_tagging` | none |
@@ -230,7 +230,7 @@ end
 | `CQL.reset_cache!` | `Nil` | When `cache.on`: resets cache statistics and clears the request cache. |
 | `CQL.memory_cache` | `CQL::Cache::MemoryCache` | New memory cache sized by `memory_size`. |
 | `CQL.fragment_cache` | `CQL::Cache::FragmentCache` | New fragment cache from the settings above. |
-| `CQL.start_request_cache(request_id = nil)`, `CQL.end_request_cache`, `CQL.with_request_cache(request_id = nil) { }` | `Nil` / block value | No-ops unless `cache.on` and `cache.request_cache`. |
+| `CQL.start_request_cache(request_id = nil)`, `CQL.end_request_cache`, `CQL.with_request_cache(request_id = nil) { }` | `Nil` / block value | Start no request unless `cache.on` and `cache.request_cache`. `with_request_cache` reads them once and ends only the request it started; `end_request_cache` always ends the current fiber's request (a no-op without one), so a request started before a switch was turned off still ends. The `CQL::Cache::Middleware` hooks go through them. |
 
 See [Query caching](../how-to/caching/query-cache.md).
 

@@ -20,9 +20,15 @@ Every select a query runs (`all`, `get`, `each`, `find` and the like) passes thr
 
 ## Hook It Into Your Framework
 
-Each integration starts a request with the `X-Request-ID` header (or a random id) and ends it when the response is done.
+Each integration starts a request with the `X-Request-ID` header (or a random id) and ends it when the response is done. A header value is kept only when it is 1 to 128 of `A-Z a-z 0-9 . _ -`; any other value (empty, too long, control characters, spaces, non-ASCII) is replaced with a random 16-character hex id.
 
-The tracker is a repeated-query (N+1) diagnostic, not a result cache: it stores and serves no rows, so it makes no request faster. It is one per process, so concurrent requests share its statements and counters (see the warning below). The middleware calls `RequestQueryCacheHelper` directly and does not look at `config.cache.on?` or `config.cache.request_cache?`; only `CQL.start_request_cache`, `CQL.end_request_cache` and `CQL.with_request_cache` check those.
+The integrations go through `CQL.with_request_cache` (`HTTP`, `Amber`, `Manual.with_request`) or `CQL.start_request_cache` and `CQL.end_request_cache` (the before/after hooks), so they track only when both switches are on:
+
+```crystal
+CQL.configure { |c| c.cache.on = true }  # c.cache.request_cache is true by default; cache.on is true by default only when CRYSTAL_ENV is development or unset
+```
+
+The tracker is a repeated-query (N+1) diagnostic, not a result cache: it stores and serves no rows, so it makes no request faster. A request belongs to the fiber that started it: each request has its own id, statements and counters, so concurrent requests do not share them. Queries run by a fiber the request spawns are not tracked.
 
 {% tabs %}
 {% tab title="HTTP::Server" %}
@@ -91,11 +97,11 @@ The Lucky, Amber and SpiderGazelle modules rely on those frameworks' macros and 
 ## Call the Helper Directly
 
 ```crystal
-CQL::Cache::RequestQueryCacheHelper.start_request   # a random 32-character id
+CQL::Cache::RequestQueryCacheHelper.start_request   # a random 32-character id; tracks whatever cache.on says
 CQL::Cache::RequestQueryCacheHelper.end_request
 
 CQL.configure { |c| c.cache.on = true }          # c.cache.request_cache is true by default
-CQL.with_request_cache("req-123") { handle(request) }  # does nothing unless both are on; ends in an ensure
+CQL.with_request_cache("req-123") { handle(request) }  # starts nothing unless both are on; ends in an ensure only what it started
 
 CQL::Cache::RequestQueryCacheHelper.with_cache("SELECT 1", [] of DB::Any) { legacy_lookup }  # track your own call
 ```
@@ -112,19 +118,19 @@ stats["request_id"]        # "none" outside a request
 stats["enabled"]           # "true" or "false"; also "max_size", "sets" and "clears"
 ```
 
-`hits` and `misses` are totals for the process: starting or ending a request clears the tracked statements, not the counters. A high `hits` count on an endpoint points at an N+1 or a duplicated lookup; see [Avoid N+1 Queries](../performance/n-plus-one.md).
+Inside a request, the counts are that request's. Outside a request, `hits`, `misses`, `sets` and `clears` are totals for the process, over every request so far. The stats always describe the fiber that reads them, and so does `CQL.cache_summary` (`CQL.config.cache.performance_summary`): read from a dashboard or a timer fiber, outside any request, they show the process totals and `enabled` is `"false"` (unless `enabled = true`). A high `hits` count on an endpoint points at an N+1 or a duplicated lookup; see [Avoid N+1 Queries](../performance/n-plus-one.md).
 
 ## Control Tracking
 
 ```crystal
-CQL::Cache::RequestQueryCacheHelper.enabled = true   # track outside requests too
+CQL::Cache::RequestQueryCacheHelper.enabled = true   # track outside requests too, in one process-wide tracker
 CQL::Cache::RequestQueryCacheHelper.enabled = false  # stop, even for requests still active
-CQL::Cache::RequestQueryCacheHelper.enabled?         # true while a request is active or after enabled = true
-CQL::Cache::RequestQueryCacheHelper.clear            # drop tracked statements, keep the request id
+CQL::Cache::RequestQueryCacheHelper.enabled?         # true on a fiber with an active request, or after enabled = true
+CQL::Cache::RequestQueryCacheHelper.clear            # drop the current request's tracked statements, keep its id
 ```
 
 {% hint style="warning" %}
-The tracker is one per process: overlapping requests share its statements and counters, and tracking stays on while any request is active. An `end_request` skipped on an error path keeps it on for good, so end requests in an `ensure` (as `Manual.with_request` and `CQL.with_request_cache` do).
+`end_request` must run on the fiber that called `start_request`. One skipped on an error path keeps tracking on for that fiber, which in `HTTP::Server` serves every request of a keep-alive connection, so end requests in an `ensure` (as `Manual.with_request`, `CQL.with_request_cache` and `Middleware::HTTP` do). The state of a fiber that has died is dropped by a later `start_request` once at least 64 request fibers (or twice as many as are left) have state.
 {% endhint %}
 
 ## See Also

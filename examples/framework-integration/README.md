@@ -23,7 +23,7 @@ The middleware lives in `src/cache/middleware.cr` and is loaded by `require "cql
 
 | Entry point | Use |
 | --- | --- |
-| `CQL::Cache::Middleware::HTTP.new` | an `HTTP::Handler` for any `HTTP::Server` or Azu app: starts the process-wide tracker with `X-Request-ID` (or a random id) and ends it in an `ensure`; in Azu, `app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)` |
+| `CQL::Cache::Middleware::HTTP.new` | an `HTTP::Handler` for any `HTTP::Server` or Azu app: starts a request on the tracker for the fiber serving it, with `X-Request-ID` when valid (or a random id), and ends it in an `ensure`; in Azu, `app.start(app.default_handlers + [CQL::Cache::Middleware::HTTP.new] of HTTP::Handler)` |
 | `CQL::Cache::Middleware::Azu::Handler.new` | deprecated: a subclass of `HTTP` that adds nothing |
 | `CQL::Cache::Middleware::Azu.setup!(app)` | deprecated: calls `app.use(Handler.new)`; `Azu::App` has no `use` (`Azu::HandlerPipeline#use` does) |
 | `include CQL::Cache::Middleware::Azu::Controller` | deprecated: registers `before_action`/`after_action`, which Azu endpoints do not have |
@@ -40,8 +40,10 @@ end
 ```
 
 The tracker stores and serves no rows: it counts repeated statements (an N+1 diagnostic) and makes no request
-faster. It is one per process, so concurrent requests share its statements and counters, and the middleware does not
-look at `config.cache.on?` or `config.cache.request_cache?`. Azu's own bridge, `require "azu/cql"`
+faster. Each request fiber has its own request id, statements and counters; queries from fibers the request spawns
+are not tracked. The middleware tracks only when `cache.on` and `cache.request_cache` are set
+(`CQL.configure { |c| c.cache.on = true }`; `request_cache` is `true` by default), and keeps a client `X-Request-ID`
+only when it is 1 to 128 of `A-Z a-z 0-9 . _ -`. Azu's own bridge, `require "azu/cql"`
 (`Azu::CQL::Middleware`), is the Azu-aware piece: request tagging, telemetry and per-request transactions.
 
 The Azu-side snippets the demo prints are not compiled here: Azu is not a dependency of this repository. They use
