@@ -1,11 +1,11 @@
 <div align="center">
 
-<img width="1038" alt="CQL, the Crystal Query Language" src="https://github.com/user-attachments/assets/ed4e733a-3d37-4d03-a4d8-d15bfd7e6f25">
-
-# CQL
+<img width="1990" height="480" alt="cql-gitbook-cover" src="https://github.com/user-attachments/assets/1302281a-1ba9-453a-9328-a40fa4b3b4e7" />
 
 **A type-safe query builder and Active Record ORM for Crystal**<br>
 SQLite · PostgreSQL · MySQL · CockroachDB
+
+
 
 [![Crystal CI](https://github.com/azutoolkit/cql/actions/workflows/crystal.yml/badge.svg)](https://github.com/azutoolkit/cql/actions/workflows/crystal.yml)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/a85e29e6b78849c28fb813397cc3eb1a)](https://app.codacy.com/gh/azutoolkit/cql/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)

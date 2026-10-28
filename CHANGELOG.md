@@ -86,6 +86,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `return` or `break` out of a `CQL::Schema#transaction` block whose COMMIT then failed raised `KeyError: Missing hash key: Fiber` instead of the COMMIT error (and, out of a nested transaction, dropped the enclosing transaction's frame and published the savepoint's telemetry end event twice), and ran the rollback hooks whatever the COMMIT outcome; they now run only when `Dialect#commit_refused?` accepts the error, as after a block that returns normally. A savepoint's hooks no longer run when its block ended an enclosing transaction (`outer.commit`) and then raised.
 - A COMMIT that failed (SQLite busy or a deferred constraint, or any driver's refused COMMIT) left the pooled connection inside the transaction: the next transaction on it raised "There is an existing transaction in this connection", and a plain write on it was never committed. `CQL::Schema#transaction` now rolls that connection back before the pool lends it again (when the ROLLBACK fails too, as after SQLite rolled back by itself, it releases crystal-db's transaction flag and logs a warning); the COMMIT error is still what raises.
 
+## [0.0.923] - 2026-10-28
+
+### Upgrade notes
+
+- The `CQL::Cache::Middleware` hooks (`HTTP`, `Kemal`, `Lucky`, `Amber`, `SpiderGazelle`, `Manual`, `Azu`) now start tracking only when `cache.on` and `cache.request_cache` are both set, like `CQL.with_request_cache`. `cache.on` defaults to `true` only when `CRYSTAL_ENV` is `development` or unset; in every other environment (`production`, `test`, `staging`, ...) it defaults to `false`, so to keep the middleware tracking there, set `CQL.configure { |c| c.cache.on = true }` (`c.cache.request_cache` is `true` by default). `cache.on` is also the switch `CQL.build_schema` and `CQL.cache_on` read to set up the main cache (`CQL::Cache::Cache.enabled`); to get the tracker without that, call `CQL::Cache::RequestQueryCacheHelper.start_request`/`end_request` yourself (they ignore `cache.on` and do not validate the request id).
+- `RequestQueryCache#stats` (and `RequestQueryCacheHelper.stats`) describes the calling fiber: inside a request, that request's `hits`, `misses`, `sets` and `clears`, not totals for the process; outside a request, the process totals, with `enabled` `"false"` unless `enabled = true`. `CQL.cache_summary` (`CQL.config.cache.performance_summary`) reads it, so a dashboard or timer fiber outside any request sees process totals and a disabled tracker. `enabled?`, `size`, `clear` and `current_request_id` are also about the current fiber's request.
+- Queries run by a fiber that a request spawns are no longer tracked (that fiber has no request); before, the one process-wide tracker counted them.
+- `start_request` on one fiber and `end_request` on another no longer pair up: `end_request` on a fiber without a request does nothing, and the first fiber's state stays until that fiber dies and a dead-fiber sweep drops it. End a request on the fiber that started it.
+- `clear` and `CQL.reset_cache!` called from a fiber that is not in a request (a console, an admin endpoint outside the middleware, a timer) clear only the process-wide tracker, not the statements of requests in flight.
+- The block forms (`CQL.with_request_cache`, `Middleware::HTTP`, `Middleware::Amber`, `Middleware::Manual.with_request`) read the switches once, when the block starts, and end only a request they started. The before/after hooks (`Kemal`, `Lucky`, `SpiderGazelle`, `Azu.before_request`/`after_request`, `Manual.start_request`/`end_request`) and `CQL.end_request_cache` cannot carry that state: their end always ends the fiber's current request, so with the switches off an after hook still ends a request that something else started on that fiber with `RequestQueryCacheHelper.start_request`.
+- A client `X-Request-ID` the middleware hooks receive is kept only when it is 1 to 128 of `A-Z a-z 0-9 . _ -`; any other value is replaced with a random 16-character hex id.
+
+### Changed
+
+- The request query tracker keeps one state per request fiber: each request (the fiber that called `start_request`, until its `end_request`) has its own request id, statements and counters, so concurrent requests no longer clear each other's statements or overwrite each other's id. Statements tracked with `enabled = true` outside a request still go to one process-wide tracker. A fiber that dies without `end_request` has its state dropped by a later `start_request` once at least `RequestQueryCache::SWEEP_THRESHOLD` (64) request fibers, or twice as many as are left, have state. New: `RequestQueryCache#active_requests`.
+
+### Fixed
+
+- The caching examples (`examples/caching/README.md`, `per_request_query_cache_demo.cr`), the per-request how-to and the configuration reference no longer say the per-request query tracker serves repeated queries from a cache, deduplicates them, speeds requests up or is shared safely by concurrent requests: every query still runs, and each request fiber now has its own state.
+- A request started while `cache.on` and `cache.request_cache` were set now ends when one of them is turned off before its end: `CQL.end_request_cache` no longer checks them, and the block forms decide once at the start. Before, the request kept its state on the fiber, and on a keep-alive connection the next request nested on it.
+
+### Security
+
+- The middleware hooks pass a client `X-Request-ID` into `stats["request_id"]` and `CQL.cache_summary` only when it is 1 to 128 of `A-Z a-z 0-9 . _ -`; before, any value went through, including control characters (an ANSI escape sequence, for one, that rewrites a terminal or log viewer) and values of any length. CR, LF and NUL cannot arrive through `Middleware::HTTP` (`HTTP::Headers` refuses them); they reached the tracker only from direct callers of `Middleware::Manual` or the Kemal hooks.
+
 ## [0.0.921] - 2026-10-27
 
 ### Deprecated

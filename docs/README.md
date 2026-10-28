@@ -4,6 +4,7 @@ icon: "house"
 ---
 
 # CQL (Crystal Query Language)
+<img width="1990" height="480" alt="cql-gitbook-cover" src="https://github.com/user-attachments/assets/1302281a-1ba9-453a-9328-a40fa4b3b4e7" />
 
 Schemas, models and queries are Crystal code, so a misspelled column or a value of the wrong type fails at compile time, and every value reaches the database as a bound parameter. CQL ships its own PostgreSQL driver.
 

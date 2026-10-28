@@ -534,25 +534,33 @@ module CQL
     config.build_fragment_cache
   end
 
+  # Whether request-scoped caching starts requests: `cache.on` and `cache.request_cache`.
+  def self.request_cache_tracking? : Bool
+    config.cache.on? && config.cache.request_cache?
+  end
+
   # Start request-scoped caching
   def self.start_request_cache(request_id : String? = nil) : Nil
-    return unless config.cache.on? && config.cache.request_cache?
+    return unless request_cache_tracking?
     CQL::Cache::RequestQueryCacheHelper.start_request(request_id)
   end
 
-  # End request-scoped caching
+  # End request-scoped caching. Not gated on the switches, so a request started before one of them was turned
+  # off still ends; on a fiber without a request it does nothing. With the switches off it still ends a request
+  # someone else started on this fiber: prefer `with_request_cache`, which ends only what it started.
   def self.end_request_cache : Nil
-    return unless config.cache.on? && config.cache.request_cache?
     CQL::Cache::RequestQueryCacheHelper.end_request
   end
 
-  # Execute block with request-scoped caching
+  # Execute block with request-scoped caching. The switches are read once: the block's request is started and
+  # ended only when they were on at the start, so a request started outside the block is never ended by it.
   def self.with_request_cache(request_id : String? = nil, &)
-    start_request_cache(request_id)
+    tracking = request_cache_tracking?
+    CQL::Cache::RequestQueryCacheHelper.start_request(request_id) if tracking
     begin
       yield
     ensure
-      end_request_cache
+      CQL::Cache::RequestQueryCacheHelper.end_request if tracking
     end
   end
 end

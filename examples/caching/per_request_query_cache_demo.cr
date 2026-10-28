@@ -7,7 +7,7 @@ include Beautify
 
 # Example demonstrating per-request query caching
 header("CQL Per-Request Query Cache Demo")
-info("Demonstrating automatic query deduplication within requests")
+info("Counting repeated queries within each request (an N+1 diagnostic: every query still runs)")
 config_item("Started at", timestamp)
 
 section("Setting up Database Schema")
@@ -29,6 +29,9 @@ schema = CQL::Schema.define(:cache_demo, "sqlite3://cache_demo.db", CQL::Adapter
     foreign_key :user_id, :users, :id
   end
 end
+
+# The middleware tracks only with cache.on and cache.request_cache (true by default)
+CQL.configure { |c| c.cache.on = true }
 
 # Create tables and insert test data
 schema.build
@@ -66,15 +69,15 @@ exec_time = Time.monotonic - start_time
 query_result("First execution", result1, false)
 performance("Execution time: #{execution_time(exec_time)}")
 
-# Same query again - this will hit the cache
+# Same query again - it runs again and is counted as a hit
 sub_header("Query #2: SELECT users WHERE age = 30 (identical SQL)")
 start_time = Time.monotonic
 result2 = query.all(User)
 exec_time = Time.monotonic - start_time
-query_result("Second execution", result2, true)
+query_result("Second execution (counted as a hit)", result2, false)
 performance("Execution time: #{execution_time(exec_time)}")
 
-# Different query - this will hit the database again
+# Different query - counted as a miss
 sub_header("Query #3: SELECT users WHERE age = 25 (different SQL)")
 result3 = schema.query.from(:users).where(age: 25).all(User)
 query_result("Third execution", result3, false)
@@ -83,9 +86,9 @@ query_result("Third execution", result3, false)
 cache_stats = CQL::Cache::Middleware::Manual.query_cache_stats
 stats(cache_stats)
 
-# End the request (clears cache)
+# End the request (drops its tracked statements)
 CQL::Cache::Middleware::Manual.end_request
-info("🏁 Request ended - cache cleared")
+info("🏁 Request ended - tracked statements dropped")
 
 step(2, "Automatic Request Block Management")
 info("Using with_request block for automatic cleanup")
@@ -119,15 +122,15 @@ CQL::Cache::Middleware::Manual.with_request("request-2") do
     .all(ShortUser)
   exec_time = Time.monotonic - start_time
 
-  query_result("Cached query", result2, true)
+  query_result("Repeated query (counted as a hit)", result2, false)
   performance("Execution time: #{execution_time(exec_time)}")
 
   stats(CQL::Cache::RequestQueryCache.instance.stats)
 end
-info("🏁 Block exited - cache automatically cleared")
+info("🏁 Block exited - tracked statements dropped")
 
 step(3, "Complex Queries with Joins")
-info("Testing cache with JOIN operations and complex SQL")
+info("Tracking JOIN operations and complex SQL")
 
 record UserPost, id : Int32, name : String, title : String do
   include DB::Serializable
@@ -169,7 +172,7 @@ CQL::Cache::Middleware::Manual.with_request("request-3") do
   result2 = join_query.all(UserPost)
   exec_time = Time.monotonic - start_time
 
-  query_result("Complex JOIN (cached)", result2, true)
+  query_result("Complex JOIN (counted as a hit)", result2, false)
   performance("Execution time: #{execution_time(exec_time)}")
 
   stats(CQL::Cache::RequestQueryCache.instance.stats)
@@ -206,14 +209,14 @@ end
   start_time = Time.monotonic
   result1 = user_query.all(User)
   exec_time = Time.monotonic - start_time
-  query_result("Database hit", result1, false)
+  query_result("First query", result1, false)
   performance("Response time: #{execution_time(exec_time)}")
 
   sub_header("API Endpoint Query #2 (same request)")
   start_time = Time.monotonic
   result2 = user_query.all(User)
   exec_time = Time.monotonic - start_time
-  query_result("Cache hit", result2, true)
+  query_result("Same query (counted as a hit)", result2, false)
   performance("Response time: #{execution_time(exec_time)}")
 
   success("Results identical: #{result1 == result2}")
@@ -221,19 +224,19 @@ end
 
   # End request (like after_all middleware)
   CQL::Cache::Middleware::Kemal.after_request(env)
-  info("🏁 Request #{request_id} completed - cache cleared")
+  info("🏁 Request #{request_id} completed - its tracked statements dropped")
   empty_line
 end
 
-step(5, "Performance Benchmarking")
-info("Comparing performance with and without query caching")
+step(5, "Tracking Overhead")
+info("Timing 100 identical queries with and without tracking: every query runs both times")
 
 # Disable cache to show performance difference
-section("Benchmark: Without Cache")
+section("Benchmark: Without Tracking")
 CQL::Cache::RequestQueryCacheHelper.enabled = false
-warning("Cache disabled for baseline measurement")
+warning("Tracking disabled for baseline measurement")
 
-info("Running 100 identical queries without cache...")
+info("Running 100 identical queries without tracking...")
 start_time = Time.monotonic
 100.times do
   schema.query.from(:users).all(User)
@@ -243,12 +246,12 @@ performance("Total time: #{execution_time(no_cache_time)}")
 performance("Average per query: #{execution_time(no_cache_time / 100)}")
 
 # Enable cache
-section("Benchmark: With Cache")
+section("Benchmark: With Tracking")
 CQL::Cache::RequestQueryCacheHelper.enabled = true
 CQL::Cache::RequestQueryCacheHelper.start_request("perf-test")
-success("Cache enabled for performance test")
+success("Tracking enabled")
 
-info("Running 100 identical queries with cache...")
+info("Running 100 identical queries with tracking...")
 start_time = Time.monotonic
 100.times do
   schema.query.from(:users).all(User)
@@ -257,20 +260,20 @@ with_cache_time = Time.monotonic - start_time
 
 CQL::Cache::RequestQueryCacheHelper.end_request
 
-performance_comparison("Without Cache (100 queries)", no_cache_time, "With Cache (100 queries)", with_cache_time)
+performance("Without tracking: #{execution_time(no_cache_time)}")
+performance("With tracking: #{execution_time(with_cache_time)} (no rows are served from the tracker: any difference is noise or its overhead)")
 
 stats(CQL::Cache::RequestQueryCache.instance.stats)
 
-header("Key Benefits Summary")
-feature_list("Per-Request Query Cache Benefits", [
-  "Automatic SQL query deduplication per request",
-  "Zero configuration - just add middleware",
-  "Thread-safe and memory efficient",
-  "Works with any query type (selects, counts, aggregates)",
-  "Cache automatically clears between requests",
-  "Provides detailed statistics for monitoring",
-  "Supports all major Crystal web frameworks",
-  "Significant performance improvements for duplicate queries",
+header("What the Request Query Tracker Does")
+feature_list("Per-Request Query Tracker", [
+  "Counts repeated identical selects within a request (an N+1 diagnostic)",
+  "Stores and serves no rows: every query still runs",
+  "Each request fiber has its own id, statements and counters",
+  "Queries from fibers a request spawns are not tracked",
+  "Tracks only with cache.on and cache.request_cache in CQL.configure",
+  "Drops a request's statements when it ends",
+  "Hooks for HTTP::Server, Kemal, Lucky, Amber and SpiderGazelle",
 ])
 
 demo_complete("Per-Request Query Cache Demo")
