@@ -168,6 +168,13 @@ module CQL
       # - **param** : id (Pk)
       # - **return** : Target? - The target record if association was removed, nil otherwise
       def delete(id : Pk) : Target?
+        return unlink(id) unless @dependent == :destroy
+        unlinked = nil
+        all_or_none { unlinked = unlink(id) }
+        unlinked
+      end
+
+      private def unlink(id : Pk) : Target?
         record_to_remove = @records.find { |record| record.id == id } if @loaded
 
         # Delete the association record from the join table
@@ -236,12 +243,10 @@ module CQL
           # Get target records before clearing associations
           target_records = all.dup
 
-          # Clear join table associations
-          clear_join_records
-
-          # Destroy the target records as well (cascade)
-          target_records.each do |record|
-            safe_db_operation { record.delete! }
+          # Clear join table associations and destroy the targets, all or none
+          all_or_none do
+            clear_join_records
+            target_records.each { |record| safe_db_operation { record.delete! } }
           end
         else
           clear_join_records

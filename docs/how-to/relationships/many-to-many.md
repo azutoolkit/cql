@@ -112,7 +112,7 @@ post.tags.clear             # unlinks every tag, following dependent:
 post.tags.delete_all        # => Int64 join rows removed; the tags stay, whatever dependent: says
 ```
 
-`remove_tag`, `delete` and `clear` delete the join rows; then `:nullify` keeps the tags, `:destroy` calls each tag's `delete!`, and `:delete_all` deletes the tag rows. `nullify_all` is the same as `delete_all`, because the link lives in the join row.
+`remove_tag`, `delete` and `clear` delete the join rows; then `:nullify` keeps the tags, `:destroy` calls each tag's `delete!`, and `:delete_all` deletes the tag rows. With `:destroy`, the join rows and the tags go in one transaction on the tag's schema: when a tag's `delete!` raises (a stale [locked](../models/optimistic-locking.md) one), every join row and tag stays. A join model on another schema has its rows deleted outside that transaction. `nullify_all` is the same as `delete_all`, because the link lives in the join row.
 
 ## Delete the Owner
 

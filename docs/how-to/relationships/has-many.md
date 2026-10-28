@@ -102,6 +102,8 @@ user.posts.clear             # follows dependent: (nullifies when undeclared or 
 user.posts.ids = [3_i64, 4_i64] # points those posts at the user
 ```
 
+With `dependent: :destroy`, `clear` calls each post's `delete!` in one transaction: when one raises (a stale [locked](../models/optimistic-locking.md) post), it rolls back and every post stays, those deleted before it included.
+
 ## When the Parent Is Deleted
 
 `dependent:` chooses what `user.delete!` does with the user's posts. It reads them from the database, so it covers posts never loaded or added since `user.posts` was loaded:
