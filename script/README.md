@@ -159,3 +159,15 @@ How to steer `compile_snippets.py` with `<!-- docs-check: ... -->` comments is i
 - [Native PostgreSQL Driver](../README.md#native-postgresql-driver): the results these scripts produced
 - [benchmarks/README.md](../benchmarks/README.md): the performance scripts
 - `spec/postgres/`: the specs these scripts drive
+
+## MySQL 8.4 authentication fixture
+
+`script/mysql84-fixture start`, `run`, then `stop` provisions a disposable Docker server on loopback port 13308,
+with a test CA, `require_secure_transport=ON` and the default `caching_sha2_password` plugin. The run command
+flushes the authentication cache and executes the authentication and dialect contracts with no pending cases.
+It needs Docker, OpenSSL, Crystal and installed shards. Override `CQL_MYSQL_PORT`, `CQL_MYSQL_CONTAINER` and
+`CQL_MYSQL_DIR` to avoid an existing fixture; `stop` removes only its labeled container and generated files.
+Always run `stop`, including after a failed test. The CA and keys are disposable and must never be deployed.
+
+`script/pgbouncer-matrix run` requires all four configured poolers. The release workflow runs these tests after
+preparing the PostgreSQL SCRAM roles, alongside the direct-driver TLS probes.

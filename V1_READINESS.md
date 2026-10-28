@@ -96,6 +96,43 @@ These results resolve the four reproduced blockers. Hosted CI still must pass on
 The earlier crystal-db compatibility check passed for 0.13.1, 0.14.0, 0.15.0 and latest; it is a compilation check,
 not a live dialect test.
 
+### MySQL 8.4 and optional PgBouncer follow-up
+
+The optional `require "cql/mysql"` entry point now adds modern authentication and TLS to the tested
+`crystal-mysql` 0.16 transport/query implementation. It supports `caching_sha2_password` cold/full and cached
+exchanges, a bounded plugin switch, and legacy native-password authentication. TLS verifies the CA and hostname
+by default; full-password authentication is refused on plaintext. Handshake packets have length/sequence checks,
+a total authentication deadline closes stalled sockets, and authentication errors omit server-provided text.
+The integration is opt-in; requiring only `mysql` retains upstream behavior. RSA key retrieval, other plugins,
+mutual TLS and newer crystal-mysql versions are outside this validated configuration.
+
+`script/mysql84-fixture` provisions MySQL 8.4 with secure transport required, a disposable CA and the default
+plugin. It clears the server auth cache before testing. Release CI runs this fixture plus the legacy MySQL 8.0
+contract. The existing TLS job now also provisions four PgBouncer modes and requires all ten pooler tests;
+missing services fail instead of silently becoming pending. Readiness probes fail on startup timeout.
+
+Follow-up evidence (Crystal 1.22.1 unless stated otherwise):
+
+- MySQL **8.4.13**: **10 passed**, no pending: cold/warm authentication, verified encryption, wrong password,
+  untrusted CA, wrong hostname, plaintext refusal, 16 concurrent clients × 10 bound queries on a three-connection
+  pool, optimistic locking, nested savepoints and explicit isolation. Native-password authentication remains
+  disabled on this server.
+- MySQL **8.0.46** legacy native-password contract through the new integration: **4 passed**, no pending.
+- Authentication packet/deadline regression tests: **10 passed** on both Crystal **1.22.1** and **1.19.1**.
+- PgBouncer **1.24.1**, PostgreSQL **17**: **10 passed**, no pending, both normally and with four worker threads.
+  Modes: session pooling; transaction pooling with 100 prepared statements; transaction pooling with prepared
+  statements disabled and either one or three backend connections. These are SCRAM loopback fixtures, not a
+  validation of a deployed TLS-terminating proxy. CI uses the Ubuntu 24.04 PgBouncer package.
+- Full suite with PostgreSQL 17, TLS and all four PgBouncer fixtures: **3,494 examples, zero failures/errors,
+  2 pending** (optional version-matrix and CockroachDB binary-parameter fixtures). This run included the initial
+  nine MySQL unit cases; the final ten-case authentication suite above also covers stalled TLS handshakes.
+- PostgreSQL 17 version-matrix contract: **7 passed**, no pending, before restarting the four poolers.
+- PostgreSQL direct-driver TLS probes passed. CI lint: **398 files, zero failures**; formatting passed.
+  Documentation checks passed for **107 Markdown files**, **90 GitBook pages**, and **4 compiled programs**.
+
+The PgBouncer results do not extend to untested RDS Proxy, Supavisor or other pgpool-II configurations. Existing
+pgcat and pgpool-II streaming limitations remain documented. Hosted CI still must pass on this follow-up commit.
+
 ### Remaining publication and application checks
 
 - Review the final PR commit and pass hosted CI, including every new required job. GitHub API access is currently
@@ -108,5 +145,6 @@ not a live dialect test.
 - Validate the actual application's TLS/proxy topology, database privileges, migration serialization, failover,
   backups/PITR, workload/SLO and telemetry export. Single-node transactional tests cannot establish distributed
   durability, cross-region recovery or a production capacity limit.
-- MySQL's external driver has authentication limitations documented in the database support guide. PostgreSQL
-  geo operators also require PostGIS; SQL generation tests do not prove that extension is deployed.
+- Use the documented optional MySQL integration for default MySQL 8.4 authentication and verified TLS; other
+  plugins and TLS topologies need their own validation. PostgreSQL geo operators require PostGIS; SQL generation
+  tests do not prove that extension is deployed.

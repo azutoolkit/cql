@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts three PgBouncer instances in front of one PostgreSQL server (needs `pgbouncer` installed and the
+# Starts four PgBouncer instances in front of one PostgreSQL server (needs `pgbouncer` installed and the
 # role cql_scram, which `script/pg-matrix run` creates: run that once first) and runs
 # spec/postgres/pgbouncer_spec.cr against them. For throwaway test machines and CI only.
 #
@@ -20,6 +20,7 @@ as_server_user() {
 }
 
 start() {
+  "$PGBOUNCER" --version
   mkdir -p "$DIR"
   if [ "$(id -u)" = 0 ]; then chown postgres "$DIR"; fi
   echo '"cql_scram" "secret"' > "$DIR/userlist.txt"
@@ -44,7 +45,16 @@ logfile = $DIR/$name.log
 INI
     if [ "$(id -u)" = 0 ]; then chown postgres "$DIR/$name.ini" "$DIR/userlist.txt"; fi
     as_server_user "'$PGBOUNCER' -d '$DIR/$name.ini'"
-    for _ in $(seq 50); do (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break; sleep 0.1; done
+    local ready=false
+    for _ in {1..50}; do
+      if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then ready=true; break; fi
+      sleep 0.1
+    done
+    if [ "$ready" != true ]; then
+      echo "PgBouncer $name failed readiness on port $port" >&2
+      cat "$DIR/$name.log" >&2
+      exit 1
+    fi
     echo "PgBouncer ($mode, max_prepared_statements=$prepared) on 127.0.0.1:$port"
   done
 }
@@ -59,6 +69,6 @@ stop() {
 case "${1:-}" in
   start) start ;;
   stop) stop ;;
-  run) CQL_PGB_TX=6501 CQL_PGB_TX_PS=6502 CQL_PGB_SESSION=6503 CQL_PGB_TX_MULTI=6504 crystal spec spec/postgres/pgbouncer_spec.cr ;;
+  run) CQL_PGB_REQUIRED=1 CQL_PGB_TX=6501 CQL_PGB_TX_PS=6502 CQL_PGB_SESSION=6503 CQL_PGB_TX_MULTI=6504 crystal spec spec/postgres/pgbouncer_spec.cr ;;
   *) echo "usage: $0 start|run|stop" >&2; exit 2 ;;
 esac

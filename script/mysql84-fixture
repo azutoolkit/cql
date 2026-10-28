@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Disposable loopback-only MySQL 8.4 with default authentication and required TLS.
+# Commands: start | run | stop. Needs docker, openssl, crystal and installed shards.
+set -euo pipefail
+NAME="${CQL_MYSQL_CONTAINER:-cql-mysql84-validation}"
+DIR="${CQL_MYSQL_DIR:-/tmp/cql-mysql84-validation}"
+PORT="${CQL_MYSQL_PORT:-13308}"
+LABEL=cql.mysql84.validation
+if [[ -L "$DIR" || "$DIR" != /* || "$DIR" == / ]]; then
+  echo "mysql84-fixture: use an absolute, non-symlink fixture directory" >&2; exit 1
+fi
+owned() { [[ "$(docker inspect --format '{{index .Config.Labels "cql.mysql84.validation"}}' "$NAME" 2>/dev/null)" == "$DIR" ]]; }
+admin() { docker exec -e MYSQL_PWD=cql-validation-only "$NAME" mysql -uroot "$@"; }
+case "${1:-}" in
+  start)
+    if docker inspect "$NAME" >/dev/null 2>&1 || [[ -e "$DIR" ]]; then
+      echo "mysql84-fixture: name or directory already exists; stop its fixture or select a new one" >&2; exit 1
+    fi
+    mkdir -m 700 -p "$DIR"
+    touch "$DIR/.cql-owned"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj '/CN=CQL disposable MySQL CA' \
+      -keyout "$DIR/ca-key.pem" -out "$DIR/ca.pem" >/dev/null 2>&1
+    openssl req -newkey rsa:2048 -nodes -subj '/CN=127.0.0.1' \
+      -keyout "$DIR/server-key.pem" -out "$DIR/server.csr" >/dev/null 2>&1
+    printf 'subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\n' > "$DIR/server.ext"
+    openssl x509 -req -in "$DIR/server.csr" -CA "$DIR/ca.pem" -CAkey "$DIR/ca-key.pem" \
+      -CAcreateserial -days 2 -extfile "$DIR/server.ext" -out "$DIR/server-cert.pem" >/dev/null 2>&1
+    chmod 600 "$DIR/"*key.pem
+    docker run -d --name "$NAME" --label "$LABEL=$DIR" -p "127.0.0.1:$PORT:3306" \
+      -e MYSQL_ROOT_PASSWORD=cql-validation-only -e MYSQL_DATABASE=cql_v1 \
+      mysql:8.4 --require-secure-transport=ON
+    ready=false
+    for _ in {1..90}; do
+      if admin --protocol=TCP --host=127.0.0.1 --ssl-mode=REQUIRED -e 'SELECT 1' >/dev/null 2>&1; then ready=true; break; fi
+      sleep 1
+    done
+    if [[ "$ready" != true ]]; then docker logs "$NAME"; exit 1; fi
+    for file in ca.pem server-cert.pem server-key.pem; do docker cp "$DIR/$file" "$NAME:/var/lib/mysql/$file"; done
+    docker exec -u root "$NAME" chown mysql:mysql /var/lib/mysql/ca.pem /var/lib/mysql/server-cert.pem /var/lib/mysql/server-key.pem
+    admin -e "ALTER INSTANCE RELOAD TLS;
+      CREATE USER 'cql'@'%' IDENTIFIED WITH caching_sha2_password BY 'cql-validation-only' REQUIRE SSL;
+      GRANT ALL ON cql_v1.* TO 'cql'@'%';
+      GRANT SELECT ON performance_schema.* TO 'cql'@'%';
+      UPDATE performance_schema.setup_consumers SET ENABLED='YES' WHERE NAME='events_transactions_current';"
+    ;;
+  run)
+    owned || { echo 'mysql84-fixture: owned container missing' >&2; exit 1; }
+    # Invalidate the auth cache so the first connection exercises full TLS auth.
+    admin -e 'FLUSH PRIVILEGES'
+    export CQL_ENTERPRISE_DIALECT=mysql
+    export CQL_MYSQL_CA="$DIR/ca.pem"
+    export CQL_ENTERPRISE_URL="mysql://cql:cql-validation-only@127.0.0.1:$PORT/cql_v1?ssl-ca=$DIR/ca.pem"
+    crystal spec validation/mysql_auth_spec.cr validation/dialect_spec.cr
+    ;;
+  stop)
+    if owned; then docker rm -f "$NAME"; fi
+    if [[ -f "$DIR/.cql-owned" ]]; then
+      rm -f "$DIR/ca-key.pem" "$DIR/server-key.pem" "$DIR/ca.pem" "$DIR/server-cert.pem" \
+        "$DIR/server.csr" "$DIR/server.ext" "$DIR/ca.srl" "$DIR/.cql-owned"
+      rmdir "$DIR"
+    fi
+    ;;
+  *) echo "usage: $0 start|run|stop" >&2; exit 2 ;;
+esac

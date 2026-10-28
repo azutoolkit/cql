@@ -1,6 +1,6 @@
 require "spec"
 require "sqlite3"
-require "mysql"
+require "../src/cql/mysql"
 require "../src/cql"
 
 # Deliberately fails if the requested server is missing: no pending matrix jobs.

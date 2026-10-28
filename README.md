@@ -86,13 +86,18 @@ dependencies:
     version: ~> 0.0.861
   sqlite3: # for SQLite
     github: crystal-lang/crystal-sqlite3
-  mysql: # for MySQL
+  mysql: # for MySQL; used by the optional cql/mysql integration
     github: crystal-lang/crystal-mysql
+    version: ~> 0.16.0
 ```
 
 > [!NOTE]
 > PostgreSQL and CockroachDB need nothing more, because CQL ships the driver. CQL needs Crystal 1.19.1 or later; CI
 > tests Crystal 1.19.1 and 1.22.1.
+
+For MySQL 8.4, use `require "cql/mysql"` to enable `caching_sha2_password` and verified TLS.
+Set `ssl-ca=/path/to/ca.pem` in the database URL for a private CA; see
+[MySQL configuration](docs/how-to/configuration/database-connection.md#mysql-authentication-and-tls).
 
 ## Quick Start
 
@@ -185,7 +190,7 @@ go. [How CQL Keeps Queries Fast](docs/explanation/performance-design.md) walks t
 | :--- | :--- | :--- | :--- | :--- |
 | SQLite | `CQL::Adapter::SQLite` | `sqlite3://` | `sqlite3` shard | the spec suite runs live |
 | PostgreSQL | `CQL::Adapter::Postgres` | `postgres://`, `postgresql://` | built in | generated-SQL specs; driver live specs on PostgreSQL 11 to 18 |
-| MySQL | `CQL::Adapter::MySql` | `mysql://` | `mysql` shard | generated-SQL specs |
+| MySQL | `CQL::Adapter::MySql` | `mysql://` | `mysql` shard + `require "cql/mysql"` | live MySQL 8.0/8.4 transaction and authentication contracts |
 | CockroachDB | `CQL::Adapter::CockroachDB` | `cockroachdb://` | built in | generated-SQL specs; driver live specs on CockroachDB 24.3 |
 
 Feature differences, such as upsert, `RETURNING`, `DISTINCT ON`, locking, JSON and the minimum versions for CTEs and

@@ -12,7 +12,7 @@ In the tables, "raises" means CQL raises `CQL::DialectError` (or the subclass na
 | :--- | :--- | :--- | :--- |
 | `CQL::Adapter::SQLite` | `Expression::SqliteDialect` | `sqlite3://path`, `sqlite3::memory:` | `sqlite3` shard |
 | `CQL::Adapter::Postgres` | `Expression::PostgresDialect` | `postgres://`, `postgresql://` | native `CQL::Postgres` driver (or `pg` if it registers first) |
-| `CQL::Adapter::MySql` | `Expression::MySqlDialect` | `mysql://` | `mysql` shard |
+| `CQL::Adapter::MySql` | `Expression::MySqlDialect` | `mysql://` | `mysql` shard; `require "cql/mysql"` for modern authentication/TLS |
 | `CQL::Adapter::CockroachDB` | `Expression::CockroachDialect` < `PostgresDialect` | `cockroachdb://` | native driver, as `postgres://` |
 
 | Method | Returns |
@@ -48,15 +48,16 @@ generated-SQL tests cover the broader dialect syntax. See the tested versions an
 ## Queries
 
 The release validation matrix exercises optimistic locking, nested savepoints and isolation on SQLite, PostgreSQL,
-MySQL 8.0 with `mysql_native_password` as the server default, and CockroachDB 24.3. SQLite rejects explicit
+MySQL 8.0 with legacy `mysql_native_password`, MySQL 8.4 with default `caching_sha2_password` and verified TLS,
+and CockroachDB 24.3. SQLite rejects explicit
 `read_committed`; CockroachDB may strengthen a requested level to `serializable`. Server durability settings and
 storage determine crash guarantees; CQL does not override them to claim ACID behavior.
 
-The current dependency resolution selects `crystal-mysql` 0.16 with `crystal-db` 0.13. Its authentication exchange
-does not support MySQL's default `caching_sha2_password` or authentication-switch packets. MySQL 8.4 failed the
-connection probe even with a native-password user; it is not covered by this release's live validation. Do not
-weaken an existing deployment's authentication to match a test fixture. Such deployments need a compatible driver
-and separate authentication/TLS validation.
+The optional `require "cql/mysql"` integration adds modern authentication to the tested `crystal-mysql` 0.16 /
+`crystal-db` 0.13 combination. It verifies TLS identity by default and rejects plaintext full-password authentication.
+The original `require "mysql"` entry point alone does not gain this behavior. See
+[MySQL authentication and TLS](../how-to/configuration/database-connection.md#mysql-authentication-and-tls)
+for supported options and limitations. Do not weaken a deployment's authentication to match a legacy fixture.
 
 | Feature | SQLite | PostgreSQL | MySQL | CockroachDB |
 | :--- | :--- | :--- | :--- | :--- |

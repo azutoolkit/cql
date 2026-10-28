@@ -73,7 +73,7 @@ Not tested: RDS Proxy, Supavisor, other pgpool-II settings.
 ```crystal
 # Transaction-mode pooler without prepared-statement support: named statements collide between
 # clients (SQLSTATE 42P05, or 26000 on the next server connection). Use the unnamed statement:
-"postgres://app:secret@pgbouncer.internal:6432/app?statement_cache_size=0&max_protocol_version=3.0"
+"postgres://app:secret@pgbouncer.internal:6432/app?sslmode=verify-full&statement_cache_size=0&max_protocol_version=3.0"
 # Pipelining needs the cache, so engine.pipeline raises ArgumentError there.
 # In transaction mode a stream's portal pins the pooler's server connection until its block ends.
 ```
@@ -84,6 +84,15 @@ POOLER_NAME=pgbouncer POOLER_PORT=6432 POOLER_USER=app POOLER_PASSWORD=secret cr
 # Nine probes: connect, cached statements, interleaved clients, statement_cache_size=0, pipelining,
 # SET LOCAL, timeout cancel, streaming, savepoints. POOLER_QUERY adds URL options (default sslmode=disable).
 ```
+
+The release workflow runs all ten PgBouncer regression cases against four disposable configurations:
+transaction pooling with prepared statements disabled (one and three backend connections), transaction pooling
+with `max_prepared_statements=100`, and session pooling. Missing services fail that job instead of becoming pending.
+Local validation uses PgBouncer 1.24.1; CI installs the Ubuntu 24.04 package and records its version.
+The tests cover statement-name collisions and their `statement_cache_size=0` remedy, interleaved clients,
+`SET LOCAL` isolation, streaming, pipelining, cancellation and rollback after an abandoned transaction.
+These fixtures use loopback SCRAM connections; the separate TLS tests exercise the native driver directly.
+They do not validate TLS termination, failover or certificate rotation in your deployed proxy topology.
 
 ## Timeouts and Cancel
 

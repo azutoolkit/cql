@@ -20,6 +20,7 @@ development_dependencies:
     github: crystal-lang/crystal-sqlite3
   mysql:
     github: crystal-lang/crystal-mysql
+    version: ~> 0.16.0
   pg:
     github: will/crystal-pg
     version: ~> 0.29.0
