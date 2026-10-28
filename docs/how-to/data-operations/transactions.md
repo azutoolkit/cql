@@ -163,7 +163,8 @@ error. Only the native PostgreSQL driver's errors, on PostgreSQL and CockroachDB
 Only this transaction's work is undone before the block runs again. Build or load the records the block changes inside
 it: a rolled-back record keeps its `id` and attributes, so one from outside writes nothing (its `save!` updates no row
 and succeeds) or is changed twice. Everything else runs again: writes through another schema or connection, fibers the
-block spawned, emails, HTTP calls. Do not call `tx.commit` in the block.
+block spawned, emails, HTTP calls. A run whose block ended the transaction itself (`tx.commit`, `tx.rollback`) is not
+retried; a `COMMIT` or `ROLLBACK` statement it sends itself is not detected, so do not send one.
 {% endhint %}
 
 ## Observe Transactions

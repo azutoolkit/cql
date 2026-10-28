@@ -43,6 +43,34 @@ describe "CQL::Schema#retrying_transaction" do
     {error.server_message, runs}.should eq({"run 3", 5}) # the first call's last error, then 2 runs of the second
   end
 
+  it "does not run a block again once it ended the transaction itself, which may have committed its work" do
+    {:commit, :rollback}.each do |ending|
+      plain.exec("DELETE FROM tx_retry_rows")
+      runs = 0
+      expect_raises(CQL::Postgres::SerializationFailure) do
+        retrying.retrying_transaction do |tx|
+          runs += 1
+          tx.connection.exec("INSERT INTO tx_retry_rows (label) VALUES ('ended')")
+          ending == :commit ? tx.commit : tx.rollback
+          retrying.exec("INSERT INTO tx_retry_rows (label) VALUES ('after')") if ending == :rollback # autocommits
+          raise server_error("40001")
+        end
+      end
+      runs.should eq 1
+      plain.exec_query(&.scalar("SELECT COUNT(*) FROM tx_retry_rows")).should eq 1
+    end
+  end
+
+  it "still runs a block again after a savepoint in it committed, as the transaction itself did not end" do
+    runs = 0
+    retrying.retrying_transaction do |tx|
+      runs += 1
+      tx.transaction { |savepoint| savepoint.connection.exec("INSERT INTO tx_retry_rows (label) VALUES (?)", "run #{runs}") }
+      raise server_error("40001") if runs == 1
+    end
+    {runs, plain.exec_query(&.query_all("SELECT label FROM tx_retry_rows", as: String))}.should eq({2, ["run 2"]})
+  end
+
   it "raises an error that is not retryable after one run, as does a dialect that retries nothing" do
     [{retrying, server_error("23505")}, {retrying, RuntimeError.new("boom")}, {plain, server_error("40001")}].each do |(schema, error)|
       runs = 0
