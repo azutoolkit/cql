@@ -470,6 +470,24 @@ describe "CQL::Postgres against a live server" do
     end
   end
 
+  it "runs a Schema#retrying_transaction again after a real serialization failure, through the engine" do
+    require_live!
+    pending! "CockroachDB's REPEATABLE READ differs" if cockroach?
+    other = live_session # commits between the first run's read and its write
+    other.simple_query("INSERT INTO cql_wire_live_accounts (name, balance) VALUES ('shared', 10)")
+    schema = CQL::Schema.new(:retry_live, LIVE_URL, CQL::Adapter::Postgres, source: PG::EngineSource.connect(LIVE_URL))
+    runs = 0
+    schema.retrying_transaction(isolation: :repeatable_read) do |tx|
+      balance = tx.connection.scalar("SELECT balance FROM cql_wire_live_accounts WHERE name = 'shared'").as(Int64)
+      other.simple_query("UPDATE cql_wire_live_accounts SET balance = balance + 1 WHERE name = 'shared'") if (runs += 1) == 1
+      tx.connection.exec("UPDATE cql_wire_live_accounts SET balance = $1 WHERE name = 'shared'", balance * 2)
+    end
+    {runs, other.query("SELECT balance FROM cql_wire_live_accounts").rows}.should eq({2, [[22_i64]]})
+  ensure
+    schema.try &.close
+    other.try &.close
+  end
+
   it "rolls back to a savepoint without ending the surrounding transaction" do
     require_live!
     engine = PG::AsyncEngine.connect(LIVE_URL)

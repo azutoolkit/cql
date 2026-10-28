@@ -234,6 +234,11 @@ module Expression
       set_transaction_sql(isolation, read_only)
     end
 
+    # SQLSTATE 40001 and 40P01 from CQL's own driver only (the `pg` shard's errors are not retried).
+    def retryable_transaction_error?(error : Exception) : Bool
+      error.is_a?(CQL::Postgres::SerializationFailure | CQL::Postgres::DeadlockDetected)
+    end
+
     # REPEATABLE READ and SERIALIZABLE take their snapshot at the lock statement, before it waits.
     def migration_lock_isolation_safe?(level : String) : Bool
       level.in?("read committed", "read uncommitted")

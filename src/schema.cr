@@ -574,3 +574,5 @@ module CQL
     end
   end
 end
+
+require "./schema/transaction_retry"

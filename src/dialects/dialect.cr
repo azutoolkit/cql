@@ -57,6 +57,12 @@ module Expression
       false
     end
 
+    # Whether *error* means the database undid the whole transaction over a clash with a concurrent one, so
+    # `Schema#retrying_transaction` runs it again. False unless a dialect knows such errors: any other would recur.
+    def retryable_transaction_error?(error : Exception) : Bool
+      false
+    end
+
     # Whether a migrator that waited for `migration_lock_sql` at *level* (as `transaction_isolation_sql` reads it)
     # sees what the holder committed.
     def migration_lock_isolation_safe?(level : String) : Bool

@@ -144,6 +144,28 @@ implicitly. Fibers spawned in the block use connections of their own. To enforce
 database role without write privileges, or to a read-only replica.
 {% endhint %}
 
+## Retry Serialization Failures
+
+```crystal
+AppDB.retrying_transaction(isolation: :serializable) do
+  from = Account.find!(from_id)
+  from.balance_cents -= cents
+  from.save!
+end
+```
+
+`retrying_transaction` takes the same `isolation:` and `read_only:` and, on a serialization failure or a deadlock,
+runs the whole block again after a short random pause, up to `attempts` runs (3 by default), then raises the last
+error. Only the native PostgreSQL driver's errors, on PostgreSQL and CockroachDB, are retried: other databases and the
+`pg` shard run the block once. Inside another transaction it raises `ArgumentError`.
+
+{% hint style="warning" %}
+Only this transaction's work is undone before the block runs again. Build or load the records the block changes inside
+it: a rolled-back record keeps its `id` and attributes, so one from outside writes nothing (its `save!` updates no row
+and succeeds) or is changed twice. Everything else runs again: writes through another schema or connection, fibers the
+block spawned, emails, HTTP calls. Do not call `tx.commit` in the block.
+{% endhint %}
+
 ## Observe Transactions
 
 `CQL::Telemetry.subscribe_transactions` reports each `Begin`, `Commit` and `Rollback` with its duration; see [Telemetry](../observability/telemetry.md#transactions).
