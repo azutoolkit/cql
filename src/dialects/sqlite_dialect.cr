@@ -222,10 +222,14 @@ module Expression
       raise CQL::DialectError.new(display_name, "the #{isolation.to_sql.downcase} isolation level")
     end
 
-    # SQLite runs in process, so no reply is lost: a COMMIT that raised did not commit.
+    # BUSY, LOCKED and CONSTRAINT (a deferred foreign key) leave the transaction open and uncommitted; after IOERR,
+    # FULL, CORRUPT or any other result a COMMIT that raised may be durable.
     def commit_refused?(error : Exception) : Bool
       {% if @top_level.has_constant?(:SQLite3) %}
-        return true if error.is_a?(SQLite3::Exception)
+        if error.is_a?(SQLite3::Exception)
+          primary = LibSQLite3::Code.new(error.code & 0xff) # an extended code keeps its primary one in the low byte
+          return primary.busy? || primary.locked? || primary.constraint?
+        end
       {% end %}
       false
     end

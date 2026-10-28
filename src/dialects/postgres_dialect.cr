@@ -239,8 +239,9 @@ module Expression
       error.is_a?(CQL::Postgres::SerializationFailure | CQL::Postgres::DeadlockDetected)
     end
 
-    # A server's ERROR answer (CQL's driver, or the `pg` shard when loaded) or a request never sent; not a FATAL or 08
-    # answer (a pooler that lost the server) nor 40003 (CockroachDB's ambiguous COMMIT), which may follow a commit.
+    # A server's ERROR answer (CQL's driver, or the `pg` shard when loaded) or a request never sent (CQL's driver may
+    # wrap that in crystal-db's `ConnectionLost`, which alone can follow a sent one); not a FATAL or 08 answer (a pooler
+    # that lost the server) nor 40003 (CockroachDB's ambiguous COMMIT), which may follow a commit.
     def commit_refused?(error : Exception) : Bool
       {% if @top_level.has_constant?(:PQ) %}
         if error.is_a?(PQ::PQError)
@@ -249,6 +250,7 @@ module Expression
         end
       {% end %}
       return definite_refusal?(error.severity, error.sqlstate) if error.is_a?(CQL::Postgres::ServerError)
+      return error.cause.is_a?(CQL::Postgres::ConnectionClosed) if error.is_a?(::DB::ConnectionLost)
       error.is_a?(CQL::Postgres::TransactionAborted | CQL::Postgres::ConnectionClosed)
     end
 
