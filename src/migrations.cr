@@ -163,6 +163,41 @@ module CQL
       down(steps)
     end
 
+    # Execute an operator-reviewed plan, checking the complete version sets
+    # while holding the same lock used by normal migration commands. An exact
+    # latest version is required for rollback; it never means "whatever is last".
+    # Nontransactional migrations need a separate manual operational procedure.
+    def apply_reviewed(expected_applied : Array(Int64), expected_pending : Array(Int64), rollback_version : Int64? = nil) : Nil
+      reject_duplicate_versions!
+      unless schema.dialect.supports_transactional_ddl?
+        raise Error.new("Reviewed execution requires transactional DDL; use a manual procedure for this dialect")
+      end
+      schema.ddl_transaction do
+        @lock.acquire
+        current_applied = applied_migrations.map(&.version).sort!
+        current_pending = pending_migrations.map(&.version).sort!
+        unless current_applied == expected_applied.sort && current_pending == expected_pending.sort
+          raise Error.new("Migration state changed since review; prepare a new migration plan. Nothing was executed")
+        end
+        if version = rollback_version
+          unless current_applied.last? == version
+            raise Error.new("Reviewed rollback must identify the latest applied migration; prepare a new plan")
+          end
+          migration = applied_migration_classes.find { |item| item.version == version } || raise Error.new("Reviewed migration source is missing")
+          raise Error.new("Reviewed execution does not support disable_ddl_transaction! migrations") unless migration.ddl_transaction?
+          migration.new(schema).down
+          remove_migration_record(migration)
+        else
+          pending = pending_migrations
+          unless pending.all?(&.ddl_transaction?)
+            raise Error.new("Reviewed execution does not support disable_ddl_transaction! migrations; use a manual procedure")
+          end
+          pending.each { |migration| apply(migration) }
+        end
+      end
+      sync_schema_file if config.auto_sync?
+    end
+
     # Redoes the last migration.
     # **Example** Redoing migrations
     # ```

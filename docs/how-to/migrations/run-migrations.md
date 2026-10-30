@@ -82,6 +82,27 @@ On PostgreSQL a run holds its DDL locks until the final commit, and `CREATE INDE
 
 ## Check Status
 
+### Execute a reviewed plan
+
+Operator tools can capture the applied and pending version sets, obtain human review, then recheck them at execution:
+
+```crystal
+applied = migrator.applied_migrations.map(&.version)
+pending = migrator.pending_migrations.map(&.version)
+# Persist these sets with your review; do not recalculate them at execution.
+migrator.apply_reviewed(applied, pending)
+# To roll back, review a new snapshot and pass its exact latest version:
+# migrator.apply_reviewed(reviewed_applied, reviewed_pending, reviewed_version)
+```
+
+On PostgreSQL the existing advisory lock covers both validation and execution. SQLite uses its DDL transaction;
+concurrent writers can fail with `database is locked`. Changed version sets raise before any migration runs.
+MySQL, CockroachDB, and `disable_ddl_transaction!` migrations require a manual procedure and are rejected by this API.
+Rollback still depends on the migration's `down` implementation and can discard data. This API validates database
+state, not source hashes or operator identity: the calling tool must bind those to its reviewed plan.
+
+### Read applied and pending versions
+
 ```crystal
 migrator.applied_migrations.size                    # rows in cql_schema_migrations
 migrator.pending_migrations.map(&.version)          # => [4, 5]
