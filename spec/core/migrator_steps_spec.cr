@@ -211,3 +211,37 @@ describe "CQL::Migrator steps" do
     end
   end
 end
+
+describe "CQL::Migrator reviewed execution" do
+  it "applies exactly the pending set and rolls back the named latest migration" do
+    with_step_migrator do |migrator|
+      migrator.apply_reviewed([] of Int64, [1_i64, 2_i64, 3_i64, 4_i64, 5_i64])
+      applied_versions(migrator).should eq([1_i64, 2_i64, 3_i64, 4_i64, 5_i64])
+      migrator.apply_reviewed(applied_versions(migrator), [] of Int64, 5_i64)
+      applied_versions(migrator).should eq([1_i64, 2_i64, 3_i64, 4_i64])
+    end
+  end
+
+  it "rejects stale version sets and a rollback of a different latest version" do
+    with_step_migrator do |migrator|
+      migrator.up_to(2_i64)
+      expect_raises(CQL::Error, /changed since review/) do
+        migrator.apply_reviewed([] of Int64, [1_i64, 2_i64, 3_i64, 4_i64, 5_i64])
+      end
+      expect_raises(CQL::Error, /latest applied/) do
+        migrator.apply_reviewed([1_i64, 2_i64], [3_i64, 4_i64, 5_i64], 1_i64)
+      end
+      applied_versions(migrator).should eq([1_i64, 2_i64])
+      StepMigration.reverted.should be_empty
+    end
+  end
+
+  it "rejects nontransactional plans before applying their first migration" do
+    with_step_migrator(ALONE_MIGRATIONS) do |migrator|
+      expect_raises(CQL::Error, /manual procedure/) do
+        migrator.apply_reviewed([] of Int64, [1_i64, 2_i64, 3_i64, 4_i64, 5_i64])
+      end
+      applied_versions(migrator).should be_empty
+    end
+  end
+end

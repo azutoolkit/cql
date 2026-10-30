@@ -106,6 +106,20 @@ private def recorded_versions(schema : CQL::Schema) : Array(Int64)
 end
 
 describe "CQL::Migrator's migration lock on PostgreSQL" do
+  it "rejects the second reviewed plan after waiting for the first plan to commit" do
+    require_postgres!
+    with_lock_spec_migrations do |schemas, config|
+      migrators = schemas.map { |schema| CQL::Migrator.new(schema, config) }
+      pending = [LockSpecCreateCounter.version, LockSpecIncrementCounter.version]
+      errors = race(migrators) { |migrator| migrator.apply_reviewed([] of Int64, pending) }
+
+      errors.size.should eq(1)
+      errors.first.message.to_s.should contain("changed since review")
+      schemas[0].exec_query(&.scalar("SELECT n FROM #{COUNTER}")).should eq(1)
+      recorded_versions(schemas[0]).should eq(pending)
+    end
+  end
+
   it "lets two first-boot migrators create the table and apply each migration exactly once" do
     require_postgres!
     with_lock_spec_migrations do |schemas, config|
