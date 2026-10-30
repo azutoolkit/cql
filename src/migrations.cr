@@ -192,7 +192,7 @@ module CQL
           unless pending.all?(&.ddl_transaction?)
             raise Error.new("Reviewed execution does not support disable_ddl_transaction! migrations; use a manual procedure")
           end
-          pending.each { |migration| apply(migration) }
+          pending.each { |pending_migration| apply(pending_migration) }
         end
       end
       sync_schema_file if config.auto_sync?
