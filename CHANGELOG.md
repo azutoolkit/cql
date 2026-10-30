@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-30
+
 ### Added
 
 - `Migrator#apply_reviewed` revalidates applied and pending version sets under the migration lock before applying pending migrations or rolling back an explicitly identified latest version. It requires transactional DDL and rejects `disable_ddl_transaction!` migrations.
