@@ -19,6 +19,7 @@ module CQL
     protected def render(statement : Expression::Statement, gen : Expression::Generator? = nil)
       generator = gen || schema.new_generator
       generator.reset
+      generator.binding = schema.binding
       statement.accept(generator)
       {generator.query, generator.params}
     end

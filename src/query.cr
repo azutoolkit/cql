@@ -125,6 +125,7 @@ module CQL
     protected def replace_schema(@schema : Schema) : Nil
       @executor = nil
       @query_tables.transform_values! do |entry|
+        next entry if entry[:table].is_a?(CQL::DerivedTable)
         {table: @schema.tables[entry[:table].table_name]? || entry[:table], alias: entry[:alias]}
       end
     end
@@ -895,7 +896,7 @@ module CQL
         recursive?,
         distinct_on_snapshot,
         @row_lock
-      )
+      ).tap { |statement| statement.binding = @schema.binding }
     end
 
     # Adds a COUNT aggregate function to the query.

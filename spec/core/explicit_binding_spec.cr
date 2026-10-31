@@ -320,3 +320,28 @@ describe "bound tracked records" do
     end
   end
 end
+
+describe "bound query composition" do
+  it "preserves derived tables whose aliases match physical table names" do
+    ExplicitBindingSpec.with_databases do |_, _, first_binding, _|
+      users = ExplicitBindingSpec::BoundUser.on(first_binding)
+      users.create!(name: "derived")
+      source = ExplicitBindingSpec::Mapping.query.from(:bound_users).select(:name)
+      query = ExplicitBindingSpec::Mapping.query.from(source, as: :bound_users)
+      rebound = query.rebind(ExplicitBindingSpec::Mapping.bind(first_binding))
+      rebound.query_tables["bound_users"][:table].columns.keys.should eq([:name])
+      rebound.all(as: String).should eq(["derived"])
+    end
+  end
+
+  it "rejects different bindings in set operands, CTEs and predicates before execution" do
+    ExplicitBindingSpec.with_databases do |_, _, first_binding, second_binding|
+      first = ExplicitBindingSpec::Mapping.bind(first_binding).query.from(:bound_users).select(:id)
+      second = ExplicitBindingSpec::Mapping.bind(second_binding).query.from(:bound_users).select(:id)
+      expect_raises(CQL::Error, "different bindings") { first.union(second).to_sql }
+      expect_raises(CQL::Error, "different bindings") { first.clone.with(:other_users, second).to_sql }
+      key = ExplicitBindingSpec::Mapping.bound_users.columns[:id].expression
+      expect_raises(CQL::Error, "different bindings") { first.clone.where { key.in(second) }.to_sql }
+    end
+  end
+end

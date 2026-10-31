@@ -35,7 +35,10 @@ module Expression
 
     # Visits only append to the parameters; `reset` (called by every `to_sql`)
     # is the one place they are cleared, so subqueries keep the outer values.
+    property binding : CQL::Binding? = nil
+
     def reset
+      @binding = nil
       @params.clear
       @query = ""
     end
@@ -82,6 +85,9 @@ module Expression
     end
 
     private def write(node : Query, io : IO) : Nil
+      if binding = node.binding
+        raise CQL::Error.new("Cannot combine queries from different bindings") unless binding == @binding
+      end
       write_with_clause(node, io)
       io << "SELECT "
       io << "DISTINCT " if node.distinct? && node.distinct_on.empty?
