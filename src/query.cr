@@ -896,7 +896,7 @@ module CQL
         recursive?,
         distinct_on_snapshot,
         @row_lock
-      ).tap { |statement| statement.binding = @schema.binding }
+      ).tap(&.binding=(@schema.binding))
     end
 
     # Adds a COUNT aggregate function to the query.
