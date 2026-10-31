@@ -42,6 +42,7 @@ module CQL::ActiveRecord::Relations
 
     # Raises UnsavedRecord unless *record* has a row; a soft-deleted record keeps its row, so it may be associated
     macro ensure_saved(record)
+      {{record}} = {{record}}.with_binding(binding)
       if {{record}}.new_record?
         raise UnsavedRecord.new("Record must be saved before association operations")
       end
@@ -78,7 +79,7 @@ module CQL::ActiveRecord::Relations
     # - **return** : CQL::Query - A configured query builder
     macro build_query(model_class)
       safe_db_operation do
-        CQL::Query.new({{model_class}}.schema).from({{model_class}}.table)
+        CQL::Query.new({{model_class}}.on(binding).schema).from({{model_class}}.table)
       end
     end
   end

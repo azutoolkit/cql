@@ -74,14 +74,14 @@ module CQL
           attrs.delete(lock_version_col)
 
           begin
-            update_of(record.id!).set(attrs).with_optimistic_lock(current_version, lock_version_col).commit
+            record.persistence_model.update_of(record.id!).set(attrs).with_optimistic_lock(current_version, lock_version_col).commit
           rescue CQL::OptimisticLockError
             raise CQL::OptimisticLockError.new(model_class: name, id: record.id.as?(DB::Any | UUID), expected_version: current_version)
           end
 
           # If successful (no exception), increment the local version to match DB; a rollback puts it back
           undo = record.persistence_snapshot
-          schema.on_rollback { record.{{version_column.id}} = current_version; undo.call }
+          record.persistence_schema.on_rollback { record.{{version_column.id}} = current_version; undo.call }
           record.{{version_column.id}} = current_version + 1
           record.clear_changes! if record.responds_to?(:clear_changes!)
           record
@@ -89,7 +89,10 @@ module CQL
 
         # Override the standard update! method to use optimistic locking
         def update!
-          {{@type.id}}.update_with_lock!(self)
+          updated = persistence_model.update_with_lock!(self)
+          self.attributes(updated.attributes)
+          self.clear_changes! if self.responds_to?(:clear_changes!)
+          self
         end
 
         # Deletes the row only while it still holds the version this copy read, so a row another
@@ -97,7 +100,7 @@ module CQL
         private def delete_row! : Bool
           expected = self.{{version_column.id}}
           raise CQL::Error.new("Version value missing for optimistic locking") if expected.nil?
-          return true if {{@type.id}}.delete_of(id!).where({{version_column.id}}: expected).commit.rows_affected > 0
+          return true if persistence_model.delete_of(id!).where({{version_column.id}}: expected).commit.rows_affected > 0
           raise CQL::OptimisticLockError.new(model_class: self.class.name, id: id.as?(DB::Any | UUID), expected_version: expected)
         end
       end

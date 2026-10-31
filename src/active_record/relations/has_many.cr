@@ -110,7 +110,8 @@ module CQL::ActiveRecord::Relations
           id: parent_id,
           query: scoped_query,
           dependent: {{strategy}},
-          auto_load: false
+          auto_load: false,
+          binding: binding
         )
       end
 
@@ -141,7 +142,8 @@ module CQL::ActiveRecord::Relations
           key: :{{fk}},
           id: parent_id,
           dependent: {{strategy}},
-          auto_load: false
+          auto_load: false,
+          binding: binding
         )
         @{{name.id}}.not_nil!._inject_preloaded(records)
       end
@@ -153,12 +155,13 @@ module CQL::ActiveRecord::Relations
       # - **param** : chunk_size (Int32) - The most parent ids bound by one query
       # - **return** : Nil
       def self._preload_{{name.id}}(records : Array(self), chunk_size : Int32 = {{type.id}}.adapter.dialect.max_bind_params - 1) : Nil
+        binding = preload_binding(records)
         parent_ids = records.compact_map(&.id)
         return if parent_ids.empty?
 
         grouped = {} of Pk => Array({{type.id}})
         CQL::ActiveRecord::IdChunks.each(parent_ids, chunk_size) do |ids|
-          {{type.id}}.where({ :{{fk}} => ids }).all.each do |record|
+          {{type.id}}.on(binding).where({ :{{fk}} => ids }).all.each do |record|
             fk_value = record.{{fk}}
             next if fk_value.nil?
             (grouped[fk_value.as(Pk)] ||= [] of {{type.id}}) << record
@@ -166,11 +169,12 @@ module CQL::ActiveRecord::Relations
         end
 
         # Inject preloaded records into each parent
-        records.each do |parent|
+        records.map! do |parent|
           parent_id = parent.id
-          next if parent_id.nil?
+          next parent if parent_id.nil?
           related = grouped[parent_id.as(Pk)]? || [] of {{type.id}}
           parent._set_preloaded_{{name.id}}(related)
+          parent
         end
       end
 
@@ -215,6 +219,7 @@ module CQL::ActiveRecord::Relations
           created_records = [] of {{type.id}}
 
           records.each do |record|
+             record = record.with_binding(binding)
              record.attributes({ :{{fk}} => parent_id })
              record.new_record? ? record.create! : record.save!
              created_records << record
@@ -232,7 +237,7 @@ module CQL::ActiveRecord::Relations
       # `create_{{name.id}}`, it runs no validations or callbacks and builds no records.
       def insert_{{name.id}}_all(rows : Array(Hash(Symbol, DB::Any)), batch_size : Int32? = nil) : Int64
         owner = { :{{fk}} => CQL::ActiveRecord::IdChunks.bound(safe_id(self, Pk)) }
-        inserted = {{type.id}}.insert_all(rows.map(&.merge(owner)), batch_size)
+        inserted = {{type.id}}.on(binding).insert_all(rows.map(&.merge(owner)), batch_size)
         @{{name.id}} = nil
         inserted
       end

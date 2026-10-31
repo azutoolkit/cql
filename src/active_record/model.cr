@@ -1,4 +1,5 @@
 require "./definition"
+require "./bound_model"
 require "./association_registry"
 require "./dsl/column"
 require "./typed_columns"
@@ -61,6 +62,7 @@ module CQL
 
         include DB::Serializable
         include DB::Serializable::NonStrict
+        include CQL::ActiveRecord::Bindable
         include CQL::ActiveRecord::Definition
         include CQL::ActiveRecord::TypedColumns
         include CQL::ActiveRecord::Identifyable

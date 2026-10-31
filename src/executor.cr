@@ -40,6 +40,12 @@ module CQL
     end
 
     def executor : Executor
+      if reader = schema.binding.try(&.read_executor)
+        if self.is_a?(CQL::Insert) || self.is_a?(CQL::Update) || self.is_a?(CQL::Delete)
+          raise CQL::Error.new("Executor-only bindings do not support writes")
+        end
+        return @executor || reader
+      end
       @executor || schema
     end
 
@@ -52,6 +58,9 @@ module CQL
   # measurement feeds telemetry (events, tracing) and the performance monitor.
   module Execution
     def self.run(executor : Executor, sql : String, params : Array(DB::Any), operation : Symbol, track : Bool = true, &)
+      if executor.is_a?(Schema) && executor.source.is_a?(ReadOnlyExecutorSource) && operation != :select && operation != :explain
+        raise CQL::Error.new("Executor-only bindings do not support writes; bind a database, connection or transaction")
+      end
       monitor = CQL::Performance.monitor if track
       monitor = nil unless monitor.try &.enabled?
       unless Telemetry.observing? || monitor

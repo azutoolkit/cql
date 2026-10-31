@@ -19,6 +19,7 @@ module CQL
     protected def render(statement : Expression::Statement, gen : Expression::Generator? = nil)
       generator = gen || schema.new_generator
       generator.reset
+      generator.binding = schema.binding
       statement.accept(generator)
       {generator.query, generator.params}
     end
@@ -46,7 +47,17 @@ module CQL
 
     # All rows, each mapped to *kind*.
     def all(as kind)
-      execute { |conn, sql, params| conn.query_all(sql, args: params, as: kind) }
+      execute { |conn, sql, params| conn.query_all(sql, args: params, as: kind).map! { |row| contextualize(row) } }
+    end
+
+    # UUIDs may arrive as native values or text, depending on the adapter.
+    def all(as kind : UUID.class) : Array(UUID)
+      all(as: UUID | String).map { |value| value.is_a?(UUID) ? value : UUID.new(value) }
+    end
+
+    def get(as kind : UUID.class) : UUID?
+      value = get(as: UUID | String)
+      value.is_a?(String) ? UUID.new(value) : value
     end
 
     def all!(as kind)
@@ -55,7 +66,7 @@ module CQL
 
     # The first row (or scalar) mapped to *kind*, nil when there is none.
     def get(as kind)
-      execute { |conn, sql, params| conn.query_one?(sql, args: params, as: kind) }
+      execute { |conn, sql, params| contextualize(conn.query_one?(sql, args: params, as: kind)) }
     end
 
     # Like `get`, but raises `DB::NoResultsError` when there is no row.
@@ -83,6 +94,14 @@ module CQL
     # before the block runs, so the block may run other queries; use `find_each` for large results.
     def each(as kind : U.class, & : U ->) : Nil forall U
       all(kind).each { |record| yield record }
+    end
+
+    protected def contextualize(record : U) : U forall U
+      if record.responds_to?(:with_binding)
+        record.with_binding(schema.binding)
+      else
+        record
+      end
     end
 
     private def execute(&)

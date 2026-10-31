@@ -14,7 +14,7 @@ module CQL
         # user.reload!
         # ```
         def reload!
-          record = {{@type.id}}.find!(id!)
+          record = persistence_model.find!(id!)
           self.attributes(record.attributes)
           self
         end
@@ -85,7 +85,7 @@ module CQL
           end
 
           # Get the table schema to validate the columns exist
-          table = {{@type.id}}.schema.tables[{{@type.id}}.table]
+          table = persistence_schema.tables[persistence_model.table]
           attrs.each do |field_name, _|
             column = table.columns[field_name]?
             unless column
@@ -96,7 +96,7 @@ module CQL
           end
 
           # Update the database directly without callbacks
-          result = {{@type.id}}.update_of(id!).set(attrs).commit
+          result = persistence_model.update_of(id!).set(attrs).commit
 
           # Update the local instance attributes to match
           if result.rows_affected > 0
@@ -201,8 +201,12 @@ module CQL
             # Create path
             return false unless run_callbacks(:before_create)
             # Already validated above; the instance create! would validate again
-            result = {{@type.id}}.create!(self)
+            result = persistence_model.create!(self)
             create_success = !result.nil?
+            if create_success
+              self.id = result.id!
+              self.clear_changes! if self.responds_to?(:clear_changes!)
+            end
             run_callbacks(:after_create) if create_success
             create_success
           else

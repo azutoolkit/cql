@@ -75,7 +75,7 @@ module CQL
                 {% name = column[0] %}
                 {% type = column[1] %}
                 {% stored = (type == "UUID" || type == "JSON::Any") ? "String" : type %}
-                @[DB::Field(key: {{ name == "id" ? owner_key.id.stringify : name }})]
+                @[DB::Field(key: {{ name == "id" ? owner_key.id.stringify : name }}{% if type == "UUID" %}, converter: CQL::UUIDStorageConverter{% end %})]
                 @{{ name.id }} : {{ stored.id }}? = nil
 
                 {% if type == "UUID" %}

@@ -115,7 +115,7 @@ module CQL
           update_attrs = Hash(Symbol, DB::Any).new
           update_attrs[:deleted_at] = timestamp.as(DB::Any)
 
-          success = delete_with_dependents { {{@type.id}}.update_by(where_attrs, update_attrs).rows_affected > 0 }
+          success = delete_with_dependents { persistence_model.update_by(where_attrs, update_attrs).rows_affected > 0 }
 
           # Run after destroy callbacks
           if success
@@ -137,7 +137,7 @@ module CQL
           # Run before destroy callbacks
           return false unless run_callbacks(:before_destroy)
 
-          success = delete_with_dependents { {{@type.id}}.force_delete!(id!).rows_affected > 0 }
+          success = delete_with_dependents { persistence_model.force_delete!(id!).rows_affected > 0 }
 
           # Run after destroy callbacks and clear the ID if successful
           if success
@@ -153,7 +153,7 @@ module CQL
         # A rollback undoes a soft delete or a restore, so the record's `deleted_at` is what its row holds again.
         private def undo_soft_delete_on_rollback : Nil
           deleted_at, destroyed = @deleted_at, self.destroyed
-          {{@type.id}}.schema.on_rollback { @deleted_at = deleted_at; self.destroyed = destroyed }
+          persistence_schema.on_rollback { @deleted_at = deleted_at; self.destroyed = destroyed }
         end
 
         # Restore a soft-deleted record
@@ -169,7 +169,7 @@ module CQL
           update_attrs = Hash(Symbol, DB::Any).new
           update_attrs[:deleted_at] = nil.as(DB::Any)
 
-          result = {{@type.id}}.update_by(where_attrs, update_attrs)
+          result = persistence_model.update_by(where_attrs, update_attrs)
 
           success = result.rows_affected > 0
 

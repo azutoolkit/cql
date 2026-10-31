@@ -174,6 +174,7 @@ module CQL
       end
       schema.ddl_transaction do
         @lock.acquire
+        reject_foreign_versions!
         current_applied = applied_migrations.map(&.version).sort!
         current_pending = pending_migrations.map(&.version).sort!
         unless current_applied == expected_applied.sort && current_pending == expected_pending.sort
@@ -276,10 +277,10 @@ module CQL
     # ```
     # - **@return** [BaseMigration.class | Nil]
     def last : BaseMigration.class | Nil
-      last_record = repo.last
+      last_record = applied_migrations.max_by?(&.version)
       return if last_record.nil?
 
-      Migrator.migrations.find { |migration| migration.version == last_record.version }
+      selected_migrations.find { |migration| migration.version == last_record.version }
     rescue DB::NoResultsError | CQL::Schema::ConnectionError
       nil
     end
@@ -355,7 +356,52 @@ module CQL
     # migrator.applied_migrations
     # ```
     def applied_migrations : Array(MigrationRecord)
-      repo.all
+      repo.all.select { |record| config.includes_migration?(record.name) }
+    end
+
+    private def selected_migrations : Array(BaseMigration.class)
+      # Validate even an empty registry, and reselect on every operation.
+      config.namespace_prefix
+      Migrator.migrations.select { |migration| config.includes_migration?(migration.name) }
+    end
+
+    private def reject_foreign_versions! : Nil
+      return unless config.namespace_prefix
+      versions = selected_migrations.map(&.version).to_set
+      repo.all.each do |record|
+        if versions.includes?(record.version) && !config.includes_migration?(record.name)
+          raise Error.new("Migration version #{record.version} belongs to #{record.name}; use a separate migration_table_name for independent namespaces")
+        end
+      end
+    end
+
+    # A health read: never creates the ledger or starts a transaction.
+    def self.ready?(schema : Schema, config = MigratorConfig.new) : Bool
+      config.namespace_prefix
+      selected = migrations.select { |migration| config.includes_migration?(migration.name) }
+      selected.group_by(&.version).each do |version, items|
+        raise Error.new("Duplicate migration version #{version} in selected namespace") if items.size > 1
+      end
+      schema.with_connection do |connection|
+        table = config.migration_table_name.to_s
+        exists = case schema.adapter
+                 when .postgres_compatible?
+                   !connection.query_one("SELECT to_regclass($1)::text", table, as: String?).nil?
+                 when .sq_lite?
+                   connection.query_one("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table, as: Int64) > 0
+                 else
+                   connection.query_one("SELECT count(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", table, as: Int64) > 0
+                 end
+        return false unless exists
+        quoted = schema.adapter.my_sql? ? "`#{table.gsub("`", "``")}`" : "\"#{table.gsub("\"", "\"\"")}\""
+        history = connection.query_all("SELECT name, version FROM #{quoted}", as: {String, Int64})
+        selected.all? do |migration|
+          history.any? { |name, version| version == migration.version && config.includes_migration?(name) } &&
+            history.none? { |name, version| version == migration.version && !config.includes_migration?(name) }
+        end
+      end
+    rescue DB::Error | Schema::ConnectionError | CQL::Postgres::Error
+      false
     end
 
     private def print_table(m : Array(MigrationRecord), status : String = "✔".colorize.green.to_s)
@@ -368,7 +414,7 @@ module CQL
 
     private def sorted_migrations
       reject_duplicate_versions!
-      Migrator.migrations.sort_by(&.version)
+      selected_migrations.sort_by(&.version)
     end
 
     private def applied_migration_classes : Array(BaseMigration.class)
@@ -377,13 +423,13 @@ module CQL
     end
 
     private def applied_versions : Set(Int64)
-      repo.query.select(:version).all(Int64).to_set
+      applied_migrations.map(&.version).to_set
     end
 
     # The records table keys on the version alone, so a shared version would apply both and record one.
     # Checked again before every run, as the registry is a mutable class property.
     private def reject_duplicate_versions! : Nil
-      Migrator.migrations.group_by(&.version).each do |version, migrations|
+      selected_migrations.group_by(&.version).each do |version, migrations|
         next if migrations.size == 1
         names = migrations.map(&.name).join(" and ")
         table = config.migration_table_name
@@ -394,7 +440,7 @@ module CQL
     end
 
     private def require_registered!(version : Int64) : Nil
-      return if Migrator.migrations.any? { |migration| migration.version == version }
+      return if selected_migrations.any? { |migration| migration.version == version }
       raise Error.new("No migration with version #{version}")
     end
 
@@ -428,6 +474,7 @@ module CQL
     # migrator that ran it at the same time recorded it first.
     private def apply_alone(migration : BaseMigration.class) : Nil
       return if oldest_pending([migration] of BaseMigration.class).empty?
+      with_migration_lock([migration]) { reject_foreign_versions! }
       migration.new(schema).up
       with_migration_lock([migration]) { record_migration(migration) if oldest_pending([migration] of BaseMigration.class).any? }
     end
@@ -464,6 +511,7 @@ module CQL
       return if picked.empty?
       schema.ddl_transaction do
         @lock.acquire
+        reject_foreign_versions!
         yield
       end
     end

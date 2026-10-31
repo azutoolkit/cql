@@ -4,6 +4,8 @@ require "./aggregate_functions"
 module Expression
   # Query structure - optimized for memory efficiency
   class Query < Statement
+    # Explicit context retained when this query becomes a subquery or set operand.
+    property binding : CQL::Binding? = nil
     getter columns : Array(BaseColumn)
     getter from : From
     getter where : Where? = nil

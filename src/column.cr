@@ -16,6 +16,7 @@ module CQL
   # end
   # ```
   class Column(Type) < BaseColumn
+    property sql_type : SQLType? = nil
     @as_name : String? = nil
     # :nodoc:
     property name : Symbol
@@ -62,6 +63,7 @@ module CQL
       @size : Int32? = nil,
       @index : Index? = nil,
       @version_number : Bool = false,
+      @sql_type : SQLType? = nil,
     )
     end
 
@@ -78,8 +80,20 @@ module CQL
       Expression::TypedColumn(Type).new(self, @as_name)
     end
 
+    def copy_declaration_to(table : Table) : BaseColumn
+      copy = dup
+      copy.reset_declaration_owner(table)
+      copy
+    end
+
+    protected def reset_declaration_owner(@table : Table) : Nil
+      @index = nil
+      value = @default
+      @default = value.dup if value.is_a?(Bytes)
+    end
+
     def copy_to(table : Table) : BaseColumn
-      Column(Type).new(@name, nil, @null).tap(&.table=(table))
+      Column(Type).new(@name, nil, @null, sql_type: @sql_type).tap(&.table=(table))
     end
 
     # Builds the expression qualified by a *table* alias (e.g. `c.name` for
@@ -95,6 +109,17 @@ module CQL
 
     def type
       adapter = @table.not_nil!.schema.adapter
+      if explicit = @sql_type
+        case explicit
+        in .text?
+          raise ArgumentError.new("sql_type: :text requires String without size") unless Type == String && @size.nil?
+          return "TEXT"
+        in .timestamptz?
+          raise ArgumentError.new("sql_type: :timestamptz requires Time") unless Type == Time
+          raise CQL::Error.new("TIMESTAMPTZ requires PostgreSQL or CockroachDB") unless adapter.postgres_compatible?
+          return "TIMESTAMPTZ"
+        end
+      end
       adapter.dialect.sized_type(adapter.sql_type(Type), @size)
     end
   end
@@ -104,7 +129,7 @@ module CQL
   # `change_column` take a Crystal type, so `Date` there declares a timestamp.
   class DateColumn(Type) < Column(Type)
     def copy_to(table : Table) : BaseColumn
-      DateColumn(Type).new(@name, nil, @null).tap(&.table=(table))
+      DateColumn(Type).new(@name, nil, @null, sql_type: @sql_type).tap(&.table=(table))
     end
 
     def type

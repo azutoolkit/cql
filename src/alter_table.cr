@@ -12,6 +12,14 @@ module CQL
   # end
   # ```
   class AlterTable
+    def add_column(*args, sql_type : Symbol, **options)
+      add_column(*args, **options, sql_type: SQLType.parse(sql_type.to_s))
+    end
+
+    def change_column(*args, sql_type : Symbol, **options)
+      change_column(*args, **options, sql_type: SQLType.parse(sql_type.to_s))
+    end
+
     Log = CQL.config.logger
     # In declaration order, each built against the table as it was named then, so a later
     # `rename_table` in the same block does not rename the statements before it.
@@ -49,8 +57,9 @@ module CQL
       unique : Bool = false,
       size : Int32? = nil,
       index : Bool = false,
+      sql_type : SQLType? = nil,
     ) forall T
-      new_column = Column(T).new(name, as_name, null, default, unique, size)
+      new_column = Column(T).new(name, as_name, null, default, unique, size, sql_type: sql_type)
       new_column.table = @table
       @table.columns[name] = new_column
       alter Expression::AddColumn.new(new_column.dup)
@@ -117,8 +126,9 @@ module CQL
     #   change_column :age, Int64
     # end
     # ```
-    def change_column(name : Symbol, type : T.class) forall T
+    def change_column(name : Symbol, type : T.class, sql_type : SQLType? = nil) forall T
       new_column = redeclared(name, type)
+      new_column.sql_type = sql_type
       new_column.table = @table
       alter Expression::ChangeColumn.new(new_column.dup, type)
       @table.columns[name] = new_column

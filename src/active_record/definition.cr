@@ -67,7 +67,7 @@ module CQL
 
               # Re-declares Identifyable's id storage so DB::Serializable maps it to the declared column
               {% if CQL_PRIMARY_KEY_TYPE.resolve == UUID %}
-                @[DB::Field(key: {{primary_key.id.stringify}})]
+                @[DB::Field(key: {{primary_key.id.stringify}}, converter: CQL::UUIDStorageConverter)]
                 @_id_storage : String? = nil
               {% else %}
                 @[DB::Field(key: {{primary_key.id.stringify}})]

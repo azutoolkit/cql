@@ -52,8 +52,8 @@ module CQL
           changed = record.changed_columns
           record.stamp_deferred_update(changed)
           unless changed.empty?
-            update_row!(record.id!, &.set(changed))
-            schema.on_rollback(&record.persistence_snapshot)
+            record.persistence_model.update_row!(record.id!, &.set(changed))
+            record.persistence_schema.on_rollback(&record.persistence_snapshot)
           end
           record.clear_changes!
           record

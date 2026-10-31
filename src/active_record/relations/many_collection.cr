@@ -74,6 +74,7 @@ module CQL
         @dependent : Symbol = :nullify, # dependency strategy
         @validate : Bool = true,        # validate records
         @autosave : Bool = false,       # autosave records
+        binding : CQL::Binding? = nil,
       )
         # Handle legacy cascade parameter with deprecation warning
         if @cascade
@@ -83,7 +84,7 @@ module CQL
 
         # Initialize parent with auto_load: false to prevent loading in base initializer
         # The cascade flag was handled above; passing it on would log the warning a second time
-        super(@key, @id, false, query, auto_load: false, dependent: @dependent)
+        super(@key, @id, false, query, auto_load: false, dependent: @dependent, binding: binding)
         @through_table = Through.table
         @records = [] of Target
       end
@@ -102,12 +103,13 @@ module CQL
       # - **param** : record (Target)
       # - **return** : self
       def <<(record : Target)
+        record = record.with_binding(binding)
         ensure_saved(record)
         target_id = safe_id(record, Pk)
 
         # Create join table record to establish association
         safe_db_operation do
-          Through.find_or_create_by({@key => bound_id(@id), @target_key => bound_id(target_id)})
+          Through.on(binding).find_or_create_by({@key => bound_id(@id), @target_key => bound_id(target_id)})
         end
 
         # Add to the loaded records unless a reload would hide it (a soft-deleted record)
@@ -134,6 +136,7 @@ module CQL
       # - **return** : Target - The associated (and possibly created) record
       # - **raise** : RelationError on creation failure
       def create(record : Target)
+        record = record.with_binding(binding)
         # A soft-deleted record has an id but is not `persisted?`; only a new one is inserted
         safe_db_operation { record.create! } if record.new_record?
 
@@ -141,7 +144,7 @@ module CQL
 
         # Create the association in the join table
         safe_db_operation do
-          Through.find_or_create_by({@key => bound_id(@id), @target_key => bound_id(target_id)})
+          Through.on(binding).find_or_create_by({@key => bound_id(@id), @target_key => bound_id(target_id)})
         end
 
         # Add to the loaded records unless a reload would hide it (a soft-deleted record)
@@ -157,6 +160,7 @@ module CQL
       # - **param** : record (Target)
       # - **return** : Target? - The record if association was removed, nil otherwise
       def delete(record : Target) : Target?
+        record = record.with_binding(binding)
         record_id = safe_id(record, Pk)
         success = delete(record_id)
         success ? record : nil
@@ -180,7 +184,7 @@ module CQL
         # Delete the association record from the join table
         rows_affected = safe_db_operation do
           CQL::Delete
-            .new(Through.schema)
+            .new(Through.on(binding).schema)
             .from(@through_table)
             .where({@key => bound_id(@id), @target_key => bound_id(id)})
             .commit
@@ -194,19 +198,19 @@ module CQL
           case @dependent
           when :destroy
             # Destroy the target record (with callbacks)
-            deleted_target_record = record_to_remove || safe_db_operation { Target.find?(id) }
+            deleted_target_record = record_to_remove || safe_db_operation { Target.on(binding).find?(id) }
             if deleted_target_record
               safe_db_operation { deleted_target_record.delete! }
             end
           when :delete_all
             # Delete the target record (without callbacks)
-            deleted_target_record = record_to_remove || safe_db_operation { Target.find?(id) }
+            deleted_target_record = record_to_remove || safe_db_operation { Target.on(binding).find?(id) }
             if deleted_target_record
-              safe_db_operation { Target.delete!(id) }
+              safe_db_operation { Target.on(binding).delete!(id) }
             end
           else
             # For :nullify or default, just preserve the target record
-            deleted_target_record = record_to_remove || safe_db_operation { Target.find?(id) }
+            deleted_target_record = record_to_remove || safe_db_operation { Target.on(binding).find?(id) }
           end
 
           # Remove from internal array if it was loaded
@@ -278,16 +282,16 @@ module CQL
       end
 
       # Deletes the target rows with one DELETE per chunk of ids, without callbacks. Soft-deletable
-      # targets go through `Target.query.where_primary_key(...).delete_all` instead: their default
+      # targets go through `Target.on(binding).query.where_primary_key(...).delete_all` instead: their default
       # scope leaves those already soft deleted alone, and the others run their destroy callbacks if
       # they declare any.
       private def delete_targets(target_ids : Array(Pk)) : Nil
         if Target.responds_to?(:acts_as_paranoid?)
           CQL::ActiveRecord::IdChunks.each(target_ids, Target.adapter.dialect.max_bind_params - 1) do |chunk|
-            safe_db_operation { Target.query.where_primary_key(chunk).delete_all }
+            safe_db_operation { Target.on(binding).query.where_primary_key(chunk).delete_all }
           end
         else
-          safe_db_operation { Target.delete_ids(target_ids) }
+          safe_db_operation { Target.on(binding).delete_ids(target_ids) }
         end
       end
 
@@ -304,7 +308,7 @@ module CQL
       def delete_all : Int64
         rows_affected = safe_db_operation do
           CQL::Delete
-            .new(Through.schema)
+            .new(Through.on(binding).schema)
             .from(@through_table)
             .where({@key => bound_id(@id)})
             .commit
@@ -327,7 +331,7 @@ module CQL
       # - **return** : Target
       def build(**attributes) : Target
         safe_db_operation do
-          Target.new(**attributes)
+          Target.new(**attributes).with_binding(binding)
         end
       end
 
@@ -338,13 +342,14 @@ module CQL
 
       # Check if the collection includes a specific record
       def includes?(record : Target) : Bool
+        record = record.with_binding(binding)
         if @loaded
           @records.any? { |local_record| local_record.id == record.id }
         else
           record_id = safe_id(record, Pk)
           safe_db_operation do
             result = CQL::Query
-              .new(Through.schema)
+              .new(Through.on(binding).schema)
               .from(@through_table)
               .where({@key => bound_id(@id), @target_key => bound_id(record_id)})
               .limit(1)
@@ -366,7 +371,7 @@ module CQL
           safe_db_operation do
             values = ids.map { |id| {@key => bound_id(@id), @target_key => bound_id(id)} }
             CQL::Insert
-              .new(Through.schema)
+              .new(Through.on(binding).schema)
               .into(@through_table)
               .values(values)
               .commit
@@ -384,7 +389,7 @@ module CQL
         else
           safe_db_operation do
             through_records = CQL::Query
-              .new(Through.schema)
+              .new(Through.on(binding).schema)
               .from(@through_table)
               .where({@key => bound_id(@id)})
               .all(Through)
@@ -424,17 +429,17 @@ module CQL
 
       # The associated targets with *attributes* in one statement:
       # `WHERE <attributes> AND id IN (SELECT <target_key> FROM <through> WHERE <key> = ?)`.
-      # Going through `Target.where` keeps the target's default scope (soft deletes) and returns
+      # Going through `Target.on(binding).where` keeps the target's default scope (soft deletes) and returns
       # each target once.
       private def target_matches(attributes : NamedTuple) : CQL::ActiveRecord::Queryable::QueryBuilder(Target)
-        targets = attributes.empty? ? Target.query : Target.where(**attributes)
+        targets = attributes.empty? ? Target.on(binding).query : Target.on(binding).where(**attributes)
         condition = associated_targets
         targets.where { condition }
       end
 
       # `<target pk> IN (SELECT <target_key> FROM <through> WHERE <key> = ?)`: the parent's targets.
       private def associated_targets
-        associated_ids = CQL::Query.new(Through.schema).from(@through_table).select(@target_key).where({@key => bound_id(@id)})
+        associated_ids = CQL::Query.new(Through.on(binding).schema).from(@through_table).select(@target_key).where({@key => bound_id(@id)})
         Target.table_column(Target.primary_key_column).in(associated_ids)
       end
     end

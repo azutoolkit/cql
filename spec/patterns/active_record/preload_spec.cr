@@ -59,7 +59,7 @@ describe "Eager Loading / Preload" do
       expect_raises(ArgumentError, "TestUser has no association :name") { TestUser.where(age: 25).preload(:posts, :name) }
     end
 
-    it "accepts a declared association it cannot preload, such as a many_to_many" do
+    it "accepts declared many_to_many associations" do
       Movie.preload(:actors).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(Movie))
       Actor.preload(:movies).should be_a(CQL::ActiveRecord::Queryable::QueryBuilder(Actor))
     end

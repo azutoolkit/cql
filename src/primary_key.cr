@@ -17,10 +17,12 @@ module CQL
     def initialize(
       @name : Symbol = :id,
       @as_name : String? = nil,
-      @auto_increment : Bool = true,
+      @auto_increment : Bool = T != UUID,
       @unique : Bool = true,
       @default : ::DB::Any = nil,
+      @sql_type : SQLType? = nil,
     )
+      raise ArgumentError.new("UUID primary keys cannot auto increment") if T == UUID && @auto_increment
     end
 
     def as_name

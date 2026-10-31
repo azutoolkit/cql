@@ -120,8 +120,14 @@ module CQL
 
           case result
           when QueryBuilder({{@type.id}})
+            unless result.query.schema.binding == cql_builder.query.schema.binding
+              raise CQL::Error.new("Scope returned a query with a different binding")
+            end
             result
           when CQL::Query
+            unless result.schema.binding == cql_builder.query.schema.binding
+              raise CQL::Error.new("Scope returned a query with a different binding")
+            end
             QueryBuilder({{@type.id}}).new(result)
           when Nil
             raise ArgumentError.new("Scope '{{name.id}}' returned nil - scopes must return a QueryBuilder or CQL::Query")

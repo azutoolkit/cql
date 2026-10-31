@@ -12,6 +12,10 @@ module CQL
   abstract class ConnectionSource
     Log = CQL.config.logger
 
+    # :nodoc: Called even when a schema has an active transaction frame.
+    def validate! : Nil
+    end
+
     # Lends one connection to the block and takes it back afterwards.
     abstract def using_connection(& : DB::Connection -> _)
 

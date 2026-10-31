@@ -18,6 +18,23 @@ module CQL
         protected def initialize(@query : CQL::Query, @model_class : T.class, @preload_specs : Array(Symbol))
         end
 
+        # :nodoc:
+        def rebind(schema : Schema) : self
+          self.class.new(@query.rebind(schema), @model_class, @preload_specs.dup)
+        end
+
+        private def bind_record(record : T) : T
+          record.with_binding(@query.schema.binding)
+        end
+
+        private def bind_record(record : U) : U forall U
+          record
+        end
+
+        private def persistence_model
+          BoundModel(T).new(@query.schema.binding)
+        end
+
         # Get the model class
         def model_class : T.class
           @model_class
@@ -422,6 +439,9 @@ module CQL
         # - **@param** other [QueryBuilder(T)] The other query builder to merge
         # - **@return** [QueryBuilder(T)] A new merged query builder
         def merge(other : QueryBuilder(T))
+          unless @query.schema.binding == other.query.schema.binding
+            raise CQL::Error.new("Cannot merge queries with different bindings")
+          end
           merged_query = @query.clone.merge(other.query)
           self.class.new(merged_query, @model_class)
         end
@@ -445,7 +465,7 @@ module CQL
         end
 
         # Raises for a name the model declares no association by, before any query runs. A declared
-        # association that cannot be preloaded (many_to_many, `cache: false`) is skipped later.
+        # association that cannot be preloaded (`cache: false`) is skipped later.
         private def check_association(name : Symbol) : Nil
           names = T.cql_association_names
           return if names.includes?(name)
@@ -456,19 +476,31 @@ module CQL
         # When preloads are configured, automatically applies them to the results.
         # - **@return** [Array(T)] Array of model instances
         def all
-          records = row_query(T).all(T)
+          records = row_query(T).all(T).map { |record| bind_record(record) }
           apply_preloads(records) if @preload_specs.any?
           records
         end
 
         # Runs this query on an explicit connection (see `Schema#with_connection`).
         def using(connection : DB::Connection) : self
-          clone_builder.tap(&.query.using(connection))
+          rebind(@query.schema.bind(connection))
         end
 
         # Runs this query on another executor, e.g. a `CQL::Postgres::AsyncEngine`.
+        def using(transaction : DB::Transaction) : self
+          rebind(@query.schema.bind(transaction))
+        end
+
+        def using(schema : CQL::Schema) : self
+          if binding = schema.binding
+            rebind(@query.schema.bind(binding))
+          else
+            rebind(@query.schema.bind(CQL::Binding.new(schema)))
+          end
+        end
+
         def using(executor : CQL::Executor) : self
-          clone_builder.tap(&.query.using(executor))
+          rebind(@query.schema.bind(CQL::Binding.new(executor)))
         end
 
         # Alias of `all`.
@@ -481,7 +513,7 @@ module CQL
         # - **@param** as_kind [Class] The type to deserialize results as
         # - **@return** [Array] Array of instances of the specified type
         def all(as as_kind)
-          row_query(as_kind).all(as_kind)
+          row_query(as_kind).all(as_kind).map { |record| bind_record(record) }
         end
 
         # Apply preloads to the fetched records
@@ -506,13 +538,19 @@ module CQL
         # Execute the query and return the first result
         # - **@return** [T?] First model instance or nil
         def first(as as_kind = T)
-          row_query(as_kind).first(as_kind)
+          record = bind_record(row_query(as_kind).first(as_kind))
+          if record.is_a?(T) && @preload_specs.any?
+            records = [record]
+            apply_preloads(records)
+            return records.first
+          end
+          record
         end
 
         # Execute the query and return the first result, raises if not found
         # - **@return** [T] First model instance
         def first!(as as_kind = T)
-          row_query(as_kind).first!(as_kind)
+          first(as_kind) || raise DB::NoResultsError.new("No records found")
         end
 
         # Execute the query and return the last result (using reverse order)
@@ -531,7 +569,7 @@ module CQL
         # - **@param** as [Type] The type to cast the result to
         # - **@return** [Type] The scalar result
         def get(as as_kind)
-          @query.get(as_kind)
+          bind_record(@query.get(as_kind))
         end
 
         # Iterate over each result
@@ -544,7 +582,7 @@ module CQL
         # still load them all, since reordering them could change the result.
         private def last_row(query : Query, kind)
           reversed = reversed_for_last(query) unless reshapes_rows?(query)
-          reversed ? reversed.first(kind) : query.all(kind).last?
+          bind_record(reversed ? reversed.first(kind) : query.all(kind).last?)
         end
 
         # Paging, grouping, aggregates and DISTINCT decide which rows exist, so the
@@ -559,7 +597,7 @@ module CQL
         # The reversed order, with the primary key DESC appended to break ties
         # (alone when the query is unordered); nil when neither exists.
         private def reversed_for_last(query : Query) : Query?
-          primary_key = T.schema.tables[T.table].primary_key
+          primary_key = @query.schema.tables[T.table].primary_key
           return if primary_key.nil? && !query.order_by?
           reversed = query.clone.reverse_order
           reversed.order_by.put_if_absent(primary_key, Expression::OrderDirection::DESC) if primary_key
@@ -571,7 +609,7 @@ module CQL
         private def row_query(kind) : Query
           joined_without_select = @query.columns.empty? && @query.joins?
           return @query unless joined_without_select && kind == T
-          @query.clone.tap(&.columns.concat(T.table_columns.values))
+          @query.clone.tap(&.columns.concat(@query.schema.tables[T.table].columns.values))
         end
 
         # Check if any records exist
@@ -724,7 +762,7 @@ module CQL
         private def break_ties_by_primary_key(query : Query) : Nil
           selected = !query.columns.empty? || query.select_expressions?
           return if query.group_by? || query.having || query.distinct_on? || (query.distinct? && selected)
-          primary_key = T.schema.tables[T.table].primary_key
+          primary_key = @query.schema.tables[T.table].primary_key
           query.order_by.put_if_absent(primary_key, Expression::OrderDirection::ASC) if primary_key
         end
 
@@ -825,10 +863,10 @@ module CQL
         # `dependent:` strategies loads and deletes each record so they run, all in one transaction;
         # others delete by id in bulk (soft-deletable models set `deleted_at`).
         def delete_all : Int64
-          return T.delete_ids(id_scope.ids(as: T.stored_id_type)) unless T.destroy_callbacks? || T.delete_applies_dependents?
+          return persistence_model.delete_ids(id_scope.ids(as: T.stored_id_type)) unless T.destroy_callbacks? || T.delete_applies_dependents?
 
           deleted = 0_i64
-          T.schema.transaction { deleted = all.count(&.delete!).to_i64 }
+          @query.schema.transaction { deleted = all.count(&.delete!).to_i64 }
           deleted
         end
 
