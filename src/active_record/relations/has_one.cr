@@ -76,7 +76,7 @@ module CQL::ActiveRecord::Relations
         parent_id = safe_id(self, Pk)
 
         result = safe_db_operation do
-          {{kind.id}}.find_by({{fk}}: CQL::ActiveRecord::IdChunks.bound(parent_id))
+          {{kind.id}}.on(binding).find_by({{fk}}: CQL::ActiveRecord::IdChunks.bound(parent_id))
         end
 
         {% if cache %}
@@ -98,6 +98,7 @@ module CQL::ActiveRecord::Relations
             safe_db_operation { current.save! }
           end
         else
+          record = record.with_binding(binding)
           # Don't require the record to be persisted when setting association
           # ensure_saved(record)
           parent_id = safe_id(self, Pk)
@@ -129,16 +130,18 @@ module CQL::ActiveRecord::Relations
         # children gets an arbitrary one. Keys are compared as strings, so the child's foreign key
         # type need not match the parent's primary key type.
         def self._preload_{{name.id}}(records : Array(self), chunk_size : Int32 = {{kind.id}}.adapter.dialect.max_bind_params - 1) : Nil
+          binding = preload_binding(records)
           \{% if {{kind.id}}.has_method?({{fk.stringify}}) %}
             found = {} of String => {{kind.id}}
             CQL::ActiveRecord::IdChunks.each(records.compact_map(&.id), chunk_size) do |ids|
-              {{kind.id}}.where({:{{fk}} => ids}).all.each do |child|
+              {{kind.id}}.on(binding).where({:{{fk}} => ids}).all.each do |child|
                 child.{{fk}}.try { |key| found[key.to_s] ||= child }
               end
             end
-            records.each do |record|
+            records.map! do |record|
               id = record.id
               record._set_preloaded_{{name.id}}(found[id.to_s]?) unless id.nil?
+            record
             end
           \{% else %}
             raise ArgumentError.new("Cannot preload {{name.id}}: {{kind.id}} has no {{fk}} attribute")
@@ -156,7 +159,7 @@ module CQL::ActiveRecord::Relations
         parent_id = safe_id(self, Pk)
 
         safe_db_operation do
-          record = {{kind.id}}.new(**attributes)
+          record = {{kind.id}}.new(**attributes).with_binding(binding)
           record.{{fk}} = parent_id
           record
         end
@@ -171,7 +174,7 @@ module CQL::ActiveRecord::Relations
           when :destroy
             safe_db_operation { existing.delete! }
           when :delete
-            safe_db_operation { {{kind.id}}.delete!(existing.id!) }
+            safe_db_operation { {{kind.id}}.on(binding).delete!(existing.id!) }
           when :nullify
             existing.{{fk}} = nil
             safe_db_operation { existing.save! }
@@ -213,7 +216,7 @@ module CQL::ActiveRecord::Relations
           end
         when :delete
           safe_db_operation do
-            {{kind.id}}.delete!(current_record.id!).rows_affected > 0
+            {{kind.id}}.on(binding).delete!(current_record.id!).rows_affected > 0
           end
         when :nullify
           safe_db_operation do
@@ -281,7 +284,7 @@ module CQL::ActiveRecord::Relations
         {% if strategy == :destroy %}
           destroy_dependent(current_record, {{name}})
         {% elsif strategy == :delete %}
-          safe_db_operation { {{kind.id}}.delete!(current_record.id!) }
+          safe_db_operation { {{kind.id}}.on(binding).delete!(current_record.id!) }
         {% else %}
           safe_db_operation do
             current_record.{{fk}} = nil

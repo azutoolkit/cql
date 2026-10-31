@@ -93,7 +93,7 @@ module CQL
 
         # The type ids are stored as (UUIDs as strings), for reading them back.
         def self.stored_id_type
-          {% if Pk == UUID %}String{% else %}Pk{% end %}
+          {% if Pk == UUID %}UUID | String{% else %}Pk{% end %}
         end
 
         # The statement `delete_ids` sends for one chunk of ids (soft deletes update instead).
@@ -148,13 +148,13 @@ module CQL
         # A rollback puts the row back, so the record gets its id back, and `save!` updates it.
         private def undo_delete_on_rollback : Nil
           restore, destroyed = persistence_snapshot, self.destroyed
-          {{@type.id}}.schema.on_rollback { restore.call; self.destroyed = destroyed }
+          persistence_schema.on_rollback { restore.call; self.destroyed = destroyed }
         end
 
         # Deletes this record's row and reports whether there was one; `optimistic_locking`
         # overrides it to delete only the version this copy read.
         private def delete_row! : Bool
-          {{@type.id}}.delete!(id!).rows_affected > 0
+          persistence_model.delete!(id!).rows_affected > 0
         end
       end
     end

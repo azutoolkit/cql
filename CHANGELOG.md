@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Explicit caller-owned database, connection, and transaction binding through `CQL::Binding`, `Schema#bind`, and `Model.on`, including bound persistence, associations, shared transaction frames, and declaration-only schemas.
+- `MigratorConfig#migration_namespace` selects independent migration streams; `Migrator.ready?` checks readiness without creating a ledger or taking a migration lock.
+- Optional `sql_type: :text` and `sql_type: :timestamptz` in declarations and ALTER operations. Existing String/Time defaults remain unchanged.
+- Native UUID DDL mappings (PostgreSQL/CockroachDB UUID, SQLite TEXT, MySQL CHAR(36)) and decoding of native/text UUIDs in primary keys, partial rows, RETURNING, and bulk reads. UUID primary keys default to non-incrementing and reject explicit identity generation.
+
+### Fixed
+
+- Bound declaration metadata and schema inspection use the supplied source without reopening its URI. PostgreSQL dumps preserve TEXT, TIMESTAMPTZ, and UUID identity distinctions.
+- ActiveRecord queries pinned with `using(connection)` retain their connection through hydration and persistence. Executor-only bindings reject unsupported writes instead of falling back to a default database.
+
 ## [1.0.2] - 2026-10-30
 
 ### Added

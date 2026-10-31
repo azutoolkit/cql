@@ -25,6 +25,26 @@ module CQL
   class Table
     include QuotedNameCache
 
+    def primary(*args, sql_type : Symbol, **options)
+      primary(*args, **options, sql_type: SQLType.parse(sql_type.to_s))
+    end
+
+    def column(*args, sql_type : Symbol, **options)
+      column(*args, **options, sql_type: SQLType.parse(sql_type.to_s))
+    end
+
+    def text(*args, sql_type : Symbol, **options)
+      text(*args, **options, sql_type: SQLType.parse(sql_type.to_s))
+    end
+
+    def timestamp(*args, sql_type : Symbol, **options)
+      timestamp(*args, **options, sql_type: SQLType.parse(sql_type.to_s))
+    end
+
+    def timestamps(*args, sql_type : Symbol, **options)
+      timestamps(*args, **options, sql_type: SQLType.parse(sql_type.to_s))
+    end
+
     Log = CQL.config.logger
 
     property table_name : Symbol
@@ -70,6 +90,27 @@ module CQL
     # - **@raise** [Error] If the table name is invalid
     def initialize(@table_name : Symbol, @schema : Schema, @as_name : String? = nil)
       validate_table_name!
+    end
+
+    # :nodoc: Copy all mutable declaration state without sharing source ownership.
+    def copy_declaration(schema : Schema) : Table
+      copy = Table.new(@table_name, schema, @as_name)
+      @columns.each do |name, column|
+        copy.columns[name] = column.copy_declaration_to(copy)
+      end
+      @indexes.each do |index|
+        cloned = copy.index(index.columns.dup, unique: index.unique?, name: index.name)
+        @columns.each do |name, column|
+          copy.columns[name].index = cloned if column.index?.try(&.same?(index))
+        end
+      end
+      @foreign_keys.each do |key|
+        copy.foreign_key(key.columns.dup, references: key.references_table, references_columns: key.references_columns.dup,
+          name: key.name, on_delete: key.on_delete, on_update: key.on_update)
+      end
+      @unique_constraints.each { |constraint| copy.unique_constraints << UniqueConstraint.new(constraint.columns.dup, constraint.name) }
+      @check_constraints.each { |constraint| copy.check_constraints << constraint.dup }
+      copy
     end
 
     private def validate_table_name!
@@ -212,9 +253,10 @@ module CQL
     def primary(
       name : Symbol,
       type : T.class = Int32,
-      auto_increment : Bool = true,
+      auto_increment : Bool = T != UUID,
+      sql_type : SQLType? = nil,
     ) forall T
-      primary = PrimaryKey(T).new(name: name, auto_increment: auto_increment)
+      primary = PrimaryKey(T).new(name: name, auto_increment: auto_increment, sql_type: sql_type)
       primary.table = self
       @primary = primary
       @columns[name] = @primary
@@ -257,8 +299,9 @@ module CQL
       unique : Bool = false,
       size : Int32? = nil,
       index : Bool = false,
+      sql_type : SQLType? = nil,
     ) forall T
-      col = Column(T).new(name, as_name, null, default, unique, size)
+      col = Column(T).new(name, as_name, null, default, unique, size, sql_type: sql_type)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -408,8 +451,8 @@ module CQL
     #   text :bio, null: true, default: ""
     # end
     # ```
-    def text(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false)
-      col = Column(String).new(name, as_name, null, default, unique, size)
+    def text(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, size : Int32? = nil, index : Bool = false, sql_type : SQLType? = nil)
+      col = Column(String).new(name, as_name, null, default, unique, size, sql_type: sql_type)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -468,8 +511,8 @@ module CQL
     #   timestamp :cancelled_at, null: true, index: true
     # end
     # ```
-    def timestamp(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false)
-      col = Column(Time).new(name, as_name, null, default, unique)
+    def timestamp(name : Symbol, as as_name : String? = nil, null : Bool = false, default : DB::Any = nil, unique : Bool = false, index : Bool = false, sql_type : SQLType? = nil)
+      col = Column(Time).new(name, as_name, null, default, unique, sql_type: sql_type)
       col.table = self
       @columns[name] = col
       col.index = index ? add_index(columns: [name], unique: unique) : nil
@@ -615,11 +658,11 @@ module CQL
     # ```
     # timestamps
     # ```
-    def timestamps
+    def timestamps(sql_type : SQLType? = nil)
       # Get the dialect-specific timestamp function string from the schema
       timestamp_default_value = @schema.dialect.current_timestamp
-      timestamp(name: :created_at, default: timestamp_default_value)
-      timestamp(name: :updated_at, default: timestamp_default_value)
+      timestamp(name: :created_at, default: timestamp_default_value, sql_type: sql_type)
+      timestamp(name: :updated_at, default: timestamp_default_value, sql_type: sql_type)
     end
 
     # Declares an index that `create!` and `Schema#build` create after the table.

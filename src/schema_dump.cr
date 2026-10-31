@@ -50,7 +50,30 @@ module CQL
 
     getter adapter : Adapter
     getter uri : String
-    private getter db : DB::Database
+    private getter db : DB::Database | BoundReader
+
+    # Introspection follows the schema's resource instead of reopening its URI.
+    private class BoundReader
+      def initialize(@schema : Schema)
+      end
+
+      def query_all(*args, **options)
+        @schema.with_connection(&.query_all(*args, **options))
+      end
+
+      def query_each(*args, **options, &)
+        @schema.with_connection { |connection| connection.query_each(*args, **options) { |rows| yield rows } }
+      end
+
+      def close : Nil
+      end
+    end
+
+    def initialize(schema : Schema)
+      @adapter = schema.adapter
+      @uri = schema.uri? || ""
+      @db = BoundReader.new(schema)
+    end
 
     # Initialize the schema dumper
     # - **@param** adapter [Adapter] The database adapter to use
@@ -78,7 +101,7 @@ module CQL
     # - **@param** schema [CQL::Schema] The existing schema instance
     # - **@return** [SchemaDump] New SchemaDump instance
     def self.from_schema(schema : CQL::Schema)
-      new(schema.adapter, schema.uri)
+      new(schema)
     end
 
     # Yields a dumper for *schema*'s database and closes its connections afterwards.
@@ -215,7 +238,7 @@ module CQL
       table_names = @db.query_all(<<-SQL, as: String)
         SELECT table_name
         FROM information_schema.tables
-        WHERE table_schema = 'public'
+        WHERE table_schema = current_schema()
         AND table_type = 'BASE TABLE'
         ORDER BY table_name
         SQL
@@ -227,7 +250,7 @@ module CQL
           ON tc.constraint_name = kcu.constraint_name
           AND tc.table_schema = kcu.table_schema
           AND tc.table_name = kcu.table_name
-          WHERE tc.table_schema = 'public'
+          WHERE tc.table_schema = current_schema()
           AND tc.table_name = $1
           AND tc.constraint_type = 'PRIMARY KEY'
           SQL
@@ -235,15 +258,16 @@ module CQL
 
         # Get columns
         @db.query_each(<<-SQL, table_name) do |col_rs|
-          SELECT column_name, data_type, is_nullable, column_default
+          SELECT column_name, data_type, is_nullable, column_default, is_identity
           FROM information_schema.columns
-          WHERE table_schema = 'public' AND table_name = $1
+          WHERE table_schema = current_schema() AND table_name = $1
           ORDER BY ordinal_position
           SQL
           column_name = col_rs.read(String)
           column_type = col_rs.read(String)
           nullable = col_rs.read(String) == "YES"
           default_value = col_rs.read(String?)
+          identity = col_rs.read(String) == "YES"
 
           crystal_type = map_sql_type_to_crystal(column_type)
           column_info = ColumnInfo.new(
@@ -252,7 +276,9 @@ module CQL
             nullable: nullable,
             default: default_value,
             primary_key: primary_keys.includes?(column_name),
-            unique: unique_columns.includes?(column_name)
+            unique: unique_columns.includes?(column_name),
+            sql_type: column_type == "text" ? SQLType::Text : (column_type == "timestamp with time zone" ? SQLType::Timestamptz : nil),
+            auto_increment: identity || !!default_value.try(&.starts_with?("nextval("))
           )
           table_info.columns << column_info
         end
@@ -276,7 +302,7 @@ module CQL
             ON tc.constraint_name = rc.constraint_name
             AND tc.table_schema = rc.constraint_schema
           WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema = 'public'
+          AND tc.table_schema = current_schema()
           AND tc.table_name = $1
           SQL
           local_column = fk_rs.read(String)
@@ -316,7 +342,7 @@ module CQL
         JOIN pg_class c ON c.oid = i.indrelid
         JOIN pg_namespace n ON n.oid = c.relnamespace
         JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
-        WHERE n.nspname = 'public' AND c.relname = $1
+        WHERE n.nspname = current_schema() AND c.relname = $1
         AND i.indisunique AND i.indisvalid AND NOT i.indisprimary AND i.indnatts = 1 AND i.indpred IS NULL
         SQL
     end
@@ -425,18 +451,19 @@ module CQL
         end
       when CQL::Adapter::Postgres, CQL::Adapter::CockroachDB
         case downcase_type
-        when "integer"                                  then "Int32"
-        when "bigint"                                   then "Int64"
-        when "real"                                     then "Float32"
-        when "double precision"                         then "Float64"
-        when "character varying", "varchar", "text"     then "String"
-        when "boolean"                                  then "Bool"
-        when "timestamp without time zone", "timestamp" then "Time"
-        when "date"                                     then "Date"
-        when "interval"                                 then "Time::Span"
-        when "bytea"                                    then "Slice(UInt8)"
-        when "jsonb", "json"                            then "JSON::Any"
-        else                                                 "String"
+        when "integer"                                                              then "Int32"
+        when "bigint"                                                               then "Int64"
+        when "real"                                                                 then "Float32"
+        when "double precision"                                                     then "Float64"
+        when "character varying", "varchar", "text"                                 then "String"
+        when "boolean"                                                              then "Bool"
+        when "timestamp without time zone", "timestamp", "timestamp with time zone" then "Time"
+        when "uuid"                                                                 then "UUID"
+        when "date"                                                                 then "Date"
+        when "interval"                                                             then "Time::Span"
+        when "bytea"                                                                then "Slice(UInt8)"
+        when "jsonb", "json"                                                        then "JSON::Any"
+        else                                                                             "String"
         end
       else
         "String"
@@ -471,19 +498,28 @@ module CQL
         primary_columns = table.columns.select(&.primary_key?)
         if primary_columns.size == 1
           pk = primary_columns.first
-          str << "    primary #{symbol(pk.name)}, #{pk.type}\n"
+          str << "    primary #{symbol(pk.name)}, #{pk.type}"
+          str << ", auto_increment: false" unless pk.auto_increment?
+          str << ", sql_type: :#{pk.sql_type.to_s.downcase}" if pk.sql_type
+          str << "\n"
         end
 
         has_created_at = table.columns.any? { |column| column.name == "created_at" }
         has_updated_at = table.columns.any? { |column| column.name == "updated_at" }
-        use_timestamps_macro = has_created_at && has_updated_at
+        timestamp_columns = table.columns.select { |column| {"created_at", "updated_at"}.includes?(column.name) }
+        use_timestamps_macro = has_created_at && has_updated_at && timestamp_columns.all? { |column| column.type == "Time" && column.sql_type.nil? } && timestamp_columns.map(&.default).uniq!.size == 1
 
         table.columns.reject(&.primary_key?).each do |column|
           if use_timestamps_macro && (column.name == "created_at" || column.name == "updated_at")
             next
           end
 
-          str << "    #{get_column_method(column.type)} #{symbol(column.name)}"
+          if column.type == "UUID"
+            str << "    column #{symbol(column.name)}, UUID"
+          else
+            str << "    #{get_column_method(column.type)} #{symbol(column.name)}"
+          end
+          str << ", sql_type: :#{column.sql_type.to_s.downcase}" if column.sql_type
           str << ", null: true" if column.nullable?
           str << ", default: #{column.default.inspect}" if column.default
           str << ", unique: true" if column.unique?
@@ -598,9 +634,11 @@ module CQL
       property default : String?
       property? primary_key : Bool
       property? unique : Bool
+      property sql_type : SQLType?
+      property? auto_increment : Bool
 
       def initialize(@name : String, @type : String, @nullable : Bool = false, @default : String? = nil,
-                     @primary_key : Bool = false, @unique : Bool = false)
+                     @primary_key : Bool = false, @unique : Bool = false, @sql_type : SQLType? = nil, @auto_increment : Bool = true)
       end
     end
 

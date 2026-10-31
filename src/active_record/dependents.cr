@@ -41,7 +41,7 @@ module CQL
             yield
           \{% else %}
             deleted = false
-            {{@type.id}}.schema.transaction do
+            persistence_schema.transaction do
               \{% for name in DEPENDENT_ASSOCIATIONS %}
                 handle_\{{name.id}}_dependency
               \{% end %}

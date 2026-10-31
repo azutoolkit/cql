@@ -197,9 +197,9 @@ describe CQL::SchemaDump do
 
       table = dumped_table(dumper.generate_schema_content(:UniqueDB, :unique_db), table_name)
 
-      table.should contain("    text :email, unique: true\n")
+      table.should contain("    text :email, sql_type: :text, unique: true\n")
       table.should contain("    primary :id, Int32\n")
-      {"name", "a", "b"}.each { |column| table.should contain("    text :#{column}\n") }
+      {"name", "a", "b"}.each { |column| table.should contain("    text :#{column}, sql_type: :text\n") }
     ensure
       dumper.try(&.close)
       DB.open(postgres_database_url, &.exec("DROP TABLE IF EXISTS #{table_name}")) if table_name
@@ -444,7 +444,7 @@ describe CQL::SchemaDump do
     it "dumps a lowercase PostgreSQL table and keyword column" do
       table = "schema_dump_keys_#{Random::Secure.hex(4)}"
       with_postgres_dump(table, "key") do |dumper|
-        dumped_table(dumper.generate_schema_content(:KeysDB, :keys_db), table).should contain("    text :key, null: true\n")
+        dumped_table(dumper.generate_schema_content(:KeysDB, :keys_db), table).should contain("    text :key, sql_type: :text, null: true\n")
       end
     end
 

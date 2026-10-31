@@ -12,6 +12,7 @@ require "./exceptions"
 require "./cql"
 require "./pool_stats"
 require "./connection_source"
+require "./binding"
 require "./rollback_hooks"
 
 module CQL
@@ -58,7 +59,17 @@ module CQL
 
     # - **@return** [String] the URI of the database: the string given, or for a schema with a `source:` the crystal-db-safe
     #   form of it (`ConnectionSource#database_uri`, e.g. without the engine's pool options)
-    getter uri : String
+    @uri : String?
+
+    def uri? : String?
+      @uri
+    end
+
+    def uri : String
+      @uri || raise Error.new("Declaration-only schema has no database URI")
+    end
+
+    getter binding : Binding?
 
     # - **@return** [String] the version of the schema
     getter version : String
@@ -99,10 +110,15 @@ module CQL
 
     # Fiber-local transaction stacks: each fiber's entered transactions (and savepoints), innermost last.
     # A frame's rollback hooks are only touched by the fiber that owns the stack.
-    @fiber_transactions = {} of Fiber => Array(TransactionFrame)
-    @fiber_mutex = CQL::Compat::Mutex.new
-    # Mirrors `@fiber_transactions.size`: queries skip the mutex only while no fiber has a transaction open
-    @fibers_in_transaction = Atomic(Int32).new(0)
+    class TransactionState
+      getter fiber_transactions = {} of Fiber => Array(TransactionFrame)
+      getter fiber_mutex = CQL::Compat::Mutex.new
+      getter fibers_in_transaction = Atomic(Int32).new(0)
+    end
+
+    @transaction_state = TransactionState.new
+
+    # Mirrors `@transaction_state.fiber_transactions.size`: queries skip the mutex only while no fiber has a transaction open
 
     # Creates a new expression generator for thread-safe SQL generation.
     # Each call returns a fresh Generator instance to avoid state corruption
@@ -140,18 +156,18 @@ module CQL
     # The frame of the fiber's innermost transaction still open; any closed by hand (`tx.commit`/`tx.rollback`)
     # are skipped, so work falls back to the enclosing transaction rather than leaving it.
     private def active_frame : TransactionFrame?
-      return if @fibers_in_transaction.get.zero? # this fiber's own push is already visible, so 0 means it has none
-      @fiber_mutex.synchronize do
-        @fiber_transactions[Fiber.current]?.try { |stack| stack.reverse_each.find { |frame| !frame.transaction.closed? } }
+      return if @transaction_state.fibers_in_transaction.get.zero? # this fiber's own push is already visible, so 0 means it has none
+      @transaction_state.fiber_mutex.synchronize do
+        @transaction_state.fiber_transactions[Fiber.current]?.try { |stack| stack.reverse_each.find { |frame| !frame.transaction.closed? } }
       end
     end
 
     # The innermost open frame, as `active_frame`, once the hooks of savepoints the block released by hand above it
     # (closed frames on its connection) were handed down to it in stack order: hooks keep running newest first.
     private def settled_frame : TransactionFrame?
-      return if @fibers_in_transaction.get.zero?
-      @fiber_mutex.synchronize do
-        stack = @fiber_transactions[Fiber.current]? || return
+      return if @transaction_state.fibers_in_transaction.get.zero?
+      @transaction_state.fiber_mutex.synchronize do
+        stack = @transaction_state.fiber_transactions[Fiber.current]? || return
         open_index = stack.rindex { |frame| !frame.transaction.closed? } || return
         target = stack[open_index]
         (open_index + 1...stack.size).each do |index|
@@ -167,31 +183,31 @@ module CQL
     # block and pops it afterwards.
     private def with_active_transaction(tx : DB::Transaction, rollback_hooks : RollbackHooks, &)
       fiber = Fiber.current
-      @fiber_mutex.synchronize do
-        (@fiber_transactions[fiber] ||= [] of TransactionFrame).push(TransactionFrame.new(tx, rollback_hooks))
-        @fibers_in_transaction.set(@fiber_transactions.size)
+      @transaction_state.fiber_mutex.synchronize do
+        (@transaction_state.fiber_transactions[fiber] ||= [] of TransactionFrame).push(TransactionFrame.new(tx, rollback_hooks))
+        @transaction_state.fibers_in_transaction.set(@transaction_state.fiber_transactions.size)
       end
       popped = false
       begin
         yield
       ensure
         # Pops once: crystal-db's COMMIT runs while a `return` or `break` unwinds the block, and its error runs this again.
-        @fiber_mutex.synchronize { pop_frame(fiber) } unless popped
+        @transaction_state.fiber_mutex.synchronize { pop_frame(fiber) } unless popped
         popped = true # ameba:disable Lint/UselessAssign (read by this ensure's second run)
       end
     end
 
     private def pop_frame(fiber : Fiber) : Nil
-      stack = @fiber_transactions[fiber]
+      stack = @transaction_state.fiber_transactions[fiber]
       stack.pop
-      @fiber_transactions.delete(fiber) if stack.empty?
-      @fibers_in_transaction.set(@fiber_transactions.size)
+      @transaction_state.fiber_transactions.delete(fiber) if stack.empty?
+      @transaction_state.fibers_in_transaction.set(@transaction_state.fiber_transactions.size)
     end
 
     # The fiber's open transactions on *connection*: a savepoint begun on it now is nested in each of them.
     private def open_transactions_on(connection : DB::Connection) : Array(DB::Transaction)
-      @fiber_mutex.synchronize do
-        @fiber_transactions[Fiber.current].compact_map do |frame|
+      @transaction_state.fiber_mutex.synchronize do
+        @transaction_state.fiber_transactions[Fiber.current].compact_map do |frame|
           frame.transaction if frame.transaction.connection.same?(connection) && !frame.transaction.closed?
         end
       end
@@ -218,7 +234,7 @@ module CQL
     #   end
     # end
     # ```
-    def self.define(name : Symbol, uri : String, adapter : Adapter, version : String = "1.0", quote_identifiers : Bool = false, source : ConnectionSource? = nil, &)
+    def self.define(name : Symbol, uri : String? = nil, adapter : Adapter = Adapter::SQLite, version : String = "1.0", quote_identifiers : Bool = false, source : ConnectionSource? = nil, &)
       schema = new(name, uri, adapter, version, quote_identifiers, source)
       with schema yield
       schema
@@ -242,17 +258,37 @@ module CQL
     # schema = CQL::Schema.new(:app, "postgres://app@db/app", CQL::Adapter::Postgres,
     #   source: CQL::Postgres::EngineSource.new(engine))
     # ```
-    def initialize(@name : Symbol, @uri : String, @adapter : Adapter, @version : String = "1.0", @quote_identifiers : Bool = false, source : ConnectionSource? = nil)
-      validate_uri!
+    def initialize(@name : Symbol, @uri : String?, @adapter : Adapter, @version : String = "1.0", @quote_identifiers : Bool = false, source : ConnectionSource? = nil)
+      validate_uri! if @uri
       if source && (declared = source.adapter) && declared != @adapter
         raise ArgumentError.new("the connection source speaks #{declared}, the schema uses #{@adapter} (build the engine with adapter: to match)")
       end
-      @source = source || DatabaseSource.new(open_database)
-      @uri = source.database_uri(@uri) if source # `uri` names the same server; the source's own options stay out of it
+      @source = source || (@uri ? DatabaseSource.new(open_database) : UnboundSource.new)
+      @uri = source.database_uri(@uri.not_nil!) if source && @uri # `uri` names the same server; the source's own options stay out of it
+    end
+
+    def bind(target : Binding) : Schema
+      target.schema(self)
+    end
+
+    def bind(target : DB::Database | DB::Connection | DB::Transaction) : Schema
+      bind(Binding.new(target))
+    end
+
+    # :nodoc: Complete declaration copy; query-only Column#copy_to is deliberately different.
+    def copy_for_binding(binding : Binding) : Schema
+      copy = Schema.new(@name, @uri, @adapter, @version, @quote_identifiers, source: binding.source)
+      copy.attach_binding(binding)
+      @tables.each { |name, table| copy.tables[name] = table.copy_declaration(copy) }
+      copy
+    end
+
+    protected def attach_binding(@binding : Binding) : Nil
+      @transaction_state = @binding.not_nil!.transaction_state
     end
 
     private def open_database : DB::Database
-      url = URI.parse(@adapter.driver_uri(@uri))
+      url = URI.parse(@adapter.driver_uri(@uri.not_nil!))
       if @adapter.postgres_compatible? && url.query_params.has_key?("query_timeout") &&
          (reason = CQL::Postgres::Driver.unread_query_timeout(url.scheme.to_s))
         CQL.config.effective_logger.warn { reason }
@@ -266,7 +302,7 @@ module CQL
 
     # Validates the database URI format
     private def validate_uri!
-      uri = URI.parse(@uri)
+      uri = URI.parse(@uri.not_nil!)
       raise InvalidURIError.new("Invalid database URI format") unless uri.scheme && uri.path
 
       case uri.scheme
@@ -316,6 +352,7 @@ module CQL
     # Yields the fiber's transaction connection, or else one pooled connection, to pin statements to it with `using(connection)`
     # (e.g. inside a transaction started on that connection).
     def with_connection(&)
+      @source.validate!
       if connection = active_connection
         yield connection
       else
@@ -324,6 +361,7 @@ module CQL
     end
 
     def exec_query(& : DB::Connection -> _)
+      @source.validate!
       # Performance monitoring will be handled by individual query methods
       # that call this method, as we don't have access to SQL/params here
       if conn = active_connection
@@ -407,8 +445,9 @@ module CQL
     # A dialect that cannot honour them raises `DialectError`, and a nested call raises `ArgumentError`, before
     # anything begins.
     def transaction(*, isolation : IsolationLevel? = nil, read_only : Bool = false, &)
+      @source.validate!
       parent = settled_frame
-      before_begin, after_begin = transaction_mode_statements(isolation, read_only, nested: !parent.nil?)
+      before_begin, after_begin = transaction_mode_statements(isolation, read_only, nested: !parent.nil? || @source.is_a?(BorrowedTransactionSource))
       observer = Telemetry.begin_transaction(@adapter, !parent.nil?)
       rollback_hooks = RollbackHooks.new
       enclosing = parent.try { |frame| open_transactions_on(frame.transaction.connection) }
@@ -458,6 +497,8 @@ module CQL
     end
 
     def transaction(tx : DB::Transaction, &)
+      @source.validate!
+      raise CQL::Error.new("Transaction is closed") if tx.closed?
       # Not this schema's transaction to commit or roll back: rollback hooks go to the enclosing one when *tx* runs on
       # its connection, and are dropped otherwise.
       shared = settled_frame.try { |frame| frame.rollback_hooks if frame.transaction.connection.same?(tx.connection) }

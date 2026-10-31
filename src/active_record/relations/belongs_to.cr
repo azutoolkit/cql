@@ -92,7 +92,7 @@ module CQL::ActiveRecord::Relations
         fk_value = @{{foreign_key.id}}.not_nil!
 
         result = safe_db_operation do
-          {{klass.id}}.find?(fk_value)
+          {{klass.id}}.on(binding).find?(fk_value)
         end
 
         {% if !optional %}
@@ -138,14 +138,16 @@ module CQL::ActiveRecord::Relations
         # Loads this association for *records* with one query per *chunk_size* distinct foreign
         # keys (the dialect's bind-parameter limit by default).
         def self._preload_{{assoc.id}}(records : Array(self), chunk_size : Int32 = {{klass.id}}.adapter.dialect.max_bind_params - 1) : Nil
+          binding = preload_binding(records)
           keys = records.compact_map(&.{{foreign_key.id}}).reject(&.==(0))
           found = {} of typeof(keys.first) => {{klass.id}}
           CQL::ActiveRecord::IdChunks.each(keys, chunk_size) do |chunk|
-            {{klass.id}}.query.where_primary_key(chunk).all.each { |target| found[target.id!] = target }
+            {{klass.id}}.on(binding).query.where_primary_key(chunk).all.each { |target| found[target.id!] = target }
           end
-          records.each do |record|
+          records.map! do |record|
             target = record.{{foreign_key.id}}.try { |key| found[key]? }
             record._set_preloaded_{{assoc.id}}(target)
+            record
           end
         end
 
@@ -158,7 +160,7 @@ module CQL::ActiveRecord::Relations
       # Build a new associated record without saving
       def build_{{assoc.id}}(**attributes) : {{klass.id}}
         safe_db_operation do
-          {{klass.id}}.new(**attributes)
+          {{klass.id}}.new(**attributes).with_binding(binding)
         end
       end
 
@@ -198,7 +200,7 @@ module CQL::ActiveRecord::Relations
         result = safe_db_operation do
           record = current_record{% unless optional %}.not_nil!{% end %}
           record_id = safe_id(record, typeof(record.id!))
-          {{klass.id}}.delete!(record_id).rows_affected > 0
+          {{klass.id}}.on(binding).delete!(record_id).rows_affected > 0
         end
 
         if result

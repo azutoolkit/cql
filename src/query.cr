@@ -112,6 +112,23 @@ module CQL
     def initialize(@schema : Schema)
     end
 
+    # :nodoc: Keep the query AST, replacing its explicit execution context.
+    def rebind(schema : Schema) : Query
+      if binding = @schema.binding
+        raise CQL::Error.new("Cannot rebind a query to a different binding") unless binding == schema.binding
+      end
+      copy = clone
+      copy.replace_schema(schema)
+      copy
+    end
+
+    protected def replace_schema(@schema : Schema) : Nil
+      @executor = nil
+      @query_tables.transform_values! do |entry|
+        {table: @schema.tables[entry[:table].table_name]? || entry[:table], alias: entry[:alias]}
+      end
+    end
+
     # Clone the query object
     def clone
       new_query = Query.new(@schema)
@@ -148,7 +165,7 @@ module CQL
     # The first row mapped to *kind*, rendered with `LIMIT 1` instead of on a clone.
     def first(as kind)
       sql, params = render(build(limit: 1))
-      PreparedSelect.new(@schema, sql, params).using(executor).get(kind)
+      contextualize(PreparedSelect.new(@schema, sql, params).using(executor).get(kind))
     end
 
     def first!(as kind)
@@ -843,6 +860,9 @@ module CQL
     #
     # ameba/disable Metrics/CyclomaticComplexity
     def merge(other_query : Query) : Query
+      unless @schema.binding == other_query.schema.binding
+        raise CQL::Error.new("Cannot merge queries from different bindings")
+      end
       MergeQuery.new(self, other_query).execute
     end
 
@@ -1425,8 +1445,9 @@ module CQL
 
     # Finds the String alias for a given Table object
     private def find_alias_for_table(table_to_find : CQL::Table) : String
+      rebound = @schema.binding.try(&.rebound_table(table_to_find))
       @query_tables.each do |alias_str, info|
-        return alias_str if info[:table].object_id == table_to_find.object_id
+        return alias_str if info[:table].same?(table_to_find) || info[:table].same?(rebound)
       end
       raise KeyError.new "Internal Error: Could not find String alias for table '#{table_to_find.table_name}' in query_tables: #{@query_tables.keys}"
     end

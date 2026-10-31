@@ -172,3 +172,19 @@ user.avatar_url # => "/avatars/john.png"
 - [Implement Soft Deletes](../models/soft-delete.md)
 - [Add Optimistic Locking](../models/optimistic-locking.md)
 - [Migration DSL Reference](../../reference/api/migration-dsl.md)
+
+## Explicit SQL types and UUIDs
+
+The default String and Time mappings are unchanged. Opt in to PostgreSQL TEXT and TIMESTAMPTZ with `sql_type:` in declarations or ALTER operations:
+
+```crystal
+schema.alter :events do
+  add_column :payload, String, sql_type: :text
+  change_column :observed_at, Time, sql_type: :timestamptz
+  add_column :correlation_id, UUID
+end
+```
+
+`:text` requires String without a size; `:timestamptz` requires Time and PostgreSQL or CockroachDB. The same option works with `column`, `text`, `timestamp`, `timestamps`, and `primary`. Bound declarations, ALTER rollback metadata, and PostgreSQL schema dumps preserve the option.
+
+UUID columns map to UUID on PostgreSQL/CockroachDB, TEXT on SQLite, and CHAR(36) on MySQL. `primary :id, UUID` defaults to `auto_increment: false`; explicitly enabling identity generation raises before execution.

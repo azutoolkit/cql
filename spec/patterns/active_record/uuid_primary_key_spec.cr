@@ -352,6 +352,8 @@ describe "UUID Primary Key Support" do
       gone = UuidSession.create!(token: "gone", user_id: 1_i64, created_at: Time.utc, updated_at: Time.utc)
       kept = UuidSession.create!(token: "kept", user_id: 2_i64, created_at: Time.utc, updated_at: Time.utc)
 
+      UuidSession.where(token: "gone").ids(as: UUID).should eq([gone.id!])
+      UuidSession.where(token: "gone").pick(:id, as: UUID).should eq(gone.id!)
       UuidSession.where(token: "gone").delete_all.should eq(1)
 
       UuidSession.find(gone.id!).should be_nil

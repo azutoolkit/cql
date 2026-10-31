@@ -23,6 +23,7 @@ module CQL::ActiveRecord::Relations
     include Enumerable(Target)
     include BaseRelation
 
+    getter binding : CQL::Binding?
     @base_query : CQL::Query?
     @scoped_query : CQL::Query?
     @records : Array(Target) = [] of Target
@@ -56,7 +57,9 @@ module CQL::ActiveRecord::Relations
       query @base_query : CQL::Query? = nil, # base query; scoped to the parent on first use
       auto_load : Bool = false,              # automatically load records
       @dependent : Symbol = :nullify,        # dependency strategy
+      @binding : CQL::Binding? = nil,
     )
+      @binding ||= @base_query.try(&.schema.binding)
       @target_table = Target.table
       @records = [] of Target
 
@@ -169,6 +172,7 @@ module CQL::ActiveRecord::Relations
     # user.posts << Post.new(title: "Hello World")
     # ```
     def <<(record : Target)
+      record = record.with_binding(binding)
       load_records unless @loaded
       created_record = create(record)
       # a reload hides a soft-deleted record
@@ -291,7 +295,7 @@ module CQL::ActiveRecord::Relations
     # ```
     def build(**attributes)
       safe_db_operation do
-        record = Target.new(**attributes)
+        record = Target.new(**attributes).with_binding(binding)
         record.attributes({@key => @id})
         record
       end
@@ -323,9 +327,14 @@ module CQL::ActiveRecord::Relations
     # - **return** : Target
     # - **raise** : RelationError, or CQL::RecordInvalid when a saved record fails its validations
     def create(record : Target)
+      record = record.with_binding(binding)
       record.attributes({@key => @id})
       safe_db_operation do
-        record.new_record? ? Target.create!(record) : record.save!
+        if record.new_record?
+          record = Target.on(binding).create!(record)
+        else
+          record.save!
+        end
         record
       end
     end
@@ -341,6 +350,7 @@ module CQL::ActiveRecord::Relations
     # user.posts.delete(post) # => true
     # ```
     def delete(record : Target)
+      record = record.with_binding(binding)
       record_id = safe_id(record, Pk)
       delete(record_id)
     end
@@ -358,7 +368,7 @@ module CQL::ActiveRecord::Relations
     def delete(id : Pk)
       result = safe_db_operation do
         CQL::Delete
-          .new(Target.schema)
+          .new(Target.on(binding).schema)
           .from(Target.table)
           .where({Target.primary_key_column => bound_id(id), @key => bound_id(@id)})
           .commit
@@ -377,7 +387,7 @@ module CQL::ActiveRecord::Relations
     def delete_all : Int64
       result = safe_db_operation do
         CQL::Delete
-          .new(Target.schema)
+          .new(Target.on(binding).schema)
           .from(Target.table)
           .where({@key => bound_id(@id)})
           .commit
@@ -396,7 +406,7 @@ module CQL::ActiveRecord::Relations
     def nullify_all : Int64
       result = safe_db_operation do
         CQL::Update
-          .new(Target.schema)
+          .new(Target.on(binding).schema)
           .table(Target.table)
           .set({@key => nil})
           .where({@key => bound_id(@id)})
@@ -425,7 +435,7 @@ module CQL::ActiveRecord::Relations
       safe_db_operation do
         target_key = Expression::Column.new(Target.cql_column(Target.primary_key_column))
         CQL::ActiveRecord::IdChunks.each(ids, Target.adapter.dialect.max_bind_params - 1) do |chunk|
-          CQL::Update.new(Target.schema).table(Target.table).set({@key => bound_id(@id)}).where { target_key.in(chunk) }.commit
+          CQL::Update.new(Target.on(binding).schema).table(Target.table).set({@key => bound_id(@id)}).where { target_key.in(chunk) }.commit
         end
         reload
       end
@@ -488,6 +498,7 @@ module CQL::ActiveRecord::Relations
         load_records unless @loaded
         all_or_none do
           @records.each do |record|
+            record = record.with_binding(binding)
             safe_db_operation { record.delete! }
             records_affected += 1
           end
@@ -511,8 +522,8 @@ module CQL::ActiveRecord::Relations
     # `delete!` raises (a stale one) rolls back the deletes before it, and a rollback has the collection load its rows
     # again. Statements on another schema, such as a many_to_many join table's, run outside it.
     private def all_or_none(&)
-      Target.schema.transaction do
-        Target.schema.on_rollback { @loaded = false }
+      Target.on(binding).schema.transaction do
+        Target.on(binding).schema.on_rollback { @loaded = false }
         yield
       end
     end
@@ -521,6 +532,7 @@ module CQL::ActiveRecord::Relations
     # - **param** : record (Target)
     # - **return** : Bool
     def includes?(record : Target) : Bool
+      record = record.with_binding(binding)
       load_records unless @loaded
       @records.any? { |local_record| local_record.id == record.id }
     end
@@ -627,6 +639,7 @@ module CQL::ActiveRecord::Relations
       load_records unless @loaded
 
       records.each do |record|
+        record = record.with_binding(binding)
         next if includes?(record)
         record.attributes({@key => @id})
         safe_db_operation { record.save! }
@@ -643,6 +656,7 @@ module CQL::ActiveRecord::Relations
       load_records unless @loaded
 
       records.each do |record|
+        record = record.with_binding(binding)
         if includes?(record)
           record.attributes({@key => nil})
           safe_db_operation { record.save! }

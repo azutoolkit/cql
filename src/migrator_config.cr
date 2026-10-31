@@ -12,6 +12,20 @@ module CQL
     # The environment variable the schema file's `uri:` line reads.
     property schema_url_env : String
 
+    property migration_namespace : String?
+
+    def namespace_prefix : String?
+      return unless value = @migration_namespace
+      value = value.strip.rstrip(':')
+      raise ArgumentError.new("migration_namespace must name a module") if value.empty?
+      "#{value}::"
+    end
+
+    def includes_migration?(name : String) : Bool
+      prefix = namespace_prefix
+      prefix.nil? || name.starts_with?(prefix)
+    end
+
     def initialize(
       @schema_file_path : String = "src/schemas/app_schema.cr",
       @schema_name : Symbol = :AppSchema,
@@ -20,6 +34,7 @@ module CQL
       @auto_sync : Bool? = true,
       @lock_timeout : Time::Span? = 60.seconds,
       @schema_url_env : String = "DATABASE_URL",
+      @migration_namespace : String? = nil,
     )
     end
   end

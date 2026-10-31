@@ -84,6 +84,7 @@
 
 - [Configure CQL](how-to/configuration/configure-cql.md)
 - [Configure Database Connection](how-to/configuration/database-connection.md)
+- [Bind Models to a Database or Transaction](how-to/configuration/explicit-binding.md)
 - [Set Up Connection Pooling](how-to/configuration/connection-pooling.md)
 - [Configure Multiple Environments](how-to/configuration/environments.md)
 - [Enable SSL Connections](how-to/configuration/ssl.md)

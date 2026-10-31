@@ -42,10 +42,11 @@ module CQL
         # ```
         # User.update!(1, {:active => true} of Symbol => DB::Any)
         # ```
-        def self.update!(id : Pk, attrs : Hash(Symbol, DB::Any))
+        def self.update!(id : Pk, attrs : Hash(Symbol, DB::Any), context : CQL::ActiveRecord::BoundModel({{@type.id}})? = nil)
           raise CQL::Error.new("No attributes to update") if attrs.empty?
 
-          table = {{@type.id}}.schema.tables[{{@type.id}}.table]
+          model = context || CQL::ActiveRecord::BoundModel({{@type.id}}).new
+          table = model.schema.tables[{{@type.id}}.table]
           attrs.each do |key, value|
             column = table.columns[key]?
             raise CQL::Error.new("Unknown column: #{key}") unless column
@@ -60,7 +61,7 @@ module CQL
             end
           end
 
-          update_row!(id, &.set(attrs))
+          model.update_row!(id, &.set(attrs))
         end
 
         # Update a record by ID with given fields
@@ -110,7 +111,7 @@ module CQL
           # Remove the ID from the attributes
           attrs.delete(primary_key_column)
 
-          update_row!(record.id!, &.set(attrs))
+          record.persistence_model.update_row!(record.id!, &.set(attrs))
 
           record
         end
@@ -165,7 +166,10 @@ module CQL
         # user.update!
         # ```
         def update!
-          {{@type.id}}.update!(self)
+          updated = persistence_model.update!(self)
+          self.attributes(updated.attributes)
+          self.clear_changes! if self.responds_to?(:clear_changes!)
+          self
         end
 
         # Assign the given fields and write the record to its row

@@ -47,7 +47,12 @@ module CQL
   alias PrimaryKeyType = Int32.class | Int64.class | UUID.class | ULID.class
 
   # :nodoc:
-  alias Any = Int32.class |
+  enum SQLType
+    Text
+    Timestamptz
+  end
+
+  alias Any = UUID.class | Int32.class |
               Int64.class |
               UInt32.class |
               UInt64.class |
@@ -69,6 +74,7 @@ module CQL
     UInt64       => "BIGINT",
     Float32      => "REAL",
     Float64      => "DOUBLE PRECISION",
+    UUID         => "UUID",
     String       => "VARCHAR",
     Bool         => "BOOLEAN",
     Time         => "TIMESTAMP",
@@ -90,6 +96,7 @@ module CQL
       UInt64       => "BIGINT UNSIGNED",
       Float32      => "FLOAT",
       Float64      => "DOUBLE",
+      UUID         => "TEXT",
       String       => "TEXT",
       Bool         => "BOOLEAN",
       Time         => "TIMESTAMP",
@@ -104,6 +111,7 @@ module CQL
       UInt64       => "BIGINT UNSIGNED",
       Float32      => "FLOAT",
       Float64      => "DOUBLE",
+      UUID         => "CHAR(36)",
       String       => "VARCHAR(255)",
       Bool         => "TINYINT(1)",
       Time         => "DATETIME(3)",

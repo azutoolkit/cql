@@ -100,8 +100,42 @@ module CQL::ActiveRecord::Relations
           query: base_query,
           dependent: {{dependent}},
           validate: {{validate}},
-          autosave: {{autosave}}
+          autosave: {{autosave}},
+          binding: binding
         )
+      end
+
+      # Batch the join rows and targets on the same binding, replacing struct
+      # parents after injecting their collections.
+      def self._preload_{{name.id}}(records : Array(self), chunk_size : Int32 = {{klass.id}}.adapter.dialect.max_bind_params - 1) : Nil
+        binding = preload_binding(records)
+        links = [] of Tuple(String, String)
+        CQL::ActiveRecord::IdChunks.each(records.compact_map(&.id), chunk_size) do |ids|
+          joins = CQL::Query.new({{join_class}}.on(binding).schema).from({{join_class}}.table)
+            .select(:{{fk}}, :{{target_fk}}).where({ :{{fk}} => ids })
+          joins.all(as: {DB::Any | UUID, DB::Any | UUID}).each do |owner_id, target_id|
+            links << {owner_id.to_s, target_id.to_s} unless owner_id.nil? || target_id.nil?
+          end
+        end
+        targets = {} of String => {{klass.id}}
+        CQL::ActiveRecord::IdChunks.each(links.map(&.[1]).uniq!, chunk_size) do |ids|
+          {{klass.id}}.on(binding).query.where_primary_key(ids).all.each do |target|
+            targets[target.id!.to_s] = target
+          end
+        end
+        grouped = {} of String => Array({{klass.id}})
+        links.each do |owner_id, target_id|
+          if target = targets[target_id]?
+            items = (grouped[owner_id] ||= [] of {{klass.id}})
+            items << target unless items.any? { |item| item.id == target.id }
+          end
+        end
+        records.map! do |record|
+          if id = record.id
+            record.{{name.id}}._inject_preloaded(grouped[id.to_s]? || [] of {{klass.id}})
+          end
+          record
+        end
       end
 
       # Reload the association and clear the memoized value
@@ -144,7 +178,7 @@ module CQL::ActiveRecord::Relations
 
         safe_db_operation do
            CQL::Query
-             .new({{join_class}}.schema)
+             .new({{join_class}}.on(binding).schema)
              .from({{join_class}}.table)
              .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
              .count
@@ -161,7 +195,7 @@ module CQL::ActiveRecord::Relations
         safe_db_operation do
           begin
             result = CQL::Query
-              .new({{join_class}}.schema)
+              .new({{join_class}}.on(binding).schema)
               .from({{join_class}}.table)
               .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
               .limit(1)
@@ -183,7 +217,7 @@ module CQL::ActiveRecord::Relations
         safe_db_operation do
           begin
             result = CQL::Query
-              .new({{join_class}}.schema)
+              .new({{join_class}}.on(binding).schema)
               .from({{join_class}}.table)
               .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id), :{{target_fk}} => CQL::ActiveRecord::IdChunks.bound(target_id) })
               .limit(1)
@@ -203,7 +237,7 @@ module CQL::ActiveRecord::Relations
 
                  safe_db_operation do
            records = CQL::Query
-             .new({{join_class}}.schema)
+             .new({{join_class}}.on(binding).schema)
              .from({{join_class}}.table)
              .where({ :{{fk}} => CQL::ActiveRecord::IdChunks.bound(parent_id) })
              .all({{join_class}})

@@ -5,7 +5,7 @@ module CQL
         {% if Pk == UUID %}
           # For UUID primary keys, store as String internally for DB compatibility
           # but expose as UUID for type safety
-          @[DB::Field(key: "id")]
+          @[DB::Field(key: "id", converter: CQL::UUIDStorageConverter)]
           @_id_storage : String? = nil
 
           def id : UUID?

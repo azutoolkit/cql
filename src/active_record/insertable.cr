@@ -101,9 +101,10 @@ module CQL
         # ```
         # user = User.create!({:name => "Alice", :email => "alice@example.com"} of Symbol => DB::Any)
         # ```
-        def self.create!(attrs : Hash(Symbol, DB::Any)) : {{@type.id}}
+        def self.create!(attrs : Hash(Symbol, DB::Any), context : CQL::ActiveRecord::BoundModel({{@type.id}})? = nil) : {{@type.id}}
           # The including model's, which a subclass shares
-          schema = {{@type.id}}.schema
+          model = context || {{@type.id}}
+          schema = model.schema
           table = {{@type.id}}.table
           table_columns = schema.tables[table].columns
           insertable_attrs = attrs.select { |key, _| key != primary_key_column && table_columns.has_key?(key) }
@@ -118,11 +119,11 @@ module CQL
           {% end %}
 
           insert = CQL::Insert.new(schema).into(table).values(insertable_attrs)
-          return insert.back(table_columns.keys).get!({{@type.id}}) if static_query? && schema.dialect.supports_returning?
+          return insert.back(table_columns.keys).get!({{@type.id}}).with_binding(context.try(&.binding)) if static_query? && schema.dialect.supports_returning?
 
           {% if Pk == UUID || Pk == String %}
             insert.commit
-            {{@type.id}}.find!(generated_id)
+            model.find!(generated_id)
           {% else %}
             # Int32/Int64 - use database auto-increment
             pk_id = insert.last_insert_id(as: Pk)
@@ -131,9 +132,9 @@ module CQL
               if pk_id > Int32::MAX || pk_id < Int32::MIN
                 raise CQL::Error.new("Primary key overflow: #{pk_id} exceeds Int32 range")
               end
-              {{@type.id}}.find!(pk_id.to_i32)
+              model.find!(pk_id.to_i32)
             {% else %}
-              {{@type.id}}.find!(pk_id.as(Pk))
+              model.find!(pk_id.as(Pk))
             {% end %}
           {% end %}
         end
@@ -169,7 +170,7 @@ module CQL
           attrs.delete(primary_key_column)
 
           # Filter out ignored fields (fields not in the database schema)
-          schema = {{@type.id}}.schema
+          schema = record.persistence_schema
           table = {{@type.id}}.table
           table_columns = schema.tables[table].columns.keys
           filtered_attrs = attrs.select { |key, _| table_columns.includes?(key) }
@@ -180,7 +181,7 @@ module CQL
             filtered_attrs[primary_key_column] = generated_id.to_s.as(DB::Any)
 
             CQL::Insert
-              .new({{@type.id}}.schema)
+              .new(record.persistence_schema)
               .into({{@type.id}}.table)
               .values(filtered_attrs)
               .commit
@@ -192,7 +193,7 @@ module CQL
             filtered_attrs[primary_key_column] = generated_id.as(DB::Any)
 
             CQL::Insert
-              .new({{@type.id}}.schema)
+              .new(record.persistence_schema)
               .into({{@type.id}}.table)
               .values(filtered_attrs)
               .commit
@@ -201,7 +202,7 @@ module CQL
           {% else %}
             # Int32/Int64 - use database auto-increment
             id = CQL::Insert
-              .new({{@type.id}}.schema)
+              .new(record.persistence_schema)
               .into({{@type.id}}.table)
               .values(filtered_attrs)
               .last_insert_id(as: Pk)
@@ -244,7 +245,9 @@ module CQL
           validate!(:create)
 
           # Create the record using the class method
-          {{@type.id}}.create!(self)
+          record = {{@type.id}}.create!(self)
+          self.id = record.id!
+          self
         end
       end
     end
