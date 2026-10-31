@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-31
+
 ### Added
 
 - Explicit caller-owned database, connection, and transaction binding through `CQL::Binding`, `Schema#bind`, and `Model.on`, including bound persistence, associations, shared transaction frames, and declaration-only schemas.
