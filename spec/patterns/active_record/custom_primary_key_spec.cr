@@ -409,6 +409,27 @@ describe "Custom primary key column" do
       label.id.should eq(7)
       label.name.should eq("Noir")
     end
+
+    it "exposes accessors named after the declared primary key column" do
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir')")
+
+      label = Label.query.first!
+      label.label_no.should eq(7)
+      label.label_no!.should eq(7)
+      label.label_no?.should eq(7)
+
+      unsaved = Label.new
+      unsaved.label_no.should be_nil
+      unsaved.label_no = 12
+      unsaved.id.should eq(12)
+      unsaved.label_no!.should eq(12)
+
+      uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+      insert_badge(uuid)
+      badge = Badge.find!(uuid)
+      badge.badge_uuid.should eq(uuid)
+      badge.badge_uuid!.should eq(uuid)
+    end
   end
 
   describe "#attributes" do
@@ -554,6 +575,29 @@ describe "Custom primary key column" do
 
     it "still maps id to the id column on a model keyed on the default column" do
       Shelf.query.where { id == 1 }.query.to_sql.first.should end_with("WHERE shelves.id = ?")
+    end
+
+    it "exposes the declared primary key column name in where, order_by, select, and cql_column_names" do
+      Label.query.where { label_no == 7 }.query.to_sql.should eq({
+        "SELECT labels.label_no, labels.name FROM labels WHERE labels.label_no = ?",
+        [7] of DB::Any,
+      })
+      Label.query.order_by(label_no: :desc).query.to_sql.first.should end_with("ORDER BY labels.label_no DESC")
+
+      LabelKeyDB.exec("INSERT INTO labels (label_no, name) VALUES (7, 'Noir'), (8, 'Blanc')")
+      Label.query.where { label_no == 7 }.to_a.map(&.label_no!).should eq([7])
+
+      row = Label.query.select(:label_no, :name).where { label_no == 7 }.first!
+      row.label_no.should eq(7)
+      row.id.should eq(7)
+
+      uuid = UUID.new("5f0c3a1e-8d2b-4c7a-9e61-2b4f8d0a7c35")
+      insert_badge(uuid)
+      Badge.query.where { badge_uuid == uuid }.to_a.map(&.badge_uuid!).should eq([uuid])
+      Badge.query.order_by(badge_uuid: :asc).query.to_sql.first.should end_with("ORDER BY badges.badge_uuid ASC")
+
+      Label.cql_column_names.should contain(:label_no)
+      Badge.cql_column_names.should contain(:badge_uuid)
     end
   end
 

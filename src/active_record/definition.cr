@@ -73,6 +73,22 @@ module CQL
                 @[DB::Field(key: {{primary_key.id.stringify}})]
                 @id : {{CQL_PRIMARY_KEY_TYPE}}? = nil
               {% end %}
+
+              def {{primary_key.id}} : {{CQL_PRIMARY_KEY_TYPE}}?
+                id
+              end
+
+              def {{primary_key.id}}! : {{CQL_PRIMARY_KEY_TYPE}}
+                id!
+              end
+
+              def {{primary_key.id}}? : {{CQL_PRIMARY_KEY_TYPE}}?
+                id?
+              end
+
+              def {{primary_key.id}}=(id : {{CQL_PRIMARY_KEY_TYPE}})
+                self.id = id
+              end
             {% end %}
           end
         {% end %}

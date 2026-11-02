@@ -52,6 +52,21 @@ Session.find_or_create_by(token: "abc")
 ```
 
 `CQL_VALIDATE_SCHEMA_MAPPINGS=1` accepts a `UUID` getter against a `String` column (see [Dump and Validate Your Schema](../migrations/schema-dump-and-validation.md)).
+
+When a UUID primary key column is not named `id`, pass `primary_key:` to `db_context` — CQL generates both the model accessors (`organization_id`, `organization_id!`) and the typed query column (`where { organization_id == ... }`) automatically:
+
+```crystal
+struct BillingAccount
+  include CQL::ActiveRecord::Model(UUID)
+  db_context AppDB, :billing_accounts, primary_key: :organization_id
+
+  getter customer_id : String
+  getter state : String
+end
+
+account = BillingAccount.query.where { organization_id == org_id }.first!
+account.organization_id! # => UUID
+```
 {% endtab %}
 
 {% tab title="ULID" %}
