@@ -146,6 +146,8 @@ User.cql_association(:profile) # => {:profiles, ON-condition proc}; ArgumentErro
 User::Row                   # the record type of a partial select
 ```
 
+When a model declares `db_context ..., primary_key: :custom_key`, `Model::Columns`, `Model::Row` and `Model.cql_column_names` expose `custom_key` alongside `id`.
+
 ## See Also
 
 - [Filter with Where Clauses](filter-records.md)

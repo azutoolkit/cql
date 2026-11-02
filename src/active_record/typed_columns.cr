@@ -58,6 +58,12 @@ module CQL
                 end
               {% end %}
 
+              {% if owner_key != :id && !columns.any? { |column| column[0] == owner_key.id.stringify } %}
+                def {{ owner_key.id }}
+                  id
+                end
+              {% end %}
+
               {% for meta in associations %}
                 {% target = meta.constant(:TARGET) %}
                 def {{ meta.constant(:ASSOCIATION).id }} : {{ target }}::Columns
@@ -92,6 +98,12 @@ module CQL
                   end
                 {% end %}
               {% end %}
+
+              {% if owner_key != :id && !columns.any? { |column| column[0] == owner_key.id.stringify } %}
+                def {{ owner_key.id }}
+                  id
+                end
+              {% end %}
             end
 
             # The typed column proxy for this model's table.
@@ -107,7 +119,7 @@ module CQL
 
             # The names of this model's columns, for error messages.
             def self.cql_column_names : Array(Symbol)
-              [{% for column in columns %}:{{ column[0].id }}, {% end %}] of Symbol
+              [{% for column in columns %}:{{ column[0].id }}, {% end %}{% if owner_key != :id && !columns.any? { |column| column[0] == owner_key.id.stringify } %}:{{ owner_key.id }}, {% end %}] of Symbol
             end
 
             # The names of every association the model declares, many_to_many included.

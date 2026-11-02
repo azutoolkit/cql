@@ -104,7 +104,7 @@ Run `CQL_VALIDATE_SCHEMA_MAPPINGS=1 crystal spec` to compare every model's prope
 
 ## Primary Key on Another Column
 
-Name the key column with `primary_key:` (default `:id`, always a Symbol literal); `id` then reads and writes it:
+Name the key column with `primary_key:` (default `:id`, always a Symbol literal); both `id` (`id!`, `id?`, `id=`) and the declared column name (`label_no`, `label_no!`, `label_no?`, `label_no=`) then read and write it:
 
 ```crystal
 table :labels do      # in AppDB
@@ -128,18 +128,21 @@ end
 Label.primary_key_column                # => :label_no
 label = Label.create!(name: "Fragile")
 label.id                                # => 1
+label.label_no                          # => 1 (label.label_no! => 1 : Int32)
 Label.find!(99)                         # DB::NoResultsError: No records found with label_no=99
 
 # Hashes name real columns; where_primary_key names the key for you
 Label.where(label_no: 1).all            # where(id: 1) would look for a column called id
 Label.query.where_primary_key([1, 2]).all
-# In the typed DSL, id is the key: WHERE labels.label_no = ?
+# In the typed DSL and partial selects, both the declared column name and id map to the key:
+Label.query.where { label_no == 1 }.order_by(label_no: :desc).all
 Label.query.where { id == 1 }.order_by(id: :desc).all
+Label.query.select(:label_no, :name).first!.label_no  # => 1
 
 # Mass assignment never sets the key, so request params cannot re-point a record
 label.attributes({:label_no => 7} of Symbol => DB::Any)
 label.id                                # => 1
-label.id = 7                            # explicit assignment does
+label.label_no = 7                      # explicit assignment via label_no= or id= does
 Label.from_hash({:label_no => 7, :name => "x"} of Symbol => DB::Any).id                          # => nil
 Label.from_hash({:label_no => 7, :name => "x"} of Symbol => DB::Any, with_primary_key: true).id  # => 7
 ```
