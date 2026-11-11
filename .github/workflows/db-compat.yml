@@ -1,11 +1,11 @@
 name: crystal-db compatibility
 
-# Called by Crystal CI on every push that changes code (workflow_call), weekly (a new crystal-db release can break
+# Called by Crystal CI on every push that changes code (workflow_call), nightly (a new crystal-db release can break
 # CQL without any push here) and by hand. It no longer runs on push itself: that ran it twice per push.
 on:
   workflow_call:
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "7 6 * * *"
   workflow_dispatch:
 
 permissions:
