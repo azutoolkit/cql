@@ -8,124 +8,40 @@ permissions:
   contents: read
 
 jobs:
+  # The three PostgreSQL versions differ only by the server the specs talk to, so they run in one job: the specs are
+  # compiled once (Crystal's compile cache makes the later runs link-only) and the install steps are paid once. The
+  # compiler diagnostics and allocation contracts run first, before any database load, in the same container.
   native-postgres:
+    name: native PostgreSQL 14, 17 and 18 + macro and allocation contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        postgres: ["14", "17", "18"]
+    timeout-minutes: 75
     container:
       image: crystallang/crystal:1.22.1
     services:
-      postgres:
-        image: postgres:${{ matrix.postgres }}
+      postgres14:
+        image: postgres:14
         env:
           POSTGRES_PASSWORD: cql-validation-only
           POSTGRES_DB: cql_v1
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 20
-    env:
-      DATABASE_URL: postgres://postgres:cql-validation-only@postgres:5432/cql_v1
-      CRYSTAL_WORKERS: "4"
-    steps:
-      - uses: actions/checkout@v4
-      - run: apt-get update && apt-get install -y libsqlite3-dev
-      - run: shards install
-      - name: Threaded contention and shutdown recovery
-        run: >-
-          crystal spec -Dpreview_mt validation/native_stress_spec.cr spec/postgres/pool_shutdown_spec.cr
-          spec/postgres/circuit_breaker_spec.cr spec/postgres/setup_deadline_spec.cr
-          spec/postgres/transaction_scope_fiber_spec.cr
-      - name: Protocol, live transactions, cancellation and migration locking
-        run: >-
-          crystal spec spec/postgres/handshake_spec.cr spec/postgres/wire_spec.cr
-          spec/postgres/wire_fuzz_spec.cr spec/postgres/live_spec.cr
-          spec/postgres/engine_failover_live_spec.cr spec/postgres/migrator_lock_live_spec.cr
-          spec/postgres/query_timeout_spec.cr
-
-  dialects:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        dialect: [sqlite, postgres, mysql, cockroach]
-    env:
-      CQL_ENTERPRISE_DIALECT: ${{ matrix.dialect }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: crystal-lang/install-crystal@v1
-        with:
-          crystal: 1.22.1
-      - run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - run: shards install
-      - name: Start the selected disposable database
-        shell: bash
-        run: |
-          set -euo pipefail
-          case "$CQL_ENTERPRISE_DIALECT" in
-            sqlite)
-              echo "CQL_ENTERPRISE_URL=sqlite3:///tmp/cql-v1.db" >> "$GITHUB_ENV"
-              ;;
-            postgres)
-              docker run -d --name cql-v1-db -p 127.0.0.1:15432:5432 -e POSTGRES_PASSWORD=cql-validation-only -e POSTGRES_DB=cql_v1 postgres:17
-              for i in {1..60}; do docker exec cql-v1-db pg_isready -U postgres && break; sleep 1; done
-              docker exec cql-v1-db pg_isready -U postgres
-              echo "CQL_ENTERPRISE_URL=postgres://postgres:cql-validation-only@127.0.0.1:15432/cql_v1" >> "$GITHUB_ENV"
-              ;;
-            mysql)
-              # Keep the legacy MySQL 8.0 compatibility job; mysql84 below tests the default modern plugin.
-              docker run -d --name cql-v1-db -p 127.0.0.1:13306:3306 -e MYSQL_ROOT_PASSWORD=cql-validation-only -e MYSQL_DATABASE=cql_v1 mysql:8.0 --default-authentication-plugin=mysql_native_password
-              for i in {1..60}; do docker exec cql-v1-db mysql -uroot -pcql-validation-only -e 'SELECT 1' && break; sleep 1; done
-              docker exec cql-v1-db mysql -uroot -pcql-validation-only -e "CREATE USER 'cql'@'%' IDENTIFIED WITH mysql_native_password BY 'cql-validation-only'; GRANT ALL ON cql_v1.* TO 'cql'@'%';"
-              docker exec cql-v1-db mysql -uroot -pcql-validation-only -e "UPDATE performance_schema.setup_consumers SET ENABLED='YES' WHERE NAME='events_transactions_current'; GRANT SELECT ON performance_schema.* TO 'cql'@'%';"
-              echo "CQL_ENTERPRISE_URL=mysql://cql:cql-validation-only@127.0.0.1:13306/cql_v1?ssl-mode=disabled" >> "$GITHUB_ENV"
-              ;;
-            cockroach)
-              docker run -d --name cql-v1-db --network host cockroachdb/cockroach:v24.3.0 start-single-node --insecure --listen-addr=127.0.0.1:26257 --http-addr=127.0.0.1:18081
-              for i in {1..60}; do docker exec cql-v1-db cockroach sql --insecure --host=127.0.0.1:26257 -e 'SELECT 1' && break; sleep 1; done
-              docker exec cql-v1-db cockroach sql --insecure --host=127.0.0.1:26257 -e 'SELECT 1'
-              echo "CQL_ENTERPRISE_URL=postgres://root@127.0.0.1:26257/defaultdb?sslmode=disable" >> "$GITHUB_ENV"
-              ;;
-          esac
-      - name: Live optimistic locking, savepoints and isolation (no skips)
-        run: crystal spec validation/dialect_spec.cr
-      - name: Database logs
-        if: failure() && matrix.dialect != 'sqlite'
-        run: docker logs cql-v1-db
-      - name: Remove owned database
-        if: always() && matrix.dialect != 'sqlite'
-        run: docker rm -f cql-v1-db
-
-  mysql84:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: crystal-lang/install-crystal@v1
-        with:
-          crystal: 1.22.1
-      - run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - run: shards install
-      - run: script/mysql84-fixture start
-      - name: Default authentication, verified TLS, pooling and dialect contract (no skips)
-        run: script/mysql84-fixture run
-      - name: Authentication malformed packets and deadlines
-        run: crystal spec spec/mysql/authentication_spec.cr
-      - name: MySQL logs
-        if: failure()
-        run: docker logs cql-mysql84-validation
-      - name: Remove owned server and private keys
-        if: always()
-        run: script/mysql84-fixture stop
-
-  macro-and-allocation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    container:
-      image: crystallang/crystal:1.22.1
+      postgres17:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: cql-validation-only
+          POSTGRES_DB: cql_v1
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      postgres18:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: cql-validation-only
+          POSTGRES_DB: cql_v1
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - run: apt-get update && apt-get install -y python3 libsqlite3-dev
@@ -139,6 +55,93 @@ jobs:
         run: >-
           crystal spec spec/performance/overhead_spec.cr spec/performance/tracer_once_spec.cr
           spec/performance/n_plus_one_backtrace_spec.cr
+      - name: Threaded contention, protocol, live transactions, cancellation and migration locking
+        env:
+          CRYSTAL_WORKERS: "4"
+        run: |
+          status=0
+          for version in 14 17 18; do
+            echo "::group::PostgreSQL $version"
+            export DATABASE_URL="postgres://postgres:cql-validation-only@postgres$version:5432/cql_v1"
+            {
+              crystal spec -Dpreview_mt validation/native_stress_spec.cr spec/postgres/pool_shutdown_spec.cr \
+                spec/postgres/circuit_breaker_spec.cr spec/postgres/setup_deadline_spec.cr \
+                spec/postgres/transaction_scope_fiber_spec.cr &&
+              crystal spec spec/postgres/handshake_spec.cr spec/postgres/wire_spec.cr \
+                spec/postgres/wire_fuzz_spec.cr spec/postgres/live_spec.cr \
+                spec/postgres/engine_failover_live_spec.cr spec/postgres/migrator_lock_live_spec.cr \
+                spec/postgres/query_timeout_spec.cr
+            } || { echo "::error::the specs failed against PostgreSQL $version"; status=1; }
+            echo "::endgroup::"
+          done
+          exit $status
+
+  # SQLite, PostgreSQL 17, MySQL 8.0 and CockroachDB run the same dialect spec; the three servers start together and
+  # the spec is compiled once. MySQL 8.4 (default authentication, verified TLS) follows, after the others are removed.
+  dialects:
+    name: live dialects (sqlite, postgres, mysql 8.0, cockroach) + MySQL 8.4
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.22.1
+      - run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - run: shards install
+      - name: Start the disposable databases
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name cql-v1-pg -p 127.0.0.1:15432:5432 -e POSTGRES_PASSWORD=cql-validation-only -e POSTGRES_DB=cql_v1 postgres:17
+          # Keep the legacy MySQL 8.0 compatibility job; mysql84 below tests the default modern plugin.
+          docker run -d --name cql-v1-mysql -p 127.0.0.1:13306:3306 -e MYSQL_ROOT_PASSWORD=cql-validation-only -e MYSQL_DATABASE=cql_v1 mysql:8.0 --default-authentication-plugin=mysql_native_password
+          docker run -d --name cql-v1-crdb --network host cockroachdb/cockroach:v24.3.0 start-single-node --insecure --listen-addr=127.0.0.1:26257 --http-addr=127.0.0.1:18081
+          for i in {1..60}; do docker exec cql-v1-pg pg_isready -U postgres && break; sleep 1; done
+          docker exec cql-v1-pg pg_isready -U postgres
+          for i in {1..60}; do docker exec cql-v1-mysql mysql -uroot -pcql-validation-only -e 'SELECT 1' && break; sleep 1; done
+          docker exec cql-v1-mysql mysql -uroot -pcql-validation-only -e "CREATE USER 'cql'@'%' IDENTIFIED WITH mysql_native_password BY 'cql-validation-only'; GRANT ALL ON cql_v1.* TO 'cql'@'%';"
+          docker exec cql-v1-mysql mysql -uroot -pcql-validation-only -e "UPDATE performance_schema.setup_consumers SET ENABLED='YES' WHERE NAME='events_transactions_current'; GRANT SELECT ON performance_schema.* TO 'cql'@'%';"
+          for i in {1..60}; do docker exec cql-v1-crdb cockroach sql --insecure --host=127.0.0.1:26257 -e 'SELECT 1' && break; sleep 1; done
+          docker exec cql-v1-crdb cockroach sql --insecure --host=127.0.0.1:26257 -e 'SELECT 1'
+      - name: Live optimistic locking, savepoints and isolation (no skips)
+        shell: bash
+        run: |
+          status=0
+          dialect() {
+            echo "::group::$1"
+            CQL_ENTERPRISE_DIALECT="$1" CQL_ENTERPRISE_URL="$2" crystal spec validation/dialect_spec.cr \
+              || { echo "::error::the dialect spec failed for $1"; status=1; }
+            echo "::endgroup::"
+          }
+          dialect sqlite "sqlite3:///tmp/cql-v1.db"
+          dialect postgres "postgres://postgres:cql-validation-only@127.0.0.1:15432/cql_v1"
+          dialect mysql "mysql://cql:cql-validation-only@127.0.0.1:13306/cql_v1?ssl-mode=disabled"
+          dialect cockroach "postgres://root@127.0.0.1:26257/defaultdb?sslmode=disable"
+          exit $status
+      - name: Database logs
+        if: failure()
+        run: |
+          for name in cql-v1-pg cql-v1-mysql cql-v1-crdb; do echo "::group::$name"; docker logs "$name" || true; echo "::endgroup::"; done
+      - name: Remove owned databases
+        if: always()
+        run: docker rm -f cql-v1-pg cql-v1-mysql cql-v1-crdb >/dev/null 2>&1 || true
+      # MySQL 8.4 was a job of its own: it runs whatever happened to the steps above.
+      - name: Start the MySQL 8.4 fixture
+        if: ${{ !cancelled() }}
+        run: script/mysql84-fixture start
+      - name: Default authentication, verified TLS, pooling and dialect contract (no skips)
+        if: ${{ !cancelled() }}
+        run: script/mysql84-fixture run
+      - name: Authentication malformed packets and deadlines
+        if: ${{ !cancelled() }}
+        run: crystal spec spec/mysql/authentication_spec.cr
+      - name: MySQL logs
+        if: failure()
+        run: docker logs cql-mysql84-validation || true
+      - name: Remove owned server and private keys
+        if: always()
+        run: script/mysql84-fixture stop
 
   tls:
     runs-on: ubuntu-24.04

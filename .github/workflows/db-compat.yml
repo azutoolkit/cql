@@ -1,17 +1,20 @@
 name: crystal-db compatibility
 
+# Called by Crystal CI on every push that changes code (workflow_call), weekly (a new crystal-db release can break
+# CQL without any push here) and by hand. It no longer runs on push itself: that ran it twice per push.
 on:
   workflow_call:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
   schedule:
     - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   compile:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container:
       image: crystallang/crystal:1.22.1
     steps:

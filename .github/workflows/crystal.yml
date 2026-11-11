@@ -1,35 +1,76 @@
 name: Crystal CI
 
+# Pushes to master and manual runs. Which jobs run follows the git diff of the push (see the `changes` job): a push
+# that only touches documentation runs the documentation checks and nothing else, and releases nothing.
 on:
   push:
     branches: [master]
-  pull_request:
-    branches: [master]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# One queue per ref: a run that is waiting is replaced by the newest push; a running one (it may be releasing) finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  release-contract:
+  # What the push changed. A path is code unless it is known to be documentation or ignorable, so a path nobody
+  # classified runs the tests, and a change to a workflow runs everything. A manual run, a new or force-pushed ref and
+  # an API error run everything too.
+  changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      docs: ${{ steps.classify.outputs.docs }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: paulhatch/semantic-version
-          ref: v4.0.2
-          path: .release-action
-      - name: Verify merge strategies and publication guard
-        run: python3 script/test_release.py --action .release-action/dist/index.js
+      - id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          code=false; docs=false; files=""
+          if [ "$EVENT" = push ] && [ -n "${BEFORE//0/}" ]; then
+            files=$(gh api --paginate "repos/$REPO/compare/$BEFORE...$SHA" --jq '.files[].filename') || files=""
+          fi
+          if [ -z "$files" ]; then
+            code=true; docs=true
+          else
+            while IFS= read -r f; do
+              case "$f" in
+                .github/workflows/*) code=true; docs=true ;;
+                docs/*|script/docs/*) docs=true ;;
+                .claude/*|.github/ISSUE_TEMPLATE/*|.github/*.md|LICENSE) ;;
+                */*) code=true ;;
+                *.md) docs=true ;;
+                *) code=true ;;
+              esac
+            done <<< "$files"
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+          echo "code=$code docs=$docs"
 
   enterprise:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/enterprise.yml
 
   db-compat:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/db-compat.yml
 
   build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     container:
       image: crystallang/crystal:1.22.1
 
@@ -86,7 +127,10 @@ jobs:
   # The oldest tested Crystal: a construct newer compilers accept and 1.19 rejects fails here instead of in every
   # application that builds with 1.19.
   build-crystal-1-19:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     container:
       image: crystallang/crystal:1.19.1
     steps:
@@ -107,7 +151,10 @@ jobs:
         run: crystal spec
   # The checks in script/docs/: links and anchors, navigation and redirects, GitBook markup.
   docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -122,7 +169,10 @@ jobs:
       - name: Lint GitBook markup
         run: python script/docs/gitbook_lint.py
   # Compiles the docs' programs and tutorials, so a page cannot drift from the API.
+  # The programs compile against src, so a code change runs this too.
   docs-snippets:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -137,18 +187,25 @@ jobs:
         run: shards install --ignore-crystal-version
       - name: Compile the programs in the docs
         run: python3 script/docs/compile_snippets.py
-  # Every push to master is released: shard.yml and the changelog are bumped in one commit, and that commit is tagged.
+  # Every push that changed code and passed is released: shard.yml and the changelog are bumped in one commit, and that
+  # commit is tagged. Jobs the diff skipped (the documentation checks on a code-only push) do not block it.
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs:
-      - release-contract
+      - changes
       - enterprise
       - db-compat
       - build
       - build-crystal-1-19
       - docs
       - docs-snippets
-    if: ${{ success() && github.event_name == 'push' }}
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      needs.changes.outputs.code == 'true' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     permissions:
       contents: write
     concurrency:
@@ -162,6 +219,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # The release contract (merge strategies, publication guard) is verified here, before the release, so it gates
+      # the release without a runner of its own.
+      - uses: actions/checkout@v4
+        with:
+          repository: paulhatch/semantic-version
+          ref: v4.0.2
+          path: .release-action
+      - name: Verify merge strategies and publication guard
+        run: python3 script/test_release.py --action .release-action/dist/index.js
+      - name: Remove the action checkout (the release works on a clean tree)
+        run: rm -rf .release-action
       - name: Compute Release Version
         id: semver
         uses: paulhatch/semantic-version@v4.0.2
